@@ -1,12 +1,12 @@
 import { query } from '../../shared/config/db.js';
 
 /*
-  LINKS DE PAGO (CRM#680, fase 1): solo lectura.
+  LINKS DE PAGO (CRM#680).
 
-  Aquí todavía no se crea ni se cambia ningún link: eso llega en la fase 2, con
-  la llamada a Stripe. Lo que hay es lo que necesitan las vistas que pidió Diego
-  (por gestora, por prospecto o venta, por campus y por estado) y el detalle con
-  su historial.
+  Fase 1: lo que necesitan las vistas que pidió Diego (por gestora, por
+  prospecto o venta, por campus y por estado) y el detalle con su historial.
+  Fase 2 (al final): las reglas del campus y la fila de cada link al crearlo,
+  anularlo o caducarlo. Aquí no se llama a Stripe: eso es `links-pago.service.js`.
 
   El recorte lo decide el controlador y llega ya hecho: `projectIds` (los campus
   de quien pide) y `creadores` (null = cualquiera de esos campus; una lista =
@@ -96,19 +96,162 @@ export async function cobros(linkId) {
   return rows;
 }
 
-/** El descuento máximo del campus. null si el campus no existe. */
-export async function descuentoMaximo(projectId) {
-  const { rows } = await query(
-    'SELECT id, links_pago_descuento_max_pct FROM projects WHERE id = $1', [projectId]);
-  if (!rows[0]) return null;
-  return Number(rows[0].links_pago_descuento_max_pct);
+// ─── Fase 2: configuración, crear, anular y caducar ─────────────────────────
+
+const COLUMNAS_CONFIG = `
+  links_pago_descuento_max_pct AS descuento_max_pct,
+  links_pago_caducidad_dias AS caducidad_dias,
+  links_pago_caducidad_max_dias AS caducidad_max_dias,
+  links_pago_cuotas_admitidas AS cuotas_admitidas,
+  links_pago_cuotas_max AS cuotas_max,
+  links_pago_monedas::text[] AS monedas,
+  links_pago_moneda_defecto AS moneda_defecto`;
+
+function configDeFila(r) {
+  if (!r) return null;
+  return {
+    descuento_max_pct: Number(r.descuento_max_pct),
+    caducidad_dias: Number(r.caducidad_dias),
+    caducidad_max_dias: Number(r.caducidad_max_dias),
+    cuotas_admitidas: r.cuotas_admitidas === true,
+    cuotas_max: Number(r.cuotas_max),
+    monedas: r.monedas || [],
+    moneda_defecto: r.moneda_defecto,
+  };
 }
 
-export async function guardarDescuentoMaximo(projectId, pct) {
+/** Las reglas de los links del campus (migraciones 314 y 315). null si no existe. */
+export async function config(projectId) {
+  const { rows } = await query(`SELECT ${COLUMNAS_CONFIG} FROM projects WHERE id = $1`, [projectId]);
+  return configDeFila(rows[0]);
+}
+
+const COLUMNA_DE = {
+  descuento_max_pct: 'links_pago_descuento_max_pct',
+  caducidad_dias: 'links_pago_caducidad_dias',
+  caducidad_max_dias: 'links_pago_caducidad_max_dias',
+  cuotas_admitidas: 'links_pago_cuotas_admitidas',
+  cuotas_max: 'links_pago_cuotas_max',
+  monedas: 'links_pago_monedas',
+  moneda_defecto: 'links_pago_moneda_defecto',
+};
+
+/** Guarda solo lo que venga. Las columnas salen de una lista fija, nunca del cuerpo. */
+export async function guardarConfig(projectId, cambios) {
+  const sets = [];
+  const params = [projectId];
+  for (const [campo, columna] of Object.entries(COLUMNA_DE)) {
+    if (cambios[campo] === undefined) continue;
+    params.push(cambios[campo]);
+    sets.push(`${columna} = $${params.length}${campo === 'monedas' ? '::varchar(3)[]' : ''}`);
+  }
+  if (!sets.length) return config(projectId);
   const { rows } = await query(
-    `UPDATE projects SET links_pago_descuento_max_pct = $2, updated_at = NOW()
-      WHERE id = $1
-      RETURNING links_pago_descuento_max_pct`,
-    [projectId, pct]);
-  return rows[0] ? Number(rows[0].links_pago_descuento_max_pct) : null;
+    `UPDATE projects SET ${sets.join(', ')}, updated_at = NOW() WHERE id = $1 RETURNING ${COLUMNAS_CONFIG}`,
+    params);
+  return configDeFila(rows[0]);
+}
+
+/** El prospecto con lo que hace falta para decidir si la persona puede: campus y responsable. */
+export async function lead(leadId) {
+  const { rows } = await query(
+    'SELECT id, project_id, responsable_id, nombre, email FROM leads WHERE id = $1', [leadId]);
+  return rows[0] || null;
+}
+
+/** La venta, con su prospecto y su curso. */
+export async function venta(conversionId) {
+  const { rows } = await query(
+    `SELECT c.id, c.project_id, c.lead_id, c.vendedora_id, c.producto_contratado_id,
+            l.responsable_id
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
+export async function producto(productId) {
+  const { rows } = await query(
+    'SELECT id, project_id, nombre, precio, moneda FROM products WHERE id = $1', [productId]);
+  return rows[0] || null;
+}
+
+/** El link recién apuntado, todavía sin URL: se rellena cuando Stripe contesta. */
+export async function insertar(l) {
+  const { rows } = await query(
+    `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
+        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10))
+     RETURNING id, created_at, caduca_el`,
+    [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
+      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias]);
+  return rows[0];
+}
+
+export async function completarConStripe(id, { url, paymentLinkId, priceId }) {
+  await query(
+    `UPDATE payment_links
+        SET url = $2, stripe_payment_link_id = $3, stripe_price_id = $4, updated_at = NOW()
+      WHERE id = $1`,
+    [id, url, paymentLinkId, priceId]);
+}
+
+/** Si Stripe no lo crea, el link no existe: no se deja una fila sin URL. */
+export async function borrar(id) {
+  await query('DELETE FROM payment_links WHERE id = $1', [id]);
+}
+
+export async function anotarEvento(linkId, tipo, datos = {}) {
+  await query(
+    'INSERT INTO payment_link_eventos (link_id, tipo, datos) VALUES ($1, $2, $3::jsonb)',
+    [linkId, tipo, JSON.stringify(datos)]);
+}
+
+// Solo los vivos pasan a anulado o caducado. Si dos lo intentan a la vez, o el
+// cron caduca uno que alguien está anulando, solo el primero cambia la fila.
+const VIVOS = `estado IN ('creado', 'abierto')`;
+
+export async function marcarAnulado(id, { userId, motivo }) {
+  const { rows } = await query(
+    `UPDATE payment_links
+        SET estado = 'anulado', anulado_por = $2, anulado_el = NOW(), motivo_anulacion = $3, updated_at = NOW()
+      WHERE id = $1 AND ${VIVOS}
+      RETURNING id`,
+    [id, userId, motivo]);
+  return rows.length > 0;
+}
+
+export async function marcarCaducado(id) {
+  const { rows } = await query(
+    `UPDATE payment_links SET estado = 'caducado', updated_at = NOW()
+      WHERE id = $1 AND ${VIVOS} RETURNING id`,
+    [id]);
+  return rows.length > 0;
+}
+
+/** Los vivos con la fecha pasada, los más viejos primero. */
+export async function porCaducar(lote = 50) {
+  const { rows } = await query(
+    `SELECT id, project_id, stripe_payment_link_id
+       FROM payment_links
+      WHERE ${VIVOS} AND caduca_el <= NOW()
+      ORDER BY caduca_el, id
+      LIMIT $1`,
+    [lote]);
+  return rows;
+}
+
+/** Los campus (de esta lista, o todos con null) que usan el mismo webhook de Stripe. */
+export async function campusDelWebhook(endpointId, projectIds) {
+  const { rows } = await query(
+    `SELECT p.id, p.nombre
+       FROM project_integrations pi
+       JOIN projects p ON p.id = pi.project_id
+      WHERE pi.provider = 'stripe'
+        AND pi.config_public->>'webhook_endpoint_id' = $1
+        AND ($2::int[] IS NULL OR p.id = ANY($2::int[]))
+      ORDER BY p.nombre`,
+    [endpointId, projectIds]);
+  return rows;
 }

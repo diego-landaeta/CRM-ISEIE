@@ -27,6 +27,8 @@ import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
 import EnrollSequenceModal from '../components/EnrollSequenceModal';
+// Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
+import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 
 function LoadingSkeleton() {
   return (
@@ -306,6 +308,7 @@ export default function LeadDetailPage() {
             onEnrollSequence={() => setEnrollOpen(true)}
             refreshKey={emailRefreshKey}
           />
+          <LinksDePagoCard projectId={lead.project_id} leadId={lead.id} productoId={lead.producto_interes_id} />
           <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <CurrencyEur size={16} weight="regular" /> Historial de compras

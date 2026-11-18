@@ -378,8 +378,10 @@ const RECURSOS_DE_LOS_LINKS = [
   { clave: 'prices', nombre: 'Prices', ruta: '/v1/prices?limit=1' },
   { clave: 'checkout_sessions', nombre: 'Checkout Sessions', ruta: '/v1/checkout/sessions?limit=1' },
 ];
+// Webhook Endpoints (fase 2): para ver y cambiar el webhook de la cuenta desde la
+// tarjeta. No se prueba aquí: si falta, lo dice la propia sección del webhook.
 const QUE_DARLE = 'En Stripe, la clave restringida necesita Payment Links, Products y Prices con escritura, '
-  + 'y Checkout Sessions con lectura.';
+  + 'Checkout Sessions con lectura y, para el webhook, Webhook Endpoints con escritura.';
 
 async function testStripeLinks(apiKey) {
   const forma = String(apiKey || '').match(CLAVE_DE_STRIPE);

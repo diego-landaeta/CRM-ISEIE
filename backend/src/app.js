@@ -128,6 +128,7 @@ import { startCertifexReversionesScheduler } from './jobs/certifexReversionesSch
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
+import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
@@ -644,6 +645,15 @@ if (process.env.NODE_ENV !== 'test') {
       if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
     } catch (err) {
       logger.error({ err }, 'entregas sin corregir: el trabajo falló al arrancar');
+    }
+    // Links de pago (#407, gemela de CRM#680): desactivar en Stripe los que caducan sin
+    // pagar. Solo con los links encendidos (LINKS_PAGO_EN_PRODUCCION); sin interruptor propio.
+    if (linksPagoActivos()) {
+      try {
+        startLinksPagoCaducidadScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
+      }
     }
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
       try {
