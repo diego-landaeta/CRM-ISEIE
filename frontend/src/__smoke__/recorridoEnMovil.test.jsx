@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import RecorridoGuiado, { colocarCartel, MARGEN_CARTEL } from '@/shared/components/ui/RecorridoGuiado';
 import { PASOS_TABLERO, CLAVE_RECORRIDO_TABLERO } from '@/modules/tasks/lib/recorridoTablero';
+import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -34,7 +35,8 @@ function comoMovil() {
 function objetivo(nombre, caja) {
   const el = document.createElement('div');
   el.setAttribute('data-recorrido', nombre);
-  el.getBoundingClientRect = () => ({ x: caja.left, y: caja.top, width: 120, height: 30, right: caja.left + 120, ...caja, bottom: caja.top + 30, toJSON() {} });
+  const ancho = caja.width ?? 120;
+  el.getBoundingClientRect = () => ({ x: caja.left, y: caja.top, height: 30, ...caja, width: ancho, right: caja.left + ancho, bottom: caja.top + 30, toJSON() {} });
   el.scrollIntoView = () => {};
   document.body.appendChild(el);
   return el;
@@ -123,5 +125,43 @@ describe('a 375 px, con la página más ancha que la pantalla', () => {
     fireEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
     const { izq } = cabeEnLaVista();
     expect(izq).toBe(MARGEN_CARTEL);
+  });
+});
+
+/*
+  Testeo del 18/11 (ISEIE#586): en ISEIE también fallaba en Pagos Stripe (el cartel
+  llegaba a 466 px en una pantalla de 375). Se recorren TODOS los recorridos, paso
+  a paso, a 375 px con la página a 481: lo señalado a la derecha, abajo o más ancho
+  que la pantalla (una tabla), y en cada paso el cartel cabe y su botón se ve.
+*/
+const TODOS = [
+  ...Object.values(RECORRIDOS_COBROS).map((r) => [r.id, pasosPara(r, () => true)]),
+  ['tablero de Tareas', PASOS_TABLERO],
+];
+
+describe('a 375 px, todos los recorridos, paso a paso', () => {
+  it.each(TODOS)('%s: el cartel cabe en cada paso y «Siguiente» se puede pulsar', (_id, pasos) => {
+    comoMovil();
+    const sitios = [
+      { left: 300, top: 120 },              // a la derecha, como en Facturas
+      { left: 260, top: 560 },              // abajo a la derecha
+      { left: 0, top: 200, width: 466 },    // más ancho que la pantalla (Pagos Stripe)
+      { left: 420, top: 300 },              // fuera de la vista, a la derecha
+    ];
+    pasos.forEach((p, i) => {
+      const nombre = /data-recorrido="([a-z0-9-]+)"/.exec(p.donde || '')?.[1];
+      if (nombre && !document.querySelector(p.donde)) objetivo(nombre, sitios[i % sitios.length]);
+    });
+    render(<RecorridoGuiado pasos={pasos} clave={`movil-${_id}`} alCerrar={() => {}} />);
+    const vistos = [];
+    for (let i = 0; i < pasos.length; i++) {
+      cabeEnLaVista();
+      vistos.push(document.getElementById('recorrido-titulo').textContent);
+      const sig = screen.queryByRole('button', { name: /Siguiente/ });
+      if (!sig) break;
+      fireEvent.click(sig);
+    }
+    expect(vistos).toEqual(pasos.map((p) => p.titulo));
+    expect(screen.getByRole('button', { name: 'Entendido' })).toBeInTheDocument();
   });
 });
