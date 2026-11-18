@@ -48,7 +48,7 @@ export const ACTIVO = `(c.baja_desde IS NULL
   OR c.baja_desde > date_trunc('month', NOW() AT TIME ZONE 'Europe/Madrid')::date)`;
 
 const CAMPOS_COLABORADOR = `
-  c.id, c.nombre, c.email, c.nif, c.area, c.notas, c.user_id, ${ACTIVO} AS activo,
+  c.id, c.nombre, c.email, c.nif, c.area, c.tipo, c.notas, c.user_id, ${ACTIVO} AS activo,
   to_char(c.alta_desde, 'YYYY-MM') AS alta_desde,
   to_char(c.baja_desde, 'YYYY-MM') AS baja_desde,
   c.created_at, c.updated_at,
@@ -91,7 +91,7 @@ const VISIBLE = `($1::int[] IS NULL OR EXISTS (
   SELECT 1 FROM colaborador_empresas ce
    WHERE ce.colaborador_id = c.id AND ce.issuer_id = ANY($1::int[])))`;
 
-export async function listar({ issuerIds, issuerId = null, estado = 'activos', q = null }) {
+export async function listar({ issuerIds, issuerId = null, estado = 'activos', q = null, tipo = null }) {
   const { rows } = await query(
     `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}, ${COMPARTIDO}
        FROM colaboradores c
@@ -102,8 +102,9 @@ export async function listar({ issuerIds, issuerId = null, estado = 'activos', q
                WHERE ce.colaborador_id = c.id AND ce.issuer_id = $2))
         AND ($3 = 'todos' OR ($3 = 'activos') = ${ACTIVO})
         AND ($4::text IS NULL OR c.nombre ILIKE $4 OR c.email ILIKE $4)
+        AND ($5::text IS NULL OR c.tipo = $5)
       ORDER BY activo DESC, c.nombre`,
-    [issuerIds, issuerId, estado, q ? textoParaLike(q) : null],
+    [issuerIds, issuerId, estado, q ? textoParaLike(q) : null, tipo],
   );
   return rows;
 }
@@ -162,13 +163,51 @@ export function comoCobra(e) {
  * o añadido (26/10/2026: Diego es soporte y además factura como colaborador).
  * Con el rol añadido, «Mi factura» le funciona porque la guardia de esas rutas
  * mira también los roles de más (`subeSuFactura`, routes).
+ *
+ * La ficha de una vendedora (CRM#710) es de una gestora o una comercial: rol
+ * gestor o admin (el principal o, gestor, añadido) y activa. Un super admin no:
+ * Carlos y Vlad no tienen sección de factura.
  */
-export async function esUsuarioColaborador(userId) {
+export async function esUsuarioColaborador(userId, tipo = 'colaborador') {
   const { rows } = await query(
-    `SELECT 1 FROM users WHERE id = $1 AND (role IN ('colaborador', 'tutor_redactor') OR roles_extra::text[] && ARRAY['colaborador', 'tutor_redactor'])`,
+    tipo === 'vendedora'
+      ? `SELECT 1 FROM users WHERE id = $1 AND active = true
+           AND (role IN ('gestor', 'admin') OR roles_extra::text[] && ARRAY['gestor'])`
+      : `SELECT 1 FROM users WHERE id = $1 AND (role IN ('colaborador', 'tutor_redactor') OR roles_extra::text[] && ARRAY['colaborador', 'tutor_redactor'])`,
     [userId],
   );
   return rows.length > 0;
+}
+
+/** ¿Ya tiene ficha de vendedora este usuario? (una sola, con sus empresas dentro) */
+export async function fichaDeVendedoraDe(userId, salvoId = null) {
+  const { rows } = await query(
+    `SELECT id FROM colaboradores WHERE user_id = $1 AND tipo = 'vendedora' AND ($2::int IS NULL OR id <> $2) LIMIT 1`,
+    [userId, salvoId],
+  );
+  return rows[0] ? Number(rows[0].id) : null;
+}
+
+/**
+ * «Mi factura» para la vendedora (CRM#710): su permiso `facturas_colaborador.subir`,
+ * dado a ELLA como excepción (la lista explícita, nunca su rol entero), y apuntado
+ * en el registro de permisos. Si alguien se lo quitó a propósito, no se le vuelve
+ * a dar. Devuelve true si se lo ha dado ahora.
+ */
+export async function darSubirSuFactura(db, userId, quienId) {
+  const { rowCount } = await db.query(
+    `INSERT INTO user_permission_overrides (user_id, resource, action, allowed, updated_by, updated_at)
+     VALUES ($1, 'facturas_colaborador', 'subir', true, $2, NOW())
+     ON CONFLICT (user_id, resource, action) DO NOTHING`,
+    [userId, quienId],
+  );
+  if (!rowCount) return false;
+  await db.query(
+    `INSERT INTO permisos_registro (quien_id, destino_tipo, usuario_id, clave, antes, despues, origen, motivo)
+     VALUES ($1, 'usuario', $2, 'facturas_colaborador.subir', NULL, 'true', 'ficha_vendedora', $3)`,
+    [quienId, userId, 'Ficha de vendedora en Facturas de colaboradores (CRM#710)'],
+  );
+  return true;
 }
 
 /** ¿Factura también a alguna empresa fuera de estas? (`null` = el super admin: nunca.) */
@@ -184,16 +223,16 @@ export async function facturaFueraDe(colaboradorId, issuerIds) {
 
 export async function insertar(db, datos, porUserId) {
   const { rows } = await db.query(
-    `INSERT INTO colaboradores (nombre, email, nif, area, notas, user_id, alta_desde, creado_por)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+    `INSERT INTO colaboradores (nombre, email, nif, area, notas, user_id, alta_desde, creado_por, tipo)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
      RETURNING id`,
     [datos.nombre, datos.email, datos.nif ?? null, datos.area, datos.notas ?? null,
-      datos.user_id ?? null, datos.alta_desde ?? null, porUserId],
+      datos.user_id ?? null, datos.alta_desde ?? null, porUserId, datos.tipo ?? 'colaborador'],
   );
   return Number(rows[0].id);
 }
 
-const EDITABLES = ['nombre', 'email', 'nif', 'area', 'notas', 'user_id', 'alta_desde'];
+const EDITABLES = ['nombre', 'email', 'nif', 'area', 'tipo', 'notas', 'user_id', 'alta_desde'];
 
 export async function actualizar(db, id, cambios) {
   // Lo que no llega no se toca (undefined); lo que llega vacío, null.

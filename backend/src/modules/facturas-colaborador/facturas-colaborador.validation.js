@@ -5,6 +5,11 @@ import { z } from 'zod';
 
 export const AREAS = ['soporte', 'desarrollo', 'wordpress', 'seo', 'contenido', 'otra'];
 
+// Quién factura (CRM#710): un colaborador externo o una vendedora de la lista
+// (gestoras y comerciales). Las listas y los totales se filtran por esto.
+export const TIPOS = ['colaborador', 'vendedora'];
+const tipo = z.enum(TIPOS, { message: 'Tipo inválido: colaborador o vendedora' });
+
 const id = z.number().int().positive().max(2147483647);
 
 // El primer día de un mes: «2026-09-01». Se acepta «2026-09» y se completa.
@@ -53,6 +58,7 @@ const base = {
   email: z.string().trim().toLowerCase().email('Correo inválido').max(255, 'El correo es demasiado largo'),
   nif: textoOpcional(30),
   area: z.enum(AREAS, { message: `Área inválida: ${AREAS.join(', ')}` }),
+  tipo,
   notas: textoOpcional(5000),
   user_id: id.optional().nullable(),
   alta_desde: mes.optional().nullable(),
@@ -61,6 +67,7 @@ const base = {
 export const crearColaboradorSchema = z.object({
   ...base,
   area: base.area.default('otra'),
+  tipo: base.tipo.default('colaborador'),
   empresas: z.array(empresa).min(1, 'Elige al menos una empresa a la que factura'),
 });
 
@@ -69,6 +76,7 @@ export const editarColaboradorSchema = z.object({
   email: base.email.optional(),
   nif: base.nif,
   area: base.area.optional(),
+  tipo: base.tipo.optional(),
   notas: base.notas,
   user_id: base.user_id,
   alta_desde: base.alta_desde,
@@ -87,6 +95,7 @@ export const altaSchema = z.object({
 export const listarColaboradoresSchema = z.object({
   issuerId: z.coerce.number().int().positive().optional(),
   estado: z.enum(['activos', 'de_baja', 'todos']).default('activos'),
+  tipo: tipo.optional(),
   q: z.string().trim().max(100, 'La búsqueda es demasiado larga').optional(),
 });
 
@@ -135,10 +144,13 @@ export const delMesSchema = z.object({
   issuerId: z.coerce.number().int().positive().optional(),
   estado: z.enum(['sin_enviar', 'enviado', 'abierto', 'recibida', 'anulada', 'no_enviado', 'caducado']).optional(),
   area: z.enum(AREAS).optional(),
+  // «Vendedoras / Colaboradores» (CRM#710).
+  tipo: tipo.optional(),
 });
 
 // Las pestañas de la segunda parte: «filtrable por colaborador, empresa, mes y estado».
-export const VISTAS = ['enviadas', 'por_pagar', 'pagadas', 'historial'];
+// «Por validar» (CRM#710): la empresa revisa la factura antes de pagarla.
+export const VISTAS = ['enviadas', 'por_validar', 'por_pagar', 'pagadas', 'historial'];
 export const vistaSchema = z.object({
   vista: z.enum(VISTAS, { message: `Pestaña inválida: ${VISTAS.join(', ')}` }),
   issuerId: z.coerce.number().int().positive().max(2147483647).optional(),
@@ -147,6 +159,7 @@ export const vistaSchema = z.object({
   estado: z.enum(['sin_enviar', 'enviado', 'abierto', 'recibida', 'anulada', 'no_enviado', 'caducado', 'no_cuadra']).optional(),
   // El buscador (Ctrl K, #591): número de factura o de recepción, colaborador o su correo.
   q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100).optional(),
+  tipo: tipo.optional(),
 });
 
 export const costePorCampusSchema = z.object({ periodo: mes, issuerId: z.coerce.number().int().positive().max(2147483647).optional() });

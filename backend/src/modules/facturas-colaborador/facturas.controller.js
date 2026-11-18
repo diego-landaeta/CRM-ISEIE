@@ -102,6 +102,11 @@ export const archivo = accion(async (req, res) => {
   res.json({ success: true, data: await service.urlDelArchivo(req.user, validarId(req.params.id)) });
 });
 
+// «Validar» (CRM#710): la empresa la da por buena; después se paga.
+export const validarFactura = accion(async (req, res) => {
+  res.json({ success: true, data: await service.validar(req.user, validarId(req.params.id), ipDe(req)) });
+});
+
 export const anular = accion(async (req, res) => {
   const { motivo } = validar(anularSchema, req.body);
   const r = await service.anular(req.user, validarId(req.params.id), motivo, ipDe(req));

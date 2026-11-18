@@ -1,6 +1,7 @@
 import { getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as model from './facturas-colaborador.model.js';
+import { olvidarPermisos } from '../permissions/permissions.service.js';
 
 /*
   Facturas de colaboradores (#202) · la lista de colaboradores.
@@ -36,10 +37,30 @@ function comprobarEmpresas(empresas, ambito) {
   }
 }
 
-async function comprobarUsuario(userId) {
-  if (userId && !(await model.esUsuarioColaborador(userId))) {
+async function comprobarUsuario(userId, tipo = 'colaborador', salvoId = null) {
+  if (!userId) return;
+  if (tipo === 'vendedora') {
+    if (!(await model.esUsuarioColaborador(userId, 'vendedora'))) {
+      throw new AppError('La vendedora tiene que ser una gestora o una comercial (rol gestor o admin) activa', 400, 'VALIDATION_ERROR');
+    }
+    // Una ficha por persona: sus empresas van dentro, una por empresa.
+    if (await model.fichaDeVendedoraDe(userId, salvoId)) {
+      throw new AppError('Esta vendedora ya tiene su ficha: añade la empresa en la que ya tiene', 409, 'CONFLICT');
+    }
+    return;
+  }
+  if (!(await model.esUsuarioColaborador(userId))) {
     throw new AppError('El usuario elegido tiene que tener el rol colaborador o tutor redactor', 400, 'VALIDATION_ERROR');
   }
+}
+
+/**
+ * La vendedora con usuario (CRM#710) necesita «Subir su factura» para ver «Mi
+ * factura»: se le da a ella, por excepción, en la misma transacción que su ficha.
+ */
+async function darMiFactura(db, tipo, userId, quien) {
+  if (tipo !== 'vendedora' || !userId) return false;
+  return model.darSubirSuFactura(db, userId, quien.userId);
 }
 
 /**
@@ -93,20 +114,23 @@ export async function ver(user, id) {
 export async function crear(user, datos, ip) {
   const ambito = await ambitoDe(user);
   comprobarEmpresas(datos.empresas, ambito);
-  await comprobarUsuario(datos.user_id);
+  await comprobarUsuario(datos.user_id, datos.tipo);
 
+  let dado = false;
   const id = await enTransaccion(async (db) => {
     const nuevo = await model.insertar(db, datos, user.userId);
     for (const e of datos.empresas) await model.ponerEmpresa(db, nuevo, e);
+    dado = await darMiFactura(db, datos.tipo, datos.user_id, user);
     await model.anotar(db, {
       colaboradorId: nuevo, evento: 'alta', userId: user.userId, ip,
       detalle: {
-        nombre: datos.nombre, email: datos.email, area: datos.area,
+        nombre: datos.nombre, email: datos.email, area: datos.area, tipo: datos.tipo ?? 'colaborador',
         empresas: datos.empresas, alta_desde: datos.alta_desde ?? null,
       },
     });
     return nuevo;
   });
+  if (dado) olvidarPermisos(datos.user_id);
   return model.porId(id, ambito);
 }
 
@@ -133,14 +157,21 @@ export async function editar(user, id, cambios, ip) {
     if (!deLaFicha.every(igual)) throw COMPARTIDO();
     for (const k of deLaFicha) delete cambios[k];
   }
-  if (cambios.user_id !== undefined) await comprobarUsuario(cambios.user_id);
+  const tipo = cambios.tipo ?? antes.tipo;
+  const usuario = cambios.user_id !== undefined ? cambios.user_id : antes.user_id;
+  // Al cambiar el usuario o el tipo, el usuario tiene que valer para ese tipo.
+  if (cambios.user_id !== undefined || (cambios.tipo !== undefined && cambios.tipo !== antes.tipo)) {
+    await comprobarUsuario(usuario, tipo, id);
+  }
 
   // `alta_desde` llega como «2026-09-01» y se guarda así; en la ficha sale «2026-09».
   const comparables = { ...antes, alta_desde: antes.alta_desde ? `${antes.alta_desde}-01` : null };
   const detalle = diferencias(comparables, cambios);
 
+  let dado = false;
   await enTransaccion(async (db) => {
     await model.actualizar(db, id, cambios);
+    dado = await darMiFactura(db, tipo, usuario, user);
 
     if (cambios.empresas) {
       // Un admin solo toca las empresas de sus campus: las demás se quedan
@@ -168,6 +199,7 @@ export async function editar(user, id, cambios, ip) {
       await model.anotar(db, { colaboradorId: id, evento: 'cambio', userId: user.userId, ip, detalle });
     }
   });
+  if (dado) olvidarPermisos(usuario);
   return model.porId(id, ambito);
 }
 

@@ -45,6 +45,8 @@ export function usuarioParaElFrontal(user) {
     // La casilla de WhatsApp, también al entrar (QA 22/10, punto 8): sin ella los
     // avisos no saben si preguntar por /api/whatsapp/sin-leer. null = sin la columna.
     usa_whatsapp: user.usa_whatsapp ?? null,
+    // «Mi factura» (CRM#710): con ficha viva en Facturas de colaboradores.
+    factura_propia: !!user.factura_propia,
   };
 }
 

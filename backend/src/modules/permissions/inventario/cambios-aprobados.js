@@ -245,6 +245,18 @@ export const CAMBIOS_POR_DATOS = [
  */
 export const CAMBIOS_DE_MENU = [
   {
+    id: 'menu-mi-factura-con-ficha',
+    // Solo se esconde del menú: la ruta sigue abierta y responde igual que antes (solo lo suyo).
+    soloMenu: true,
+    que: '«Mi factura» la ve quien tiene ficha viva en Facturas de colaboradores (colaborador, tutor redactor o vendedora de la lista, CRM-ISEIE#422); el super admin sin ficha deja de verla.',
+    motivo: 'Las vendedoras de la lista suben su factura del mes, y las cuatro excepciones de la issue no tienen sección de factura (criterio 4 de la issue). El super admin lo puede todo, así que el menú se la enseñaba aunque no factura a nadie. El acceso no cambia: la ruta sigue abierta y solo devuelve lo suyo.',
+    perfiles: {
+      superadmin: ['- Equipo de Desarrollo › Mi factura'],
+    },
+    rutas: { 'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias' },
+    aprobadoPor: 'Pendiente de Diego (CRM-ISEIE#422)',
+  },
+  {
     id: 'menu-sin-403',
     que: 'El menú deja de enseñar lo que daba 403: 12 entradas a soporte y 3 al project manager.',
     motivo: 'Soporte lo veía todo por un atajo del menú («ve todo»), y el project manager las pantallas de la gestora; al entrar, el servidor les respondía 403. Ninguno pierde nada que pudiera usar.',

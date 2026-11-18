@@ -9,6 +9,10 @@ export async function findUserByEmail(email) {
             -- leer la columna directamente romperia el login de todos. Asi vale false.
             COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp,
             -- La casilla de WhatsApp, igual: null si falta la columna (no se le niega a nadie).
+            -- «Mi factura» (CRM#710): si tiene una ficha viva en Facturas de colaboradores
+            -- (colaborador o vendedora de la lista). Quien no, no ve la entrada del menú.
+            EXISTS (SELECT 1 FROM colaboradores c WHERE c.user_id = u.id
+                     AND (c.baja_desde IS NULL OR c.baja_desde > date_trunc('month', NOW() AT TIME ZONE 'Europe/Madrid')::date)) AS factura_propia,
             (to_jsonb(u)->>'usa_whatsapp')::boolean AS usa_whatsapp
      FROM users u
      -- Sin distinguir mayusculas: el formulario de entrada pasa el correo a
@@ -26,6 +30,10 @@ export async function findUserById(id) {
     `SELECT u.id, u.nombre, u.email, u.role, u.roles_extra::text[] AS roles_extra, u.active, u.avatar_url, u.custom_role_id,
             u.factura_manager, u.editar_fechas_factura, u.gestor_colaboraciones,
             COALESCE((to_jsonb(u)->>'usa_mcp')::boolean, false) AS usa_mcp,
+            -- «Mi factura» (CRM#710): si tiene una ficha viva en Facturas de colaboradores
+            -- (colaborador o vendedora de la lista). Quien no, no ve la entrada del menú.
+            EXISTS (SELECT 1 FROM colaboradores c WHERE c.user_id = u.id
+                     AND (c.baja_desde IS NULL OR c.baja_desde > date_trunc('month', NOW() AT TIME ZONE 'Europe/Madrid')::date)) AS factura_propia,
             (to_jsonb(u)->>'usa_whatsapp')::boolean AS usa_whatsapp,
             cr.label AS custom_role_label
      FROM users u

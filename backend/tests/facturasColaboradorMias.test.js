@@ -96,7 +96,7 @@ describe('facturas de colaboradores (#202) · «Mi factura»', () => {
   it('ve el estado del pago de cada mes, sin el justificante ni quién lo marcó (segunda parte)', async () => {
     expect((await request.get(`${API}/mias`).set(como('colaborador'))).body.data[0].pago).toBeNull();
     Object.assign(base.factura(deLaura), {
-      pagada_at: '2026-09-05', forma_pago: 'transferencia', pagada_por: U.adminA,
+      validada_at: new Date(), pagada_at: '2026-09-05', forma_pago: 'transferencia', pagada_por: U.adminA,
       justificante: 'facturas-colaborador/pagos/secreto.pdf', referencia_pago: 'TRF-1',
     });
     const res = await request.get(`${API}/mias`).set(como('colaborador'));
