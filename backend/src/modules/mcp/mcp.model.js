@@ -1729,10 +1729,10 @@ const enteros = (fila, claves) => Object.fromEntries(claves.map((k) => [k, enter
  * la titulación previa de la persona). Las que se crean a mano sin venta salen
  * como «Sin producto».
  *
- * A quien ve solo lo suyo se le cuentan las matrículas de sus ventas (la
- * vendedora de la venta o, si no la tiene, la responsable del prospecto), igual
- * que en las facturas. La pantalla las enseña todas a las gestoras; por Claude
- * no se sacan cifras de las demás.
+ * `asesoraId` recorta a las matrículas de las ventas de una persona (la
+ * vendedora de la venta o, si no la tiene, la responsable del prospecto). La
+ * herramienta `matriculas` ya no lo pasa (17/11/2026): una gestora ve en la
+ * pantalla todas las solicitudes de sus campus, y por Claude cuenta lo mismo.
  */
 export async function resumenMatriculas({ projectIds, asesoraId = null, from = null, to = null }) {
   const f = condiciones('m.project_id', projectIds);
