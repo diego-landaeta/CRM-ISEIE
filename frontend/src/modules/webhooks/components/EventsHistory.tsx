@@ -28,6 +28,8 @@ export default function EventsHistory({ webhookId }: { webhookId: number }) {
   const [expanded, setExpanded] = useState<number | null>(null);
 
   async function load() {
+    // Sin id no se pide nada: saldría `/forms//events`, que el servidor no conoce.
+    if (!webhookId) { setLoading(false); return; }
     setLoading(true);
     try {
       const res = await client.get(`/forms/${webhookId}/events?limit=50`);
