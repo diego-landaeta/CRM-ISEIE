@@ -84,11 +84,12 @@ async function hayTabla(nombre) {
 }
 
 // ig_accounts la crea #465 con (épica #464): project_id, ig_user_id, username,
-// access_token (cifrado), token_expires_at, token_refreshed_at, active.
+// access_token_cifrado (así lo nombra la migración 317; la 284 en el 360), token_expires_at,
+// token_refreshed_at, active.
 async function cuentasInstagram(proyectoId) {
   if (!(await hayTabla('ig_accounts'))) return [];
   const { rows } = await query(
-    `SELECT i.id, i.project_id, i.username, i.ig_user_id, i.access_token, i.token_expires_at,
+    `SELECT i.id, i.project_id, i.username, i.ig_user_id, i.access_token_cifrado, i.token_expires_at,
             p.nombre AS project_nombre, p.slug AS project_slug, p.logo_url AS project_logo, p.emoji AS project_emoji
        FROM ig_accounts i
        LEFT JOIN projects p ON p.id = i.project_id
@@ -99,7 +100,7 @@ async function cuentasInstagram(proyectoId) {
   return rows.map((r) => ({
     tipo: 'instagram', id: r.id, project_id: r.project_id,
     nombre: r.username ? `@${r.username}` : r.ig_user_id,
-    tokenCifrado: r.access_token, expiresAtGuardada: r.token_expires_at,
+    tokenCifrado: r.access_token_cifrado, expiresAtGuardada: r.token_expires_at,
     proyecto: r,
   }));
 }
@@ -183,7 +184,7 @@ async function revisarInstagram(cuenta, token, ahora) {
   if (!r.ok) return fallo(r.code, r.message, guardada);
   const expiresAt = new Date(ahora.getTime() + (r.expiresIn || 60 * 24 * 60 * 60) * 1000);
   await query(
-    `UPDATE ig_accounts SET access_token = $1, token_expires_at = $2, token_refreshed_at = $3 WHERE id = $4`,
+    `UPDATE ig_accounts SET access_token_cifrado = $1, token_expires_at = $2, token_refreshed_at = $3 WHERE id = $4`,
     [packToken(r.accessToken), expiresAt, ahora, cuenta.id]
   );
   return { ok: true, sinCaducidad: false, expiresAt, renovado: true };
