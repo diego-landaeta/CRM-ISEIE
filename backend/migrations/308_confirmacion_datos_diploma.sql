@@ -1,5 +1,5 @@
 -- ─────────────────────────────────────────────────────────────────────────────
--- 307 · El alumno confirma sus datos antes de emitir el diploma
+-- 308 · El alumno confirma sus datos antes de emitir el diploma
 --       (gemela de diego-landaeta/CRM#847; en el 360 es la 291)
 --
 -- Automatizaciones 5/9 (Manuel, 13/11/2026). Antes de emitir, el CRM le manda al

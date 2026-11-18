@@ -4,7 +4,7 @@ import { query } from '../../shared/config/db.js';
   Confirmación de datos del diploma (#768) · la base.
 
   Una fila viva de `diploma_confirmaciones` por matrícula de Certifex (migración
-  307 en ISEIE, 291 en el 360). Pedirla otra vez anula la anterior.
+  308 en ISEIE, 291 en el 360). Pedirla otra vez anula la anterior.
 */
 
 /** La confirmación viva de una matrícula (la que no está anulada). */
