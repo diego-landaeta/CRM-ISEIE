@@ -227,8 +227,10 @@ export default function PlantillasWhatsappPage() {
     );
   }
 
+  // `color-scheme` oscuro en el tema oscuro: la lista del desplegable y las barras de desplazamiento los pinta el
+  // navegador y no siguen los tokens; sin esto salian claros (#128).
   return (
-    <div className="space-y-4 max-w-4xl">
+    <div className="space-y-4 max-w-4xl dark:[color-scheme:dark]">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold tracking-tight flex items-center gap-2">

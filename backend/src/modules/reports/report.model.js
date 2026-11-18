@@ -397,6 +397,42 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
     par
   );
 
+  // ESCRITO CONTRA VOZ (#180, gemela de CRM#128).
+  //
+  // Diego: «en los canales de ventas hay que diferenciar cuanto es escrito, por
+  // voz en el caso de WhatsApp, si envian audios o no». Y no es curiosidad: el
+  // documento comercial dice que el saludo del dia 1 «funciona mejor en nota de
+  // voz, sube mucho la tasa de respuesta». Hasta ahora eso se repetia de oidas
+  // porque no habia forma de contarlo.
+  //
+  // Sale de `wa_mensajes`, no de `lead_interactions`: la interaccion apunta que
+  // hubo un WhatsApp, pero no de que tipo. El dato ya estaba guardado.
+  //
+  // Solo lo SALIENTE. Lo que se mide es lo que hace la gestora, no lo que le
+  // mandan: contar los audios que recibe diria que trabaja mas quien tiene
+  // clientes habladores.
+  //
+  // `sticker` no cuenta como escrito ni como voz — no es un mensaje comercial —
+  // y las fotos y documentos van a su propia columna: mandar el dossier no es
+  // «escribir», y meterlo en el mismo saco desdibujaria justo lo que se compara.
+  const { rows: vozTexto } = await query(
+    `SELECT count(*) FILTER (WHERE m.tipo = 'texto')::int    AS escrito,
+            count(*) FILTER (WHERE m.tipo = 'audio')::int    AS voz,
+            count(*) FILTER (WHERE m.tipo IN ('imagen', 'video', 'documento'))::int AS adjunto
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       JOIN leads l ON l.id = c.lead_id
+      WHERE m.direccion = 'saliente'
+        AND l.deleted_at IS NULL ${pProj} ${pAses}
+            ${entre(`(m.ts AT TIME ZONE '${TZ}')::date`)}`,
+    par
+  ).catch((err) => {
+    // Sin las tablas de WhatsApp —un CRM donde no se ha instalado— el informe
+    // entero no puede caerse por una fila de mas.
+    if (err.code !== '42P01') throw err;
+    return { rows: [{ escrito: 0, voz: 0, adjunto: 0 }] };
+  });
+
   // EL EMBUDO: cuantos llegan al seguimiento 1, al 2, al 3...
   //
   // Es lo que convierte «99 % con seguimiento» en algo accionable: enseña
@@ -494,6 +530,19 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
       // no hay cola larga, y «2,3 toques por persona» se entiende solo.
       toques_por_persona: Number(act[0].personas) > 0
         ? Math.round((Number(act[0].toques) * 10) / Number(act[0].personas)) / 10 : 0,
+      // Lo que sale por WhatsApp, separado (#180). El porcentaje se calcula
+      // sobre escrito + voz y no sobre el total: un dossier mandado no compite
+      // con una nota de voz, y meterlo en el divisor haria bajar el numero por
+      // trabajar bien.
+      whatsapp_saliente: {
+        escrito: Number(vozTexto[0].escrito),
+        voz: Number(vozTexto[0].voz),
+        adjunto: Number(vozTexto[0].adjunto),
+        pct_voz: (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz)) > 0
+          ? Math.round((Number(vozTexto[0].voz) * 1000)
+              / (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz))) / 10
+          : 0,
+      },
     },
   };
 }

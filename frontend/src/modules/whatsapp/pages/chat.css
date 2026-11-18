@@ -916,20 +916,83 @@
   .wa-panel { max-width: calc(100vw - 24px); }
 }
 
-/* La cabecera del chat en el telefono, en dos filas (#180, como CRM#128).
+/* La cabecera del chat en el telefono, en UNA fila (#180, como CRM#128).
    Medido a 390 px en el 360: las acciones (estado + cuatro botones) ocupaban
    255 de los 359 px y al nombre le quedaban CERO — no se veia con quien se
    hablaba y el boton de prohibir salia cortado. Achicar los botones no vale:
-   bajan del minimo tactil. Asi que arriba van la flecha, el avatar y el nombre a
-   todo lo ancho, y debajo el estado y los iconos, a la derecha. */
+   bajan del minimo tactil.
+   Primero se partio en dos filas, y cabia, pero la cabecera pasaba de 66 a
+   104 px y se los quitaba al hilo, que es lo que se viene a leer. Ahora en la
+   fila quedan la ficha y llamar; el estado, las etiquetas y «no volver a
+   escribir» van al menu «Mas» (ChatPage). El nombre se lleva el resto y se
+   corta con puntos suspensivos: `min-width: 0` es lo que le deja encoger —sin
+   eso un hijo flexible no baja del ancho de su texto y empuja a los botones
+   fuera—. */
 @media (max-width: 640px) {
-  .wa-marco .cs-conversation-header { flex-wrap: wrap; row-gap: 4px; }
+  .wa-marco .cs-conversation-header { padding-left: 4px; padding-right: 8px; }
   .wa-marco .cs-conversation-header__content { flex: 1 1 0; min-width: 0; }
-  .wa-marco .cs-conversation-header__actions {
-    flex: 1 0 100%;
-    justify-content: flex-end;
-    margin-left: 0;
-  }
+  .wa-marco .cs-conversation-header__actions { flex: 0 0 auto; margin-left: 4px; }
+  /* La ficha, del tamaño de sus vecinos: con 17 px de icono y sin relleno era
+     el blanco tactil mas pequeño de la fila. */
+  .wa-btn-ficha { width: 34px; height: 34px; justify-content: center; }
+}
+
+/* El boton «Mas» y su panel. El panel cuelga del boton, a la derecha, por
+   encima del hilo; con el fondo de las cabeceras, como el de etiquetas. */
+.wa-mas { position: relative; display: inline-grid; place-items: center; }
+.wa-btn-mas {
+  display: grid; place-items: center;
+  width: 34px; height: 34px;
+  border-radius: 9999px;
+  border: 0; cursor: pointer;
+  background: transparent;
+  color: var(--wa-apagado);
+}
+.wa-btn-mas:hover,
+.wa-btn-mas[aria-expanded="true"] { background: var(--wa-hover); color: var(--wa-texto); }
+.wa-mas-panel {
+  position: absolute; z-index: 50; top: 40px; right: 0;
+  width: min(260px, calc(100vw - 24px));
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 4px;
+  border-radius: 8px;
+  border: 1px solid var(--wa-borde);
+  background: var(--wa-cabecera);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .45);
+}
+.wa-mas-fila {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 6px 8px;
+}
+.wa-mas-texto { font-size: 13px; color: var(--wa-texto); }
+.wa-mas-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 40px; padding: 0 8px;
+  border: 0; border-radius: 6px;
+  background: transparent; color: var(--wa-texto);
+  font-size: 13px; text-align: left; cursor: pointer;
+}
+.wa-mas-item:hover { background: var(--wa-hover); }
+.wa-mas-peligro { color: var(--wa-rojo-texto); }
+/* El de etiquetas, dentro del panel: una fila mas, con su nombre. El contador
+   se queda en la esquina del icono, como en la cabecera. */
+.wa-mas-panel .wa-etiquetas-chat { display: block; }
+.wa-btn-etiquetas.wa-btn-etiquetas-texto {
+  display: flex; justify-content: flex-start; gap: 10px;
+  width: 100%; height: 40px; padding: 0 8px;
+  border-radius: 6px;
+  color: var(--wa-texto); font-size: 13px;
+}
+.wa-btn-etiquetas-texto .wa-etiquetas-cuantas { left: 18px; right: auto; top: 6px; }
+.wa-mas-panel .wa-etiquetas-menu { top: 42px; }
+.wa-btn-mas:focus-visible,
+.wa-mas-item:focus-visible,
+.wa-btn-etiquetas:focus-visible,
+.wa-btn-llamar:focus-visible,
+.wa-btn-prohibir:focus-visible,
+.wa-volver:focus-visible {
+  outline: 2px solid hsl(var(--ring));
+  outline-offset: 2px;
 }
 
 /* Volver a la lista, en pantallas estrechas. */
@@ -1351,15 +1414,70 @@
  * quien dude lo tiene. */
 @media (max-width: 640px) {
   .wa-barra-superior { flex-wrap: wrap; row-gap: 6px; }
-  /* El estado ocupa su fila entera. El puntito NO: es un circulo de 8 px y
+  /* El aviso de «no enlazado» ocupa su fila entera: lleva un enlace y no se
+     puede cortar. Su fila, con el puntito delante: con `flex-basis: auto` el
+     texto pedia su ancho entero, no cabia al lado del punto y bajaba solo,
+     dejando el punto huerfano en una linea (visto a 320 px). El 16 px es el
+     punto y el hueco. El puntito NO se estira: es un circulo de 8 px y
      estirarlo lo convertia en una barra naranja de lado a lado. */
-  .wa-barra-superior > span:not(.wa-punto-estado) { flex: 1 1 auto; }
+  .wa-barra-superior > .wa-sin-enlazar { flex: 1 1 calc(100% - 16px); min-width: 0; }
   .wa-barra-superior > .wa-punto-estado { flex: 0 0 auto; }
+  /* Con el numero enlazado, en una sola fila con los iconos: el nombre se
+     corta antes que partir la barra en dos (#128). Antes la regla de arriba
+     estiraba tambien el boton de plantillas, y «Tutorial» y «Conexion» caian
+     solos a una segunda fila. */
+  .wa-barra-superior > .wa-quien {
+    flex: 1 1 0; min-width: 0;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
   .wa-barra-superior > .wa-btn-ampliar { margin-left: 0; }
-  /* Solo los iconos: las tres etiquetas juntas no caben en una fila. */
+  /* Solo los iconos: las etiquetas juntas no caben en una fila. Todos llevan
+     aria-label, asi que el lector de pantalla no pierde nada. */
+  .wa-barra-superior .wa-btn-plantillas span,
   .wa-barra-superior .wa-btn-ampliar span,
   .wa-barra-superior .wa-btn-tour span,
   .wa-barra-superior a span { display: none; }
+}
+
+/* El chat, de borde a borde en el telefono (#180, como CRM#128).
+ *
+ * Era una tarjeta dentro de la pagina: el relleno del <main>, la barra de
+ * estado como otra tarjeta y 8 px de hueco entre las dos. Se anula el relleno
+ * del contenedor y la pantalla se queda entera para el chat.
+ *
+ * El alto lo sigue midiendo ChatPage, y no hay que tocarlo: `rellenoDeAbajo`
+ * suma este margen negativo con el relleno del <main> y da 0, asi que el marco
+ * llega justo al borde de abajo.
+ *
+ * Con pantalla completa no: `.wa-completa` va `fixed` contra la pantalla y un
+ * margen la descolocaria.
+ *
+ * DISTINTO DEL 360. Alli el <main> lleva `p-4` (16 px) y la cabecera del CRM
+ * va en el flujo. Aqui lleva `p-3 pt-[68px] sm:p-4 sm:pt-[72px]`: 12 px por
+ * debajo de 640 px, y arriba 56 de la barra fija del movil (`h-14`) mas 12.
+ * Copiar el -16 del 360 metia el chat 4 px por debajo de esa barra y daba
+ * scroll horizontal. Con -12 el chat empieza justo bajo la barra y toca los
+ * tres bordes. Justo a 640 px ya manda `sm:p-4`, de ahi la segunda regla.
+ *
+ * VA JUNTO CON el relleno del <main> de AppLayout.jsx. Si cambia, este margen
+ * tiene que cambiar con el: si no, sale una franja o scroll horizontal. */
+@media (max-width: 640px) {
+  .wa-pagina:not(.wa-completa) { margin: -12px; }
+  .wa-pagina:not(.wa-completa) > .wa-barra-superior {
+    border-radius: 0;
+    border-width: 0 0 1px;
+  }
+  /* Mas especifico que el `space-y-2` de Tailwind (0,3,0), que si no depende
+     del orden de las hojas para ganar o perder. */
+  .wa-pagina:not(.wa-completa) > .wa-barra-superior + .wa-marco {
+    margin-top: 0;
+    border-radius: 0;
+  }
+}
+/* Justo a 640 px. Va despues del bloque de arriba para ganarle: misma
+   especificidad. */
+@media (min-width: 640px) and (max-width: 640px) {
+  .wa-pagina:not(.wa-completa) { margin: -16px; }
 }
 
 
@@ -1500,10 +1618,13 @@
   cursor: pointer;
   max-width: 150px;
 }
-/* La lista nativa del desplegable la pinta el navegador: en oscuro se le pide
-   su variante oscura, y en claro la clara. Antes iba `color-scheme: dark` fijo,
-   de cuando el panel era oscuro en los dos temas (#128, punto 3). */
-.dark .wa-estado-elegir { color-scheme: dark; }
+/* Los controles que pinta el navegador —la lista del desplegable de estado, el
+   <audio controls> de la nota antes de mandarla, el <video>, las barras de
+   desplazamiento de la caja de escribir y de los paneles— siguen
+   `color-scheme`, no los tokens. Sin decirle nada salian claros en el tema
+   oscuro. Se pone en la raiz de la pantalla y se hereda.
+   Antes solo lo tenia el desplegable de estado (#128, punto 3). */
+.dark .wa-pagina { color-scheme: dark; }
 .wa-estado-elegir:focus-visible {
   outline: 2px solid var(--wa-verde);
   outline-offset: 2px;

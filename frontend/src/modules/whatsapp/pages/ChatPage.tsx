@@ -6,7 +6,7 @@ import {
   MessageSeparator, InputToolbox,
 } from '@chatscope/chat-ui-kit-react';
 import '@chatscope/chat-ui-kit-styles/dist/default/styles.min.css';
-import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat, Tag } from '@phosphor-icons/react';
+import { Info, Prohibit, PencilSimpleLine, X, MagnifyingGlass, Microphone, Stop, UsersThree, PlugsConnected, WarningCircle, ArrowBendUpLeft, ArrowsOut, ArrowsIn, CaretLeft, Question, PhoneX, PhoneCall, VideoCamera, Trash, PaperPlaneRight, FileText, ShareFat, Tag, DotsThreeVertical } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -24,7 +24,7 @@ import SelectorPlantillas from '../components/SelectorPlantillas';
 import Llamar from '../components/Llamar';
 import EtiquetasDelChat from '../components/EtiquetasDelChat';
 import type { DatosParaRellenar } from '../lib/plantilla';
-import { altoDelMarco, rellenoDeAbajo } from '../lib/altoDelMarco';
+import { altoDelMarco, rellenoDeAbajo, loQueHayEncima } from '../lib/altoDelMarco';
 import './chat.css';
 import TextoDeWhatsapp from '../components/TextoDeWhatsapp';
 import { STATUS_LABELS } from '@/shared/components/ui/StatusBadge';
@@ -524,6 +524,13 @@ export default function ChatPage() {
   // En un telefono no caben la lista y el hilo a la vez: o una u otro, como en
   // WhatsApp. Se mide el ancho de verdad en vez de suponerlo.
   const [estrecho, setEstrecho] = useState(() => window.innerWidth < 900);
+  // Y por debajo de 640 px —el mismo corte que en chat.css— la cabecera del
+  // hilo no tiene sitio para todas sus acciones: las que no son de cada momento
+  // se van a un menu «Mas» (#128).
+  const [enTelefono, setEnTelefono] = useState(() => window.innerWidth <= 640);
+  const [masAbierto, setMasAbierto] = useState(false);
+  const mas = useRef<HTMLDivElement>(null);
+  const botonMas = useRef<HTMLButtonElement>(null);
   // Quien esta escribiendo al otro lado. En un grupo dice ademas QUIEN de
   // todos: «Maria escribiendo…», que es lo unico que sirve cuando son quince.
   const [escribiendo, setEscribiendo] = useState<{ quien: string; que: string } | null>(null);
@@ -656,6 +663,32 @@ export default function ChatPage() {
     };
   }, [aPantalla]);
 
+  // El menu «Mas» de la cabecera, en el telefono.
+  //
+  // Se cierra al cambiar de chat —lo que ofrecia era del anterior—, al tocar
+  // fuera y con Escape. Escape devuelve el foco al boton, que es donde estaba
+  // quien lo abrio con el teclado; y no sigue hacia la ventana, donde con la
+  // pantalla completa puesta tambien la cerraria.
+  useEffect(() => { setMasAbierto(false); }, [abierto, enTelefono]);
+  useEffect(() => {
+    if (!masAbierto) return undefined;
+    const alTocar = (e: PointerEvent) => {
+      if (mas.current && !mas.current.contains(e.target as Node)) setMasAbierto(false);
+    };
+    const alPulsar = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.stopPropagation();
+      setMasAbierto(false);
+      botonMas.current?.focus();
+    };
+    document.addEventListener('pointerdown', alTocar);
+    document.addEventListener('keydown', alPulsar);
+    return () => {
+      document.removeEventListener('pointerdown', alTocar);
+      document.removeEventListener('keydown', alPulsar);
+    };
+  }, [masAbierto]);
+
   // El recorrido, AL ENTRAR.
   //
   // Antes esperaba a `chats.length && conv`: a que hubiera conversaciones Y una
@@ -687,12 +720,19 @@ export default function ChatPage() {
       if (arriba === undefined) return;
       setAlto(altoDelMarco(arriba, window.innerHeight, rellenoDeAbajo(marco.current)));
     };
-    const mirarAncho = () => setEstrecho(window.innerWidth < 900);
+    const mirarAncho = () => {
+      setEstrecho(window.innerWidth < 900);
+      setEnTelefono(window.innerWidth <= 640);
+    };
     mirarAncho();
     window.addEventListener('resize', mirarAncho);
     medir();
     const ro = new ResizeObserver(medir);
     if (document.body) ro.observe(document.body);
+    // Y lo que tiene encima: si encoge, el body no cambia de tamaño (es
+    // `min-h-screen`) y el marco se quedaria corto. El porque, en
+    // `loQueHayEncima`.
+    loQueHayEncima(marco.current).forEach((e) => ro.observe(e));
     window.addEventListener('resize', medir);
     return () => {
       ro.disconnect();
@@ -1436,12 +1476,49 @@ export default function ChatPage() {
 
   let ultimoDia = '';
 
+  // Dos acciones de la cabecera del hilo que cambian de sitio con el ancho: en
+  // la fila, o dentro del menu «Mas» en el telefono. Se escriben una vez aqui.
+  //
+  // La etiqueta del prospecto, cambiable desde la cabecera (#72). Solo con
+  // ficha: un grupo no tiene estado, y un numero que no es prospecto tampoco —
+  // para ese esta el boton de la ficha, que deja convertirlo. Un <select> de
+  // verdad y no un menu propio: se abre con teclado, se lee con lector de
+  // pantalla y en el movil sale la rueda del sistema.
+  const estadoDelChat = conv?.lead_id ? (
+    <select
+      className={`wa-estado-elegir wa-et-${conv.lead_status || 'nuevo'}`}
+      value={conv.lead_status || ''}
+      aria-label="Estado del prospecto"
+      title="Cambiar el estado de este prospecto"
+      onChange={(e) => { setMasAbierto(false); cambiarEstado(conv, e.target.value); }}
+    >
+      {!conv.lead_status && <option value="">Sin estado</option>}
+      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
+        <option key={valor} value={valor}>{texto}</option>
+      ))}
+    </select>
+  ) : null;
+  // Las etiquetas del WhatsApp de la gestora (#128, #138). Van aparte del
+  // desplegable de estado: ese es del CRM y va con la persona; estas son de su
+  // movil. Si esa cuenta no tiene etiquetas —no es Business— el boton no se
+  // pinta, en vez de abrir una lista vacia.
+  const etiquetasDelChat = conv ? (
+    <EtiquetasDelChat
+      conversacionId={conv.id}
+      puestas={conv.etiquetas_wa || []}
+      esGrupo={conv.es_grupo}
+      deQuien={deQuien}
+      conTexto={enTelefono}
+      alCambiar={() => { cargarHilo(conv.id); cargarLista(); }}
+    />
+  ) : null;
+
   return (
-    <div className={`space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
+    <div className={`wa-pagina space-y-2 ${aPantalla ? 'wa-completa' : ''}`}>
       <div className="wa-barra-superior flex items-center gap-2 text-xs bg-card border border-border rounded-lg px-3 py-1.5">
         <span className={`wa-punto-estado w-2 h-2 rounded-full ${conexion?.conectado ? 'bg-success' : 'bg-warning'}`} />
         {conexion?.conectado
-          ? <span className="text-muted-foreground">
+          ? <span className="wa-quien text-muted-foreground">
               {sesion.esMia ? 'Tu WhatsApp' : `WhatsApp de ${sesion.nombre}`}: <strong className="text-foreground">
                 {conexion.nombre || (conexion.numero ? `+${conexion.numero}` : conexion.instancia)}
               </strong>
@@ -1534,7 +1611,7 @@ export default function ChatPage() {
             <div className="wa-barra-lista">
               <Search placeholder="Buscar un chat" value={filtro}
                 onChange={(v: string) => setFiltro(v)} onClearClick={() => setFiltro('')} />
-              <button type="button" title="Escribir a un prospecto"
+              <button type="button" title="Escribir a un prospecto" aria-label="Escribir a un prospecto"
                 onClick={() => setNuevoAbierto(true)} className="wa-btn-nuevo">
                 <PencilSimpleLine size={16} weight="bold" />
               </button>
@@ -1750,6 +1827,7 @@ export default function ChatPage() {
                      lo que uno pulsa— no hace nada. Ademas es diminuta. */
                   <ConversationHeader.Back>
                     <button type="button" className="wa-volver" title="Ver todos los chats"
+                      aria-label="Ver todos los chats"
                       onClick={() => { setAbierto(null); setConv(null); }}>
                       <CaretLeft size={20} weight="bold" />
                     </button>
@@ -1768,27 +1846,7 @@ export default function ChatPage() {
                     : [telefonoVisible(conv), conv.lead_id ? 'prospecto' : 'sin prospecto']
                         .filter(Boolean).join(' · ')} />
                 <ConversationHeader.Actions>
-                  {/* La etiqueta del prospecto, cambiable desde aqui (#72).
-                      Solo con ficha: un grupo no tiene estado, y un numero que
-                      no es prospecto tampoco — para ese esta el boton de al
-                      lado, que abre la ficha y deja convertirlo.
-                      Un <select> de verdad y no un menu propio: se abre con
-                      teclado, se lee con lector de pantalla y en el movil sale
-                      la rueda del sistema. */}
-                  {conv.lead_id && (
-                    <select
-                      className={`wa-estado-elegir wa-et-${conv.lead_status || 'nuevo'}`}
-                      value={conv.lead_status || ''}
-                      aria-label="Estado del prospecto"
-                      title="Cambiar el estado de este prospecto"
-                      onChange={(e) => cambiarEstado(conv, e.target.value)}
-                    >
-                      {!conv.lead_status && <option value="">Sin estado</option>}
-                      {Object.entries(STATUS_LABELS).map(([valor, texto]) => (
-                        <option key={valor} value={valor}>{texto}</option>
-                      ))}
-                    </select>
-                  )}
+                  {!enTelefono && estadoDelChat}
                   {/* La ficha, en un popup y SIN salir de aqui.
                       Antes era un enlace a /prospectos/:id que navegaba en esta
                       misma pestaña: al volver se recargaban las conversaciones,
@@ -1811,18 +1869,7 @@ export default function ChatPage() {
                         paso los tres van iguales. */}
                     <Info size={17} />
                   </button>
-                  {/* Las etiquetas del WhatsApp de la gestora (#128, #138).
-                      Van aparte del desplegable de estado que hay al lado: ese
-                      es del CRM y va con la persona; estas son de su móvil.
-                      Si esa cuenta no tiene etiquetas —no es Business— el botón
-                      no se pinta, en vez de abrir una lista vacía. */}
-                  <EtiquetasDelChat
-                    conversacionId={conv.id}
-                    puestas={conv.etiquetas_wa || []}
-                    esGrupo={conv.es_grupo}
-                    deQuien={deQuien}
-                    alCambiar={() => { cargarHilo(conv.id); cargarLista(); }}
-                  />
+                  {!enTelefono && etiquetasDelChat}
                   {/* Llamar. El CRM prepara, el telefono llama.
                       Solo cuando hay un numero de verdad al que llamar: a un
                       grupo no se puede, y de quien llega por «@lid» no tenemos
@@ -1831,14 +1878,53 @@ export default function ChatPage() {
                       ofrecerlo. */}
                   {telefonoVisible(conv) && (
                     <button type="button" onClick={() => llamar(conv)} className="wa-btn-llamar"
+                      aria-label={`Llamar a ${telefonoVisible(conv)} desde el móvil`}
                       title={`Llamar a ${telefonoVisible(conv)} desde el móvil`}>
                       <PhoneCall size={17} />
                     </button>
                   )}
-                  <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
-                    title="No volver a escribir a este número">
-                    <Prohibit size={17} />
-                  </button>
+                  {enTelefono ? (
+                    /* En el telefono, el estado, las etiquetas y «no volver a
+                       escribir» van aqui dentro (#128). Con todo en la fila, al
+                       nombre le quedaban 0 px a 390; en dos filas cabia, pero la
+                       cabecera se comia 104 px del hilo. A la vista quedan la
+                       ficha y llamar, que son las de cada conversacion.
+
+                       Es un panel y no un role="menu": dentro hay un <select> y
+                       el boton de etiquetas abre su propia lista, y un menu ARIA
+                       solo admite elementos de menu. Va justo detras del boton,
+                       asi que el tabulador entra en el sin mas. */
+                    <div className="wa-mas" ref={mas}>
+                      <button type="button" ref={botonMas} className="wa-btn-mas"
+                        aria-label="Más acciones" title="Más acciones"
+                        aria-expanded={masAbierto} aria-controls="wa-mas-panel"
+                        onClick={() => setMasAbierto((v) => !v)}>
+                        <DotsThreeVertical size={20} weight="bold" />
+                      </button>
+                      {masAbierto && (
+                        <div id="wa-mas-panel" className="wa-mas-panel" role="group" aria-label="Más acciones">
+                          {estadoDelChat && (
+                            <div className="wa-mas-fila">
+                              <span className="wa-mas-texto" aria-hidden="true">Estado</span>
+                              {estadoDelChat}
+                            </div>
+                          )}
+                          {etiquetasDelChat}
+                          <button type="button" className="wa-mas-item wa-mas-peligro"
+                            onClick={() => { setMasAbierto(false); setPidiendoMotivo(true); }}>
+                            <Prohibit size={17} />
+                            No volver a escribir
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setPidiendoMotivo(true)} className="wa-btn-prohibir"
+                      aria-label="No volver a escribir a este número"
+                      title="No volver a escribir a este número">
+                      <Prohibit size={17} />
+                    </button>
+                  )}
                 </ConversationHeader.Actions>
               </ConversationHeader>
 
