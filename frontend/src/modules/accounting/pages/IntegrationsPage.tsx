@@ -7,6 +7,7 @@ import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
 import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
@@ -34,11 +35,10 @@ interface Integration {
 // /api/integrations/stripe/webhook, que no existe en ningun sitio: la ruta
 // buena es /api/stripe-webhook/<projectId>, montada aparte por ser publica.
 // Quien copiara la anterior a Stripe la configuro contra la nada.
+// Con la base de la compilación (ver shared/lib/direccionesPublicas): en el 360
+// salía sin el /crm y daba 404; aquí la base es la raíz, pero la regla es la misma.
 function urlWebhook(projectId: number | null | undefined): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined)
-    || `${window.location.origin}/api`;
-  const raiz = base.replace(/\/+$/, '');
-  return `${raiz}/stripe-webhook/${projectId ?? ''}`;
+  return apiPublicUrl(`/stripe-webhook/${projectId ?? ''}`);
 }
 
 /**
@@ -580,8 +580,7 @@ const EVENTOS_PAYPAL = [
 ] as const;
 
 function urlWebhookPaypal(projectId: number): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined) || `${window.location.origin}/api`;
-  return `${base.replace(/\/+$/, '')}/paypal-webhook/${projectId}`;
+  return apiPublicUrl(`/paypal-webhook/${projectId}`);
 }
 
 function PaypalSiEstaEncendido({ projectId }: { projectId: number }) {

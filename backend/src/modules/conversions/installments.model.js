@@ -1,5 +1,6 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { recalcularCobrado } from './cobrado.js';
+import { saldarCuotas, cargosStripeSueltos, MARGEN } from './saldar-cuotas.js';
 
 export async function listByConversion(conversionId) {
   // Se añade la factura emitida por el pago de cada cuota (por payment_id) para
@@ -27,6 +28,11 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
     await c.query('BEGIN');
     // Borra anteriores no cobradas
     await c.query(`DELETE FROM conversion_installments WHERE conversion_id = $1 AND fecha_cobro IS NULL`, [conversionId]);
+    // Las nuevas van DETRÁS de las ya cobradas (CRM#888): numerar desde 1 chocaba
+    // con la cuota 1 cobrada (número repetido) y el plan no se podía rehacer.
+    const { rows: [{ ultima }] } = await c.query(
+      'SELECT COALESCE(MAX(numero), 0)::int AS ultima FROM conversion_installments WHERE conversion_id = $1',
+      [conversionId]);
 
     if (Array.isArray(customInstallments) && customInstallments.length > 0) {
       for (let i = 0; i < customInstallments.length; i++) {
@@ -38,7 +44,7 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
         await c.query(
           `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, concepto)
            VALUES ($1, $2, $3, $4, $5)`,
-          [conversionId, i + 1, importe, fecha, conceptoVal]
+          [conversionId, ultima + i + 1, importe, fecha, conceptoVal]
         );
       }
     } else {
@@ -54,10 +60,14 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
         await c.query(
           `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, concepto)
            VALUES ($1, $2, $3, $4, $5)`,
-          [conversionId, i + 1, importe, venc.toISOString().slice(0, 10), conceptoVal]
+          [conversionId, ultima + i + 1, importe, venc.toISOString().slice(0, 10), conceptoVal]
         );
       }
     }
+    // Los cobros que ya hay y no saldan ninguna cuota saldan las nuevas, en
+    // orden (CRM#888). Si el plan es «lo que queda» tras un pago inicial, ese
+    // pago queda fuera: el plan suma menos que el total.
+    await saldarCuotas(c, conversionId);
     await c.query('COMMIT');
     return await listByConversion(conversionId);
   } catch (err) {
@@ -82,14 +92,55 @@ export async function update(id, data) {
 }
 
 // `referencia`: la del banco en una transferencia o un depósito (migración 206).
-export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas, referencia }) {
+//
+// ANTES DE APUNTAR, MIRAR SI YA ESTÁ PAGADA (CRM#888). 18/11: una gestora apuntó
+// a mano la cuota 2 de una venta que ya la tenía pagada por Stripe en
+// septiembre, y salió otra factura. La cuota salía pendiente porque el pago
+// inicial no saldaba ninguna. Ahora, primero los cobros sueltos de la venta
+// saldan sus cuotas; si con eso esta queda pagada, se dice cuál la paga
+// (`ya_pagada`) y no se apunta nada. Y sin `confirmar`, se avisa (`aviso`) si
+// hay un cargo de Stripe sin enlazar de este cliente por ese importe o si la
+// venta ya está cobrada y esto la pasaría.
+export async function markPaid(id, { fecha_cobro, importe_cobrado, metodo, notas, referencia }, { confirmar = false } = {}) {
   const c = await getClient();
   try {
     await c.query('BEGIN');
     const { rows: instRows } = await c.query(`SELECT * FROM conversion_installments WHERE id = $1 FOR UPDATE`, [id]);
-    const inst = instRows[0];
+    let inst = instRows[0];
     if (!inst) { await c.query('ROLLBACK'); return null; }
     if (inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota ya cobrada'); }
+
+    const saldadas = await saldarCuotas(c, inst.conversion_id);
+    if (saldadas.length) {
+      const { rows: tras } = await c.query('SELECT * FROM conversion_installments WHERE id = $1', [id]);
+      inst = tras[0];
+      if (inst?.fecha_cobro) {
+        const { rows: cobro } = await c.query(
+          `SELECT cp.id, cp.importe::float8 AS importe, cp.fecha::text AS fecha, f.codigo AS factura
+             FROM conversion_payments cp
+             LEFT JOIN invoices f ON f.payment_id = cp.id AND f.tipo <> 'proforma' AND f.estado <> 'cancelada'
+            WHERE cp.id = $1 LIMIT 1`, [inst.payment_id]);
+        await c.query('COMMIT');
+        return { ...inst, ya_pagada: true, cobro: cobro[0] || null };
+      }
+    }
+
+    const importe = Number(importe_cobrado || inst.importe_previsto);
+    if (!confirmar) {
+      const [cargo] = await cargosStripeSueltos((s, p) => c.query(s, p), inst.conversion_id, { importe });
+      if (cargo) {
+        await c.query('COMMIT'); // lo saldado arriba es cierto con o sin este cobro
+        return { ...inst, aviso: 'CARGO_STRIPE_SUELTO', cargo };
+      }
+      const { rows: [v] } = await c.query(
+        `SELECT importe_total::float8 AS total,
+                COALESCE((SELECT SUM(importe) FROM conversion_payments WHERE conversion_id = $1), 0)::float8 AS cobrado
+           FROM conversions WHERE id = $1`, [inst.conversion_id]);
+      if (v && v.cobrado + importe > v.total + MARGEN) {
+        await c.query('COMMIT');
+        return { ...inst, aviso: 'PAGO_DE_MAS', total: v.total, cobrado: v.cobrado };
+      }
+    }
     // Crear payment
     const { rows: payRows } = await c.query(
       `INSERT INTO conversion_payments (conversion_id, importe, fecha, notas, metodo, referencia)

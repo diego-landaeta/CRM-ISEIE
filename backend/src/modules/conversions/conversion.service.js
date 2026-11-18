@@ -325,6 +325,15 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
       + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
       409, 'DUPLICATE_PAYMENT');
   }
+  if (result.error === 'CARGO_STRIPE_SUELTO') {
+    // Mismo código que el duplicado: la pantalla ya pregunta «¿registrarlo
+    // igualmente?» y, con un sí, vuelve con `permitir_duplicado` (CRM#888).
+    const d = result.existing;
+    throw new AppError(
+      `Ese pago ya entró por Stripe: un cargo de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} `
+      + 'de este cliente, sin enlazar a ningún cobro. Enlázalo desde la ficha de la venta en vez de apuntarlo otra vez.',
+      409, 'DUPLICATE_PAYMENT', { cargo: d });
+  }
   if (result.error === 'DUPLICATE_AUTOMATICO') {
     const d = result.existing;
     const deDonde = d.origen === 'paypal' ? 'PayPal' : 'el extracto del banco';

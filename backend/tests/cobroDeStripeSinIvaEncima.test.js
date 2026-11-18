@@ -85,7 +85,12 @@ function responder(sql, p = []) {
     db.conversions.get(Number(p[1])).importe_pagado = Number(p[0]);
     return r([]);
   }
-  if (/^SELECT id, importe_previsto FROM conversion_installments/.test(s)) return r([]);
+  // saldar-cuotas.js (CRM#888): la venta no tiene plan de cuotas.
+  if (/^SELECT importe_total FROM conversions WHERE id = \$1$/.test(s)) {
+    const c = db.conversions.get(Number(p[0]));
+    return r(c ? [{ importe_total: c.importe_total }] : []);
+  }
+  if (/^SELECT id, numero, importe_previsto, fecha_vencimiento, fecha_cobro, concepto, enviar_email FROM conversion_installments/.test(s)) return r([]);
 
   // ¿La admin lleva un equipo comercial? (#415: si lo lleva no corrige facturas). Aquí, no.
   if (/^SELECT gestora_id FROM equipo_comercial WHERE lider_id = \$1/.test(s)) return r([]);

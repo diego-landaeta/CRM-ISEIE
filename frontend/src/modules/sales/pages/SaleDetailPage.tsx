@@ -11,6 +11,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import RepartoVentaCard from '../components/RepartoVentaCard';
+import EnlazarStripeCard from '../components/EnlazarStripeCard';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -37,7 +38,7 @@ type Cuota = {
 };
 type Pago = {
   id: number; importe: string | number; fecha: string; notas: string | null; metodo: string | null;
-  cuota_numero: number | null; pagado_por_stripe?: boolean;
+  cuota_numero: number | string | null; pagado_por_stripe?: boolean;
   factura_id?: number | null; factura_codigo?: string | null; factura_estado?: string | null;
 };
 type Venta = {
@@ -66,6 +67,8 @@ export default function SaleDetailPage() {
   const navigate = useNavigate();
   const [venta, setVenta] = useState<Venta | null>(null);
   const [loading, setLoading] = useState(true);
+  // Se sube al enlazar un cargo de Stripe: la venta se vuelve a leer.
+  const [recarga, setRecarga] = useState(0);
 
   useEffect(() => {
     (async () => {
@@ -81,7 +84,7 @@ export default function SaleDetailPage() {
         });
       } finally { setLoading(false); }
     })();
-  }, [id]);
+  }, [id, recarga]);
 
   if (loading) {
     return (
@@ -251,6 +254,8 @@ export default function SaleDetailPage() {
           )}
         </div>
       </div>
+
+      <EnlazarStripeCard conversionId={venta.id} onEnlazado={() => setRecarga((n) => n + 1)} />
 
       <div className="bg-card border border-border rounded-lg p-4">
         <h3 className="font-semibold mb-3">Pagos registrados ({pagos.length})</h3>

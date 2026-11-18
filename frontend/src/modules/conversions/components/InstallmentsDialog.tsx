@@ -287,7 +287,24 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         });
         toast({ title: 'Pago actualizado', description: `${importe}€ el ${payFecha}` });
       } else {
-        await conversionsApi.payInstallment(payingInst.id, { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo, referencia });
+        const datos = { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo, referencia };
+        try {
+          await conversionsApi.payInstallment(payingInst.id, datos);
+        } catch (err: any) {
+          // Ya estaba pagada: se dice con qué cobro y se recarga el plan (CRM#888).
+          if (err?.data?.code === 'CUOTA_YA_PAGADA') {
+            toast({ title: 'Esta cuota ya está pagada', description: err.data.error });
+            setPayingInst(null);
+            onSaved?.();
+            await load();
+            return;
+          }
+          // Posible duplicado (un cargo de Stripe sin enlazar, o la venta ya
+          // cobrada): se pregunta antes de apuntarlo.
+          if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
+          if (!window.confirm(`${err.data.error}\n\n¿Apuntarlo igualmente?`)) return;
+          await conversionsApi.payInstallment(payingInst.id, { ...datos, confirmar: true });
+        }
         toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
       }
       setPayingInst(null);
