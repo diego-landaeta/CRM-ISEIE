@@ -165,12 +165,12 @@ describe('#694 · lo nuevo de la semana sale sin tocar la pantalla', () => {
     }
   });
 
-  it('consultas, Mi campus, Moodle, tablero y facturas de colaboradores están en la ficha', () => {
+  it('consultas, Mi campus, Moodle, tablero, links de pago y facturas de colaboradores están en la ficha', () => {
     const { fila } = pintar({ role: 'gestor' });
     const claves = [
       'consultas.atender', 'consultas.view', 'consultas.gestionar', 'tutores.mis_cursos', 'moodle.view', 'moodle.conectar',
       'tasks.view_own', 'tasks.create', 'tasks.edit', 'tasks.assign', 'tasks.manage', 'tasks.close',
-      // Los links de pago (gemela de CRM#713) aún no están en ISEIE: se añaden aquí cuando lleguen.
+      'links_pago.crear', 'links_pago.ver_todos', 'links_pago.configurar',
       'facturas_colaborador.subir', 'facturas_colaborador.ver_todas', 'facturas_colaborador.anular', 'facturas_colaborador.pagar',
     ];
     for (const k of claves) expect(fila(k), k).not.toBeNull();
