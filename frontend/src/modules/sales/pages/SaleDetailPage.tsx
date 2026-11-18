@@ -205,7 +205,8 @@ export default function SaleDetailPage() {
         {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
         <RepartoVentaCard conversionId={venta.id} />
         {venta.project_id != null && (
-          <LinksDePagoCard projectId={venta.project_id} conversionId={venta.id} productoId={venta.producto_contratado_id} />
+          <LinksDePagoCard projectId={venta.project_id} conversionId={venta.id} productoId={venta.producto_contratado_id}
+            pendiente={pendiente} />
         )}
         </div>
 

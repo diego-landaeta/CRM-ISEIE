@@ -189,6 +189,8 @@ export async function crear(req, res, next) {
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
       modalidad: b.modalidad, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
+      // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
+      pendiente: destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined,
     });
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,

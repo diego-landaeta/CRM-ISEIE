@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { COBRADO_DE } from '../conversions/cobrado.js';
 
 /*
   LINKS DE PAGO (CRM#680).
@@ -254,4 +255,129 @@ export async function campusDelWebhook(endpointId, projectIds) {
       ORDER BY p.nombre`,
     [endpointId, projectIds]);
   return rows;
+}
+
+// ─── Fase 3: el cobro del link, a su venta ──────────────────────────────────
+
+/** Lo que hace falta de un link para atar su cobro. Sin recortar: lo pide Stripe. */
+export async function paraCobro(id) {
+  const { rows } = await query(
+    `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
+            estado, stripe_payment_link_id
+       FROM payment_links WHERE id = $1`,
+    [id]);
+  return rows[0] || null;
+}
+
+/** Lo pendiente de una venta (lo vendido menos la suma de sus pagos), o null si no existe. */
+export async function pendienteDeVenta(conversionId) {
+  const { rows } = await query(
+    `SELECT GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0) AS pendiente
+       FROM conversions c WHERE c.id = $1`,
+    [conversionId]);
+  return rows[0] ? Number(rows[0].pendiente) : null;
+}
+
+/** Del cargo de Stripe a su link (`stripe_payments.payment_link_id`, migración 250). */
+export async function atarCargo(stripePaymentId, linkId) {
+  await query(
+    `UPDATE stripe_payments SET payment_link_id = $2, updated_at = NOW()
+      WHERE id = $1 AND payment_link_id IS DISTINCT FROM $2`,
+    [stripePaymentId, linkId]);
+}
+
+/**
+ * La venta de ese curso que ya tenga la ficha (la más reciente): la asesora pudo
+ * registrarla a mano entre que mandó el link y que el cliente lo pagó. Sin curso
+ * en el link no se adivina.
+ */
+export async function ventaDelCursoEnLaFicha(leadId, productId) {
+  if (!leadId || !productId) return null;
+  const { rows } = await query(
+    `SELECT id FROM conversions
+      WHERE lead_id = $1 AND producto_contratado_id = $2
+      ORDER BY fecha_conversion DESC NULLS LAST, id DESC LIMIT 1`,
+    [leadId, productId]);
+  return rows[0] || null;
+}
+
+/** La venta y su ficha: a quién se avisa y a qué ficha va el cargo. */
+export async function ventaConFicha(conversionId) {
+  const { rows } = await query(
+    `SELECT c.id, c.lead_id, l.nombre AS lead_nombre, l.responsable_id
+       FROM conversions c LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.id = $1`,
+    [conversionId]);
+  return rows[0] || null;
+}
+
+/** El link sale de un prospecto: al crearse la venta, queda apuntada en él. */
+export async function ponerVenta(linkId, conversionId) {
+  await query(
+    `UPDATE payment_links SET conversion_id = $2, updated_at = NOW()
+      WHERE id = $1 AND conversion_id IS NULL`,
+    [linkId, conversionId]);
+}
+
+/**
+ * Pagado. Solo cambia la fila la primera vez (un cargo que vuelve a entrar por
+ * el sondeo no lo marca otra vez) y devuelve el estado de antes: un link
+ * caducado o anulado que el cliente llegó a pagar se marca pagado igual (el
+ * dinero entró), pero se dice.
+ */
+export async function marcarPagado(linkId, { pagadoEl, conversionId }) {
+  const { rows } = await query(
+    `UPDATE payment_links pl
+        SET estado = 'pagado', pagado_el = COALESCE(pl.pagado_el, $2::timestamptz),
+            conversion_id = COALESCE(pl.conversion_id, $3), updated_at = NOW()
+       FROM (SELECT id, estado FROM payment_links WHERE id = $1 FOR UPDATE) antes
+      WHERE pl.id = antes.id AND pl.estado <> 'pagado'
+      RETURNING antes.estado AS estado_antes`,
+    [linkId, pagadoEl, conversionId]);
+  return rows[0] || null;
+}
+
+/** Abierto: el cliente llegó a la página de pago (un intento fallido o una sesión que caducó). */
+export async function marcarAbierto(linkId) {
+  await query(
+    `UPDATE payment_links SET estado = 'abierto', updated_at = NOW() WHERE id = $1 AND estado = 'creado'`,
+    [linkId]);
+}
+
+/** Los ids de la sesión de Checkout que pagó el link, sin pisar los que ya hubiera. */
+export async function datosDeCheckout(linkId, { sessionId, paymentIntentId, customerId }) {
+  await query(
+    `UPDATE payment_links
+        SET stripe_checkout_session_id = COALESCE($2, stripe_checkout_session_id),
+            stripe_payment_intent_id   = COALESCE($3, stripe_payment_intent_id),
+            stripe_customer_id         = COALESCE($4, stripe_customer_id),
+            updated_at = NOW()
+      WHERE id = $1`,
+    [linkId, sessionId, paymentIntentId, customerId]);
+}
+
+/**
+ * Un aviso de Stripe en el historial del link. `stripe_event_id` es único: si
+ * Stripe lo reintenta, no se apunta dos veces. Devuelve true si se apuntó.
+ */
+export async function anotarEventoDeStripe(linkId, tipo, datos, stripeEventId) {
+  const { rows } = await query(
+    `INSERT INTO payment_link_eventos (link_id, tipo, datos, stripe_event_id)
+     VALUES ($1, $2, $3::jsonb, $4)
+     ON CONFLICT (stripe_event_id) DO NOTHING RETURNING id`,
+    [linkId, tipo, JSON.stringify(datos), stripeEventId]);
+  return rows.length > 0;
+}
+
+/**
+ * Lo que llega por el cargo (sondeo o aviso), que no trae id de evento: se
+ * apunta una vez por link, tipo y cargo.
+ */
+export async function anotarEventoDelCargo(linkId, tipo, datos) {
+  await query(
+    `INSERT INTO payment_link_eventos (link_id, tipo, datos)
+     SELECT $1::int, $2::varchar, $3::jsonb
+      WHERE NOT EXISTS (SELECT 1 FROM payment_link_eventos
+                         WHERE link_id = $1 AND tipo = $2 AND datos->>'stripe_id' = $4)`,
+    [linkId, tipo, JSON.stringify(datos), String(datos.stripe_id)]);
 }

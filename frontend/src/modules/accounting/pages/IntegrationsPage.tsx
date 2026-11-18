@@ -62,6 +62,10 @@ const EVENTOS_DEL_WEBHOOK = [
   'charge.succeeded', 'charge.updated', 'charge.refunded', 'charge.failed',
   'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed',
   'payment_intent.succeeded', 'payment_intent.payment_failed',
+  // Los links de pago (CRM#680, fase 3): el pago del link y sus intentos. Fuera de
+  // ellos el CRM no hace nada con un checkout (sin la marca del CRM, se descarta).
+  'checkout.session.completed', 'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed', 'checkout.session.expired',
 ] as const;
 
 const EMPTY = (provider: Provider): Integration => ({

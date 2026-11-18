@@ -16,6 +16,8 @@ import {
 } from './compra-directa.service.js';
 // El interruptor de las reglas nuevas de asociación (apagado de serie).
 import { asociacionV2Activa } from './asociacion.config.js';
+// Links de pago, fase 3 (#407, gemela de CRM#680): la marca del CRM en el cargo ata el cobro a su link y su venta.
+import * as cobroDelLink from '../links-pago/links-pago.cobro.js';
 
 export { asociacionV2Activa };
 
@@ -296,9 +298,19 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
     await reengancharCobro(payment, dbRow);
     return;
   }
+  // LINKS DE PAGO (CRM#680, fase 3): la marca del CRM va PRIMERO, es la asociación
+  // más segura. Con marca de este campus y entorno, el cobro va a la venta del
+  // link (o se crea desde su prospecto) sin mirar el correo; con marca ajena no
+  // se asocia. Sin marca, o con los links apagados, todo sigue como siempre.
+  const delLink = await cobroDelLink.linkDelCargo(projectId, payment, dbRow);
+  if (delLink?.ajeno) {
+    logger.info({ projectId, stripeId: payment.stripe_id, motivo: delLink.motivo },
+      'cargo con la marca de un link de pago que no es de aquí: no se asocia');
+    return;
+  }
   // Apagado el interruptor, como siempre: sin correo en el cargo no se hace nada.
   const v2 = asociacionV2Activa();
-  if (payment.status !== 'succeeded' || (!v2 && !payment.customer_email)) return;
+  if (payment.status !== 'succeeded' || (!delLink && !v2 && !payment.customer_email)) return;
   // Un cargo en otra moneda solo vale si su importe ya viene liquidado en euros.
   // Los importados sin el balance_transaction guardaron el importe en la moneda
   // del cargo: asociarlos meteria 270.000 pesos colombianos como 270.000 euros.
@@ -309,9 +321,11 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
     return;
   }
 
-  const destino = v2
-    ? await ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta, sinEsperarALaTienda })
-    : await ventaComoSiempre(projectId, payment, dbRow);
+  const destino = delLink
+    ? await cobroDelLink.ventaDelLink(projectId, payment, delLink.link)
+    : v2
+      ? await ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta, sinEsperarALaTienda })
+      : await ventaComoSiempre(projectId, payment, dbRow);
   if (destino?.aplazado) return { aplazado: true };
   if (!destino) return;
   const { conv, ficha, metodoAuto } = destino;
@@ -324,6 +338,7 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   if (dup) {
     // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
     await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
+    if (destino.link) await cobroDelLink.trasCobrar(destino.link, { payment, conversionId: conv.id, conversionPaymentId: dup.id });
     return;
   }
   // Registrar el cobro con la MISMA lógica que un pago manual (conversion.model.addPayment):
@@ -331,11 +346,13 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   // registra aunque supere el total previsto de la venta (el total es lo que suele estar mal).
   const convModel = await import('../conversions/conversion.model.js');
   const res = await convModel.addPayment(conv.id, {
-    importe: payment.amount, fecha, notas: `Auto-Stripe ${payment.stripe_id}`, metodo: 'tarjeta',
+    importe: payment.amount, fecha, metodo: 'tarjeta',
+    notas: destino.link ? `Auto-Stripe ${payment.stripe_id} (link de pago n.º ${destino.link.id})` : `Auto-Stripe ${payment.stripe_id}`,
   }, { allowOverpay: true, allowDuplicate: true });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: metodoAuto });
+  if (destino.link) await cobroDelLink.trasCobrar(destino.link, { payment, conversionId: conv.id, conversionPaymentId: cpId });
   // El cobro queda registrado en la venta y espera EN LA COLA de facturacion.
   // La factura NO sale sola: la emite una persona cuando comprueba que los datos
   // del cliente estan bien. Antes se emitia aqui mismo, y salian facturas
@@ -345,6 +362,24 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   // Factura automatica (#452), si esta encendida en este campus: pide los datos
   // fiscales al alumno o, si ya los dio, emite la de este cobro.
   facturaAutomatica(conv.id, cpId);
+
+  // El cobro de un link de pago (CRM#680, fase 3) se avisa a quien creó el link: la
+  // venta es suya. En MultiCRM va dentro del aviso de toda venta automática (#111),
+  // que ISEIE no tiene; aquí solo el del link.
+  if (destino.link && destino.avisarA) {
+    const { notifyUsers } = await import('../notifications/notifications.service.js');
+    const euros = Number(payment.amount).toLocaleString('es-ES', {
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    });
+    await notifyUsers({
+      targetUserIds: [destino.avisarA],
+      type: 'venta_automatica',
+      title: `Link de pago cobrado: ${euros} € de ${ficha.nombre || destino.email || 'tu cliente'}`,
+      message: 'Se ha registrado solo en su venta, a tu nombre. Queda en la cola de facturacion.',
+      link_path: `/leads/${ficha.id}`,
+      metadata: { lead_id: ficha.id, conversion_id: conv.id, stripe_id: payment.stripe_id, payment_link_id: destino.link.id },
+    }).catch(() => {});
+  }
 }
 
 // Trae detalle completo de dispute desde Stripe API (incluye evidence_due_by)
@@ -819,6 +854,32 @@ export async function handleWebhookEvent(projectId, event) {
           catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo no se pudo enlazar con su venta (payment_intent)'); }
           if (event.type === 'payment_intent.succeeded') await trasAsociarCargo(dbRow.id);
         } catch (e) { logger.warn({ err: e.message }, 'fetch charge from PI failed'); }
+      }
+      return { processed: event.type, stripeId: obj.id };
+    }
+    case 'checkout.session.completed':
+    case 'checkout.session.async_payment_succeeded':
+    case 'checkout.session.async_payment_failed':
+    case 'checkout.session.expired': {
+      // Links de pago (CRM#680, fase 3). La sesión se apunta en su link y, si se ha
+      // pagado, se trae su cargo y entra por el MISMO camino que charge.succeeded
+      // (misma reserva por cargo): si el aviso del cargo llega también, no suma dos
+      // veces. Sin clave de lectura no se trae: el sondeo lo encontrará con su marca.
+      const r = await cobroDelLink.desdeLaSesion(projectId, event);
+      if (r?.skipped) return { skipped: r.skipped, stripeId: obj.id };
+      if (r.cobrar && r.paymentIntent && apiKey) {
+        try {
+          const cargos = await stripeGet(apiKey, '/v1/charges', {
+            payment_intent: r.paymentIntent, 'expand[]': 'data.balance_transaction',
+          });
+          for (const ch of cargos.data || []) {
+            const payment = chargeToPayment(ch, projectId);
+            const dbRow = await model.upsertPayment(payment);
+            try { await enlazarDesdeElAviso(projectId, payment, dbRow); }
+            catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo de un link de pago no se pudo enlazar (checkout)'); }
+            if (payment.status === 'succeeded') await trasAsociarCargo(dbRow.id);
+          }
+        } catch (e) { logger.warn({ err: e.message, projectId, linkId: r.link?.id }, 'links de pago: no se pudo traer el cargo de la sesión; lo traerá el sondeo'); }
       }
       return { processed: event.type, stripeId: obj.id };
     }

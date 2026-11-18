@@ -13,9 +13,8 @@ import { logger } from '../../shared/utils/logger.js';
   clave es la de ESCRITURA del campus (`stripe_links`), nunca la de lectura ni
   una del `.env`: si el campus no la tiene, no se crea nada.
 
-  Atar el cobro a la venta por la marca (`crm_link_id`) es la fase 3; las cuotas,
-  la 4. Mientras tanto, lo que se pague con estos links entra como hasta hoy, por
-  el sondeo y por el correo.
+  Atar el cobro a la venta por la marca (`crm_link_id`) es la fase 3, en
+  `links-pago.cobro.js`; las cuotas, la 4.
 */
 
 /**
@@ -99,7 +98,17 @@ export function importeMinimo(precioCatalogo, maxPct) {
  *   · descuento: hasta el tope del campus, salvo quien configura (el admin);
  *   · sin precio comparable (curso sin precio, o en otra moneda): solo el admin.
  */
-export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, esAdmin }) {
+/*
+ * DESDE UNA VENTA, EL TOPE SE MIDE CONTRA LO PENDIENTE (CRM#680, fase 3).
+ *
+ * En una venta ya hay un precio pactado y quizá pagos hechos: lo que se le puede
+ * pedir al cliente es lo que falta. Si se midiera contra el catálogo, un link por
+ * lo pendiente de una venta a medio pagar saldría como un «descuento» enorme, y
+ * uno de una venta pactada por encima del catálogo dejaría rebajar más de la
+ * cuenta. `pendiente` (en euros, como guarda el CRM) solo llega desde una venta;
+ * sin nada pendiente, o en otra moneda, no hay con qué comparar: solo el admin.
+ */
+export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, esAdmin, pendiente }) {
   if (modalidad === 'cuotas') {
     throw new AppError('Los links en cuotas todavía no se pueden crear: de momento, pago único.', 400, 'CUOTAS_AUN_NO');
   }
@@ -114,27 +123,42 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
 
   const mismaMoneda = !prod.moneda || String(prod.moneda).toUpperCase() === mon;
   const precio = prod.precio != null && Number(prod.precio) > 0 && mismaMoneda ? Number(prod.precio) : null;
-  const descuento = precio == null ? null : descuentoSobre(precio, importe);
-  if (precio == null && !esAdmin) {
-    throw new AppError(
-      mismaMoneda
+  const desdeVenta = pendiente !== undefined && pendiente !== null;
+  // Contra qué se mide el descuento: lo pendiente de la venta, o el catálogo.
+  const referencia = desdeVenta
+    ? (mon === 'EUR' && Number(pendiente) > 0 ? Number(pendiente) : null)
+    : precio;
+  const descuento = referencia == null ? null : descuentoSobre(referencia, importe);
+  if (referencia == null && !esAdmin) {
+    let motivo;
+    if (desdeVenta) {
+      motivo = mon !== 'EUR'
+        ? `Lo pendiente de la venta está en EUR: un link en ${mon} lo tiene que crear un admin.`
+        : 'Esta venta no tiene nada pendiente de cobro: el link lo tiene que crear un admin.';
+    } else {
+      motivo = mismaMoneda
         ? 'Este curso no tiene precio en el catálogo: el link lo tiene que crear un admin.'
-        : `El precio del catálogo está en ${String(prod.moneda).toUpperCase()}: un link en ${mon} lo tiene que crear un admin.`,
-      403, 'SIN_PRECIO_COMPARABLE');
+        : `El precio del catálogo está en ${String(prod.moneda).toUpperCase()}: un link en ${mon} lo tiene que crear un admin.`;
+    }
+    throw new AppError(motivo, 403, 'SIN_PRECIO_COMPARABLE');
   }
-  if (precio != null && !esAdmin) {
+  if (referencia != null && !esAdmin) {
     // En céntimos y con enteros: 899,99 sobre 1000 es un 10,001 % y, redondeado,
     // pasaría por un 10 % que sí cabe. Lo que manda es el importe mínimo.
-    const minimo = importeMinimo(precio, cfg.descuento_max_pct);
+    const minimo = importeMinimo(referencia, cfg.descuento_max_pct);
     if (Math.round(Number(importe) * 100) < Math.round(minimo * 100)) {
+      const sobre = desdeVenta ? `lo pendiente de la venta (${referencia.toFixed(2)} ${mon})` : 'el precio del catálogo';
       throw new AppError(
         cfg.descuento_max_pct > 0
-          ? `El descuento máximo en este campus es un ${cfg.descuento_max_pct} %: el importe no puede bajar de ${minimo.toFixed(2)} ${mon}.`
-          : 'En este campus solo el admin puede hacer descuento sobre el precio del catálogo.',
+          ? `El descuento máximo en este campus es un ${cfg.descuento_max_pct} % sobre ${sobre}: el importe no puede bajar de ${minimo.toFixed(2)} ${mon}.`
+          : `En este campus solo el admin puede hacer descuento sobre ${sobre}.`,
         403, 'DESCUENTO_MAXIMO');
     }
   }
-  return { moneda: mon, caducidadDias: dias, precioCatalogo: precio, descuentoPct: descuento ?? 0 };
+  return {
+    moneda: mon, caducidadDias: dias, precioCatalogo: precio, descuentoPct: descuento ?? 0,
+    referencia: desdeVenta ? 'pendiente' : 'catalogo', ...(desdeVenta ? { pendiente: Number(pendiente) } : {}),
+  };
 }
 
 /** La marca del CRM que va en el link y en el cargo (la lee la fase 3). */
@@ -196,6 +220,9 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
   await model.anotarEvento(fila.id, 'creado', {
     por: userId, importe, moneda: reglas.moneda, descuento_pct: reglas.descuentoPct,
     caduca_el: fila.caduca_el, stripe_payment_link_id: link.id,
+    // Contra qué se midió el descuento (fase 3): el catálogo, o lo pendiente de la venta.
+    descuento_sobre: reglas.referencia || 'catalogo',
+    ...(reglas.pendiente !== undefined ? { pendiente: reglas.pendiente } : {}),
   });
   logger.info({ linkId: fila.id, projectId, userId, importe, moneda: reglas.moneda }, 'Links de pago: link creado');
   return model.porId(fila.id);

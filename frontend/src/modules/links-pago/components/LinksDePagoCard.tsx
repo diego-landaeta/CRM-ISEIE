@@ -69,9 +69,14 @@ interface Props {
   conversionId?: number;
   /** El curso que sale elegido al abrir (el del prospecto o el de la venta). */
   productoId?: number | null;
+  /**
+   * Desde una venta: lo que queda por cobrar, en euros. Es el importe sugerido y
+   * contra lo que se mide el tope de descuento, como en el servidor (fase 3).
+   */
+  pendiente?: number;
 }
 
-export default function LinksDePagoCard({ projectId, leadId, conversionId, productoId }: Props) {
+export default function LinksDePagoCard({ projectId, leadId, conversionId, productoId, pendiente }: Props) {
   const { can } = usePermission();
   const encendidos = useLinksPagoEncendidos();
   const puedeCrear = can('links_pago.crear');
@@ -146,6 +151,7 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
                 <span className="text-xs text-muted-foreground basis-full sm:basis-auto">
                   {l.creado_por_nombre || '—'} · {cuando(l.created_at)}
                   {vivo && l.caduca_el && <> · caduca {cuando(l.caduca_el)}</>}
+                  {l.estado === 'pagado' && l.pagado_el && <> · pagado {cuando(l.pagado_el)}</>}
                   {l.estado === 'caducado' && l.caduca_el && <> · caducó {cuando(l.caduca_el)} sin pagar</>}
                   {l.estado === 'anulado' && <> · anulado{l.anulado_por_nombre ? ` por ${l.anulado_por_nombre}` : ''}: {l.motivo_anulacion}</>}
                 </span>
@@ -172,6 +178,7 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
       {creando && (
         <CrearLinkDialog
           projectId={projectId} leadId={leadId} conversionId={conversionId} productoId={productoId}
+          pendiente={pendiente}
           onClose={() => setCreando(false)}
           onCreado={() => cargar()}
         />
@@ -197,7 +204,7 @@ export default function LinksDePagoCard({ projectId, leadId, conversionId, produ
 
 interface Curso { id: number; nombre: string; precio: string | number | null; moneda: string | null }
 
-function CrearLinkDialog({ projectId, leadId, conversionId, productoId, onClose, onCreado }: Props & {
+function CrearLinkDialog({ projectId, leadId, conversionId, productoId, pendiente, onClose, onCreado }: Props & {
   onClose: () => void; onCreado: () => void;
 }) {
   const { can } = usePermission();
@@ -228,17 +235,22 @@ function CrearLinkDialog({ projectId, leadId, conversionId, productoId, onClose,
 
   const curso = useMemo(() => cursos.find((c) => String(c.id) === cursoId) || null, [cursos, cursoId]);
 
-  // Al elegir curso, su precio del catálogo como importe sugerido (editable).
+  const desdeVenta = pendiente !== undefined;
+  // Importe sugerido (editable): desde una venta, lo pendiente; si no, el precio
+  // del catálogo del curso elegido.
   useEffect(() => {
+    if (pendiente !== undefined) { if (pendiente > 0) setImporte(String(pendiente)); return; }
     if (curso?.precio != null && Number(curso.precio) > 0) setImporte(String(Number(curso.precio)));
-  }, [curso]);
+  }, [curso, pendiente]);
 
   const precio = curso?.precio != null && Number(curso.precio) > 0
     && (!curso.moneda || curso.moneda.toUpperCase() === moneda) ? Number(curso.precio) : null;
+  // Contra qué se mide el descuento: lo pendiente de la venta (en euros) o el catálogo.
+  const referencia = pendiente !== undefined ? (moneda === 'EUR' && pendiente > 0 ? pendiente : null) : precio;
   const n = Number(importe.replace(',', '.'));
-  const descuento = precio && n > 0 ? Math.max(0, Math.round(((precio - n) / precio) * 10000) / 100) : 0;
-  const pasaDelTope = !esAdmin && cfg && precio != null && descuento > cfg.descuento_max_pct;
-  const sinPrecio = !esAdmin && curso && precio == null;
+  const descuento = referencia && n > 0 ? Math.max(0, Math.round(((referencia - n) / referencia) * 10000) / 100) : 0;
+  const pasaDelTope = !esAdmin && cfg && referencia != null && descuento > cfg.descuento_max_pct;
+  const sinPrecio = !esAdmin && curso && referencia == null;
 
   async function enviar() {
     if (!curso || !(n > 0)) { setError('Elige el curso y escribe el importe.'); return; }
@@ -323,15 +335,17 @@ function CrearLinkDialog({ projectId, leadId, conversionId, productoId, onClose,
                 <input id="link-dias" type="number" min={1} max={cfg?.caducidad_max_dias} value={dias}
                   onChange={(e) => setDias(e.target.value)} className={`${campo} w-28 tabular-nums`} />
               </div>
-              {precio != null && descuento > 0 && (
+              {referencia != null && descuento > 0 && (
                 <p className={`text-xs ${pasaDelTope ? 'text-destructive-soft-foreground' : 'text-muted-foreground'}`}>
-                  Un {descuento} % menos que el catálogo ({dinero(precio, moneda)}).
+                  Un {descuento} % menos que {desdeVenta ? 'lo pendiente de la venta' : 'el catálogo'} ({dinero(referencia, moneda)}).
                   {cfg && !esAdmin && ` El máximo en este campus es un ${cfg.descuento_max_pct} %.`}
                 </p>
               )}
               {sinPrecio && (
                 <p className="text-xs text-destructive-soft-foreground">
-                  Este curso no tiene precio en el catálogo en {moneda}: el link lo tiene que crear un admin.
+                  {!desdeVenta && `Este curso no tiene precio en el catálogo en ${moneda}: el link lo tiene que crear un admin.`}
+                  {desdeVenta && moneda !== 'EUR' && `Lo pendiente de la venta está en EUR: un link en ${moneda} lo tiene que crear un admin.`}
+                  {desdeVenta && moneda === 'EUR' && 'Esta venta no tiene nada pendiente de cobro: el link lo tiene que crear un admin.'}
                 </p>
               )}
               {error && <p role="alert" className="text-xs text-destructive-soft-foreground">{error}</p>}
