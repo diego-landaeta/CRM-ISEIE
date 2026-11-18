@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -164,7 +165,7 @@ export default function WebhookDetailPage() {
     );
   }
 
-  const apiBase = `${window.location.origin}${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api`;
+  const apiBase = apiPublicUrl('');
   const url = webhook.embed_id
     ? `${apiBase}/forms/webhook/${webhook.embed_id}`
     : null;

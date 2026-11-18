@@ -1,3 +1,4 @@
+import { apiPublicUrl, appPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { copyToClipboard } from '@/shared/lib/clipboard';
 import { useSearchParams } from 'react-router-dom';
@@ -248,10 +249,11 @@ function EmbedDialog({ form, onClose }: EmbedDialogProps) {
     toast({ title: ok ? 'Copiado' : 'No se pudo copiar — usa Ctrl+C', variant: ok ? undefined : 'destructive' });
   }
 
-  const apiBase = `${window.location.origin}${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api/forms/public/${form.embed_id}`;
-  const iframeSrc = `${window.location.origin}/embed/form/${form.embed_id}`;
+  const apiBase = apiPublicUrl(`/forms/public/${form.embed_id}`);
+  // Con la base: sin ella el iframe apuntaba a /embed/form/... fuera del CRM.
+  const iframeSrc = appPublicUrl(`/embed/form/${form.embed_id}`);
   const iframeHtml = `<iframe src="${iframeSrc}" width="100%" height="500" frameborder="0"></iframe>`;
-  const scriptHtml = `<div id="crm-form-${form.embed_id}"></div>\n<script src="${window.location.origin}/embed/form.js" data-form-id="${form.embed_id}"></script>`;
+  const scriptHtml = `<div id="crm-form-${form.embed_id}"></div>\n<script src="${appPublicUrl('/embed/form.js')}" data-form-id="${form.embed_id}"></script>`;
   return (
     <div className="fixed inset-0 !m-0 z-50 flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div role="dialog" aria-modal="true" aria-labelledby="form-embed-title" className="bg-card rounded-2xl border border-border max-w-2xl w-full max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>

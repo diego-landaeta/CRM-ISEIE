@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback } from 'react';
 import { WhatsappLogo, FloppyDisk, Copy, ArrowSquareOut, CheckCircle } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -94,8 +95,7 @@ export default function WhatsappWidgetPage() {
   }
   if (loading || !config) return <div className="p-8 text-muted-foreground">Cargando…</div>;
 
-  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-  const dataUrl = `${baseUrl}/api/w/data/${pid}.json`;
+  const dataUrl = apiPublicUrl(`/w/data/${pid}.json`);
   // El código para la web, con el idioma elegido (vacío = el de cada página). Ver lib/snippet.ts.
   const embedCode = construirSnippet({ dataUrl, idioma: idiomaCodigo });
   const activeInWidget = users.filter(u => u.in_project && u.whatsapp_widget_active && u.whatsapp_phone && !config.excluded_user_ids.includes(u.id));
