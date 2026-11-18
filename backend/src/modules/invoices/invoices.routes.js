@@ -29,7 +29,8 @@ router.get('/',                       puede('facturas.view'), ctrl.list);
 router.get('/stats',                  puede('facturas.view'), ctrl.stats);
 // Que numero tocaria ahora. Va ANTES de '/:id' para que «siguiente-numero» no
 // se lea como el id de una factura.
-router.get('/siguiente-numero',       puede('facturas.view'), ctrl.siguienteNumero);
+// Solo de un campus de quien pide: dice las anuladas con su motivo (CRM#793).
+router.get('/siguiente-numero',       puede('facturas.view'), projectAccess, ctrl.siguienteNumero);
 router.get('/ventas-sin-factura',     puede('facturas.view'), ctrl.ventasSinFactura);
 router.get('/regimenes',              puede('facturas.view'), ctrl.listRegimenes);
 router.get('/resolve-regimen',        puede('facturas.view'), ctrl.resolveRegimen);
@@ -55,6 +56,8 @@ router.get('/lead-fiscal/:leadId',    puede('facturas.view'), prospectoDelParame
 router.get('/by-conversion/:conversionId', puede('facturas.view'), ventaDelParametro, ctrl.byConversion);
 router.get('/:id',                    puede('facturas.view'), facturaDeSuCampus, ctrl.getOne);
 router.post('/',                      puede('facturas.create'), campusDelCuerpo, ctrl.create);
+// Una factura EMITIDA no se borra ni se cambia (CRM#793): editar, corregir,
+// cambiar fechas y borrar responden 409 FACTURA_EMITIDA. Se anula con su motivo.
 // Editar una factura en borrador: SOLO admin/superadmin.
 router.patch('/:id',                  puede('facturas.edit'), facturaDeSuCampus, ctrl.update);
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): admin/superadmin
@@ -74,7 +77,11 @@ router.post('/:id/mark-paid',         puede('facturas.cobrar'), facturaDeSuCampu
 // «Cobrada» en una proforma: apunta el cobro y la pasa a factura. El servicio
 // deja solo a quien lleva la facturacion, y a una gestora, con las suyas.
 router.post('/:id/cobrar-proforma',   puede('facturas.cola'), facturaDeSuCampus, ctrl.cobrarProforma);
+// Cancelar lo que NO está emitido (borrador, proforma), con su motivo.
 router.post('/:id/cancel',            puede('facturas.anular'), facturaDeSuCampus, ctrl.cancel);
+// ANULAR una emitida (CRM#793): con su motivo; queda quién y por qué, y sale su
+// rectificativa. Como abonar: admin, o gestora con el permiso y solo las suyas.
+router.post('/:id/anular',            puede('facturas.gestionar'), facturaDeSuCampus, ctrl.anular);
 // Eliminar factura + liberar número: admin/superadmin o gestora factura_manager
 // (el controller valida que la factura sea suya).
 router.delete('/:id',                 puede('facturas.gestionar'), facturaDeSuCampus, ctrl.destroy);

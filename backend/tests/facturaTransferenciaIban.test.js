@@ -48,17 +48,17 @@ async function factura(metodo) {
   return rows[0].id;
 }
 
-let proyectoCreado = false;
+// Proyecto PROPIO, siempre (#567). Antes cogía «el primer proyecto» de la base; en
+// la CI la base sale vacía y ese primero era el proyecto temporal de otra prueba
+// que corría a la vez. Al borrarlo ella, el ON DELETE CASCADE de invoices e
+// invoice_issuers se llevaba nuestras facturas («Factura no encontrada») o hacía
+// fallar el INSERT («violates foreign key constraint fk_inv_project»).
+const SUFIJO = `${Date.now()}-${process.pid}`;
 beforeAll(async () => {
-  // La base local de ISEIE sale sin datos de ejemplo: si no hay proyecto, se crea uno.
-  const p = await pool.query('SELECT id FROM projects ORDER BY id LIMIT 1');
-  if (p.rows[0]) projectId = p.rows[0].id;
-  else {
-    const n = await pool.query(
-      `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Prueba IBAN', 'prueba-iban', 'clave-prueba-iban') RETURNING id`);
-    projectId = n.rows[0].id;
-    proyectoCreado = true;
-  }
+  const n = await pool.query(
+    `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
+    [`Prueba IBAN ${SUFIJO}`, `prueba-iban-${SUFIJO}`, `clave-prueba-iban-${SUFIJO}`]);
+  projectId = n.rows[0].id;
   const { rows } = await pool.query(
     `INSERT INTO invoice_issuers (project_id, razon_social, nif, iban, bic)
      VALUES ($3, 'Sociedad de prueba IBAN S.L.', 'B00000000', $1, $2) RETURNING id`, [IBAN, BIC, projectId]);
@@ -68,9 +68,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await pool.query('DELETE FROM invoices WHERE issuer_id = $1', [issuerId]);
-  await pool.query('DELETE FROM invoice_issuers WHERE id = $1', [issuerId]);
-  if (proyectoCreado) await pool.query('DELETE FROM projects WHERE id = $1', [projectId]);
+  if (issuerId) {
+    await pool.query('DELETE FROM invoices WHERE issuer_id = $1', [issuerId]);
+    await pool.query('DELETE FROM invoice_issuers WHERE id = $1', [issuerId]);
+  }
+  if (projectId) await pool.query('DELETE FROM projects WHERE id = $1', [projectId]);
   await pool.end();
 });
 

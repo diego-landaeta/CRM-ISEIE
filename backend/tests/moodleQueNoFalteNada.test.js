@@ -85,7 +85,7 @@ async function consulta(projectId, tutorId, estado, horas) {
 beforeAll(async () => {
   try {
     const t = await query(`SELECT to_regclass('public.tutor_alumnos') AS a, to_regclass('public.moodle_plugin_campus') AS b`);
-    if (!t.rows[0].a || !t.rows[0].b) throw new Error('Faltan las migraciones de Consultas de alumnos y la 312.');
+    if (!t.rows[0].a || !t.rows[0].b) throw new Error('Faltan las migraciones de Consultas de alumnos y la 313.');
   } catch (err) {
     hayBase = false;
     porQueNo = err.message;

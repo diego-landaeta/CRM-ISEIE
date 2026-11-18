@@ -170,9 +170,15 @@ const CARGO = {
 };
 
 // La factura que saco la cola: exenta, por lo cobrado (como la 2026/0196 a las 09:24).
-function facturaDeLaCola(paymentId) {
+//
+// Desde CRM#793 (18/11) una factura EMITIDA no se corrige: responde 409 y se
+// anula con su motivo. Las reglas de abajo siguen valiendo para lo que aun se
+// corrige —un borrador del cobro, sin numero—, que es lo que se prueba aqui;
+// la emitida tiene su propia prueba al final de este bloque.
+function facturaDeLaCola(paymentId, { emitida = false } = {}) {
   return {
-    id: 411, codigo: '2026/0196', numero: 196, ano: 2026, serie: 'CEDIA', tipo: 'normal', estado: 'pagada',
+    id: 411, ano: 2026, serie: 'CEDIA', tipo: 'normal',
+    ...(emitida ? { codigo: '2026/0196', numero: 196, estado: 'pagada' } : { codigo: null, numero: null, estado: 'borrador' }),
     project_id: 2, conversion_id: 643, payment_id: paymentId, issuer_id: 8,
     items: [{ descripcion: 'Producto/servicio: servicio académico, Curso de Escalas', cantidad: 1, precio_unitario: 412.25 }],
     base_imponible: 412.25, iva_pct: 0, iva_importe: 0, iva_incluido: false, total: 412.25,
@@ -231,6 +237,20 @@ describe.each([
     expect(db.payments.get(cp.id).importe).toBe(412.25);
     expect(db.conversions.get(643).importe_pagado).toBe(412.25);
     expect(sqls.some((s) => /^UPDATE conversion_payments/.test(s))).toBe(false);
+  });
+
+  it('la factura ya emitida no se corrige (CRM#793): 409 FACTURA_EMITIDA y el cobro no se mueve', async () => {
+    const cp = await cobroDeStripe();
+    db.invoices.set(411, facturaDeLaCola(cp.id, { emitida: true }));
+
+    const { data, error } = await corregirFactura(411, CORRECCION_CON_IVA);
+
+    expect(data).toBeUndefined();
+    expect(error?.code).toBe('FACTURA_EMITIDA');
+    expect(error?.statusCode ?? error?.status).toBe(409);
+    expect(db.invoices.get(411).total).toBe(412.25);
+    expect(db.payments.get(cp.id).importe).toBe(412.25);
+    expect(sqls.some((s) => /^UPDATE invoices SET cliente_nombre/.test(s))).toBe(false);
   });
 });
 

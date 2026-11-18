@@ -5,7 +5,7 @@ import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
-import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema } from './invoices.validation.js';
+import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema, anularSchema } from './invoices.validation.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { alcanceComercial, alcanceDeLider } from '../../shared/utils/roles.js';
@@ -472,15 +472,37 @@ export async function cobrarProforma(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// POST /:id/cancel { motivo } — cancelar un borrador o una proforma. Una emitida
+// responde 409 FACTURA_EMITIDA: se anula por /:id/anular (CRM#793).
 export async function cancel(req, res, next) {
   try {
-    await model.cancel(Number(req.params.id));
+    const parsed = anularSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    await model.cancel(Number(req.params.id), { motivo: parsed.data.motivo, userId: req.user?.userId });
     res.json({ success: true });
   } catch (e) { next(e); }
 }
 
-// DELETE /:id — borra la factura y libera su número (solo admin/superadmin).
-// Para errores de carga: la venta se mantiene y se puede volver a facturar.
+// POST /:id/anular { motivo } — anular una factura EMITIDA (CRM#793, Diego 18/11).
+// Queda quién y por qué, y sale su rectificativa por lo que quede sin abonar.
+export async function anular(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const parsed = anularSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
+      throw new AppError('Solo puedes anular tus propias facturas.', 403, 'FORBIDDEN');
+    }
+    const { factura, abono } = await model.anularEmitida(id, { motivo: parsed.data.motivo, userId: req.user?.userId });
+    res.json({ success: true, data: { factura, abono } });
+  } catch (e) {
+    logger.error({ e: e.message }, 'anular invoice failed');
+    next(e);
+  }
+}
+
+// DELETE /:id — borra un borrador o una proforma (solo admin/superadmin).
+// Una emitida no se borra: 409 FACTURA_EMITIDA (CRM#793); se anula con su motivo.
 export async function destroy(req, res, next) {
   try {
     const id = Number(req.params.id);

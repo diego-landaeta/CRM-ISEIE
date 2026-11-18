@@ -12,6 +12,8 @@ import { logger } from '../../shared/utils/logger.js';
 import { datosParaFacturar } from '../factura-automatica/factura-automatica.model.js';
 // La pausa de la auditoria de facturacion (#765). Apagada, no hace nada.
 import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
+// Lo emitido no se borra ni se cambia (CRM#793): se anula con su motivo.
+import { esFacturaEmitida, exigirNoEmitida } from './invoices.inmutable.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -296,15 +298,20 @@ export async function findById(id) {
 
 // Crea una factura rectificativa (de abono) a partir de una factura original.
 // Importes negativos, serie 'R', referencia a la original.
-export async function createRectificativa(originalId, { motivo, userId, parcial = null, overrideIssuerId = null }) {
-  const client = await getClient();
+//
+// `client`: la transacción de quien la llama (anularEmitida, CRM#793), para que
+// el abono y la marca de anulada vayan juntos o no vaya ninguno.
+export async function createRectificativa(originalId, { motivo, userId, parcial = null, overrideIssuerId = null }, { client: externo = null } = {}) {
+  const client = externo || await getClient();
   try {
-    await client.query('BEGIN');
+    if (!externo) await client.query('BEGIN');
     const { rows: origRows } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [originalId]);
     const orig = origRows[0];
     if (!orig) throw new Error('Factura original no encontrada');
     if (orig.tipo === 'rectificativa') throw new Error('No se puede rectificar una rectificativa');
     if (orig.estado === 'borrador') throw new AppError('Un borrador no se rectifica: edítalo o anúlalo.', 400, 'DRAFT_CANNOT_RECTIFY');
+    // Una anulada ya tiene su abono: otro la dejaría en negativo.
+    if (orig.anulada_at) throw new AppError(`La factura ${orig.codigo || ''} está anulada y ya tiene su abono.`, 409, 'YA_ANULADA');
 
     const ano = new Date().getFullYear();
     // La serie del abono se CONTINUA, no se estrena.
@@ -413,8 +420,64 @@ export async function createRectificativa(originalId, { motivo, userId, parcial 
         orig.tipo_cambio || null,
       ]
     );
-    await client.query('COMMIT');
+    if (!externo) await client.query('COMMIT');
     return rows[0];
+  } catch (e) {
+    if (!externo) await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    if (!externo) client.release();
+  }
+}
+
+/**
+ * ANULAR una factura emitida (CRM#793, Diego 18/11/2026).
+ *
+ * Una emitida no se borra ni se cambia. Si hay que dejarla sin efecto, se anula
+ * con su motivo: queda apuntado quién y por qué, y sale su rectificativa por el
+ * cauce de siempre (`createRectificativa`: `rectifica_id`, `motivo_rectificacion`)
+ * por lo que quede sin abonar. Todo en una transacción.
+ *
+ * La anulada NO pasa a 'cancelada': el resto del CRM dejaría de sumarla y su
+ * abono restaría dos veces. Sigue contando, y su abono la deja a cero.
+ */
+export async function anularEmitida(id, { motivo, userId }) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [inv] } = await client.query('SELECT * FROM invoices WHERE id = $1 FOR UPDATE', [id]);
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    if (!esFacturaEmitida(inv)) {
+      throw new AppError('Esta factura no está emitida (es un borrador o una proforma): se puede editar o borrar.', 409, 'NO_EMITIDA');
+    }
+    if (inv.tipo === 'rectificativa') {
+      throw new AppError(`${inv.codigo || 'Este abono'} es un abono: no se anula. Si sobra, emite una factura nueva por ese importe.`, 409, 'ABONO_NO_SE_ANULA');
+    }
+    if (inv.anulada_at || inv.estado === 'cancelada') {
+      throw new AppError(`La factura ${inv.codigo || ''} ya está anulada.`, 409, 'YA_ANULADA');
+    }
+    // Lo que queda por abonar: el total menos los abonos que ya tenga.
+    const { rows: [ab] } = await client.query(
+      `SELECT COALESCE(SUM(total), 0) AS abonado FROM invoices
+        WHERE rectifica_id = $1 AND tipo = 'rectificativa' AND estado <> 'cancelada'`, [id]);
+    const pendiente = Math.round((Number(inv.total || 0) + Number(ab?.abonado || 0)) * 100) / 100;
+    let abono = null;
+    if (pendiente > 0.005) {
+      const yaHabia = Math.abs(Number(ab?.abonado || 0)) > 0.005;
+      abono = await createRectificativa(id, {
+        motivo: `Anulación: ${motivo}`,
+        userId,
+        parcial: yaHabia ? pendiente : null,
+      }, { client });
+    }
+    const { rows: [factura] } = await client.query(
+      `UPDATE invoices
+          SET anulada_at = NOW(), anulada_por = $2, motivo_anulacion = $3,
+              anulada_abono_id = $4, updated_at = NOW()
+        WHERE id = $1 RETURNING *`,
+      [id, userId || null, motivo, abono?.id || null]);
+    await client.query('COMMIT');
+    return { factura, abono };
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
@@ -546,6 +609,10 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda, i.total_divisa,
+            -- Anulada (CRM#793): cuándo, quién, por qué y con qué abono.
+            i.rectifica_codigo, i.motivo_rectificacion,
+            i.anulada_at, i.motivo_anulacion, ua.nombre AS anulada_por_nombre,
+            ab.codigo AS anulada_abono_codigo,
             u.nombre AS gestora_nombre,
             ${CLASE_FACTURA} AS clase,
             cv.fecha_conversion AS fecha_de_la_venta,
@@ -564,6 +631,8 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
      LEFT JOIN conversions cv ON cv.id = i.conversion_id
      LEFT JOIN leads l ON l.id = COALESCE(i.lead_id, cv.lead_id)
      LEFT JOIN users u ON u.id = COALESCE(cv.vendedora_id, l.responsable_id, i.created_by)
+     LEFT JOIN users ua ON ua.id = i.anulada_por
+     LEFT JOIN invoices ab ON ab.id = i.anulada_abono_id
      ${where}
      ORDER BY i.ano DESC, i.numero DESC LIMIT ${limit} OFFSET ${offset}`,
     params
@@ -638,8 +707,18 @@ export async function setPdfPath(id, path) {
   await query(`UPDATE invoices SET pdf_path = $2, updated_at = NOW() WHERE id = $1`, [id, path]);
 }
 
-export async function cancel(id) {
-  await query(`UPDATE invoices SET estado = 'cancelada', updated_at = NOW() WHERE id = $1`, [id]);
+// Anular lo que NO está emitido (un borrador, una proforma). Una emitida se
+// anula con anularEmitida, que saca su abono (CRM#793).
+export async function cancel(id, { motivo = null, userId = null } = {}) {
+  const inv = await findById(id);
+  if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+  exigirNoEmitida(inv, 'cancelar así: se anula con su motivo y sale su rectificativa');
+  await query(
+    `UPDATE invoices SET estado = 'cancelada',
+            anulada_at = CASE WHEN NULLIF(btrim($3::text), '') IS NULL THEN NULL ELSE NOW() END,
+            anulada_por = $2, motivo_anulacion = $3, updated_at = NOW()
+      WHERE id = $1`,
+    [id, userId, motivo]);
 }
 
 // Elimina una factura por completo y LIBERA su número: recalcula el contador de la
@@ -653,6 +732,8 @@ export async function deleteInvoice(id) {
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
+    // Una emitida no se borra (CRM#793): su número no puede quedar libre.
+    exigirNoEmitida(inv, 'borrar');
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
     // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
     // filas: es como numera `nextNumero`, que coge el mayor de todas.
@@ -805,6 +886,8 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
 export async function updateFechas(id, { fechaEmision, fechaPago }) {
+  // Las fechas de una emitida no se cambian (CRM#793).
+  exigirNoEmitida(await findById(id), 'cambiar sus fechas');
   const { rows } = await query(
     `UPDATE invoices
         SET fecha_emision = COALESCE($2::date, fecha_emision),
@@ -1360,6 +1443,23 @@ export async function completarDatosCliente(id, patch = {}) {
   const inv = await findById(id);
   if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
   if (inv.estado === 'cancelada') throw new AppError('La factura está cancelada', 400, 'INVOICE_CANCELLED');
+  // Emitida (CRM#793): se rellena lo que le falta —la auto-emitida al cobrar sale
+  // sin NIF ni dirección—, pero lo que ya tiene no se cambia.
+  if (esFacturaEmitida(inv)) {
+    const COLS = {
+      clienteNombre: 'cliente_nombre', clienteNif: 'cliente_nif', clienteDireccion: 'cliente_direccion',
+      clienteCiudad: 'cliente_ciudad', clienteCp: 'cliente_cp', clientePais: 'cliente_pais',
+      clienteEmail: 'cliente_email', clienteTelefono: 'cliente_telefono',
+    };
+    const cambia = Object.entries(COLS).filter(([k, col]) => patch[k] !== undefined
+      && !vacio(inv[col]) && String(patch[k] ?? '').trim() !== String(inv[col]).trim());
+    if (cambia.length) {
+      throw new AppError(
+        `La factura ${inv.codigo || ''} ya está emitida: se pueden rellenar los datos que le faltan, `
+        + 'pero no cambiar los que ya tiene. Si están mal, anúlala indicando el motivo y emite otra.',
+        409, 'FACTURA_EMITIDA');
+    }
+  }
   const merged = {
     cliente_nombre: patch.clienteNombre ?? inv.cliente_nombre,
     cliente_nif: patch.clienteNif ?? inv.cliente_nif,
@@ -1539,6 +1639,9 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     const { rows: sel } = await client.query(`SELECT * FROM invoices WHERE id = $1 FOR UPDATE`, [id]);
     const inv = sel[0];
     if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
+    // Ni el importe, ni el número, ni el cliente, ni la fecha de una emitida
+    // (CRM#793, Diego 18/11/2026). Borradores y proformas, como siempre.
+    exigirNoEmitida(inv, 'cambiar');
     // soloBorrador=false → corrección admin de una factura ya emitida/pagada
     // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
     if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
@@ -2245,12 +2348,24 @@ export async function siguienteLibre({ projectId, issuerId = null, ano = null })
       ORDER BY g LIMIT 10`,
     [y, serie, Number(t.usado)]
   );
+  // Y las ANULADAS (CRM#793): su número no es un hueco —la factura sigue ahí,
+  // con su abono—, pero se dicen con su motivo para que nadie las busque. Solo
+  // las de este campus: el motivo puede llevar datos del cliente.
+  const { rows: anuladas } = await query(
+    `SELECT numero, codigo, motivo_anulacion AS motivo, anulada_at::date::text AS fecha
+       FROM invoices
+      WHERE ano = $1 AND serie = $2 AND project_id = $3 AND numero IS NOT NULL
+        AND tipo <> 'proforma' AND anulada_at IS NOT NULL
+      ORDER BY numero LIMIT 20`,
+    [y, serie, projectId]
+  );
   return {
     ano: y,
     serie,
     siguiente: n,
     codigo: `${y}/${String(n).padStart(4, '0')}`,
     huecos: huecos.map((h) => Number(h.n)),
+    anuladas: anuladas.map((a) => ({ ...a, numero: Number(a.numero) })),
   };
 }
 
