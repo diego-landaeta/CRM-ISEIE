@@ -152,12 +152,12 @@ const NO_ES_FALLO = new Set(['FRENO_DE_PRUEBAS', 'YA_ENVIADO']);
  * `recordatorio`) si Brevo lo acepta, `no_enviado` si falla. Con los correos
  * apagados solo queda en el log (lo hace `despachar`) y la fila sigue «sin enviar».
  */
-export async function mandarEnlace(facturaId, token, { recordatorio = false, nuevo = false, clave }) {
+export async function mandarEnlace(facturaId, token, { recordatorio = false, nuevo = false, clave, devuelta = null }) {
   const f = await model.porId(facturaId, null);
   if (!f) return { sent: false };
   try {
     const marca = await model.marcaDeLaEmpresa(f.issuer_id);
-    const r = await enviarCorreoDelMes({ f, token, recordatorio, nuevo, clave, marca });
+    const r = await enviarCorreoDelMes({ f, token, recordatorio, nuevo, clave, marca, devuelta });
     if (r?.sent) {
       await model.marcarEnviado(facturaId);
       await anotar(pool, {
@@ -261,7 +261,7 @@ function paraElColaborador(f) {
       tarifa_hora: num(f.tarifa_hora),
       iva_pct: num(f.iva_pct),
       irpf_pct: num(f.irpf_pct),
-      concepto: conceptoSugerido(f.area, f.periodo),
+      concepto: conceptoSugerido(f.area, f.periodo, f.tipo),
     } : null,
     recibida: f.subida_at ? {
       subida_at: f.subida_at,
@@ -280,6 +280,8 @@ function paraElColaborador(f) {
     // El estado del pago («Mi factura», ficha de Diego del 07/10): la fecha y la
     // forma, nada más (ni el justificante ni quién lo marcó).
     pago: f.pagada_at ? { pagada_at: f.pagada_at, forma_pago: f.forma_pago } : null,
+    // La empresa la revisó y la dio por buena (CRM#710): después viene el pago.
+    validada: Boolean(f.validada_at),
   };
 }
 
@@ -620,11 +622,13 @@ export async function zipDelMes(user, periodo, issuerId) {
     { header: 'Moneda', key: 'moneda', width: 9 },
     { header: 'Fecha de subida', key: 'subida', width: 18, style: { numFmt: 'dd/mm/yyyy hh:mm' } },
     { header: 'Número de recepción', key: 'numero_recepcion', width: 20 },
+    // Vendedora o colaborador (CRM#710): al final, para no mover las columnas que ya usa la gestoría.
+    { header: 'Tipo', key: 'tipo', width: 13 },
   ];
   hoja.getRow(1).font = { bold: true };
   for (const f of filas) {
     const fila = hoja.addRow({
-      colaborador: f.colaborador, area: AREA_ES[f.area] || f.area, nif: f.nif || '',
+      colaborador: f.colaborador, tipo: f.tipo === 'vendedora' ? 'Vendedora' : 'Colaborador', area: AREA_ES[f.area] || f.area, nif: f.nif || '',
       numero_factura: f.numero_factura, importe: num(f.importe), acordado: num(f.importe_esperado),
       diferencia: num(f.diferencia), moneda: f.moneda, subida: horaDeMadrid(f.subida_at), numero_recepcion: f.numero_recepcion,
     });
@@ -692,6 +696,11 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
   if (yaPagadas.length) {
     throw new AppError(`${yaPagadas.length === 1 ? 'Ya está pagada' : 'Ya están pagadas'}: ${nombres(yaPagadas)}`, 409, 'YA_PAGADA');
   }
+  // Primero se valida, después se paga (CRM#710).
+  const sinValidar = facturas.filter((f) => !f.validada_at);
+  if (sinValidar.length) {
+    throw new AppError(`Solo se pagan facturas validadas: valida antes ${sinValidar.length === 1 ? 'esta' : 'estas'}: ${nombres(sinValidar)}`, 409, 'NO_VALIDADA');
+  }
 
   // El justificante, guardado antes de la transacción (como el archivo de la factura): R2 o el disco.
   let justificante = null;
@@ -711,6 +720,7 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
     for (const fila of await model.bloquearVarias(db, ids)) {
       if (fila.pagada_at) throw new AppError('Alguien acaba de marcarla como pagada. Actualiza la lista.', 409, 'YA_PAGADA');
       if (!fila.subida_at || fila.anulada_at) throw new AppError('Solo se pagan facturas recibidas: actualiza la lista.', 409, 'NO_RECIBIDA');
+      if (!fila.validada_at) throw new AppError('Solo se pagan facturas validadas: actualiza la lista.', 409, 'NO_VALIDADA');
     }
     for (const f of facturas) {
       await model.marcarPagada(db, f.id, { fecha, porUserId: user.userId, forma, justificante, referencia });
@@ -731,6 +741,33 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
     for (const f of facturas) await mandarAvisoDePago(f.id);
   });
   return { pagadas: ids, fecha, forma_pago: forma };
+}
+
+/**
+ * «Validar» (CRM#710, Diego 18/11: «la gestora pone su monto y luego la empresa
+ * valida y hace el pago»). La empresa revisa la factura recibida y la da por
+ * buena; desde entonces sale en «Por pagar». Si algo no cuadra no se valida: se
+ * devuelve (anular con su motivo), y le llega un enlace nuevo con ese motivo.
+ */
+export async function validar(user, id, ip) {
+  const f = await model.porId(id, await ambitoDe(user));
+  if (!f) throw NO_ESTA();
+  const comprobar = (x) => {
+    if (x.anulada_at) throw new AppError('Esta factura está anulada', 409, 'CONFLICT');
+    if (!x.subida_at) throw new AppError('Solo se valida una factura recibida', 409, 'NO_RECIBIDA');
+    if (x.validada_at) throw new AppError('Esta factura ya está validada', 409, 'YA_VALIDADA');
+  };
+  comprobar(f);
+  await enTransaccion(async (db) => {
+    // Con la fila bloqueada: si otro la validó o la anuló entretanto, esta no sigue.
+    comprobar(await model.bloquear(db, id));
+    await model.marcarValidada(db, id, user.userId);
+    await anotar(db, {
+      facturaId: id, evento: 'validada', userId: user.userId, ip,
+      detalle: { importe: f.importe === null ? null : Number(f.importe), moneda: f.moneda },
+    });
+  });
+  return { id, validada: true };
 }
 
 /** El aviso al colaborador. Si falla, el pago ya está guardado: solo se apunta en el log. */
@@ -803,7 +840,8 @@ export async function anular(user, id, motivo, ip) {
     await anotar(db, { facturaId: nueva, evento: 'reenviado', userId: user.userId, ip, detalle: { sustituye_a: id } });
     return nueva;
   });
-  await mandarEnlace(nuevaId, token, { nuevo: true, clave: `facturas-colaborador-reenvio-${nuevaId}-${Date.now()}` });
+  // Con el motivo: es la factura devuelta, y la persona tiene que saber qué corregir (CRM#710).
+  await mandarEnlace(nuevaId, token, { nuevo: true, devuelta: f.subida_at ? motivo : null, clave: `facturas-colaborador-reenvio-${nuevaId}-${Date.now()}` });
   return { anulada: id, nueva: nuevaId, token };
 }
 

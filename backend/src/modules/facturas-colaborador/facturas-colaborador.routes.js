@@ -66,7 +66,8 @@ router.post('/pago/:token/no-recibido', limite(20), pagoConFormato, avisos.noRec
 
 // ─── «Mi factura»: el colaborador con usuario en el CRM, solo lo suyo ───
 // Son las únicas de este módulo que puede pedir el rol colaborador
-// (`RUTAS_DEL_COLABORADOR`, shared/utils/roles.js).
+// (`RUTAS_DEL_COLABORADOR`, shared/utils/roles.js). La vendedora de la lista
+// (CRM#710) entra con el mismo permiso, dado a ella por excepción con su ficha.
 
 router.get('/mias', verifyToken, puede('facturas_colaborador.subir'), facturas.mias);
 router.post('/mias/:id', verifyToken, puede('facturas_colaborador.subir'), limite(20), recibirArchivo, facturas.subirMia);
@@ -95,6 +96,8 @@ router.get('/facturas/:id/archivo', verifyToken, puede('facturas_colaborador.ver
 router.get('/facturas/:id/registro', verifyToken, puede('facturas_colaborador.ver_todas'), facturas.registro);
 // El desglose de la factura (segunda parte): «Administración lo ve todo».
 router.get('/facturas/:id/desglose', verifyToken, puede('facturas_colaborador.ver_todas'), facturas.desglose);
+// Validar antes de pagar (CRM#710): «la gestora pone su monto y luego la empresa valida y hace el pago».
+router.post('/facturas/:id/validar', verifyToken, puede('facturas_colaborador.validar'), facturas.validarFactura);
 router.post('/facturas/:id/anular', verifyToken, puede('facturas_colaborador.anular'), facturas.anular);
 router.post('/facturas/:id/reenviar', verifyToken, puede('facturas_colaborador.gestionar'), facturas.reenviar);
 

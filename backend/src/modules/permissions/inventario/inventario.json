@@ -5132,6 +5132,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/facturas-colaborador/facturas/:id/validar",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/facturas/:id/validar",
+  "relativa": "POST /facturas/:id/validar",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas_colaborador.validar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/facturas-colaborador/facturas/:id/anular",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

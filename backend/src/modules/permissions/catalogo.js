@@ -366,9 +366,12 @@ export const SECCIONES = [
       },
       {
         clave: 'facturas_colaborador', nombre: 'Facturas de colaboradores', acciones: [
-          a('subir', 'Subir su factura', '«Mi factura»: el colaborador sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
+          // La vendedora de la lista (CRM#710) la tiene por excepción, con su ficha: nunca por su rol.
+          a('subir', 'Subir su factura', '«Mi factura»: el colaborador, o la vendedora de la lista, sube la suya del mes.', ['colaborador', 'tutor_redactor'], { propia: true }),
           a('ver_todas', 'Ver las facturas', 'Las facturas de los colaboradores de sus empresas.', yPM(ADMIN)),
           a('gestionar', 'Gestionar colaboradores', 'Dar de alta colaboradores y reenviarles el enlace.', ADMIN),
+          // CRM#710: «la gestora pone su monto y luego la empresa valida y hace el pago».
+          a('validar', 'Validar facturas de colaboradores', 'Revisar una factura recibida y darla por buena: solo entonces se puede pagar.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
           a('anular', 'Anular facturas de colaboradores', 'Anular una factura recibida.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
           a('pagar', 'Pagar facturas de colaboradores', 'Marcarlas pagadas con su justificante.', ADMIN, { requiere: ['facturas_colaborador.ver_todas'] }),
         ],

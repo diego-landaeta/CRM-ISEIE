@@ -44,11 +44,12 @@ describe('la leyenda de Facturas de colaboradores', () => {
 
   it('cada botón de las filas usa un icono de la leyenda, y el pago ya no es una «€»', () => {
     // «Del mes» tiene los 7 botones; las pestañas (Enviadas, Por pagar…), 5: sin reenviar ni anular.
-    for (const [ruta, cuantos] of [['../modules/facturas-colaborador/pages/FacturasColaboradoresPage.tsx', 7], ['../modules/facturas-colaborador/components/ListaDeFacturas.tsx', 5]]) {
+    // «Validar» (CRM-ISEIE#422): un botón más en «Del mes» y en las pestañas.
+    for (const [ruta, cuantos] of [['../modules/facturas-colaborador/pages/FacturasColaboradoresPage.tsx', 8], ['../modules/facturas-colaborador/components/ListaDeFacturas.tsx', 6]]) {
       const s = fuente(ruta);
       expect(s).not.toMatch(/CurrencyEur/);
       // Cada botón con título de la fila de una factura dibuja su icono desde ACCION.
-      const botones = [...s.matchAll(/title="(Ver el archivo|Ver el registro|Reenviar el enlace|Marcar pagada|Ver el justificante|Deshacer el pago|Anular)"[^\n]*\n?[^\n]*?<([A-Za-z.]+) size=\{15\}/g)];
+      const botones = [...s.matchAll(/title="(Ver el archivo|Ver el registro|Reenviar el enlace|Validar|Marcar pagada|Ver el justificante|Deshacer el pago|Anular)"[^\n]*\n?[^\n]*?<([A-Za-z.]+) size=\{15\}/g)];
       expect(botones.length).toBe(cuantos);
       for (const [, titulo, icono] of botones) {
         const clave = Object.keys(ACCION).find((k) => ACCION[k].rotulo === titulo);

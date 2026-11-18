@@ -70,13 +70,14 @@ const CAMPOS_ENLACE = `
   f.importe_esperado, f.importe, f.moneda, f.numero_factura, f.numero_recepcion,
   f.subida_at, f.abierto_at, f.caduca_at, f.anulada_at, f.nombre_original,
   ${ESTADO} AS estado,
-  c.nombre AS colaborador_nombre, c.email AS colaborador_email, c.area, c.nif AS colaborador_nif,
+  c.nombre AS colaborador_nombre, c.email AS colaborador_email, c.area, c.tipo, c.nif AS colaborador_nif,
   ii.razon_social, ii.nif AS empresa_nif, ii.direccion, ii.cp, ii.ciudad, ii.pais, ii.logo_url,
   ce.modalidad, ce.importe_fijo, ce.tarifa_hora, ce.iva_pct, ce.irpf_pct, ce.moneda AS moneda_acordada,
   f.base, f.iva, f.irpf, f.total, f.horas, f.cuadra, f.importe_pdf, f.mime,
   to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.pagada_por, f.forma_pago, f.referencia_pago, f.justificante,
   f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario, f.pago_feedback_at,
-  f.pago_no_recibido_at, f.pago_no_recibido_comentario`;
+  f.pago_no_recibido_at, f.pago_no_recibido_comentario,
+  f.validada_at`;
 
 /** La fila de un enlace, por la huella de su token. */
 export async function porTokenHash(tokenHash) {
@@ -128,7 +129,7 @@ export async function delUsuarioPorId(userId, id) {
 export async function bloquear(db, id) {
   const { rows } = await db.query(
     `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo,
-            f.subida_at, f.anulada_at, f.caduca_at, f.token_hash, f.pagada_at
+            f.subida_at, f.anulada_at, f.caduca_at, f.token_hash, f.pagada_at, f.validada_at
        FROM facturas_colaborador f WHERE f.id = $1 FOR UPDATE`,
     [id],
   );
@@ -322,11 +323,19 @@ export async function guardarSubida(db, id, datos) {
 /** Varias facturas bloqueadas (en orden, para no cruzarse con otro pago a la vez). */
 export async function bloquearVarias(db, ids) {
   const { rows } = await db.query(
-    `SELECT f.id, f.subida_at, f.anulada_at, to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at
+    `SELECT f.id, f.subida_at, f.anulada_at, to_char(f.pagada_at, 'YYYY-MM-DD') AS pagada_at, f.validada_at
        FROM facturas_colaborador f WHERE f.id = ANY($1::int[]) ORDER BY f.id FOR UPDATE`,
     [ids],
   );
   return rows.map((r) => ({ ...r, id: Number(r.id) }));
+}
+
+/** «Validar» (CRM#710): la empresa la revisó y la da por buena; ya se puede pagar. */
+export async function marcarValidada(db, id, porUserId) {
+  await db.query(
+    'UPDATE facturas_colaborador SET validada_at = NOW(), validada_por = $2 WHERE id = $1',
+    [id, porUserId],
+  );
 }
 
 export async function marcarPagada(db, id, { fecha, porUserId, forma, justificante, referencia }) {
@@ -415,7 +424,7 @@ export async function cambiarEnlace(db, id, tokenHash, semilla, caducaAt) {
 /** La lista del mes para administración, con su cabecera. */
 /** Una fila de las listas de administración («Del mes» y las pestañas de la segunda parte). */
 const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM') AS periodo,
-              c.nombre AS colaborador_nombre, c.email, c.area,
+              c.nombre AS colaborador_nombre, c.email, c.area, c.tipo,
               ii.razon_social AS empresa,
               f.importe_esperado, f.importe, f.moneda,
               -- Lo acordado es la base: con desglose, la diferencia es la de su base
@@ -434,12 +443,14 @@ const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.per
               f.pago_confirmado_at, f.pago_valoracion, f.pago_comentario,
               -- «No lo he recibido» (272): la lista lo enseña mientras no confirme.
               f.pago_no_recibido_at, f.pago_no_recibido_comentario,
+              -- Validada por la empresa (CRM-ISEIE#422): sin esto no se paga.
+              f.validada_at,
               ${ESTADO} AS estado
          FROM facturas_colaborador f
          JOIN colaboradores c ON c.id = f.colaborador_id
          JOIN invoice_issuers ii ON ii.id = f.issuer_id`;
 
-export async function delMes({ periodo, issuerIds, issuerId = null, estado = null, area = null }) {
+export async function delMes({ periodo, issuerIds, issuerId = null, estado = null, area = null, tipo = null }) {
   const { rows } = await query(
     `SELECT * FROM (
        ${FILA_DE_LISTA}
@@ -447,10 +458,11 @@ export async function delMes({ periodo, issuerIds, issuerId = null, estado = nul
           AND ($2::int[] IS NULL OR f.issuer_id = ANY($2::int[]))
           AND ($3::int IS NULL OR f.issuer_id = $3)
           AND ($5::text IS NULL OR c.area = $5)
+          AND ($6::text IS NULL OR c.tipo = $6)
      ) t
      WHERE ($4::text IS NULL OR t.estado = $4)
      ORDER BY (t.estado = 'anulada'), t.colaborador_nombre, t.empresa, t.id`,
-    [periodo, issuerIds, issuerId, estado, area],
+    [periodo, issuerIds, issuerId, estado, area, tipo],
   );
   return rows;
 }
@@ -462,12 +474,15 @@ export async function delMes({ periodo, issuerIds, issuerId = null, estado = nul
  */
 const VISTAS = {
   enviadas: 'f.subida_at IS NOT NULL AND f.anulada_at IS NULL',
-  por_pagar: 'f.subida_at IS NOT NULL AND f.anulada_at IS NULL AND f.pagada_at IS NULL',
+  // CRM#710: «la gestora pone su monto y luego la empresa valida y hace el pago».
+  // Por validar: recibidas y sin validar; Por pagar: solo las validadas.
+  por_validar: 'f.subida_at IS NOT NULL AND f.anulada_at IS NULL AND f.validada_at IS NULL',
+  por_pagar: 'f.subida_at IS NOT NULL AND f.anulada_at IS NULL AND f.validada_at IS NOT NULL AND f.pagada_at IS NULL',
   pagadas: 'f.pagada_at IS NOT NULL AND f.anulada_at IS NULL',
   historial: 'TRUE',
 };
 
-export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null, q = null }) {
+export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null, q = null, tipo = null }) {
   const { rows } = await query(
     `SELECT * FROM (
        ${FILA_DE_LISTA}
@@ -479,11 +494,13 @@ export async function deLaVista({ vista, issuerIds, issuerId = null, colaborador
           -- El buscador (Ctrl K, #591): sin acentos en el nombre.
           AND ($6::text IS NULL OR unaccent(c.nombre) ILIKE unaccent($6) OR c.email ILIKE $6
                OR f.numero_factura ILIKE $6 OR f.numero_recepcion ILIKE $6)
+          -- «Vendedoras / Colaboradores» (CRM#710).
+          AND ($7::text IS NULL OR c.tipo = $7)
      ) t
      WHERE ($5::text IS NULL OR t.estado = $5 OR ($5 = 'no_cuadra' AND t.cuadra = false AND t.estado <> 'anulada'))
      ORDER BY t.periodo DESC, t.colaborador_nombre, t.empresa, t.id
      LIMIT 1000`,
-    [issuerIds, issuerId, colaboradorId, periodo, estado, q ? `%${q}%` : null],
+    [issuerIds, issuerId, colaboradorId, periodo, estado, q ? `%${q}%` : null, tipo],
   );
   return rows;
 }
@@ -517,7 +534,7 @@ export async function costePorCampus({ periodo, issuerIds, issuerId = null }) {
 /** Las recibidas de una empresa y un mes, para el ZIP: con su archivo y lo que pide el resumen. */
 export async function paraElZip(periodo, issuerId) {
   const { rows } = await query(
-    `SELECT f.id, c.nombre AS colaborador, c.area, c.nif,
+    `SELECT f.id, c.nombre AS colaborador, c.area, c.tipo, c.nif,
             f.numero_factura, f.importe, f.importe_esperado, f.moneda,
             -- Como en la lista: con desglose, la de su base.
             CASE WHEN f.importe IS NOT NULL AND f.importe_esperado IS NOT NULL
@@ -527,7 +544,7 @@ export async function paraElZip(periodo, issuerId) {
        JOIN colaboradores c ON c.id = f.colaborador_id
       WHERE f.periodo = $1::date AND f.issuer_id = $2
         AND f.subida_at IS NOT NULL AND f.anulada_at IS NULL AND f.archivo_key IS NOT NULL
-      ORDER BY c.nombre, f.id`,
+      ORDER BY c.tipo, c.nombre, f.id`,
     [periodo, issuerId],
   );
   return rows;
