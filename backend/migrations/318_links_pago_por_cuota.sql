@@ -1,4 +1,4 @@
--- 308 · Links de pago: un link por cuota del plan de la venta (#680; Diego, 19/11)
+-- 318 · Links de pago: un link por cuota del plan de la venta (#680; Diego, 19/11)
 --
 -- «Generar plan de pago»: desde una venta con plan de cuotas, un link de Stripe
 -- por cada cuota pendiente, con su importe y su fecha. Cuando el alumno paga el
