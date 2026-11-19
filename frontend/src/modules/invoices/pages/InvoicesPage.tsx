@@ -739,21 +739,12 @@ export default function InvoicesPage() {
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && !esFacturaEmitida(inv) && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto"
                           className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
-                      )}
-                      {/* Una emitida no se cambia (CRM#793): el botón se ve, desactivado, con el porqué. */}
-                      {gestionaFacturas && esFacturaEmitida(inv) && (
-                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex" data-recorrido="factura-bloqueada">
-                          <button type="button" disabled aria-label={`Editar: ${NO_SE_CAMBIA_EMITIDA}`}
-                            className="h-7 px-2 rounded border border-border text-muted-foreground text-[11px] font-semibold inline-flex items-center gap-1 opacity-50 cursor-not-allowed pointer-events-none">
-                            <Gear size={11} weight="bold" /> Editar
-                          </button>
-                        </span>
                       )}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}

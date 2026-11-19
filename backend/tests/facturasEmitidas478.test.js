@@ -100,15 +100,19 @@ describe('#793 · una emitida no se borra ni se cambia', () => {
     expect((await factura(EMITIDA_4))?.numero).toBe(4);
   });
 
-  it('corregirla (importe, IVA, cliente): 409 y nada cambia', async () => {
-    const r = await request.patch(`/api/invoices/${EMITIDA}/corregir`).set(como(ADMIN)).send({
+  it('corregirla: el admin sí (Diego 19/11); la gestora sin permiso, no', async () => {
+    const id = await nueva({ numero: 7, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
+    const g = await request.patch(`/api/invoices/${id}/corregir`).set(como(GESTORA)).send({
       clienteNombre: 'Otro cliente', items: [{ descripcion: 'Curso', cantidad: 1, precio_unitario: 1 }], ivaPct: 0,
     });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe('FACTURA_EMITIDA');
-    const f = await factura(EMITIDA);
-    expect(Number(f.total)).toBe(121);
-    expect(f.cliente_nombre).toBe(`${MARCA} Cliente`);
+    expect(g.status).toBe(403);
+    const r = await request.patch(`/api/invoices/${id}/corregir`).set(como(ADMIN)).send({
+      clienteNombre: 'Otro cliente', items: [{ descripcion: 'Curso', cantidad: 1, precio_unitario: 1 }], ivaPct: 0,
+    });
+    expect(r.status).toBe(200);
+    const f = await factura(id);
+    expect(f.cliente_nombre).toBe('Otro cliente');
+    expect(f.numero).toBe(7);
   });
 
   it('cambiarle el número: 409', async () => {
@@ -117,12 +121,11 @@ describe('#793 · una emitida no se borra ni se cambia', () => {
     expect((await factura(EMITIDA_4)).numero).toBe(4);
   });
 
-  it('cambiarle las fechas: 409', async () => {
-    const antes = (await factura(EMITIDA)).fecha_emision;
-    const r = await request.patch(`/api/invoices/${EMITIDA}/fechas`).set(como(ADMIN)).send({ fechaEmision: '2020-01-01' });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe('FACTURA_EMITIDA');
-    expect((await factura(EMITIDA)).fecha_emision).toEqual(antes);
+  it('cambiarle las fechas: el admin sí (Diego 19/11)', async () => {
+    const id = await nueva({ numero: 8, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
+    const r = await request.patch(`/api/invoices/${id}/fechas`).set(como(ADMIN)).send({ fechaEmision: '2020-01-01' });
+    expect(r.status).toBe(200);
+    expect(String((await factura(id)).fecha_emision.toISOString?.() ?? (await factura(id)).fecha_emision).slice(0, 10)).toBe('2020-01-01');
   });
 
   it('completar datos: lo que falta, sí; cambiar lo que tiene, no', async () => {
