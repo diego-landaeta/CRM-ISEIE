@@ -486,6 +486,28 @@ export const CAMBIOS_DE_MENU = [
     },
     // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
     aprobadoPor: 'Diego, 18/11',
+  },  {
+    id: 'menu-links-de-pago-680',
+    que: '«Comercial › Links de pago»: la lista de links de Stripe (estado, alumno, programa, venta, importe, quién lo creó, caducidad y pago) con «Crear link de pago». La ve quien tiene `links_pago.crear` o `links_pago.ver_todos`, y solo con los links encendidos en el servidor.',
+    motivo: 'Gemela de CRM#680 (Diego, 19/11): «no sé cómo hacer los enlaces de pago, tampoco hay una opción en el menú». No cambia el acceso: `GET /api/links-pago` ya respondía a esos permisos desde la tarjeta de la ficha.',
+    perfiles: {
+      superadmin: ['+ Comercial › Links de pago'],
+      admin: ['+ Comercial › Links de pago'],
+      soporte: ['+ Comercial › Links de pago'],
+      gestora: ['+ Comercial › Links de pago'],
+      'gestora+admin': ['+ Comercial › Links de pago'],
+      'gestora+tutor': ['+ Comercial › Links de pago'],
+      'gestora con factura_manager': ['+ Comercial › Links de pago'],
+      'gestora con editar_fechas_factura': ['+ Comercial › Links de pago'],
+      'gestora con usa_mcp': ['+ Comercial › Links de pago'],
+      'gestora con diplomas.view': ['+ Comercial › Links de pago'],
+      'gestora con tasks.close': ['+ Comercial › Links de pago'],
+    },
+    rutas: {
+      'Comercial › Links de pago': 'GET /api/links-pago/',
+    },
+    // La escribe Claude principal con el sí de Diego.
+    aprobadoPor: 'Pendiente de Diego',
   },
 ];
 

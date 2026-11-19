@@ -161,6 +161,25 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
   };
 }
 
+/*
+ * CRM#909 (testeo, 18/11): desde una venta se podía crear un link de 400 € con
+ * 370 € pendientes; pagado, la venta quedaba cobrada de más. Desde una venta, el
+ * link no pasa de lo pendiente, sea quien sea quien lo crea. Lo pendiente está en
+ * euros: en otra moneda no se puede comparar y manda `comprobarReglas` (solo el
+ * admin). Sin venta (`pendiente` undefined), nada que mirar.
+ */
+export function noPasaDelPendiente({ importe, moneda, pendiente }) {
+  if (pendiente === undefined || pendiente === null) return;
+  if (String(moneda || 'EUR').toUpperCase() !== 'EUR') return;
+  const p = Number(pendiente);
+  if (!(p > 0)) {
+    throw new AppError('Esta venta ya está cobrada entera: no queda nada pendiente para un link.', 400, 'LINK_SUPERA_PENDIENTE');
+  }
+  if (Math.round(Number(importe) * 100) > Math.round(p * 100)) {
+    throw new AppError(`El link no puede pasar de lo pendiente de la venta: ${p.toFixed(2)} EUR.`, 400, 'LINK_SUPERA_PENDIENTE');
+  }
+}
+
 /** La marca del CRM que va en el link y en el cargo (la lee la fase 3). */
 export function marca({ linkId, projectId, leadId, conversionId, userId }) {
   return {

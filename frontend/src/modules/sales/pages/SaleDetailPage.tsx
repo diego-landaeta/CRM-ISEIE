@@ -14,6 +14,7 @@ import RepartoVentaCard from '../components/RepartoVentaCard';
 import EnlazarStripeCard from '../components/EnlazarStripeCard';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
+import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -125,13 +126,17 @@ export default function SaleDetailPage() {
         title={venta.lead_nombre || `Venta #${venta.id}`}
         subtitle={`${venta.producto_contratado || 'Sin programa'} · ${venta.proyecto_nombre || ''}`}
         actions={
-          <button
-            type="button"
-            onClick={() => navigate(`/leads/${venta.lead_id}`)}
-            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
-          >
-            <User size={14} weight="bold" /> Ficha del cliente
-          </button>
+          <span className="flex flex-wrap items-center gap-2">
+            {/* «Crear link de pago» arriba (Diego, 19/11), con esta venta ya elegida. */}
+            <BotonCrearLink leadId={venta.lead_id} conversionId={venta.id} />
+            <button
+              type="button"
+              onClick={() => navigate(`/leads/${venta.lead_id}`)}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
+            >
+              <User size={14} weight="bold" /> Ficha del cliente
+            </button>
+          </span>
         }
       />
 
@@ -205,8 +210,7 @@ export default function SaleDetailPage() {
         {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
         <RepartoVentaCard conversionId={venta.id} />
         {venta.project_id != null && (
-          <LinksDePagoCard projectId={venta.project_id} conversionId={venta.id} productoId={venta.producto_contratado_id}
-            pendiente={pendiente} conRecorrido />
+          <LinksDePagoCard projectId={venta.project_id} leadId={venta.lead_id} conversionId={venta.id} conRecorrido />
         )}
         </div>
 

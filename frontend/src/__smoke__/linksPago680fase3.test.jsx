@@ -2,7 +2,8 @@
 // Gemela de la de MultiCRM (#407, gemela de CRM#872 y CRM#891). ISEIE no tiene un setup
 // común de pruebas: el entorno y la limpieza entre pruebas se ponen aquí.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { render as pintar, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 /**
  * CRM#680, fase 3 · Desde una venta, la tarjeta de links sugiere lo pendiente y
@@ -19,6 +20,9 @@ vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => p
 // La tarjeta mira en la sesión si los links están encendidos en el servidor (CRM#870).
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 2, funciones: { links_pago: true } } }) }));
 
+const render = (ui) => pintar(<MemoryRouter>{ui}</MemoryRouter>);
+// Lo pendiente de la venta lo dice el servidor (19/11), ya no la ficha.
+const pendiente = { v: 400 };
 const { default: LinksDePagoCard } = await import('@/modules/links-pago/components/LinksDePagoCard');
 
 const CONFIG = {
@@ -36,8 +40,15 @@ const PAGADO = {
 beforeEach(() => {
   get.mockReset(); post.mockReset();
   permisos.mapa = { 'links_pago.crear': true };
+  pendiente.v = 400;
   get.mockImplementation(async (url) => {
     if (url === '/links-pago') return { success: true, data: [PAGADO] };
+    if (url === '/links-pago/ventas-del-prospecto') {
+      return { success: true, data: {
+        lead: { id: 3, nombre: 'Ana', email: null, telefono: null, project_id: 1, producto_interes_id: null },
+        ventas: [{ id: 8, project_id: 1, producto_contratado_id: 5, producto_nombre: 'Máster en Psicología', importe_total: 1000, cobrado: 1000 - pendiente.v, pendiente: pendiente.v, fecha_conversion: '2026-11-01' }],
+      } };
+    }
     if (url.startsWith('/links-pago/config')) return { success: true, data: CONFIG };
     if (url === '/products') return { success: true, data: CURSOS };
     return { success: true, data: [] };
@@ -66,14 +77,29 @@ describe('links desde una venta (fase 3)', () => {
     await vi.waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(false));
 
     fireEvent.change(importe, { target: { value: '350' } });
-    expect(within(dialogo).getByText(/menos que lo pendiente de la venta/)).toBeTruthy();
+    expect(within(dialogo).getByText(/menos que lo pendiente/)).toBeTruthy();
     expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
   });
 
-  it('venta sin nada pendiente: solo el admin', async () => {
-    render(<LinksDePagoCard projectId={1} conversionId={8} productoId={5} pendiente={0} />);
+  // CRM#909: una venta cobrada entera no admite links (ni el admin), y se dice.
+  it('venta sin nada pendiente: lo dice y no deja crear', async () => {
+    pendiente.v = 0;
+    render(<LinksDePagoCard projectId={1} conversionId={8} productoId={5} />);
     fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
     const dialogo = await screen.findByRole('dialog');
-    expect(await within(dialogo).findByText(/no tiene nada pendiente/)).toBeTruthy();
+    expect(await within(dialogo).findByText(/cobrada entera/)).toBeTruthy();
+    expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
+  });
+
+  it('pasarse de lo pendiente no deja crear (CRM#909)', async () => {
+    permisos.mapa = { 'links_pago.crear': true, 'links_pago.configurar': true };
+    render(<LinksDePagoCard projectId={1} conversionId={8} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
+    const dialogo = await screen.findByRole('dialog');
+    const importe = within(dialogo).getByLabelText('Importe');
+    await vi.waitFor(() => expect(importe.value).toBe('400'));
+    fireEvent.change(importe, { target: { value: '450' } });
+    expect(within(dialogo).getByText(/no puede pasar de lo pendiente/)).toBeTruthy();
+    expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
   });
 });
