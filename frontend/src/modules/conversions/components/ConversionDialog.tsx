@@ -13,6 +13,11 @@ import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from './VentaYaExisteAviso';
+import usePermission from '@/shared/hooks/usePermission';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
+import { crearLink, generarPlan } from '@/modules/links-pago/api/linksPago.api';
+import { errorDe } from '@/modules/links-pago/components/CrearLinkAsistente';
+import LinksRecienCreados, { type ResultadoLinks } from '@/modules/links-pago/components/LinksRecienCreados';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
@@ -144,6 +149,13 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   const [selectedLinkIdx, setSelectedLinkIdx] = useState<string>('-1'); // '-1' = sin link, 'X' = índice, 'custom' = personalizado
   const [customLink, setCustomLink] = useState('');
   const [linkCopied, setLinkCopied] = useState(false);
+  // Link de pago de Stripe al registrar la venta (Diego, 19/11/2026): uno por lo
+  // pendiente o, si va fraccionada, uno por cuota. Marcado de serie.
+  const { can: puedePermiso } = usePermission();
+  const linksEncendidos = useLinksPagoEncendidos();
+  const puedeLinks = linksEncendidos && puedePermiso('links_pago.crear');
+  const [generarLinkStripe, setGenerarLinkStripe] = useState(true);
+  const [linksCreados, setLinksCreados] = useState<ResultadoLinks | null>(null);
   const [aplicaDescuento, setAplicaDescuento] = useState(false);
   // Estado del pago: 'total' SIEMPRE manda calc.total al registrar (no se queda
   // con un valor viejo si cambias el precio después), 'parcial' usa el input, 'none' = 0.
@@ -544,6 +556,22 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
           toast({ title: 'Conversión creada, pero falló generar cuotas', description: instErr?.data?.error || instErr?.message, variant: 'destructive' });
         }
       }
+      // El link (o los de cada cuota), con la venta ya creada: va a ESTA venta.
+      if (puedeLinks && generarLinkStripe && pendienteFrac > 0) {
+        try {
+          if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
+            const r = await generarPlan(res.data.id);
+            setLinksCreados({ cuotas: r.data?.cuotas || [] });
+          } else {
+            const productoId = Number((res.data as { producto_contratado_id?: number | null }).producto_contratado_id || 0);
+            if (!productoId) throw new Error('La venta no tiene un curso del catálogo: crea el link desde la ficha de la venta eligiendo el curso.');
+            const r = await crearLink({ conversionId: res.data.id, productId: productoId, importe: pendienteFrac, moneda: 'EUR' });
+            setLinksCreados({ link: r.data || null });
+          }
+        } catch (linkErr) {
+          setLinksCreados({ error: errorDe(linkErr) });
+        }
+      }
       toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
       if (!FACT_V2) {
         // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
@@ -580,6 +608,12 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
               </div>
               <div>
                 <h3 className="font-semibold text-base">Venta registrada</h3>
+                {linksCreados && (
+                  <div className="mt-3">
+                    <LinksRecienCreados resultado={linksCreados} alumno={lead?.nombre} curso={form.producto_contratado}
+                      onVerVenta={() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}C:/Program Files/Git/ventas/${created.id}`); }} />
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -975,8 +1009,26 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
               </div>
             )}
 
-            {/* Selector de enlace de pago Stripe (CRM-140) */}
-            {(productLinks.length > 0 || form.producto_contratado) && (
+            {/* Link de pago de Stripe al registrar (Diego, 19/11/2026). */}
+            {puedeLinks && pagoMode !== 'total' && (
+              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-info-soft border border-info/30 cursor-pointer" data-recorrido="venta-generar-link">
+                <input type="checkbox" checked={generarLinkStripe} onChange={(e) => setGenerarLinkStripe(e.target.checked)} className="mt-0.5 h-4 w-4" />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 text-sm font-semibold text-info-soft-foreground">
+                    <LinkIcon size={13} weight="bold" /> Generar link de pago de Stripe
+                  </span>
+                  <span className="block text-[12px] text-info-soft-foreground">
+                    {form.metodo_pago === 'fraccionado' && installments.length >= 1
+                      ? `Un link por cada cuota (${installments.length}), con su importe y su fecha. Al pagar uno, se salda esa cuota.`
+                      : `Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
+                    {' '}Te los damos al registrar, listos para copiar, y quedan en la ficha de la venta.
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {/* Selector de enlace de pago Stripe (CRM-140): los enlaces fijos del producto, si los links están apagados. */}
+            {!puedeLinks && (productLinks.length > 0 || form.producto_contratado) && (
               <div className="p-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 space-y-2">
                 <div className="flex items-center gap-2 text-xs font-bold text-blue-800 dark:text-blue-300">
                   <LinkIcon size={12} weight="bold" /> Enlace de pago para compartir

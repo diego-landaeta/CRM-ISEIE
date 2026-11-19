@@ -94,7 +94,8 @@ export function ventasDelProspecto(params: { leadId?: number; conversionId?: num
 }
 
 export function crearLink(cuerpo: {
-  leadId?: number; conversionId?: number; productId: number; importe: number; moneda: string; caducidad_dias: number;
+  // Sin caducidad, la de serie del campus; sin moneda, la del campus.
+  leadId?: number; conversionId?: number; productId: number; importe: number; moneda?: string; caducidad_dias?: number;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
 }
