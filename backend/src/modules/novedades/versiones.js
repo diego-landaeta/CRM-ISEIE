@@ -13,6 +13,29 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.8.2",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.2",
+    "intro": "El link de pago sale al registrar la venta.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Genera el link de pago al registrar la venta",
+            "texto": "Al registrar una venta, deja marcado «Generar link de pago de Stripe»: si va fraccionada, sale un link por cada cuota con su importe y su fecha; si no, un link por lo que queda por pagar. Al terminar te los da listos para copiar y mandar al alumno, y quedan en la ficha de la venta y en la del prospecto para volver a buscarlos.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "«Links de pago» sale activo en el menú (antes, «Próximamente»)."
+    ]
+  },
+  {
     "version": "2.8.0",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.8.0",
