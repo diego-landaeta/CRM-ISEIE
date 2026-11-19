@@ -423,6 +423,59 @@ export const CAMBIOS_DE_MENU = [
     // Aprobado por Diego el 18/11 en el CRM 360 (CRM#865), tras probarla en /testeo (permisos por rol, filtros, sin claves, solo lectura y móvil).
     aprobadoPor: 'Diego, 18/11',
   },
+  {
+    id: 'menu-sin-proximamente-534',
+    que: 'Las entradas sin pantalla salen del menú: «Captación › Campañas», «Captación › Tráfico orgánico» y «Publicidad › Google Ads» (gemela de CRM#900, parte 3 de la #534; aquí, CRM-ISEIE#367).',
+    motivo: 'Manuel (29/10) y la maqueta de Diego (03/11): «fuera del menú hasta que funcionen». Campañas y Google Ads eran «Próximamente» (sin enlace) y Tráfico orgánico llevaba a «Aún no conectado»: ninguna enseña nada, así que no cambia el acceso de nadie. Vuelven al menú cuando exista su pantalla.',
+    // Solo menú y sin ruta en el servidor (`null`): no hay pantalla con datos detrás.
+    soloMenu: true,
+    perfiles: Object.fromEntries(['superadmin', 'admin', 'soporte', 'gestora+admin'].map((p) => [p, [
+      '- Captación › Campañas', '- Captación › Tráfico orgánico', '- Publicidad › Google Ads',
+    ]])),
+    rutas: { 'Captación › Campañas': null, 'Captación › Tráfico orgánico': null, 'Publicidad › Google Ads': null },
+    // Diego lo aprobó el 18/11 en el 360 (CRM#903) para los dos CRM.
+    aprobadoPor: 'Diego, 18/11',
+  },
+  {
+    id: 'menu-tutoriales',
+    que: '«Sistema › Tutoriales» (Ayuda › Tutoriales): los tutoriales del CRM, cada uno con sus capturas, a quien tiene el permiso de alguno de ellos (gemela de CRM#919).',
+    motivo: 'Diego, 18/11: «tienes que poner los tutoriales», que estaban en páginas sueltas fuera del CRM. Es texto de ayuda: no llama al servidor ni enseña datos. Cada tutorial pide su permiso del catálogo (la gestora ve los suyos; los de configuración, quien ve o configura integraciones o los links de pago), así que no cambia el acceso a nada.',
+    // Solo texto: no hay ruta del servidor detrás.
+    soloMenu: true,
+    perfiles: Object.fromEntries([
+      'superadmin', 'admin', 'soporte', 'gestora', 'project_manager', 'gestora+admin', 'gestora+tutor',
+      'gestora con factura_manager', 'gestora con editar_fechas_factura', 'gestora con usa_mcp',
+      'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((p) => [p, ['+ Sistema › Tutoriales']])),
+    rutas: { 'Sistema › Tutoriales': null },
+    aprobadoPor: 'Diego, 18/11',
+  },
+  {
+    id: 'menu-actividad-paypal-incidencias',
+    que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) y «Sistema › Incidencias» salen en el menú a quien tiene su permiso (gemela de CRM#922).',
+    motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
+    perfiles: {
+      superadmin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      admin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      'gestora+admin': ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      soporte: ['+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      project_manager: ['+ Finanzas › PayPal y banco'],
+      gestora: ['+ Sistema › Incidencias'],
+      'gestora+tutor': ['+ Sistema › Incidencias'],
+      'gestora con factura_manager': ['+ Sistema › Incidencias'],
+      'gestora con editar_fechas_factura': ['+ Sistema › Incidencias'],
+      'gestora con usa_mcp': ['+ Sistema › Incidencias'],
+      'gestora con diplomas.view': ['+ Sistema › Incidencias'],
+      'gestora con tasks.close': ['+ Sistema › Incidencias'],
+    },
+    rutas: {
+      'Equipo de Desarrollo › Actividad': 'GET /api/monitask/actividad',
+      'Finanzas › PayPal y banco': 'GET /api/cobros-externos/estado',
+      'Sistema › Incidencias': 'GET /api/incidencias/',
+    },
+    // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
+    aprobadoPor: 'Diego, 18/11',
+  },
 ];
 
 /**
