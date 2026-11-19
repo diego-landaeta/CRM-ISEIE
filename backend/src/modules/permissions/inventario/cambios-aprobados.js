@@ -459,6 +459,9 @@ export const CAMBIOS_DE_MENU = [
       'gestora con diplomas.view', 'gestora con tasks.close',
     ].map((p) => [p, ['+ Sistema › Tutoriales']])),
     rutas: { 'Sistema › Tutoriales': null },
+    aprobadoPor: 'Diego, 18/11',
+  },
+  {
     id: 'menu-actividad-paypal-incidencias',
     que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) y «Sistema › Incidencias» salen en el menú a quien tiene su permiso (gemela de CRM#922).',
     motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
