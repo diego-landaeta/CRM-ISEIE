@@ -28,6 +28,10 @@ export const idSchema = z.object({ id });
 
 export const configQuerySchema = z.object({ projectId: id });
 
+/** Las ventas de un prospecto (o del de una venta), para el asistente de crear link. */
+export const ventasProspectoSchema = z.object({ leadId: id.optional(), conversionId: id.optional() })
+  .refine((b) => b.leadId || b.conversionId, 'Falta el prospecto o la venta');
+
 // Un número o un texto que sea un número (con punto o coma), y nada más. Sin
 // `z.coerce`: convertía null y "" en 0 y true en 1 sin avisar.
 const comoNumero = (v) => (typeof v === 'string' && /^\s*\d+([.,]\d+)?\s*$/.test(v) ? Number(v.trim().replace(',', '.')) : v);
@@ -105,4 +109,12 @@ export const webhookAccionSchema = z.object({
   accion: z.enum(['anadir_eventos', 'activar', 'desactivar'], {
     errorMap: () => ({ message: 'Acción no válida: anadir_eventos, activar o desactivar' }),
   }),
+});
+
+// «Generar plan de pago» (Diego, 19/11): la venta y, si se eligen, qué cuotas.
+// Sin `cuotaIds`, todas las pendientes que aún no tengan link vivo.
+export const planQuerySchema = z.object({ conversionId: id });
+export const planBodySchema = z.object({
+  conversionId: id,
+  cuotaIds: z.array(id).min(1, 'Elige al menos una cuota').max(60).optional(),
 });

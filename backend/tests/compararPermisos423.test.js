@@ -152,7 +152,9 @@ describe('antes y después de #423, persona por persona (#423)', () => {
         // Va por el rol (CRM#632): al admin con una casilla le cambia igual.
         'admin-ve-claves',
         // Y el project manager que ve todo (Diego, 04/11): por su rol, con casilla o sin ella.
-        'pm-ve-todo'].includes(d.cambio?.id));
+        'pm-ve-todo',
+        // Y las gestoras que corrigen facturas (Diego, 19/11): por su rol.
+        'gestoras-corrigen-facturas'].includes(d.cambio?.id));
     expect(conCasilla.map((d) => `${d.persona.role} · ${d.fila.id}`)).toEqual([]);
   });
 });

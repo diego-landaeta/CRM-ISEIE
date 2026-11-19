@@ -510,7 +510,10 @@ export async function destroy(req, res, next) {
     if (!(await model.esFacturaQueGestiona(req.user.userId, req.user.role, id))) {
       throw new AppError('Solo puedes eliminar tus propias facturas.', 403, 'FORBIDDEN');
     }
-    const inv = await model.deleteInvoice(id);
+    // La ruta pide «Anular y abonar» (facturas.gestionar): con él se borra también
+    // una emitida por error (Diego, 19/11/2026). Queda en el registro quién y cuál.
+    const inv = await model.deleteInvoice(id, { permitirEmitida: true });
+    if (inv) logger.warn({ userId: req.user.userId, invoiceId: inv.id, codigo: inv.codigo, estado: inv.estado, tipo: inv.tipo }, 'factura eliminada');
     if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: { id: inv.id, codigo: inv.codigo } });
   } catch (e) {

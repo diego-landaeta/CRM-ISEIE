@@ -286,7 +286,7 @@ describe('corregir y abonar facturas: solo la administradora sin equipo (Diego 0
     // probar el recorte del equipo, se le quita.
     const { esFacturaQueGestiona } = await import('../src/modules/invoices/invoices.model.js');
     const { olvidarPermisos: olvidar } = await import('../src/modules/permissions/permissions.service.js');
-    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false)
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false), ($1, 'facturas', 'gestionar', false)
              ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [RAQUEL.id]);
     olvidar();
     try {
@@ -295,7 +295,7 @@ describe('corregir y abonar facturas: solo la administradora sin equipo (Diego 0
       expect(await esFacturaQueGestiona(DANIELA.id, 'admin', 0)).toBe(true);
       expect(await esFacturaQueGestiona(SUPER.id, 'superadmin', 0)).toBe(true);
     } finally {
-      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action = 'emitir'`, [RAQUEL.id]);
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action IN ('emitir', 'gestionar')`, [RAQUEL.id]);
       olvidar();
     }
     expect(await esFacturaQueGestiona(RAQUEL.id, 'admin', 0)).toBe(true);

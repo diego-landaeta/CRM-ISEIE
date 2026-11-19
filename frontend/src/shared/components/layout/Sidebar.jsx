@@ -9,7 +9,8 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, LinkSimple } from '@phosphor-icons/react';
+import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -102,6 +103,10 @@ export const NAV_SECTIONS = [
       // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
       // y Revisión duplicados pasan a la sección Clientes al final.
       { to: '/ventas',      label: 'Ventas',     icon: Receipt, permiso: 'ventas.view' },
+      // Links de pago de Stripe (#680, gemela de CRM#940; Diego, 19/11: «tampoco hay
+      // una opción en el menú»). Quien los crea o los ve todos, y solo con los links
+      // encendidos en el servidor (`funcion`, de /auth/me).
+      { to: '/links-pago',  label: 'Links de pago', icon: LinkSimple, permiso: ['links_pago.crear', 'links_pago.ver_todos'], funcion: 'links_pago' },
     ],
   },
   // El tablero del equipo (#210, como en MultiCRM). Es lo único que ve quien es
@@ -320,6 +325,8 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   const porPermiso = Boolean(item.oPermiso && typeof can === 'function'
     && [].concat(item.oPermiso).some((p) => can(p) === true));
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
+  // Una función que enciende el servidor (`/auth/me` → `funciones`): apagada, no sale.
+  if (item.funcion === 'links_pago' && !linksPagoEncendidos(permisos)) return false;
   // El permiso de la pantalla (#230, gemela de CRM#423): sin él no sale, sea quien
   // sea. Es el mismo mapa que mira el servidor; quitarle a alguien «Ver
   // prospectos» le quita también la entrada. Los `roles` de cada entrada siguen

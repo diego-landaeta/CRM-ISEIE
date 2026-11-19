@@ -156,6 +156,19 @@ export const CAMBIOS = [
     sentido: 'gana',
     aprobadoPor: 'Diego, 04/11',
   },
+  {
+    id: 'gestoras-corrigen-facturas',
+    que: 'Las gestoras corrigen, cambian las fechas, asocian a una venta, abonan, anulan y borran (si se emitió por error) cualquier factura de su campus, y las ven todas.',
+    motivo: 'Diego (19/11): «las gestoras deben de PODER EDITAR, BORRAR Y ESO CADA FACTURA». Ganan «Anular y abonar», «Cambiar fechas» y «Editar facturas» de serie. Gemela de CRM#943.',
+    filas: [
+      'PATCH /api/invoices/:id', 'PATCH /api/invoices/:id/corregir', 'PATCH /api/invoices/:id/fechas',
+      'PATCH /api/invoices/:id/asociar', 'DELETE /api/invoices/:id', 'POST /api/invoices/:id/rectificar',
+      'POST /api/invoices/ · invoices.rectificativa',
+    ],
+    roles: ['gestor'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 19/11',
+  },
 ];
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */
@@ -441,6 +454,29 @@ export const CAMBIOS_DE_MENU = [
     },
     // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
     aprobadoPor: 'Diego, 18/11',
+  },
+  {
+    id: 'menu-links-de-pago-680',
+    que: '«Comercial › Links de pago»: la lista de links de Stripe (estado, alumno, programa, venta, importe, quién lo creó, caducidad y pago) con «Crear link de pago». La ve quien tiene `links_pago.crear` o `links_pago.ver_todos`, y solo con los links encendidos en el servidor.',
+    motivo: 'Diego (19/11): «no sé cómo hacer los enlaces de pago, tampoco hay una opción en el menú». No cambia el acceso: `GET /api/links-pago` ya respondía a esos permisos desde la tarjeta de la ficha (#680).',
+    perfiles: {
+      superadmin: ['+ Comercial › Links de pago'],
+      admin: ['+ Comercial › Links de pago'],
+      soporte: ['+ Comercial › Links de pago'],
+      gestora: ['+ Comercial › Links de pago'],
+      'gestora+admin': ['+ Comercial › Links de pago'],
+      'gestora+tutor': ['+ Comercial › Links de pago'],
+      'gestora con factura_manager': ['+ Comercial › Links de pago'],
+      'gestora con editar_fechas_factura': ['+ Comercial › Links de pago'],
+      'gestora con usa_mcp': ['+ Comercial › Links de pago'],
+      'gestora con diplomas.view': ['+ Comercial › Links de pago'],
+      'gestora con tasks.close': ['+ Comercial › Links de pago'],
+    },
+    rutas: {
+      'Comercial › Links de pago': 'GET /api/links-pago/',
+    },
+    // La escribe Claude principal con el sí de Diego.
+    aprobadoPor: 'Pendiente de Diego',
   },
 ];
 

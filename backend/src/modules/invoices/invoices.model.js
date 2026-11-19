@@ -726,7 +726,7 @@ export async function cancel(id, { motivo = null, userId = null } = {}) {
 // serie al mayor número restante, de modo que si se borran los últimos (errores) el
 // siguiente vuelve a reutilizarlos sin dejar huecos. Solo admin/superadmin.
 // No toca la conversión ni sus pagos (la venta sigue; se podrá re-facturar).
-export async function deleteInvoice(id) {
+export async function deleteInvoice(id, { permitirEmitida = false } = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -734,7 +734,10 @@ export async function deleteInvoice(id) {
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
     // Una emitida no se borra (CRM#793): su número no puede quedar libre.
-    exigirNoEmitida(inv, 'borrar');
+    // Salvo desde la pantalla (Diego, 19/11/2026), por quien tiene «Anular y abonar»:
+    // una factura emitida por error. Lo normal sigue siendo anularla (su abono).
+    // El abono (rectificativa) emitido, nunca: deshace otra factura.
+    if (!permitirEmitida || inv.tipo === 'rectificativa') exigirNoEmitida(inv, 'borrar');
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
     // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
     // filas: es como numera `nextNumero`, que coge el mayor de todas.

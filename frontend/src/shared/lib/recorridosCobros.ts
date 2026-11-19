@@ -37,6 +37,7 @@ export interface PasoCobros extends PasoRecorrido {
 export type IdRecorridoCobros =
   | 'integraciones-stripe'
   | 'link-de-pago'
+  | 'links-pago'
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
@@ -166,6 +167,40 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     ],
   },
 
+  // ─── 2 bis · Comercial › Links de pago: la pantalla (Diego, 19/11) ──────────────
+  'links-pago': {
+    id: 'links-pago',
+    titulo: 'Links de pago',
+    permiso: ['links_pago.crear', 'links_pago.ver_todos'],
+    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Links de pago',
+        texto: 'Un link de pago es un enlace de Stripe: el alumno lo abre y paga con tarjeta, y el cobro entra solo en el CRM. Aquí los creas y ves cómo va cada uno. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('links-pantalla-crear'),
+        permiso: 'links_pago.crear',
+        titulo: 'Crear link de pago',
+        texto: 'Pulsa aquí. Buscas al prospecto, eliges a cuál de sus ventas va (o «sin venta todavía»), el curso y el importe. Si algo falta o no cuadra, el asistente te dice qué.',
+      },
+      {
+        donde: anclaje('links-pantalla-filtros'),
+        titulo: 'Por estado',
+        texto: 'Pendientes, abiertos, pagados, caducados o anulados. Cada gestora ve los suyos; quien ve los de todos, los de sus campus.',
+      },
+      {
+        donde: anclaje('links-pantalla-lista'),
+        titulo: 'Copiar, abrir o anular',
+        texto: 'Cada link con su alumno, su programa y la venta a la que va. «Copiar» lo deja listo para pegarlo en WhatsApp o en un correo; si te equivocaste, «Anular» y escribe por qué. Cuando lo paga, el cobro entra en su venta y salda su cuota.',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
   // ─── 3 · Ficha de la venta › «Cargos de Stripe sin enlazar» ────────────────────
   'cargos-sin-enlazar': {
     id: 'cargos-sin-enlazar',
@@ -218,13 +253,18 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     ],
     pasos: [
       {
-        titulo: 'Una factura emitida no se toca',
-        texto: 'Cuando una factura ya tiene número, no se borra ni se cambia: la serie tiene que quedar completa, sin saltos, como pide Hacienda. Si hay un error, se anula. Son {pasos} pasos.',
+        titulo: 'Corregir, anular o borrar una factura',
+        texto: 'Una factura con número se puede corregir (datos, concepto o fechas), anular o, si se emitió por error, borrar. Su número no cambia: la serie tiene que quedar completa, como pide Hacienda. Son {pasos} pasos.',
       },
       {
-        donde: anclaje('factura-bloqueada'),
-        titulo: 'Editar y borrar, apagados',
-        texto: 'Por eso en una factura emitida «Editar» y la papelera salen apagados. Pon el ratón encima y te dice por qué.',
+        donde: anclaje('factura-editar'),
+        titulo: 'Editar',
+        texto: '«Editar» abre la factura para corregir los datos del cliente, el concepto, el IVA o las fechas de emisión y de pago. El número se queda igual.',
+      },
+      {
+        donde: anclaje('factura-eliminar'),
+        titulo: 'Borrar, solo si se emitió por error',
+        texto: 'La papelera borra la factura. Úsala solo si se emitió por error (duplicada, a quien no era). Si la factura era buena y hay que deshacerla, anúlala: así queda su abono.',
       },
       {
         donde: anclaje('factura-anular'),

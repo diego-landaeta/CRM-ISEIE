@@ -15,7 +15,9 @@ export async function tieneAccesoFacturacion(user) {
   try {
     const { explicarPermisos } = await import('../permissions/permissions.service.js');
     const e = await explicarPermisos(id);
-    return e?.mapa?.['facturas.emitir'] === true;
+    // Y quien corrige facturas («Anular y abonar»): desde el 19/11/2026 también las
+    // gestoras, que editan y borran cualquiera de su campus.
+    return e?.mapa?.['facturas.emitir'] === true || e?.mapa?.['facturas.gestionar'] === true;
   } catch { return false; }   // sin poder leer los permisos, el recorte de siempre
 }
 
