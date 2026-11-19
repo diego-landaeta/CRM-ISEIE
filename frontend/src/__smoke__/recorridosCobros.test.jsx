@@ -67,9 +67,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla)', () => {
+  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), y la de Ventas (#619)', () => {
     expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
-      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe',
+      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe', 'ventas',
     ]);
   });
 
