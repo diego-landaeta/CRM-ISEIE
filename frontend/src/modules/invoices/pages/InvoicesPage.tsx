@@ -295,7 +295,9 @@ export default function InvoicesPage() {
         title="Facturas"
         subtitle={`Histórico fiscal — ${activeProject?.nombre || ''}`}
         actions={(
-          <div className="flex gap-2">
+          // Gemela de CRM#917: sin `flex-wrap` los botones iban en una sola
+          // línea y en el móvil sacaban la página de la pantalla.
+          <div className="flex flex-wrap gap-2">
             <TutorialButton />
             {/* Anular una emitida, la rectificativa y los huecos (recorrido, 18/11). */}
             <VerRecorrido id="anular-factura" listo={!loading} />
@@ -333,8 +335,10 @@ export default function InvoicesPage() {
         </>
       ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} />)}
 
-      {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
-      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold" data-recorrido="facturas-pestanas">
+      {/* Pestañas: facturas fiscales vs proformas (presupuestos). Gemela de
+          CRM#917: a 320 px no caben las tres; la tira se desplaza ella sola en
+          vez de ensanchar la página. */}
+      <div className="inline-flex max-w-full overflow-x-auto rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold" data-recorrido="facturas-pestanas">
         {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText], ['abonos', 'Abonos', ArrowCounterClockwise]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
