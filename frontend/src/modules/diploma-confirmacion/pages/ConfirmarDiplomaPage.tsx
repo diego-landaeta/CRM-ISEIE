@@ -188,7 +188,7 @@ export default function ConfirmarDiplomaPage() {
               </label>
 
               {aviso && (
-                <p role="alert" className="mt-5 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">{aviso}</p>
+                <p role="alert" className="mt-5 rounded-md border border-destructive/30 bg-destructive-soft px-3 py-2 text-sm text-destructive-soft-foreground">{aviso}</p>
               )}
 
               {corrigiendo ? (
