@@ -460,20 +460,6 @@ export const CAMBIOS_DE_MENU = [
     aprobadoPor: 'Diego, 18/11',
   },
   {
-    id: 'menu-tutoriales',
-    que: '«Sistema › Tutoriales» (Ayuda › Tutoriales): los tutoriales del CRM, cada uno con sus capturas, a quien tiene el permiso de alguno de ellos (gemela de CRM#919).',
-    motivo: 'Diego, 18/11: «tienes que poner los tutoriales», que estaban en páginas sueltas fuera del CRM. Es texto de ayuda: no llama al servidor ni enseña datos. Cada tutorial pide su permiso del catálogo (la gestora ve los suyos; los de configuración, quien ve o configura integraciones o los links de pago), así que no cambia el acceso a nada.',
-    // Solo texto: no hay ruta del servidor detrás.
-    soloMenu: true,
-    perfiles: Object.fromEntries([
-      'superadmin', 'admin', 'soporte', 'gestora', 'project_manager', 'gestora+admin', 'gestora+tutor',
-      'gestora con factura_manager', 'gestora con editar_fechas_factura', 'gestora con usa_mcp',
-      'gestora con diplomas.view', 'gestora con tasks.close',
-    ].map((p) => [p, ['+ Sistema › Tutoriales']])),
-    rutas: { 'Sistema › Tutoriales': null },
-    aprobadoPor: 'Diego, 18/11',
-  },
-  {
     id: 'menu-actividad-paypal-incidencias',
     que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) y «Sistema › Incidencias» salen en el menú a quien tiene su permiso (gemela de CRM#922).',
     motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
