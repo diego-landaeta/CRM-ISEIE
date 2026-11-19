@@ -13,6 +13,135 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.7.2",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.2",
+    "intro": "Llegan los links de pago de Stripe, cada cobro salda su cuota, las facturas emitidas se anulan con su motivo, las vendedoras tienen su factura del mes y hay recorridos guiados en las pantallas de cobros. Desde esta versión, MultiCRM y CRM ISEIE llevan el mismo número.",
+    "grupos": [
+      {
+        "titulo": "Cobros con Stripe",
+        "items": [
+          {
+            "titulo": "Links de pago",
+            "texto": "Desde la ficha del prospecto o de la venta puedes crear un link de pago de Stripe, copiarlo y mandárselo al alumno. Cuando paga, el cobro entra solo en su venta. Si la venta no existe, se crea a tu nombre. Los links caducan solos y se pueden anular. Cada campus ya tiene su clave de Stripe puesta: no hay que configurar nada para empezar.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/prospectos",
+            "boton": "Ir a Prospectos"
+          },
+          {
+            "titulo": "Configurar los links de pago",
+            "texto": "En Integraciones, cada campus tiene su apartado «Links de pago»: la clave de Stripe con la que se crean, sus reglas (caducidad, moneda) y la dirección del aviso de Stripe, con un botón para copiarla.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ir a Integraciones"
+          },
+          {
+            "titulo": "Cada cobro salda su cuota",
+            "texto": "Al apuntar un cobro, se salda la primera cuota pendiente, con su fecha y su importe. Si el cobro parece repetido, avisa antes de guardarlo. En la ficha de la venta puedes enlazar un pago de Stripe con su cobro, para que no quede suelto.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Pagos de Stripe, solo de tus campus",
+            "texto": "Pagos Stripe enseña, sincroniza y deja asociar solo los cargos de los campus que llevas.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/pagos-stripe",
+            "boton": "Ir a Pagos Stripe"
+          }
+        ]
+      },
+      {
+        "titulo": "Ventas y facturas",
+        "items": [
+          {
+            "titulo": "Aviso de venta repetida",
+            "texto": "Si vas a crear una venta del mismo alumno y el mismo programa que otra que ya existe, el CRM te avisa antes. Si de verdad es otra venta, puedes seguir, y queda apuntado quién lo decidió.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Una factura emitida ya no se borra ni se cambia",
+            "texto": "Una factura emitida no se puede borrar ni cambiar. Si hay que dejarla sin efecto, se anula indicando el motivo y sale su abono. Queda apuntado quién la anuló y por qué.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturas"
+          },
+          {
+            "titulo": "Tu factura del mes",
+            "texto": "Los colaboradores, y las vendedoras que facturan a la empresa, tienen su factura del mes en «Mi factura»: la revisan y la suben desde ahí.",
+            "roles": [
+              "colaborador",
+              "tutor_redactor"
+            ],
+            "ruta": "/mi-factura",
+            "boton": "Ir a Mi factura"
+          },
+          {
+            "titulo": "Validar antes de pagar",
+            "texto": "Las facturas de colaboradores y vendedoras se validan antes de pagarlas: se ve cuáles están validadas y cuáles esperan.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores"
+          }
+        ]
+      },
+      {
+        "titulo": "Para todos",
+        "items": [
+          {
+            "titulo": "Recorridos guiados",
+            "texto": "En Integraciones, en la ficha de la venta, en Facturas y en Pagos Stripe hay un botón «Ver recorrido» que te enseña la pantalla paso a paso. La primera vez sale solo. También funciona en el móvil.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ver en Integraciones"
+          },
+          {
+            "titulo": "El menú, por bloques",
+            "texto": "El menú está ordenado por bloques de uso: Hoy, Comercial, Captación y publicidad, Académico, Finanzas… Cada uno sigue viendo lo mismo que antes, solo que más fácil de encontrar.",
+            "roles": [],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Las direcciones de los avisos (webhooks) que enseña Integraciones llevan la dirección completa del CRM.",
+      "Reportes, Comisiones y Por cobrar cuentan lo cobrado a partir de los pagos apuntados.",
+      "El CRM ya no pide al servidor lo que cada uno no puede ver: menos errores en segundo plano."
+    ]
+  },
+  {
     "version": "2.6.0",
     "fecha": "2026-11-03",
     "titulo": "Versión 2.6.0",
