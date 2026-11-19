@@ -75,27 +75,15 @@ describe('la tarjeta de la ficha', () => {
     expect(get).toHaveBeenCalledWith('/links-pago', { params: { conversionId: 8, limit: 50 } });
   });
 
-  it('crear: el precio del catálogo sale sugerido; pasarse del tope no deja enviar; dentro, manda lo que toca', async () => {
+  it('crear sin ninguna venta: no deja; dice que se registre antes la venta (Diego, 19/11)', async () => {
     permisos.mapa = { 'links_pago.crear': true };
-    post.mockResolvedValue({ success: true, data: { ...LINK, id: 10, importe: '950.00' } });
     render(<LinksDePagoCard projectId={1} leadId={3} productoId={5} />);
     fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
     const dialogo = await screen.findByRole('dialog');
-    const importe = within(dialogo).getByLabelText('Importe');
-    await vi.waitFor(() => expect(importe.value).toBe('1000'));
-    expect(within(dialogo).getByLabelText(/Caduca a los/).value).toBe('7');
-
-    fireEvent.change(importe, { target: { value: '850' } });
-    expect(within(dialogo).getByText(/máximo en este campus es un 10 %/)).toBeTruthy();
+    expect(await within(dialogo).findByText('Este prospecto no tiene ninguna venta')).toBeTruthy();
+    expect(within(dialogo).queryByLabelText('Importe')).toBeNull();
     expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
-
-    fireEvent.change(importe, { target: { value: '950' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear link' }));
-    await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/links-pago', {
-      leadId: 3, productId: 5, importe: 950, moneda: 'EUR', caducidad_dias: 7,
-    }));
-    expect(await within(dialogo).findByText('Link creado')).toBeTruthy();
-    expect(within(dialogo).getByLabelText('Link de pago').value).toBe('https://buy.stripe.com/test_x');
+    expect(post).not.toHaveBeenCalled();
   });
 });
 

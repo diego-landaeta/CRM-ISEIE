@@ -163,7 +163,10 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   // —que venía marcado— y la venta salió sin cobro, sin factura y sin aviso a Make. Ya no
   // viene nada marcado (null): hay que decir si ha pagado antes de registrar.
   const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total' | null>(null);
-  const hayPago = pagoMode === 'parcial' || pagoMode === 'total';
+  // La inicial por link (19/11): con «Parcial», si se paga con link no está cobrada todavía.
+  const [inicialPorLink, setInicialPorLink] = useState(true);
+  const inicialConLink = pagoMode === 'parcial' && inicialPorLink && puedeLinks;
+  const hayPago = (pagoMode === 'parcial' && !inicialConLink) || pagoMode === 'total';
   // Método REAL con el que se cobró la inicial cuando la venta es fraccionada.
   const [metodoInicial, setMetodoInicial] = useState<MetodoPago>('tarjeta');
   const [numCuotas, setNumCuotas] = useState(3);
@@ -269,16 +272,21 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   // Pago recibido HOY (parcial o total). El plan de cuotas reparte el PENDIENTE
   // (total − pago inicial), NO el total: si pagas 500 de 1500, las cuotas suman
   // 1000, no 1500. Así el inicial + cuotas = total del programa.
-  const pagadoInicial = pagoMode === 'total' ? calc.total : pagoMode === 'parcial' ? Number(form.importe_pagado || 0) : 0;
+  const pagadoInicial = pagoMode === 'total' ? calc.total : (pagoMode === 'parcial' && !inicialConLink) ? Number(form.importe_pagado || 0) : 0;
   const pendienteFrac = Math.max(0, Number((calc.total - pagadoInicial).toFixed(2)));
+  // La inicial que se cobra con link: cuota 1, hoy; el resto, en las cuotas.
+  const inicialLink = inicialConLink ? Math.max(0, Number(Number(form.importe_pagado || 0).toFixed(2))) : 0;
 
   // Recalcular cuotas si: estoy en fraccionado, las cuotas NO han sido editadas a mano.
   // Se reparte el PENDIENTE neto (total − pago inicial). Las cuotas deben sumar el
   // pendiente, no el total del programa.
   useEffect(() => {
     if (form.metodo_pago !== 'fraccionado' || installmentsDirty) return;
-    setInstallments(distributeInstallments(pendienteFrac, numCuotas, fechaPrimeraCuota));
-  }, [form.metodo_pago, pendienteFrac, numCuotas, fechaPrimeraCuota, installmentsDirty]);
+    const resto = distributeInstallments(Math.max(0, Number((pendienteFrac - inicialLink).toFixed(2))), numCuotas, fechaPrimeraCuota);
+    setInstallments(inicialLink > 0
+      ? [{ importe_previsto: String(inicialLink), fecha_vencimiento: hoyEnMadrid() }, ...resto]
+      : resto);
+  }, [form.metodo_pago, pendienteFrac, inicialLink, numCuotas, fechaPrimeraCuota, installmentsDirty]);
 
   const activeLink = selectedLinkIdx === 'custom'
     ? customLink
@@ -419,7 +427,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
     }
     const importe = calc.total;  // total final con descuento + IVA
     // Pago según el modo elegido (evita el bug de "Pagó el total" con valor viejo).
-    const pagado = pagoMode === 'total' ? calc.total : pagoMode === 'parcial' ? Number(form.importe_pagado || 0) : 0;
+    // La inicial por link no está cobrada: va como cuota 1 del plan (19/11).
+    const pagado = pagoMode === 'total' ? calc.total : (pagoMode === 'parcial' && !inicialConLink) ? Number(form.importe_pagado || 0) : 0;
     const prodOk = useMultiItem ? items.some(it => it.descripcion?.trim()) : form.producto_contratado?.trim();
     // Cada aviso dice qué falta y dónde ponerlo, no solo «requerido»; y si
     // faltan varias cosas, todas de una vez (#106). Las casillas de número con
@@ -836,7 +845,13 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                 )}
                 {pagoMode === 'parcial' && (
                   <input autoComplete="off" type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)}
-                    placeholder="¿Cuánto pagó?" aria-label="Cuánto pagó hoy" className={inputClass + ' mt-1.5'} autoFocus />
+                    placeholder={inicialConLink ? '¿De cuánto es la inicial?' : '¿Cuánto pagó?'} aria-label="Cuánto pagó hoy" className={inputClass + ' mt-1.5'} autoFocus />
+                )}
+                {pagoMode === 'parcial' && puedeLinks && (
+                  <label className="mt-1.5 flex items-start gap-2 text-[11px] leading-snug cursor-pointer" data-recorrido="venta-inicial-por-link">
+                    <input type="checkbox" checked={inicialPorLink} onChange={(e) => { setInicialPorLink(e.target.checked); setInstallmentsDirty(false); }} className="mt-0.5" />
+                    <span>La inicial se paga con <b>link de pago</b> (todavía no la ha pagado): va como cuota 1, hoy, con su link, y las demás cuotas con el suyo.</span>
+                  </label>
                 )}
               </Field>
             </FilaCampos>
@@ -938,7 +953,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                       className={inputClass}
                     />
                   </Field>
-                  <Field label="Fecha primera cuota" htmlFor="venta-primera-cuota">
+                  <Field label={inicialLink > 0 ? 'Fecha de la cuota 2' : 'Fecha primera cuota'} htmlFor="venta-primera-cuota"
+                    hint="Las siguientes, el mismo día de cada mes (p. ej. el 25). Cada fecha se puede cambiar abajo.">
                     <input
                       id="venta-primera-cuota"
                       type="date"
