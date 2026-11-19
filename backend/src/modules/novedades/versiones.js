@@ -13,6 +13,31 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.7.3",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.3",
+    "intro": "El aviso de prospecto nuevo trae lo que rellenó en el formulario.",
+    "grupos": [
+      {
+        "titulo": "Prospectos",
+        "items": [
+          {
+            "titulo": "El aviso de prospecto nuevo trae lo que rellenó en el formulario",
+            "texto": "El correo que te avisa de un prospecto nuevo dice ahora el programa que le interesa, su mensaje, la página desde la que escribió, por dónde entró y el resto de lo que rellenó. Si solo dejó su teléfono por WhatsApp, también lo dice.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/prospectos",
+            "boton": "Ir a Prospectos"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "2.7.2",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.7.2",
