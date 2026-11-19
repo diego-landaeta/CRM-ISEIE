@@ -447,6 +447,32 @@ export const CAMBIOS_DE_MENU = [
     // Diego lo aprobó el 18/11 en el 360 (CRM#903) para los dos CRM.
     aprobadoPor: 'Diego, 18/11',
   },
+  {
+    id: 'menu-actividad-paypal-incidencias',
+    que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) y «Sistema › Incidencias» salen en el menú a quien tiene su permiso (gemela de CRM#922).',
+    motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
+    perfiles: {
+      superadmin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      admin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      'gestora+admin': ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      soporte: ['+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      project_manager: ['+ Finanzas › PayPal y banco'],
+      gestora: ['+ Sistema › Incidencias'],
+      'gestora+tutor': ['+ Sistema › Incidencias'],
+      'gestora con factura_manager': ['+ Sistema › Incidencias'],
+      'gestora con editar_fechas_factura': ['+ Sistema › Incidencias'],
+      'gestora con usa_mcp': ['+ Sistema › Incidencias'],
+      'gestora con diplomas.view': ['+ Sistema › Incidencias'],
+      'gestora con tasks.close': ['+ Sistema › Incidencias'],
+    },
+    rutas: {
+      'Equipo de Desarrollo › Actividad': 'GET /api/monitask/actividad',
+      'Finanzas › PayPal y banco': 'GET /api/cobros-externos/estado',
+      'Sistema › Incidencias': 'GET /api/incidencias/',
+    },
+    // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
+    aprobadoPor: 'Diego, 18/11',
+  },
 ];
 
 /**
