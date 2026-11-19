@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { MagnifyingGlass, User, CurrencyEur, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useIdsDelAmbito } from '@/shared/hooks/useAmbito';
 import StatusBadge from '@/shared/components/ui/StatusBadge';
 
 interface LeadOption {
@@ -24,27 +25,33 @@ export default function LeadPicker({ open, onSelect, onClose }: Props) {
   const [leads, setLeads] = useState<LeadOption[]>([]);
   const [loading, setLoading] = useState(false);
   const { activeProject } = useProjectContext();
-  const pid = activeProject?.id;
+  // El campus de la cabecera o, con «Todos» o una empresa (-1), los de su
+  // ámbito. Sin ninguno no se pregunta: el servidor lo rechaza con 400 (CRM#859;
+  // antes mandaba `projectId=-1`, o nada).
+  const idsDelAmbito = useIdsDelAmbito();
+  const pid = activeProject?.id && activeProject.id > 0 ? activeProject.id : null;
+  const ambito = pid ? `projectId=${pid}` : (idsDelAmbito.length ? `projectIds=${idsDelAmbito.join(',')}` : null);
 
   useEffect(() => {
-    if (!open || !pid) return;
+    if (!open || !ambito) return;
     setSearch('');
     setLoading(true);
-    client.get(`/leads?limit=20&sort=recent${pid ? `&projectId=${pid}` : ''}`)
+    client.get(`/leads?${ambito}&limit=20&sort=recent`)
       .then(r => { if (r.success) setLeads(r.data || []); })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, [open, pid]);
+  }, [open, ambito]);
 
   useEffect(() => {
-    if (!open || !search || !pid) return;
+    if (!open || !search || !ambito) return;
     const timeout = setTimeout(() => {
-      client.get(`/leads?q=${encodeURIComponent(search)}&limit=15${pid ? `&projectId=${pid}` : ''}`)
+      // `search`, que es lo que entiende /leads; con `q` no filtraba nada.
+      client.get(`/leads?${ambito}&search=${encodeURIComponent(search)}&limit=15`)
         .then(r => { if (r.success) setLeads(r.data || []); })
         .catch(() => {});
     }, 300);
     return () => clearTimeout(timeout);
-  }, [search, open, pid]);
+  }, [search, open, ambito]);
 
   if (!open) return null;
 
