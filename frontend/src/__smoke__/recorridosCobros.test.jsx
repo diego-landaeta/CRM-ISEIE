@@ -67,9 +67,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla)', () => {
+  it('son los del encargo que tienen pantalla en producción (sin Disputas de Stripe, que no está en ISEIE)', () => {
     expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
-      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe',
+      'anular-factura', 'cargos-sin-enlazar', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe',
     ]);
   });
 
@@ -191,7 +191,7 @@ describe('no sale un paso sin permiso', () => {
 describe('cuándo sale', () => {
   it('sin el permiso del recorrido, ni botón ni recorrido', () => {
     vi.useFakeTimers();
-    render(<VerRecorrido id="disputas-stripe" />);
+    render(<VerRecorrido id="integraciones-stripe" />);
     act(() => { vi.advanceTimersByTime(2000); });
     expect(screen.queryByRole('button', { name: /Ver recorrido/ })).toBeNull();
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -199,60 +199,60 @@ describe('cuándo sale', () => {
 
   it('la primera vez sale solo; después, solo con «Ver recorrido»', () => {
     vi.useFakeTimers();
-    permisos.add('stripe.edit');
-    const { unmount } = render(<VerRecorrido id="disputas-stripe" />);
+    permisos.add('integrations.view');
+    const { unmount } = render(<VerRecorrido id="integraciones-stripe" />);
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
-    expect(localStorage.getItem(claveRecorrido('disputas-stripe', 7))).toBe('1');
+    expect(screen.getByRole('dialog', { name: 'Stripe de este campus' })).toBeInTheDocument();
+    expect(localStorage.getItem(claveRecorrido('integraciones-stripe', 7))).toBe('1');
     act(() => { fireEvent.keyDown(window, { key: 'Escape' }); });
     unmount();
 
-    render(<VerRecorrido id="disputas-stripe" />);
+    render(<VerRecorrido id="integraciones-stripe" />);
     act(() => { vi.advanceTimersByTime(3000); });
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Ver recorrido/ }));
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Stripe de este campus' })).toBeInTheDocument();
   });
 
   it('es de cada persona: otra en el mismo navegador también lo ve la primera vez', () => {
     vi.useFakeTimers();
-    permisos.add('stripe.edit');
-    localStorage.setItem(claveRecorrido('disputas-stripe', 7), '1');
+    permisos.add('integrations.view');
+    localStorage.setItem(claveRecorrido('integraciones-stripe', 7), '1');
     yo.current = { id: 8, role: 'admin' };
-    render(<VerRecorrido id="disputas-stripe" />);
+    render(<VerRecorrido id="integraciones-stripe" />);
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Stripe de este campus' })).toBeInTheDocument();
   });
 
   it('no sale hasta que la pantalla está lista', () => {
     vi.useFakeTimers();
-    permisos.add('stripe.edit');
-    const { rerender } = render(<VerRecorrido id="disputas-stripe" listo={false} />);
+    permisos.add('integrations.view');
+    const { rerender } = render(<VerRecorrido id="integraciones-stripe" listo={false} />);
     act(() => { vi.advanceTimersByTime(3000); });
     expect(screen.queryByRole('dialog')).toBeNull();
-    rerender(<VerRecorrido id="disputas-stripe" listo />);
+    rerender(<VerRecorrido id="integraciones-stripe" listo />);
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Stripe de este campus' })).toBeInTheDocument();
   });
 
   it('no se abre encima de otra ventana, y si se abre una, se cierra', () => {
     vi.useFakeTimers();
-    permisos.add('stripe.edit');
+    permisos.add('integrations.view');
     const otra = document.createElement('div');
     otra.setAttribute('role', 'dialog');
     otra.setAttribute('aria-label', 'Crear link de pago');
     document.body.appendChild(otra);
-    render(<VerRecorrido id="disputas-stripe" />, { container: document.body.appendChild(document.createElement('div')) });
+    render(<VerRecorrido id="integraciones-stripe" />, { container: document.body.appendChild(document.createElement('div')) });
     act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.queryByRole('dialog', { name: 'Qué es una disputa' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Stripe de este campus' })).toBeNull();
 
     otra.remove();
     act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Stripe de este campus' })).toBeInTheDocument();
 
     document.body.appendChild(otra);
     act(() => { vi.advanceTimersByTime(500); });
-    expect(screen.queryByRole('dialog', { name: 'Qué es una disputa' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Stripe de este campus' })).toBeNull();
   });
 
   it('dos recorridos en la misma pantalla: el segundo espera a que acabe el primero', () => {

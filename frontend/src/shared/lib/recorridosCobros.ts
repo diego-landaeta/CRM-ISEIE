@@ -39,8 +39,7 @@ export type IdRecorridoCobros =
   | 'link-de-pago'
   | 'cargos-sin-enlazar'
   | 'anular-factura'
-  | 'pagos-stripe'
-  | 'disputas-stripe';
+  | 'pagos-stripe';
 
 export interface RecorridoCobros {
   id: IdRecorridoCobros;
@@ -288,45 +287,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       {
         donde: anclaje('stripe-disputa'),
         titulo: 'Un pago en disputa',
-        texto: 'El alumno ha reclamado este pago a su banco. Púlsalo para ver el detalle. Todas las disputas, con su plazo, están en «Disputas de Stripe».',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
-
-  // ─── 5 bis · Disputas de Stripe (para admin) ─────────────────────────────────
-  'disputas-stripe': {
-    id: 'disputas-stripe',
-    titulo: 'Disputas de Stripe',
-    permiso: 'stripe.edit',
-    pantalla: ['modules/accounting/pages/DisputasStripePage.tsx'],
-    pasos: [
-      {
-        titulo: 'Qué es una disputa',
-        texto: 'Una disputa es cuando el alumno reclama un pago a su banco. Stripe retiene ese dinero hasta que se resuelve, y hay un plazo para responder: si no se responde a tiempo, se pierde. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('disputas-cifras'),
-        titulo: 'Cuántas y cuáles corren prisa',
-        texto: 'Las abiertas de tus campus, con su importe, y las que vencen pronto. Esas son las primeras.',
-      },
-      {
-        donde: anclaje('disputas-controles'),
-        titulo: 'Por empresa o por campus',
-        texto: 'Agrupa las disputas por empresa o por campus, mira las abiertas, las cerradas o todas, y elige cuántos días son «pronto».',
-      },
-      {
-        donde: anclaje('disputas-traer'),
-        titulo: 'Traerlas ahora',
-        texto: 'Entran solas cada media hora y te llega un aviso. «Traer ahora» las pide a Stripe en el momento, para el campus elegido arriba.',
-      },
-      {
-        donde: anclaje('disputas-responder'),
-        titulo: 'Qué hacer con una disputa',
-        texto: 'Se responde en Stripe: pulsa «Stripe» en su fila y sube las pruebas (la factura, los correos o mensajes con el alumno, su acceso al campus) antes de la fecha de «Responder antes de». Al lado tienes su venta y su ficha.',
+        texto: 'El alumno ha reclamado este pago a su banco. Púlsalo para ver el detalle.',
       },
       {
         titulo: 'Y listo',
