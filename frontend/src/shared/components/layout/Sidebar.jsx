@@ -12,7 +12,6 @@ import {
   GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, LinkSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
-import { PERMISOS_DE_TUTORIALES } from '@/modules/manual/tutoriales/tutoriales';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
@@ -287,10 +286,6 @@ export const NAV_SECTIONS = [
       { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
-      // Ayuda › Tutoriales (gemela de CRM#919). Sale a quien tiene algún tutorial: el
-      // permiso de cualquiera de ellos (`PERMISOS_DE_TUTORIALES`); dentro, cada
-      // tutorial pide el suyo.
-      { to: '/manual/tutoriales', label: 'Tutoriales', icon: GraduationCap, permiso: PERMISOS_DE_TUTORIALES },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos
       // del sistema. Los mismos roles que exige el servidor.

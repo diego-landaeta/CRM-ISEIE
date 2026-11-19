@@ -128,7 +128,7 @@ const ALL_STATIC_ROUTES = [
   '/clients', '/clients/1',
   '/configuracion/canales', '/configuracion/atajos',
   '/configuracion/categorias-arbol', '/configuracion/campos',
-  '/manual', '/manual/tutoriales', '/manual/tutoriales/stripe', '/preferencias', '/seo', '/soporte',
+  '/manual', '/preferencias', '/seo', '/soporte',
   '/matriculas',
   '/forms', '/make-webhooks', '/make-webhooks/1', '/woocommerce',
   '/secuencias-email', '/email-templates',
