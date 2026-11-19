@@ -1,6 +1,7 @@
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import * as model from './invoices.model.js';
+import { alcanceDeFacturas } from './invoices.alcance.js';
 import * as service from './invoices.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -8,7 +9,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { createInvoiceSchema, setSequenceSchema, updateConfigSchema, issuerSchema, cobrarProformaSchema, anularSchema } from './invoices.validation.js';
 import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, campusDeTodos } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial, alcanceDeLider } from '../../shared/utils/roles.js';
+import { alcanceDeLider } from '../../shared/utils/roles.js';
 
 function logoExt(mime) {
   if (mime === 'image/png') return 'png';
@@ -66,7 +67,7 @@ export async function list(req, res, next) {
     const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     // Gestor: solo ve SUS facturas (las de sus leads). Admin/superadmin, todas.
     // Con equipo comercial (09/11/2026), las suyas y las de sus gestoras.
-    const responsableId = await alcanceComercial(req.user);
+    const responsableId = await alcanceDeFacturas(req.user);
     const data = await model.list({ projectId: pid, projectIds, issuerId: issuerId && isAdmin ? issuerId : null,
       estado, search, from, to, tipo, responsableId,
       page: Number(page) || 1, limit: Math.min(Number(limit) || 50, 200) });
@@ -93,7 +94,7 @@ export async function stats(req, res, next) {
     const pid = req.query.projectId ? Number(req.query.projectId) : null;
     const projectIds = todos ? await campusDeTodos(req) : await campusPermitidos(req, pid);
     // Con equipo comercial (QA del 09/11/2026), los de ella y su equipo.
-    const personas = await alcanceDeLider(req.user);
+    const personas = await alcanceDeFacturas(req.user, alcanceDeLider);
     res.json({ success: true, data: await model.getStats({ projectId: pid, projectIds, issuerId, ...periodo(req), personas }) });
   } catch (e) { next(e); }
 }
@@ -699,7 +700,7 @@ export async function ventasSinFactura(req, res, next) {
   try {
     const pid = projectId(req);
     res.json({ success: true, data: await model.listVentasSinFactura({ projectId: pid, from: periodo(req).from, to: periodo(req).to,
-      personas: await alcanceDeLider(req.user) }) });
+      personas: await alcanceDeFacturas(req.user, alcanceDeLider) }) });
   } catch (e) { next(e); }
 }
 
