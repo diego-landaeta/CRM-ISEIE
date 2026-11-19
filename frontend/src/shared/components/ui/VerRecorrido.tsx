@@ -4,7 +4,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import RecorridoGuiado, { recorridoPendiente } from '@/shared/components/ui/RecorridoGuiado';
 import {
-  RECORRIDOS_COBROS, claveRecorrido, pasosPara, tienePermiso, type IdRecorridoCobros,
+  RECORRIDOS_COBROS, claveRecorrido, pasosPara, tienePermiso, recorridoPedido, olvidarRecorridoPedido,
+  type IdRecorridoCobros,
 } from '@/shared/lib/recorridosCobros';
 
 /**
@@ -14,6 +15,8 @@ import {
  *  · La PRIMERA vez que esa persona entra (`listo`: la pantalla ya cargó), se abre
  *    solo. Se marca como visto al abrirse, por persona: no vuelve a salir solo.
  *  · El botón «Ver recorrido» lo repite cuando se quiera.
+ *  · Si se pidió desde un tutorial (Ayuda › Tutoriales, `pedirRecorrido`), se abre
+ *    al llegar aunque ya se hubiera visto, con las mismas esperas de abajo.
  *  · Sin el permiso del recorrido, ni botón ni recorrido. Los pasos de botones que
  *    esa persona no tiene se quitan antes de empezar.
  *  · Nunca encima de otra ventana (lo del 27/10 en el tablero: tapaba «Crear tarea»).
@@ -58,12 +61,15 @@ export default function VerRecorrido({ id, listo = true, compacto = false }: {
   const pasos = useMemo(() => pasosPara(recorrido, can), [recorrido, firma]);
   const [abierto, setAbierto] = useState(false);
 
-  // La primera vez, solo, cuando la pantalla está lista y no hay nada encima.
+  // La primera vez (o pedido desde un tutorial), solo, cuando la pantalla está
+  // lista y no hay nada encima.
   useEffect(() => {
-    if (!permitido || !listo || abierto || !recorridoPendiente(clave)) return undefined;
+    const toca = () => recorridoPendiente(clave) || recorridoPedido(id);
+    if (!permitido || !listo || abierto || !toca()) return undefined;
     const t = setInterval(() => {
-      if (hayOtraVentana() || hayUnRecorrido() || (enPantalla && enPantalla !== id) || !recorridoPendiente(clave)) return;
+      if (hayOtraVentana() || hayUnRecorrido() || (enPantalla && enPantalla !== id) || !toca()) return;
       clearInterval(t);
+      olvidarRecorridoPedido(id);
       enPantalla = id;
       setAbierto(true);
     }, 800);
