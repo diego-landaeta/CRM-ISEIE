@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { Package, MagnifyingGlass, Info, X } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import { useEsCampusMio } from '@/shared/hooks/useCampusMio';
 
 interface ProductLite {
   id: number;
@@ -32,6 +33,7 @@ interface Props {
 // producto, el backend APRENDE el alias y futuros leads desde esa URL
 // se vincularán automáticamente.
 export default function ChangeProductDialog({ open, lead, onClose, onSaved }: Props) {
+  const esMio = useEsCampusMio();
   const [search, setSearch] = useState('');
   const [products, setProducts] = useState<ProductLite[]>([]);
   const [loading, setLoading] = useState(false);
@@ -43,12 +45,14 @@ export default function ChangeProductDialog({ open, lead, onClose, onSaved }: Pr
       setSearch('');
       setSelectedId(lead.producto_interes_id || null);
       setLoading(true);
+      // Solo de un campus suyo: si no, 403 PROJECT_FORBIDDEN (CRM#859).
+      if (!esMio(lead.project_id)) { setProducts([]); setLoading(false); return; }
       client.get(`/products?projectId=${lead.project_id}&active=true&limit=500`)
         .then((r) => { if (r.success) setProducts(r.data || []); })
         .catch(() => {})
         .finally(() => setLoading(false));
     }
-  }, [open, lead?.project_id, lead?.producto_interes_id]);
+  }, [open, lead?.project_id, lead?.producto_interes_id, esMio]);
 
   // Normaliza para búsqueda: quita acentos, espacios extra, lowercase.
   // Así "master" matchea "Máster" y "fonoaudiologia" matchea "Fonoaudiología".
