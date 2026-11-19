@@ -44,7 +44,8 @@ describe('Producto (#106)', () => {
 
   it('todos los campos con la clase común y un nombre que dice qué son', async () => {
     const { container } = await abrir();
-    const campos = [...container.querySelectorAll('input:not([type=file]), textarea')];
+    // Las casillas (p. ej. «Sin desarrollar», gemela de CRM#843) no son campos de texto: no llevan esa clase.
+    const campos = [...container.querySelectorAll('input:not([type=file]):not([type=checkbox]), textarea')];
     expect(campos.length).toBeGreaterThan(15);
     for (const c of campos) {
       expect(c.className).toMatch(/bg-muted\/50/);

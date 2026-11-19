@@ -38,6 +38,33 @@ export function rellenoDeAbajo(desde: Element | null | undefined): number {
   return total;
 }
 
+/**
+ * Lo que hay que vigilar para saber que el marco se ha movido (#128).
+ *
+ * El alto depende de donde EMPIEZA el marco, y eso lo decide todo lo que tiene
+ * encima: los hermanos que lo preceden y los de cada contenedor por el que
+ * cuelga (la barra de estado del chat, la cabecera del CRM...). Si uno de esos
+ * cambia de alto, el marco sube o baja y hay que volver a medir.
+ *
+ * Antes solo se vigilaba el <body>, y eso solo avisa cuando la pagina CRECE: el
+ * contenedor del CRM es `min-h-screen`, asi que si algo de arriba ENCOGE, el
+ * body sigue midiendo una pantalla y no salta nada. Pasaba al cargar en el
+ * movil: la barra de estado empieza diciendo «No tienes WhatsApp enlazado» (dos
+ * o tres lineas en un telefono) y, cuando llega la conexion, se queda en una.
+ * El marco subia 27 px y conservaba el alto de antes: el chat terminaba antes
+ * del borde de la pantalla, con una franja vacia debajo de la caja de escribir.
+ */
+export function loQueHayEncima(desde: Element | null | undefined): Element[] {
+  const encima: Element[] = [];
+  let n: Element | null = desde ?? null;
+  while (n && n !== document.body) {
+    let h = n.previousElementSibling;
+    while (h) { encima.push(h); h = h.previousElementSibling; }
+    n = n.parentElement;
+  }
+  return encima;
+}
+
 /** Lo minimo que puede medir el marco: por debajo no cabe una conversacion. */
 export const ALTO_MINIMO = 420;
 

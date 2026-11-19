@@ -8,10 +8,10 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, FORMAS_PAGO, FORMA_PAGO_ES, MODALIDADES, MODALIDAD_ES, MONEDAS, MONEDA_ES, diaDelPago, empresaCorta, euros,
+  AREAS, AREA_ES, FORMAS_PAGO, FORMA_PAGO_ES, MODALIDADES, MODALIDAD_ES, MONEDAS, MONEDA_ES, TIPOS, TIPO_ES, diaDelPago, empresaCorta, euros,
   enSusMonedas, facturasColaboradorApi, fechaHora, mesEscrito, normalizarImporte, simbolo,
   type Area, type Colaborador, type DesgloseDeFactura, type EmpresaDelColaborador, type EmpresaDelGrupo, type FormaPago,
-  type LineaRegistro, type Modalidad, type Moneda,
+  type LineaRegistro, type Modalidad, type Moneda, type Tipo,
 } from '../api/facturasColaborador.api';
 
 /** El marco de los diálogos de esta pantalla. */
@@ -48,21 +48,27 @@ export const errorDe = (err: any) => err?.data?.error || err?.message || 'Intén
 
 interface UsuarioColaborador { id: number; nombre: string; email: string }
 
-/** Una empresa marcada, tal como se escribe en el formulario (texto; vacío = sin poner). */
-interface FormEmpresa { acordado: string; moneda: Moneda; modalidad: Modalidad | ''; fijo: string; tarifa: string; iva: string; irpf: string }
+/**
+ * Una empresa marcada, tal como se escribe en el formulario (texto; vacío = sin poner).
+ * `variable` (CRM#710, las vendedoras): sin importe fijo ni tarifa, lo que diga su
+ * factura. En la base es la ficha sin modalidad: se sube sin desglose.
+ */
+interface FormEmpresa { acordado: string; moneda: Moneda; modalidad: Modalidad | '' | 'variable'; fijo: string; tarifa: string; iva: string; irpf: string }
 
 const texto = (v: number | string | null | undefined) => (v === null || v === undefined ? '' : String(v));
 const deLaFicha = (e: EmpresaDelColaborador): FormEmpresa => ({
-  acordado: texto(e.importe_acordado), moneda: e.moneda || 'EUR', modalidad: e.modalidad ?? '',
+  acordado: texto(e.importe_acordado), moneda: e.moneda || 'EUR', modalidad: e.modalidad ?? 'variable',
   fijo: texto(e.importe_fijo), tarifa: texto(e.tarifa_hora), iva: texto(e.iva_pct), irpf: texto(e.irpf_pct),
 });
 const VACIA: FormEmpresa = { acordado: '', moneda: 'EUR', modalidad: '', fijo: '', tarifa: '', iva: '', irpf: '' };
 /** Texto a número (vacío → null; mal escrito → NaN, para avisar). */
 const numero = (v: string) => (v.trim() === '' ? null : Number(normalizarImporte(v)));
 
-export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }: {
+export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, tipoNuevo = 'colaborador' }: {
   colaborador: Colaborador | null;
   empresas: EmpresaDelGrupo[];
+  /** Con el filtro «Vendedoras» puesto, la ficha nueva sale de vendedora (CRM#710). */
+  tipoNuevo?: Tipo;
   alCerrar: () => void;
   alGuardar: () => void;
 }) {
@@ -71,6 +77,9 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
   const [email, setEmail] = useState(c?.email ?? '');
   const [nif, setNif] = useState(c?.nif ?? '');
   const [area, setArea] = useState<Area>(c?.area ?? 'otra');
+  // Colaborador o vendedora (CRM#710): la vendedora es una gestora o comercial de la lista.
+  const [tipo, setTipo] = useState<Tipo>(c?.tipo ?? tipoNuevo);
+  const esVendedora = tipo === 'vendedora';
   const [notas, setNotas] = useState(c?.notas ?? '');
   const [altaDesde, setAltaDesde] = useState(c?.alta_desde ?? '');
   const [userId, setUserId] = useState<number | null>(c?.user_id ?? null);
@@ -87,13 +96,18 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
   const [error, setError] = useState<string | null>(null);
 
   // Su usuario del CRM, si lo tiene: los que tienen el rol colaborador (#210)
-  // o tutor redactor (CRM#708), que también sube su factura del mes.
+  // o tutor redactor (CRM#708), que también sube su factura del mes. A una
+  // vendedora (CRM#710), las gestoras y comerciales: rol gestor o admin.
   useEffect(() => {
-    Promise.all(['colaborador', 'tutor_redactor'].map((rol) =>
-      client.get(`/users?role=${rol}&active=true&limit=100`).then((r: any) => r.data || []).catch(() => [])))
-      .then((listas: UsuarioColaborador[][]) => setUsuarios(listas.flat()))
+    const roles = esVendedora ? ['gestor', 'admin'] : ['colaborador', 'tutor_redactor'];
+    Promise.all(roles.map((rol) =>
+      client.get(`/users?role=${rol}&active=true&limit=200`).then((r: any) => r.data || []).catch(() => [])))
+      .then((listas: UsuarioColaborador[][]) => {
+        const vistos = new Set<number>();
+        setUsuarios(listas.flat().filter((u) => (vistos.has(u.id) ? false : (vistos.add(u.id), true))));
+      })
       .catch(() => setUsuarios([]));
-  }, []);
+  }, [esVendedora]);
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -104,6 +118,8 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
     for (const id of ids) {
       const f = marcadas[id];
       if (!f.modalidad) { setError(`Elige cómo cobra de ${nombreDe(id)}.`); return; }
+      // Variable: lo que diga su factura; no hay importe, tarifa ni desglose que comprobar.
+      if (f.modalidad === 'variable') continue;
       if (f.modalidad === 'fijo' && !f.fijo.trim()) { setError(`Pon el importe fijo de ${nombreDe(id)}.`); return; }
       if (f.modalidad !== 'fijo' && !f.tarifa.trim()) { setError(`Pon la tarifa por hora de ${nombreDe(id)}.`); return; }
       if (!f.iva.trim() || !f.irpf.trim()) { setError(`Pon el IVA y el IRPF de ${nombreDe(id)} (0 si no lleva).`); return; }
@@ -114,9 +130,9 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
         issuer_id: id,
         importe_acordado: numero(f.acordado),
         moneda: f.moneda,
-        modalidad: f.modalidad || null,
+        modalidad: f.modalidad && f.modalidad !== 'variable' ? f.modalidad : null,
         importe_fijo: f.modalidad === 'fijo' ? numero(f.fijo) : null,
-        tarifa_hora: f.modalidad !== 'fijo' ? numero(f.tarifa) : null,
+        tarifa_hora: f.modalidad === 'hora' || f.modalidad === 'proyecto' ? numero(f.tarifa) : null,
         iva_pct: numero(f.iva),
         irpf_pct: numero(f.irpf),
       };
@@ -126,7 +142,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
       setError('Revisa los importes y porcentajes: tienen que ser números.'); return;
     }
     const cuerpo = {
-      nombre: nombre.trim(), email: email.trim(), nif: nif.trim() || null, area,
+      nombre: nombre.trim(), email: email.trim(), nif: nif.trim() || null, area: esVendedora ? 'otra' as Area : area, tipo,
       notas: notas.trim() || null, alta_desde: altaDesde || null, user_id: userId, empresas: lista,
     };
     setGuardando(true);
@@ -134,7 +150,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
     try {
       if (c) await facturasColaboradorApi.editar(c.id, cuerpo);
       else await facturasColaboradorApi.crear(cuerpo);
-      toast({ title: c ? 'Colaborador guardado' : 'Colaborador dado de alta' });
+      toast({ title: c ? (esVendedora ? 'Vendedora guardada' : 'Colaborador guardado') : (esVendedora ? 'Vendedora dada de alta' : 'Colaborador dado de alta') });
       alGuardar();
     } catch (err) {
       setError(errorDe(err));
@@ -145,7 +161,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
   const soloSusEmpresas = Boolean(c?.compartido);
 
   return (
-    <Dialogo titulo={c ? `Editar · ${c.nombre}` : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
+    <Dialogo titulo={c ? `Editar · ${c.nombre}` : esVendedora ? 'Añadir vendedora' : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
       <form onSubmit={guardar} className="space-y-4" noValidate>
         {soloSusEmpresas && (
           <p className="rounded-md bg-info-soft text-info-soft-foreground px-3 py-2 text-xs">
@@ -166,11 +182,25 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
           <Field label="NIF" htmlFor="col-nif" hint="Opcional">
             <input autoComplete="off" id="col-nif" value={nif} onChange={(e) => setNif(e.target.value)} className={inputClass} />
           </Field>
-          <Field label="Área">
-            <Select<Area> value={area} onChange={setArea} ariaLabel="Área"
-              options={AREAS.map((a) => ({ value: a, label: AREA_ES[a] }))} />
-          </Field>
+          {/* La vendedora no tiene área: su concepto es «Servicios comerciales» (CRM#710). */}
+          {esVendedora ? (
+            <Field label="Tipo" hint="Gestora o comercial: factura sus ventas del mes">
+              <Select<Tipo> value={tipo} onChange={setTipo} ariaLabel="Tipo"
+                options={TIPOS.map((t) => ({ value: t, label: TIPO_ES[t] }))} />
+            </Field>
+          ) : (
+            <Field label="Área">
+              <Select<Area> value={area} onChange={setArea} ariaLabel="Área"
+                options={AREAS.map((a) => ({ value: a, label: AREA_ES[a] }))} />
+            </Field>
+          )}
         </FilaCampos>
+        {!esVendedora && (
+          <Field label="Tipo" hint="Vendedora: una gestora o comercial de la lista, con su factura del mes (CRM#710)">
+            <Select<Tipo> value={tipo} onChange={setTipo} ariaLabel="Tipo"
+              options={TIPOS.map((t) => ({ value: t, label: TIPO_ES[t] }))} />
+          </Field>
+        )}
         </fieldset>
 
         <Field label="Empresas a las que factura" required
@@ -188,7 +218,8 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
                         // Al desmarcarla se guarda lo que tenía, y al volver a marcarla se recupera:
                         // un doble clic en el nombre la desmarcaba y la volvía a marcar en blanco, y
                         // lo acordado y cómo cobra se perdían sin que se notara (prueba a mano del 12/10).
-                        if (on) { guardadas.current[e.id] = m[e.id]; delete n[e.id]; } else n[e.id] = guardadas.current[e.id] ?? { ...VACIA };
+                        // La vendedora cobra variable (Diego, 18/11): lo que diga su factura.
+                        if (on) { guardadas.current[e.id] = m[e.id]; delete n[e.id]; } else n[e.id] = guardadas.current[e.id] ?? { ...VACIA, modalidad: esVendedora ? 'variable' : '' };
                         return n;
                       })} />
                       <span className="truncate">{e.razon_social}</span>
@@ -219,7 +250,8 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
                         <span className="text-xs text-muted-foreground">Cómo cobra</span>
                         <Select<string> value={f.modalidad} onChange={(v) => cambiar(e.id, 'modalidad', v)}
                           ariaLabel={`Cómo cobra de ${e.razon_social}`}
-                          options={[{ value: '', label: 'Elige…' }, ...MODALIDADES.map((m) => ({ value: m, label: MODALIDAD_ES[m] }))]} />
+                          options={[{ value: '', label: 'Elige…' }, ...MODALIDADES.map((m) => ({ value: m, label: MODALIDAD_ES[m] })),
+                            { value: 'variable', label: 'Variable (lo que diga su factura)' }]} />
                       </label>
                       {f.modalidad === 'fijo' ? (
                         <label className="space-y-1">
@@ -231,20 +263,20 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
                         <label className="space-y-1">
                           <span className="text-xs text-muted-foreground">Tarifa {simbolo(f.moneda)}/h</span>
                           <input aria-label={`Tarifa por hora con ${e.razon_social}`} inputMode="decimal" autoComplete="off"
-                            disabled={!f.modalidad}
+                            disabled={!f.modalidad || f.modalidad === 'variable'}
                             value={f.tarifa} onChange={(ev) => cambiar(e.id, 'tarifa', ev.target.value)} className={inputClass} />
                         </label>
                       )}
                       <label className="space-y-1">
                         <span className="text-xs text-muted-foreground">IVA %</span>
                         <input aria-label={`IVA % con ${e.razon_social}`} inputMode="decimal" autoComplete="off"
-                          disabled={!f.modalidad}
+                          disabled={!f.modalidad || f.modalidad === 'variable'}
                           value={f.iva} onChange={(ev) => cambiar(e.id, 'iva', ev.target.value)} className={inputClass} />
                       </label>
                       <label className="space-y-1">
                         <span className="text-xs text-muted-foreground">IRPF %</span>
                         <input aria-label={`IRPF % con ${e.razon_social}`} inputMode="decimal" autoComplete="off"
-                          disabled={!f.modalidad}
+                          disabled={!f.modalidad || f.modalidad === 'variable'}
                           value={f.irpf} onChange={(ev) => cambiar(e.id, 'irpf', ev.target.value)} className={inputClass} />
                       </label>
                     </div>
@@ -260,7 +292,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar }
           <Field label="Desde qué mes" htmlFor="col-alta" hint="Si lo dejas vacío, desde este mes">
             <input id="col-alta" type="month" value={altaDesde} onChange={(e) => setAltaDesde(e.target.value)} className={inputClass} />
           </Field>
-          <Field label="Su usuario del CRM" hint="Solo si lo tiene: entonces ve «Mi factura»">
+          <Field label="Su usuario del CRM" hint={esVendedora ? 'La gestora o comercial: con su ficha ve «Mi factura»' : 'Solo si lo tiene: entonces ve «Mi factura»'}>
             <Select<string> value={userId ? String(userId) : ''} onChange={(v) => setUserId(v ? Number(v) : null)} ariaLabel="Usuario del CRM"
               options={[{ value: '', label: 'Sin usuario' }, ...usuarios.map((u) => ({ value: String(u.id), label: `${u.nombre} · ${u.email}` }))]} />
           </Field>

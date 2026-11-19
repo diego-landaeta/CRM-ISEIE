@@ -53,17 +53,16 @@ describe('cómo se leen los días', () => {
 });
 
 describe('quién puede tocar', () => {
-  it('solo administradores', () => {
-    expect(puedeEditar('admin')).toBe(true);
-    expect(puedeEditar('superadmin')).toBe(true);
+  // Por el permiso que pide la API (`proceso.configurar_pasos`), no por el rol:
+  // los roles de serie se prueban en permisosPantallaServidor.test.jsx.
+  it('quien tiene «Configurar los pasos»', () => {
+    expect(puedeEditar((p) => p === 'proceso.configurar_pasos')).toBe(true);
   });
 
   it('el resto solo mira', () => {
     // La API responde 403, asi que los botones se esconden en vez de fallar.
-    expect(puedeEditar('gestor')).toBe(false);
-    expect(puedeEditar('soporte')).toBe(false);
-    expect(puedeEditar('tutor')).toBe(false);
-    expect(puedeEditar(undefined)).toBe(false);
+    expect(puedeEditar(() => false)).toBe(false);
+    expect(puedeEditar((p) => p === 'proceso.view')).toBe(false);
   });
 });
 

@@ -72,7 +72,7 @@ export async function porPagar() {
             f.numero_factura, f.numero_recepcion, f.subida_at,
             GREATEST(0, (NOW() AT TIME ZONE 'Europe/Madrid')::date
                       - (f.subida_at AT TIME ZONE 'Europe/Madrid')::date)::int AS dias,
-            c.nombre AS colaborador_nombre
+            c.nombre AS colaborador_nombre, (f.validada_at IS NOT NULL) AS validada
        FROM facturas_colaborador f
        JOIN colaboradores c ON c.id = f.colaborador_id
       WHERE f.subida_at IS NOT NULL AND f.anulada_at IS NULL AND f.pagada_at IS NULL

@@ -1,4 +1,5 @@
-import client, { API_BASE_URL } from '@/shared/api/client';
+import client from '@/shared/api/client';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 
 // Conexión → MCP: el panel desde el que cada persona conecta su Claude al CRM.
 //
@@ -166,7 +167,7 @@ export interface McpFiltrosActividad {
   herramienta?: string; resultado?: string; pagina?: number;
 }
 
-export const urlDelMcp = () => `${window.location.origin}${API_BASE_URL}/mcp`;
+export const urlDelMcp = () => apiPublicUrl('/mcp');
 
 export const mcpApi = {
   estado: () => client.get('/mcp/panel'),

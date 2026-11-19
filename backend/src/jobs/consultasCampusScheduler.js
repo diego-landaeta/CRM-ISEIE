@@ -9,17 +9,22 @@ import { vigilar } from './latido.js';
  * piloto, que no necesita instalar nada». Solo los campus con «Leer las
  * consultas» marcado en Integraciones, y solo lo escrito desde que se marcó.
  *
+ * Los campus con el plugin del CRM al día no se leen aquí (#689, 8b): ya entran por el
+ * aviso al momento y por el repaso de cada 15 minutos (moodleSincronizacionScheduler.js).
+ * Si el plugin deja de estar al día, vuelven a leerse aquí solos.
+ *
  * Se apaga con CONSULTAS_CAMPUS_DISABLED=1.
  */
 
 const CADA_MS = parseInt(process.env.CONSULTAS_CAMPUS_TICK_MS || String(5 * 60 * 1000), 10);
 
 async function vuelta() {
-  const r = await leerTodosLosCampus();
+  const todos = await leerTodosLosCampus();
+  const r = todos.filter((x) => !x.omitido);
   const nuevos = r.reduce((s, x) => s + (x.nuevos || 0), 0);
   const errores = r.flatMap((x) => x.errores || []);
   if (errores.length) logger.warn({ errores: errores.slice(0, 5) }, 'Consultas: algún campus no se ha podido leer entero');
-  return { campus: r.length, mensajes_nuevos: nuevos, errores: errores.length };
+  return { campus: r.length, con_plugin: todos.length - r.length, mensajes_nuevos: nuevos, errores: errores.length };
 }
 
 export function startConsultasCampusScheduler() {

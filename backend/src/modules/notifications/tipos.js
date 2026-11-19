@@ -111,6 +111,12 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Formación terminada sin pedir diploma', agrupa: false,
     descripcion: 'Moodle da la formación por terminada y el alumno aún no ha pedido su diploma',
   },
+  // Confirmación de datos del diploma (#768): a administración del campus, cuando el
+  // alumno confirma o corrige sus datos, vence su plazo o lo corregido no entra en Certifex.
+  diploma_confirmacion: {
+    clase: ACCION, etiqueta: 'Datos del diploma confirmados', agrupa: false,
+    descripcion: 'Un alumno confirma o corrige los datos de su diploma, o vence el plazo para hacerlo',
+  },
   rfc_created: {
     clase: ACCION, etiqueta: 'Solicitud de cambio', agrupa: false,
     descripcion: 'Alguien pide un cambio y hace falta aprobarlo',
@@ -121,6 +127,16 @@ export const TIPOS = {
   ia_tope_gasto: {
     clase: ACCION, etiqueta: 'Tope de gasto de IA', agrupa: false,
     descripcion: 'El gasto de IA del mes llega al 80 % o al 100 % del tope; al 100 % la IA se para hasta el día 1',
+  },
+  // Disputas de Stripe (#396): a los admins de la empresa del campus y a los
+  // super admin. Una por disputa; la respuesta se da en Stripe.
+  stripe_disputa: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe', agrupa: false,
+    descripcion: 'Entra una disputa (contracargo) en la cuenta de Stripe de uno de tus campus',
+  },
+  stripe_disputa_vence: {
+    clase: ACCION, etiqueta: 'Disputa de Stripe a punto de vencer', agrupa: false,
+    descripcion: 'Una disputa sigue sin respuesta en Stripe y vence en pocos días',
   },
   task_asignada: {
     clase: ACCION, etiqueta: 'Tarea asignada', agrupa: false,
@@ -202,6 +218,11 @@ export const TIPOS = {
     clase: AVISO, etiqueta: 'Fecha de un curso movida otra vez', agrupa: false,
     descripcion: 'La fecha comprometida de un curso se ha movido por segunda vez',
   },
+  // Control de subidas (#771): solo campana, a quien lleva las subidas del campus.
+  curso_pendiente_subida_vencida: {
+    clase: ACCION, etiqueta: 'Subidas de un curso atrasadas', agrupa: false,
+    descripcion: 'Un curso entregado tiene vídeos, módulos o datos de directores sin subir pasada su fecha límite',
+  },
   // Consultas de alumnos (#190, decisión 4): al tutor, cuando una consulta
   // abierta llega a las 3/4 partes del plazo; a administración del campus,
   // cuando se pasa (para reasignarla). Y al tutor, la carga sin actualizar.
@@ -212,6 +233,19 @@ export const TIPOS = {
   consulta_fuera_de_plazo: {
     clase: ACCION, etiqueta: 'Consulta fuera de plazo', agrupa: false,
     descripcion: 'Una consulta de tus campus se ha pasado del plazo sin respuesta',
+  },
+  // Entregas sin corregir (#457; #681 y #769 en el CRM 360): a la tutora, sus entregas
+  // que llevan más de 48 h sin corregir (una vez por entrega; un aviso por vuelta).
+  entregas_sin_corregir: {
+    clase: ACCION, etiqueta: 'Entregas sin corregir', agrupa: false,
+    descripcion: 'Entregas de tus alumnos que llevan más de 48 h sin corregir',
+  },
+  // El segundo escalón: a administración del campus, las que siguen sin corregir pasado
+  // el plazo (5 días o «Recordarme calificar antes de») y las de cursos sin tutora en el
+  // CRM. Un aviso por campus y vuelta (tutores/tutor.entregasAdministracion.js).
+  entregas_fuera_de_plazo: {
+    clase: ACCION, etiqueta: 'Entregas sin corregir fuera de plazo', agrupa: false,
+    descripcion: 'Entregas de alumnos de tus campus que siguen sin corregir pasado el plazo, o de cursos sin tutora en el CRM',
   },
   carga_desactualizada: {
     clase: ACCION, etiqueta: 'Carga de trabajo sin actualizar', agrupa: false,
@@ -234,6 +268,16 @@ export const TIPOS = {
   moodle_campus_caido: {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
+  },
+  // Matrícula automática (#767): a administración del campus (sus admins y los super admin).
+  // Una por alumno: cada una es una matrícula que hacer o que arreglar.
+  matricula_moodle_lista: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle lista', agrupa: false,
+    descripcion: 'Un alumno ya ha pagado, ha llegado su día y toca matricularle en Moodle',
+  },
+  matricula_moodle_fallo: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
+    descripcion: 'No se pudo preparar la matrícula de un alumno en Moodle (con el motivo)',
   },
   // #471: la renovación diaria de un token de Meta Ads o de Instagram ha fallado,
   // o el token caduca en menos de 7 días. Hay que volver a conectar la cuenta.

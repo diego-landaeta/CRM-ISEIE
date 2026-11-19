@@ -3,6 +3,7 @@ import * as model from './form.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as leadModel from '../leads/lead.model.js';
 import { duplicadoParaAlta, apuntarReenvio, avisarDuplicado } from '../leads/duplicado-en-alta.js';
+import { avisarGestoraDelLeadNuevo } from '../leads/aviso-gestora.js';
 import { decidirFormulario, apuntarFormulario } from '../asignacion/asignacion.service.js';
 import * as matriculaModel from '../matriculas/matricula.model.js';
 import { autoMap } from './field-aliases.js';
@@ -498,6 +499,8 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       customFields,
     });
     avisarDuplicado(lead, dup, { origen: 'formulario', productoInteresId });
+    // La campana y el correo a su gestora, como el alta por Make (revisión del reparto, 18/11).
+    avisarGestoraDelLeadNuevo({ lead, canal: 'formulario' });
     await apuntarFormulario(porActividad, lead, { email: final.email, origen: 'formulario' });
     await planificarAgenda(lead.id);
     await model.incrementSubmissions(f.id);
@@ -579,6 +582,8 @@ export async function publicSubmit(req, res, next) {
       customFields: body.custom_fields || {},
     });
     avisarDuplicado(lead, dup, { origen: 'formulario', productoInteresId });
+    // La campana y el correo a su gestora, como el alta por Make (revisión del reparto, 18/11).
+    avisarGestoraDelLeadNuevo({ lead, canal: 'formulario' });
     await apuntarFormulario(porActividad, lead, { email: body.email, origen: 'formulario' });
     await planificarAgenda(lead.id);
     await model.incrementSubmissions(f.id);

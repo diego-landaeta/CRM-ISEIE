@@ -40,6 +40,9 @@ export const createUserSchema = z.object({
   // Empresas ENTERAS de un admin, también los campus que se creen (#220). Solo
   // las da el super admin: lo comprueba el controlador.
   empresaIds: empresaIdsSchema,
+  // #694: sus excepciones de permisos, ya en el alta: `{ 'clave.accion': true | false }`.
+  // Las comprueba el controlador con las reglas de la ficha.
+  excepciones: z.record(z.boolean()).optional(),
 }).refine(
   (d) => d.role !== 'gestor' || tieneCampus(d),
   {

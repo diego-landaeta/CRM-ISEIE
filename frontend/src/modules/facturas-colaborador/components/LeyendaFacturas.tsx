@@ -1,4 +1,4 @@
-import { ArrowCounterClockwise, ClockCounterClockwise, FileText, HandCoins, PaperPlaneTilt, Prohibit, Receipt } from '@phosphor-icons/react';
+import { ArrowCounterClockwise, ClockCounterClockwise, FileText, HandCoins, PaperPlaneTilt, Prohibit, Receipt, SealCheck } from '@phosphor-icons/react';
 import { ESTADO, type EstadoFactura } from '../api/facturasColaborador.api';
 
 /*
@@ -14,10 +14,12 @@ export const ACCION = {
   archivo: { Icono: FileText, rotulo: 'Ver el archivo', explica: 'Abre la factura que subió, en PDF o en foto.' },
   registro: { Icono: ClockCounterClockwise, rotulo: 'Ver el registro', explica: 'Todo lo que ha pasado con ella: enviada, abierta, recibida, pagada…' },
   reenviar: { Icono: PaperPlaneTilt, rotulo: 'Reenviar el enlace', explica: 'Le manda un enlace nuevo para subirla. El anterior deja de valer.' },
-  pagar: { Icono: HandCoins, rotulo: 'Marcar pagada', explica: 'Apunta el pago (fecha, forma y justificante) y se lo avisa.' },
+  // CRM#710 (Diego, 18/11): «la gestora pone su monto y luego la empresa valida y hace el pago».
+  validar: { Icono: SealCheck, rotulo: 'Validar', explica: 'La empresa la ha revisado y está bien: pasa a «Por pagar». Si algo no cuadra, no se valida: se anula con el motivo y le llega un enlace nuevo.' },
+  pagar: { Icono: HandCoins, rotulo: 'Marcar pagada', explica: 'Apunta el pago (fecha, forma y justificante) y se lo avisa. Solo con la factura validada.' },
   justificante: { Icono: Receipt, rotulo: 'Ver el justificante', explica: 'El comprobante del pago.' },
   deshacer: { Icono: ArrowCounterClockwise, rotulo: 'Deshacer el pago', explica: 'Quita la marca de pagada, con el motivo.' },
-  anular: { Icono: Prohibit, rotulo: 'Anular', explica: 'Deja de valer. Se crea otra del mismo mes y se le manda su enlace.' },
+  anular: { Icono: Prohibit, rotulo: 'Anular', explica: 'También para devolverla si algo no cuadra: deja de valer, se crea otra del mismo mes y se le manda su enlace, con el motivo si ya la había subido.' },
 } as const;
 export type Accion = keyof typeof ACCION;
 
@@ -38,7 +40,9 @@ const pildora = 'rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowra
 /** Las otras marcas que salen en la fila, además del estado. */
 const OTRAS = [
   { rotulo: 'Pagada 05/11', clase: 'bg-success-soft text-success-soft-foreground', explica: 'Pagada ese día; al pasar el ratón, la forma de pago y la referencia.' },
-  { rotulo: 'Por pagar', clase: 'bg-warning-soft text-warning-soft-foreground', explica: 'Recibida y todavía sin pagar.' },
+  { rotulo: 'Por validar', clase: 'bg-warning-soft text-warning-soft-foreground', explica: 'Recibida: falta que la empresa la revise y la valide.' },
+  { rotulo: 'Por pagar', clase: 'bg-warning-soft text-warning-soft-foreground', explica: 'Validada y todavía sin pagar.' },
+  { rotulo: 'Vendedora', clase: 'bg-info-soft text-info-soft-foreground', explica: 'La factura es de una vendedora (gestora o comercial), no de un colaborador.' },
   { rotulo: 'No cuadra', clase: 'bg-warning-soft text-warning-soft-foreground', explica: 'El total del PDF no es el importe que escribió. Se recibió igual.' },
   { rotulo: 'PDF sin leer', clase: 'bg-muted text-muted-foreground', explica: 'No se pudo leer el importe del archivo (o es una foto): revísalo a mano.' },
 ];

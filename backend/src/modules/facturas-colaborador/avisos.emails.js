@@ -142,7 +142,8 @@ export function armarPorPagar({ empresa, facturas, marca = null }) {
       tabla(
         [['Colaborador'], ['Mes'], ['Importe', 'right'], ['Esperando', 'right']],
         facturas.map((f) => [
-          [`<strong>${esc(f.colaborador_nombre)}</strong>${f.numero_recepcion ? pequeno(esc(f.numero_recepcion)) : ''}`],
+          // Sin validar todavía (CRM#710): primero se revisa, después se paga.
+          [`<strong>${esc(f.colaborador_nombre)}</strong>${f.numero_recepcion ? pequeno(esc(f.numero_recepcion)) : ''}${f.validada === false ? pequeno('Por validar') : ''}`],
           [esc(mesDe(f.periodo))],
           [`<span style="white-space:nowrap">${esc(importeDe(f))}</span>`, 'right'],
           [`<span style="white-space:nowrap">${esc(dias(Number(f.dias) || 0))}</span>`, 'right'],

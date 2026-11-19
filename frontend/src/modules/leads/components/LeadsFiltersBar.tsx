@@ -50,6 +50,9 @@ const QUICK_LABELS: Record<string, string> = {
   week: '7 días',
   'no-reminder': 'Sin programar',
   'no-contact': 'Sin contacto',
+  // Las dos alertas del Dashboard llevan aquí (gemela de CRM#884). Las filtra el servidor.
+  'sin-gestora': 'Sin gestora',
+  'sin-actividad': 'Sin actividad',
 };
 
 const SORT_LABELS: Record<string, string> = {

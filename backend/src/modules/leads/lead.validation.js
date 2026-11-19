@@ -27,6 +27,14 @@ export const webhookLeadSchema = z.object({
   // De dónde venía la persona (document.referrer). Va junto a las UTM porque
   // ChatGPT a veces no manda utm_source y a veces no manda referrer (#48).
   referrer: z.string().max(2000).optional(),
+  // La campaña, el conjunto y el anuncio de Meta (puerta 8, #487; gemela de CRM#806): los
+  // manda Make con los formularios instantáneos. Con nombre propio o como los llama Meta.
+  meta_campaign_id: z.coerce.string().max(50).optional(),
+  meta_adset_id: z.coerce.string().max(50).optional(),
+  meta_ad_id: z.coerce.string().max(50).optional(),
+  campaign_id: z.coerce.string().max(50).optional(),
+  adset_id: z.coerce.string().max(50).optional(),
+  ad_id: z.coerce.string().max(50).optional(),
   // Make puede decidir el canal directamente (override de la deteccion automatica)
   canal: z.enum(['meta_ads', 'google_ads', 'tiktok_ads', 'organico', 'chatgpt_ia', 'directo', 'referido', 'whatsapp']).optional(),
   // Asignacion explicita desde Make (saltea round-robin si vienen).
@@ -94,6 +102,11 @@ export const listLeadsSchema = z.object({
   conConversion: z.coerce.boolean().optional(),
   // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
   installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
+  // Filtro rápido que filtra el servidor: las dos alertas del Dashboard (gemela
+  // de CRM#884). Enum porque su valor elige un fragmento de SQL (`FILTROS_RAPIDOS`):
+  // cerrado por construcción, no por confianza.
+  // Los filtros rápidos, todos en el servidor (gemela de la #132 del 360).
+  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent', 'sin-gestora', 'sin-actividad']).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] },
@@ -189,4 +202,13 @@ export const updateLeadSchema = z.object({
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
+});
+
+/** Contadores de los filtros rápidos (gemela de la #132 del 360). */
+export const quickCountsSchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    .transform((v) => (v ? v.split(',').map(Number) : undefined)),
+  responsableId: z.coerce.number().int().positive().optional(),
+  includeConverted: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
 });

@@ -3,6 +3,7 @@ import { Plus, Package, X, PencilSimple, Check, MagnifyingGlass, Star } from '@p
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
+import { useEsCampusMio } from '@/shared/hooks/useCampusMio';
 
 interface ProductItem {
   id: number | null; // null = principal (no es row de lead_products)
@@ -55,11 +56,29 @@ export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) 
 
   useEffect(() => { load(); }, [leadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Un booleano y no `can`: `can` se crea en cada render y el efecto se repetiría.
+  const veUsuarios = can('users.view');
+  // El catálogo, solo de un campus suyo: si no, 403 PROJECT_FORBIDDEN (CRM#859).
+  const esMio = useEsCampusMio();
+  const catalogoMio = esMio(projectId);
+
   // Carga catálogos para add/edit
   useEffect(() => {
-    client.get<Product[]>('/products', { params: { projectId, limit: 500 } }).then((r: any) => setProducts(r?.data || [])).catch(() => {});
-    client.get<User[]>('/users').then((r: any) => setGestores(((r?.data) || []).filter((u: User) => u.role === 'gestor' || u.role === 'admin'))).catch(() => {});
-  }, [projectId]);
+    if (catalogoMio) {
+      client.get<Product[]>('/products', { params: { projectId, limit: 500 } }).then((r: any) => setProducts(r?.data || [])).catch(() => {});
+    } else {
+      setProducts([]);
+    }
+    // Las gestoras, solo a quien puede ver usuarios: `GET /users` pide
+    // `users.view`, y a una gestora le contestaba 403 cada vez que abría una
+    // ficha (CRM#859). Sin la lista, el desplegable queda en «sin gestora» y el
+    // servidor sigue decidiendo. Con `alcance=comercial`, como en el resto de
+    // pantallas: a quien lleva un equipo, su equipo (QA 09/11/2026).
+    if (!veUsuarios) { setGestores([]); return; }
+    client.get<User[]>('/users', { params: { limit: 100, alcance: 'comercial' } })
+      .then((r: any) => setGestores(((r?.data) || []).filter((u: User) => u.role === 'gestor' || u.role === 'admin')))
+      .catch(() => {});
+  }, [projectId, veUsuarios, catalogoMio]);
 
   async function removeItem(it: ProductItem) {
     if (!it.id || it.is_principal) return;

@@ -1,6 +1,7 @@
 import { comoLista } from '../../shared/utils/ambito.js';
 import { query, getClient } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
+import { COBRADO_DE } from '../conversions/cobrado.js';
 
 // ===== RULES =====
 
@@ -104,10 +105,10 @@ export async function listCommissions({ userId, estado, from, to, projectId, pro
             l.nombre as lead_nombre,
             cv.fecha_conversion as fecha_compra,
             cv.producto_contratado,
-            cv.importe_total as conv_total, cv.importe_pagado as conv_pagado,
+            cv.importe_total as conv_total, cob.cobrado as conv_pagado,
             CASE
-              WHEN cv.importe_pagado >= cv.importe_total THEN 'pagado'
-              WHEN cv.importe_pagado > 0 THEN 'parcial'
+              WHEN cob.cobrado >= cv.importe_total THEN 'pagado'
+              WHEN cob.cobrado > 0 THEN 'parcial'
               ELSE 'pendiente'
             END as estado_pago,
             pr.nombre as proyecto_nombre
@@ -115,6 +116,8 @@ export async function listCommissions({ userId, estado, from, to, projectId, pro
      JOIN users u ON u.id = c.user_id
      LEFT JOIN products p ON p.id = c.product_id
      JOIN conversions cv ON cv.id = c.conversion_id
+     -- Lo cobrado de la venta es la suma de sus pagos (#692).
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('cv')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = cv.lead_id
      LEFT JOIN projects pr ON pr.id = cv.project_id
      ${where}
@@ -150,7 +153,8 @@ export async function createCommissionForConversion(conversionId) {
     // Conversion + responsable + project
     const { rows: cvRows } = await c.query(
       `SELECT cv.id, cv.lead_id, cv.project_id, cv.producto_contratado_id,
-              cv.importe_total, cv.importe_pagado, cv.fecha_conversion,
+              -- La base «cobrado» sale de los pagos, no del campo guardado (#692).
+              cv.importe_total, ${COBRADO_DE('cv')} AS importe_pagado, cv.fecha_conversion,
               l.responsable_id
        FROM conversions cv JOIN leads l ON l.id = cv.lead_id WHERE cv.id = $1`,
       [conversionId]

@@ -13,15 +13,15 @@ import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, ESTADO, FORMA_PAGO_ES, euros, diaDelPago, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, mesEscrito, primeraMayuscula,
-  type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes,
+  AREAS, AREA_ES, ESTADO, FORMA_PAGO_ES, TIPO_FILTRO, euros, diaDelPago, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, mesEscrito, primeraMayuscula,
+  type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes, type Tipo,
   urlDelArchivo,
 } from '../api/facturasColaborador.api';
 import {
   AltaDialog, AnularDialog, BajaDialog, ColaboradorDialog, DeshacerPagoDialog, PagarDialog, RegistroDialog, esMes,
 } from '../components/DialogosFacturas';
 import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
-import EtiquetaDelPdf from '../components/EtiquetaDelPdf';
+import EtiquetaDelPdf, { EtiquetaVendedora } from '../components/EtiquetaDelPdf';
 import ConfirmacionDelPago from '../components/ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
 
@@ -74,6 +74,19 @@ const mesPorDefecto = () => {
 
 const errorDe = (err: any) => err?.data?.error || err?.message || 'Inténtalo de nuevo';
 
+/** El filtro «Vendedoras / Colaboradores» (CRM#710), en la dirección: vale para todas las pestañas. */
+function useTipoDeLaDireccion(): ['' | Tipo, (v: '' | Tipo) => void] {
+  const [params, setParams] = useSearchParams();
+  const v = params.get('tipo');
+  const tipo: '' | Tipo = v === 'vendedora' || v === 'colaborador' ? v : '';
+  const poner = (t: '' | Tipo) => {
+    const n = new URLSearchParams(params);
+    if (t) n.set('tipo', t); else n.delete('tipo');
+    setParams(n, { replace: true });
+  };
+  return [tipo, poner];
+}
+
 function Pildora({ estado }: { estado: EstadoFactura }) {
   return <span className={`rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap ${ESTADO[estado].clase}`}>{ESTADO[estado].rotulo}</span>;
 }
@@ -87,13 +100,14 @@ export default function FacturasColaboradoresPage() {
   const veElMes = can('facturas_colaborador.ver_todas');
   const gestiona = can('facturas_colaborador.gestionar');
   // «Del mes · Enviadas · Por pagar · Pagadas · Historial» (segunda parte) y la lista de colaboradores.
-  const DE_FACTURAS = ['enviadas', 'por_pagar', 'pagadas', 'historial'] as const;
+  const DE_FACTURAS = ['enviadas', 'por_validar', 'por_pagar', 'pagadas', 'historial'] as const;
   type Vista = 'mes' | 'colaboradores' | typeof DE_FACTURAS[number];
   const enLaDireccion = params.get('vista');
   const pedida: Vista = enLaDireccion === 'colaboradores' || (DE_FACTURAS as readonly string[]).includes(enLaDireccion ?? '')
     ? enLaDireccion as Vista : 'mes';
   const vista: Vista = pedida !== 'colaboradores' && !veElMes ? 'colaboradores' : pedida === 'colaboradores' && !gestiona ? 'mes' : pedida;
   const empresa = useEmpresaDeLaCabecera();
+  const [tipo, setTipo] = useTipoDeLaDireccion();
 
   useEffect(() => {
     if (!veElMes && !gestiona) return;
@@ -106,7 +120,7 @@ export default function FacturasColaboradoresPage() {
     setParams(n, { replace: true });
   };
 
-  const cabecera = <PageHeader title="Facturas de colaboradores" subtitle="Quien factura al grupo cada mes sube su factura por un enlace personal, una por empresa y mes" />;
+  const cabecera = <PageHeader title="Facturas de colaboradores" subtitle="Colaboradores y vendedoras suben su factura del mes por un enlace personal, una por empresa y mes" />;
   if (!veElMes && !gestiona) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
@@ -120,7 +134,7 @@ export default function FacturasColaboradoresPage() {
   }
 
   const pestanas = ([
-    ['mes', 'Del mes', veElMes], ['enviadas', 'Enviadas', veElMes], ['por_pagar', 'Por pagar', veElMes],
+    ['mes', 'Del mes', veElMes], ['enviadas', 'Enviadas', veElMes], ['por_validar', 'Por validar', veElMes], ['por_pagar', 'Por pagar', veElMes],
     ['pagadas', 'Pagadas', veElMes], ['historial', 'Historial', veElMes], ['colaboradores', 'Colaboradores', gestiona],
   ] as const).filter(([, , puede]) => puede);
 
@@ -136,17 +150,20 @@ export default function FacturasColaboradoresPage() {
             {rotulo}
           </button>
         ))}
+        <div className="ml-auto w-56 flex-none">
+          <Select<'' | Tipo> value={tipo} onChange={setTipo} ariaLabel="Vendedoras o colaboradores" options={TIPO_FILTRO} />
+        </div>
       </div>
-      {vista === 'mes' ? <DelMes empresas={empresas} empresa={empresa} />
-        : vista === 'colaboradores' ? <Colaboradores empresas={empresas} empresa={empresa} />
-          : <ListaDeFacturas key={vista} vista={vista} empresas={empresas} empresa={empresa} />}
+      {vista === 'mes' ? <DelMes empresas={empresas} empresa={empresa} tipo={tipo} />
+        : vista === 'colaboradores' ? <Colaboradores empresas={empresas} empresa={empresa} tipo={tipo} />
+          : <ListaDeFacturas key={vista} vista={vista} empresas={empresas} empresa={empresa} tipo={tipo} />}
     </div>
   );
 }
 
 /* ─────────────────────────── Del mes ─────────────────────────── */
 
-function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: number | null }) {
+function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empresa: number | null; tipo: '' | Tipo }) {
   const [params, setParams] = useSearchParams();
   const periodo = params.get('periodo') || mesPorDefecto();
   // Con una empresa en la cabecera, esa: el desplegable no le lleva la contraria.
@@ -165,6 +182,9 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
   // «Marcar pagada»: solo un admin (segunda parte).
   const puedePagar = can('facturas_colaborador.pagar');
   const puedeReenviar = can('facturas_colaborador.gestionar');
+  // «Validar» (CRM#710): la empresa la da por buena antes de pagarla.
+  const puedeValidar = can('facturas_colaborador.validar');
+  const [validando, setValidando] = useState<number | null>(null);
   // La fila que se está reenviando: un segundo clic mandaba otro correo y el
   // enlace del primero ya no valía.
   const [reenviando, setReenviando] = useState<number | null>(null);
@@ -175,14 +195,14 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
     setCargando(true);
     try {
       const r = await facturasColaboradorApi.mes({
-        periodo, issuerId: issuerId ? Number(issuerId) : undefined, estado: estado || undefined, area: area || undefined,
+        periodo, issuerId: issuerId ? Number(issuerId) : undefined, estado: estado || undefined, area: area || undefined, tipo: tipo || undefined,
       });
       setDatos(r.data);
       setVueltas((v) => v + 1);
     } catch (err) {
       toast({ title: 'No se pudo cargar el mes', description: errorDe(err), variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [periodo, issuerId, estado, area]);
+  }, [periodo, issuerId, estado, area, tipo]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -221,6 +241,20 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
       window.open(urlDelArchivo(r.data.url), '_blank', 'noopener');
     } catch (err) {
       toast({ title: 'No se pudo abrir el justificante', description: errorDe(err), variant: 'destructive' });
+    }
+  }
+
+  async function validar(f: FacturaDelMes) {
+    if (validando) return;
+    setValidando(f.id);
+    try {
+      await facturasColaboradorApi.validar(f.id);
+      toast({ title: 'Factura validada', description: `${f.colaborador_nombre}: ya se puede pagar.` });
+      void cargar();
+    } catch (err) {
+      toast({ title: 'No se pudo validar', description: errorDe(err), variant: 'destructive' });
+    } finally {
+      setValidando(null);
     }
   }
 
@@ -310,7 +344,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
               <tbody className="divide-y divide-border">
                 {datos.facturas.map((f) => (
                   <tr key={f.id} className={f.estado === 'anulada' ? 'opacity-60' : ''}>
-                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}</td>
+                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} /></td>
                     <td className="px-2 py-2">{AREA_ES[f.area]}</td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado, f.moneda)}</td>
@@ -326,6 +360,10 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                         <div className="text-xs text-muted-foreground mt-0.5 whitespace-nowrap">{f.numero_recepcion}<br />{fechaHora(f.subida_at)}</div>
                       )}
                       {f.motivo_anulacion && <div className="text-xs text-muted-foreground mt-0.5">«{f.motivo_anulacion}»</div>}
+                      {/* Recibida y sin validar (CRM#710): primero se valida, después se paga. */}
+                      {f.subida_at && !f.anulada_at && !f.validada_at && (
+                        <div className="mt-0.5"><span className="rounded-full px-2 py-0.5 text-xs font-semibold whitespace-nowrap bg-warning-soft text-warning-soft-foreground">Por validar</span></div>
+                      )}
                       {/* El pago, que no se mezcla con el estado de la factura (segunda parte). */}
                       {f.pagada_at && (
                         <div className="mt-0.5">
@@ -351,7 +389,11 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
                           <Button variant="ghost" size="sm" className="px-2" title="Reenviar el enlace" aria-label="Reenviar el enlace"
                             disabled={reenviando !== null} onClick={() => reenviar(f)}><ACCION.reenviar.Icono size={15} /></Button>
                         )}
-                        {puedePagar && f.subida_at && !f.anulada_at && !f.pagada_at && (
+                        {puedeValidar && f.subida_at && !f.anulada_at && !f.validada_at && (
+                          <Button variant="ghost" size="sm" className="px-2" title="Validar" aria-label="Validar"
+                            disabled={validando !== null} onClick={() => validar(f)}><ACCION.validar.Icono size={15} /></Button>
+                        )}
+                        {puedePagar && f.subida_at && f.validada_at && !f.anulada_at && !f.pagada_at && (
                           <Button variant="ghost" size="sm" className="px-2" title="Marcar pagada" aria-label="Marcar pagada" onClick={() => setPagar(f)}><ACCION.pagar.Icono size={15} /></Button>
                         )}
                         {f.pagada_at && f.con_justificante && (
@@ -404,7 +446,7 @@ function DelMes({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: n
 
 /* ─────────────────────────── Colaboradores ─────────────────────────── */
 
-function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; empresa: number | null }) {
+function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empresa: number | null; tipo: '' | Tipo }) {
   const [estado, setEstado] = useState<'activos' | 'de_baja' | 'todos'>('activos');
   const [q, setQ] = useState('');
   const [lista, setLista] = useState<Colaborador[]>([]);
@@ -421,12 +463,12 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
     setCargando(true);
     try {
       // Con una empresa (la de la cabecera o la elegida), solo quienes le facturan.
-      const r = await facturasColaboradorApi.colaboradores({ estado, q: q.trim() || undefined, issuerId: issuerId ?? undefined });
+      const r = await facturasColaboradorApi.colaboradores({ estado, q: q.trim() || undefined, issuerId: issuerId ?? undefined, tipo: tipo || undefined });
       setLista(r.data);
     } catch (err) {
       toast({ title: 'No se pudo cargar la lista', description: errorDe(err), variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [estado, q, issuerId]);
+  }, [estado, q, issuerId, tipo]);
 
   useEffect(() => {
     const t = setTimeout(() => { void cargar(); }, 250);
@@ -439,7 +481,8 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
   );
 
   const acordado = useMemo(() => (c: Colaborador) => c.empresas
-    .map((e) => (e.importe_acordado === null ? '—' : `${euros(e.importe_acordado, e.moneda)}/mes`)).join(' · '), []);
+    // Sin importe acordado ni modalidad: variable, lo que diga su factura (las vendedoras, CRM#710).
+    .map((e) => (e.importe_acordado === null ? (e.modalidad ? '—' : 'Variable') : `${euros(e.importe_acordado, e.moneda)}/mes`)).join(' · ') || '—', []);
 
   return (
     <div className="space-y-3">
@@ -459,7 +502,7 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
             options={[{ value: 'activos', label: 'Activos' }, { value: 'de_baja', label: 'De baja' }, { value: 'todos', label: 'Todos' }]} />
         </div>
         <Button size="sm" className="ml-auto" onClick={() => setEditando('nuevo')}>
-          <Plus size={13} weight="bold" className="mr-1.5" /> Añadir colaborador
+          <Plus size={13} weight="bold" className="mr-1.5" /> {tipo === 'vendedora' ? 'Añadir vendedora' : 'Añadir colaborador'}
         </Button>
       </div>
 
@@ -487,7 +530,7 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
                 {lista.map((c) => (
                   <tr key={c.id}>
                     <td className="px-3 py-2 font-medium">
-                      {c.nombre}
+                      {c.nombre}<EtiquetaVendedora tipo={c.tipo} />
                       {c.usuario_nombre && <div className="text-xs font-normal text-muted-foreground">Usuario: {c.usuario_nombre}</div>}
                       {c.compartido && <div className="text-xs font-normal text-muted-foreground">También factura a otras empresas</div>}
                     </td>
@@ -522,7 +565,7 @@ function Colaboradores({ empresas, empresa }: { empresas: EmpresaDelGrupo[]; emp
       </div>
 
       {editando && (
-        <ColaboradorDialog colaborador={editando === 'nuevo' ? null : editando} empresas={empresas}
+        <ColaboradorDialog colaborador={editando === 'nuevo' ? null : editando} empresas={empresas} tipoNuevo={tipo || 'colaborador'}
           alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); void cargar(); }} />
       )}
       {baja && <BajaDialog colaborador={baja} alCerrar={() => setBaja(null)} alGuardar={() => { setBaja(null); void cargar(); }} />}

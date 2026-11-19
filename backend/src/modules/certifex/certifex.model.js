@@ -461,3 +461,98 @@ export async function completadosDe(matriculaIds) {
     en: r.completado_en, recibidoEn: r.completado_recibido_en, nota: r.completado_nota == null ? null : Number(r.completado_nota),
   }]));
 }
+
+// ─────────────────────────────────────────────── diplomas revertidos (#351)
+
+/**
+ * ¿Está aplicada la migración 301, y el CRM puede usarla? (El código puede llegar al servidor
+ * antes que ella.) Que la tabla exista no basta: las migraciones se pasan como `postgres`, y
+ * sin los permisos el CRM no podría apuntar la reversión; Certifex anularía el número y el CRM
+ * se quedaría sin rastro. Así que también se mira que pueda leerla y escribir en ella.
+ */
+export async function tablaReversionesExiste(db = { query }) {
+  const { rows } = await db.query(
+    `SELECT CASE WHEN to_regclass('public.certifex_reversiones') IS NULL
+                   OR to_regclass('public.certifex_reversiones_id_seq') IS NULL THEN false
+                 -- Uno a uno: con varios a la vez («SELECT, INSERT») vale con tener CUALQUIERA.
+                 ELSE has_table_privilege(to_regclass('public.certifex_reversiones'), 'SELECT')
+                  AND has_table_privilege(to_regclass('public.certifex_reversiones'), 'INSERT')
+                  AND has_sequence_privilege(to_regclass('public.certifex_reversiones_id_seq'), 'USAGE')
+            END AS existe`,
+  );
+  return !!rows[0]?.existe;
+}
+
+function filaReversion(r) {
+  if (!r) return null;
+  return {
+    nexpediente: r.nexpediente,
+    matriculaId: r.matricula_id == null ? null : Number(r.matricula_id),
+    centro: r.centro,
+    alumno: r.alumno,
+    titulacion: r.titulacion,
+    motivo: r.motivo,
+    por: r.revertido_por_email,
+    en: r.revertido_en,
+  };
+}
+
+/**
+ * Apunta una reversión que Certifex ya hizo. Un número solo se anula una vez: si ya
+ * estaba apuntado, no lo duplica ni lo cambia, y devuelve el que había.
+ */
+export async function apuntarReversion(r) {
+  const { rows } = await query(
+    `INSERT INTO certifex_reversiones
+       (nexpediente, matricula_id, centro, alumno, titulacion, motivo, revertido_por, revertido_por_email, revertido_en)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, COALESCE($9::timestamptz, NOW()))
+     ON CONFLICT (nexpediente) DO NOTHING
+     RETURNING *`,
+    [r.nexpediente, r.matriculaId ?? null, r.centro, r.alumno ?? null, r.titulacion ?? null, r.motivo, r.revertidoPor ?? null, r.revertidoPorEmail, r.revertidoEn ?? null],
+  );
+  if (rows[0]) return { ...filaReversion(rows[0]), nueva: true };
+  const { rows: ya } = await query('SELECT * FROM certifex_reversiones WHERE nexpediente = $1', [r.nexpediente]);
+  return ya[0] ? { ...filaReversion(ya[0]), nueva: false } : null;
+}
+
+/** De esos números, los que ya están apuntados (Set). */
+export async function reversionesApuntadas(nexpedientes) {
+  const lista = [...new Set((nexpedientes ?? []).filter(Boolean).map(String))];
+  if (!lista.length) return new Set();
+  const { rows } = await query('SELECT nexpediente FROM certifex_reversiones WHERE nexpediente = ANY($1::text[])', [lista]);
+  return new Set(rows.map((r) => r.nexpediente));
+}
+
+/** ¿Está apuntado este número? */
+export async function reversionDe(nexpediente) {
+  const { rows } = await query('SELECT * FROM certifex_reversiones WHERE nexpediente = $1', [nexpediente]);
+  return filaReversion(rows[0]);
+}
+
+/**
+ * Las reversiones apuntadas con su matrícula (número anulado y matrícula), de un campus o de varios
+ * (sin campus: todas). Para saber si hace falta buscar en Certifex las revertidas que no son
+ * solicitudes.
+ */
+export async function reversionesConMatricula({ centro = null, centros = null } = {}) {
+  const lista = centro ? [String(centro).toUpperCase()] : centros ? [...centros].map((c) => String(c).toUpperCase()) : null;
+  const { rows } = await query(
+    `SELECT nexpediente, matricula_id FROM certifex_reversiones
+      WHERE matricula_id IS NOT NULL AND ($1::text[] IS NULL OR upper(centro) = ANY($1::text[]))`,
+    [lista],
+  );
+  return rows.map((r) => ({ nexpediente: r.nexpediente, matriculaId: Number(r.matricula_id) }));
+}
+
+/** La última reversión de cada matrícula (Map matriculaId → reversión). */
+export async function ultimasReversionesDe(matriculaIds) {
+  const ids = [...new Set((matriculaIds ?? []).filter((x) => Number.isSafeInteger(Number(x))).map(Number))];
+  if (!ids.length) return new Map();
+  const { rows } = await query(
+    `SELECT DISTINCT ON (matricula_id) * FROM certifex_reversiones
+      WHERE matricula_id = ANY($1::bigint[])
+      ORDER BY matricula_id, revertido_en DESC, id DESC`,
+    [ids],
+  );
+  return new Map(rows.map((r) => [Number(r.matricula_id), filaReversion(r)]));
+}

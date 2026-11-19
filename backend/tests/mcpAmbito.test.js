@@ -149,6 +149,7 @@ const ARGS = {
   resumen_prospectos: { desde: '2026-01-01' },
   listar_ventas: { texto: 'master', pendiente: true, desde: '2026-01-01', pagina: 1, limite: 25 },
   resumen_ventas: { hasta: '2026-09-01' },
+  listar_pagos_stripe: { desde: '2026-11-09', hasta: '2026-11-15', estado: 'reembolsado', sin_asociar: false, pagina: 1, limite: 25 },
   listar_facturas: { estado: 'pagada', tipo: 'normal', texto: 'F-1', pagina: 1, limite: 25 },
   resumen_facturas: {},
   cobros_pendientes: { limite: 50 },

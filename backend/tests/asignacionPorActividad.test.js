@@ -202,7 +202,7 @@ describe('a quién y a qué escenario', () => {
     const dec = await one('SELECT responsable_id FROM asignacion_decisiones WHERE uid = $1', [`${MARCA}-isecd`]);
     expect(dec.responsable_id).toBe(U.cris.id);
     await esperar();
-    const [correo] = correosA(MAIL2);
+    const correo = correosA(MAIL2).find((m) => m.textContent.includes(email));
     expect(correo.textContent).toContain(`GESTORA ASIGNADA: ${MARCA} cris`);
     expect(correo.textContent).not.toContain(`GESTORA ASIGNADA: ${MARCA} ana`);
   });

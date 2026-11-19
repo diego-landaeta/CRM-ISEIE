@@ -59,6 +59,8 @@ function factura(clave, empresa, { recibida = true, importe = 636 } = {}) {
     id, colaborador_id: c, issuer_id: empresa, periodo: PERIODO, importe_esperado: null,
     subida_at: recibida ? new Date() : null, numero_recepcion: recibida ? `REC-2026-05-${String(++recepcion).padStart(4, '0')}` : null,
     importe: recibida ? importe : null, numero_factura: recibida ? `F-${clave}` : null,
+    // Recibida = recibida y validada por la empresa (CRM-ISEIE#422): aquí se prueba el pago.
+    validada_at: recibida ? new Date() : null,
     enviado_at: null, abierto_at: null, anulada_at: null, caduca_at: null,
   });
   F[clave] = id;
@@ -345,7 +347,7 @@ describe('facturas de colaboradores (#202) · el ZIP del mes', () => {
     await libro.xlsx.load(await zip.file('resumen.xlsx').async('nodebuffer'));
     const hoja = libro.getWorksheet('Resumen');
     expect(hoja.getRow(1).values.slice(1)).toEqual([
-      'Colaborador', 'Área', 'NIF', 'Número de factura', 'Importe', 'Acordado', 'Diferencia', 'Moneda', 'Fecha de subida', 'Número de recepción',
+      'Colaborador', 'Área', 'NIF', 'Número de factura', 'Importe', 'Acordado', 'Diferencia', 'Moneda', 'Fecha de subida', 'Número de recepción', 'Tipo',
     ]);
     const deLaura = [2, 3].map((n) => hoja.getRow(n).values.slice(1)).find((f) => f[0] === 'laura');
     // La moneda (#584), detrás de la diferencia: sin decir otra, EUR.

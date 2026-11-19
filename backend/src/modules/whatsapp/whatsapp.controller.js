@@ -2,7 +2,7 @@ import * as model from './whatsapp.model.js';
 import { createSchema, updateSchema } from './whatsapp.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
-import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, comoLista, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { actividadEnWhatsapp } from './actividad.model.js';
 import { usuarioObjetivo } from './chat.controller.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
@@ -92,6 +92,10 @@ export async function createTemplate(req, res, next) {
     const parsed = createSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.issues[0]?.message || 'Datos invalidos', 400, 'VALIDATION_ERROR');
     const { projectId, label, body, ambito } = parsed.data;
+    // Solo en uno de SUS campus (#181, gemela de CRM#861). El `projectId` viene en
+    // el cuerpo y no pasaba por `proyectosDelAmbito`, así que cualquiera podía
+    // colgar una plantilla —compartida, si tenía el permiso— en el campus de otra empresa.
+    await exigirCampusSuyo(req, projectId, 'Proyecto no encontrado');
     // Una compartida la ve todo el equipo, asi que la crea quien manda. Las
     // personales, cualquiera: son suyas.
     if (ambito === 'compartida' && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) {
@@ -112,7 +116,12 @@ async function permitida(req, id) {
   const t = await model.getTemplate(id);
   if (!t) throw new AppError('Plantilla no encontrada', 404, 'NOT_FOUND');
   const propia = t.ambito === 'personal' && t.owner_id === req.user.userId;
-  if (!propia && !(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
+  if (propia) return t;
+  // La de otra persona, solo dentro de SUS campus (#129). Antes bastaba el
+  // permiso: un admin de una empresa editaba o borraba por su id las del
+  // proceso de otra. Fuera de lo suyo es un 404, como si no existiera.
+  await exigirCampusSuyo(req, t.project_id, 'Plantilla no encontrada');
+  if (!(await tienePermiso(req, 'whatsapp.plantillas_compartidas'))) throw new AppError('No puedes tocar esta plantilla', 403, 'FORBIDDEN');
   return t;
 }
 

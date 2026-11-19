@@ -19,7 +19,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as model from './permissions.model.js';
 import { explicarPermisos, olvidarPermisos } from './permissions.service.js';
-import { ACCIONES, CLAVES, POR_CLAVE, ROLES_FIJOS, valoresPorDefecto, vetada } from './catalogo.js';
+import { ACCIONES, CLAVES, POR_CLAVE, ROLES_FIJOS, explicarRoturas, roturasNuevas, valoresPorDefecto, vetada } from './catalogo.js';
 import { permisosDelRol, permisosDelRolAMedida, resolverPermisos } from './resolver.js';
 import { tieneRol } from '../../shared/utils/roles.js';
 
@@ -58,6 +58,23 @@ async function exigirQueElRolNoGaneLoQueNoTienes(quien, antes, despues, db) {
   if (deMas.length) {
     throw new AppError(`No puedes ponerle a un rol lo que tú no tienes: ${deMas.slice(0, 3).join(', ')}${deMas.length > 3 ? '…' : ''}`, 403, 'NO_LO_TIENES');
   }
+}
+
+/**
+ * «Requiere» también en el servidor (Diego, #752): lo que se guarda no puede
+ * dejar un permiso marcado sin lo que necesita (`dependencias` del catálogo).
+ * Se mira el resultado FINAL —el rol con sus ajustes, la persona con su rol,
+ * su rol a medida y sus excepciones—, no solo lo que se manda, y en los dos
+ * sentidos: marcar «Editar prospectos» sin «Ver prospectos», y quitar «Ver
+ * prospectos» dejando «Editar prospectos». Solo cuenta lo que rompe ESTE
+ * cambio: lo que ya venía roto se deja estar (`roturasNuevas`).
+ */
+export const FALTA_REQUISITO = 'FALTA_REQUISITO';
+function exigirDependencias(antes, despues) {
+  const roturas = roturasNuevas(antes, despues);
+  if (!roturas.length) return;
+  throw new AppError(explicarRoturas(roturas), 400, FALTA_REQUISITO,
+    { roturas: roturas.map((r) => ({ ...r, nombre: POR_CLAVE[r.clave].nombre, faltaNombre: POR_CLAVE[r.falta].nombre })) });
 }
 
 function soloClavesDelCatalogo(permisos) {
@@ -117,7 +134,9 @@ export async function guardarRolFijo(rol, permisos, quien) {
         await model.registrarCambio(db, { quienId: quien.userId, destino: 'rol', rol, clave: x.clave, antes: antes[x.clave], despues: v, origen: 'pantalla_roles' });
       }
     }
-    return permisosDelRol(rol, await model.ajustesDeRoles(db));
+    const final = permisosDelRol(rol, await model.ajustesDeRoles(db));
+    exigirDependencias(antes, final);
+    return final;
   });
 }
 
@@ -132,6 +151,8 @@ export async function crearRolAMedida({ nombre, descripcion = null, base = 'gest
     // Lo que trae de su rol base no es «darlo»: eso ya lo tiene el rol fijo.
     // Lo que se le marca de más, sí.
     await exigirQueElRolNoGaneLoQueNoTienes(quien, delBase, { ...delBase, ...diferencias }, db);
+    // Lo que trae roto su rol base no es cosa de este rol; lo que le rompen sus diferencias, sí.
+    exigirDependencias(delBase, permisosDelRolAMedida({ base_role: base, permissions: diferencias }, ajustes));
     const { rows: [cr] } = await db.query(
       `INSERT INTO custom_roles (label, description, base_role, permissions) VALUES ($1, $2, $3, $4)
        RETURNING id, label, description, base_role, permissions, active`,
@@ -169,6 +190,7 @@ export async function guardarRolAMedida(id, { nombre, descripcion, base, activo,
     if (activo !== undefined && activo !== cr.active) await reg('activo', cr.active, activo);
     if (nombre !== undefined && nombre !== cr.label) await reg('nombre', cr.label, nombre);
     const despues = permisosDelRolAMedida(nuevo, ajustes);
+    exigirDependencias(antes, despues);
     for (const x of ACCIONES) if (despues[x.clave] !== antes[x.clave]) await reg(x.clave, antes[x.clave], despues[x.clave]);
     return nuevo;
   });
@@ -324,10 +346,90 @@ export async function fichaDePermisos(userId, quien) {
 }
 
 /**
+ * #694 · Lo que tendría alguien que todavía no existe: con este rol, estos
+ * roles de más y estas excepciones. Es lo que enseña el alta de Usuarios
+ * antes de crear a la persona, con el mismo «de dónde le viene» que su ficha.
+ * `puedeEditar`: si quien pregunta puede poner excepciones (`users.excepciones`).
+ * `misPermisos`: lo que tiene él, para que la pantalla no ofrezca dar lo que
+ * no tiene (el servidor lo vuelve a comprobar al crear).
+ */
+export async function vistaPreviaDeAlta({ role, roles_extra = [], excepciones = {}, projectIds = [] }, quien) {
+  soloClavesDelCatalogo(excepciones);
+  const ajustesRol = await model.ajustesDeRoles();
+  const { mapa, origenes } = resolverPermisos({ role, roles_extra, excepciones, ajustesRol });
+  const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  const tieneElPermiso = mios ? mios['users.excepciones'] === true : true;
+  // Revisión de la #698: la misma regla que `exigirExcepcionesDeAlta`. Si la
+  // persona nueva es admin, sus excepciones solo las pone el superadmin; la
+  // pantalla no las ofrece para luego dar 403 al crear.
+  const esAdmin = [role, ...(roles_extra || [])].some((r) => r === 'admin' || r === 'superadmin');
+  const deAdmin = tieneElPermiso && Boolean(mios) && esAdmin;
+  // Con el permiso, pero sin un campus suyo todavía elegido: se dice por qué no.
+  const sinCampus = tieneElPermiso && !deAdmin && !(await campusSuyoEnElAlta(quien, projectIds));
+  return {
+    mapa, origenes,
+    puedeEditar: tieneElPermiso && !deAdmin && !sinCampus,
+    motivo: deAdmin ? ADMIN_SOLO_SUPERADMIN : (sinCampus ? SIN_CAMPUS_SUYO : null),
+    misPermisos: mios ? Object.keys(mios).filter((k) => mios[k] === true) : null,
+  };
+}
+
+/**
+ * #694 · ¿Lleva el alta algún campus de quien da de alta? Sus permisos solo los
+ * toca quien comparte campus con ella (`exigirQuePuedaTocar`), y una persona sin
+ * campus no es de los suyos: sin esto, el alta de un tutor o un colaborador sin
+ * campus se creaba, sus excepciones fallaban con «Usuario no encontrado» y se
+ * borraba. El superadmin, siempre.
+ */
+const SIN_CAMPUS_SUYO = 'Para darle permisos, ponle primero uno de tus campus.';
+const ADMIN_SOLO_SUPERADMIN = 'Los permisos de un admin los cambia el superadmin.';
+
+export async function campusSuyoEnElAlta(quien, projectIds = []) {
+  if (quien.role === 'superadmin') return true;
+  const ids = [...new Set((projectIds || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  if (!ids.length) return false;
+  const { rows } = await query(
+    'SELECT 1 FROM user_projects WHERE user_id = $1 AND active AND project_id = ANY($2::int[]) LIMIT 1',
+    [quien.userId, ids]);
+  return rows.length > 0;
+}
+
+/** Los campus de un alta, vengan como `projectIds` o como `projects` (`{ projectId }`). */
+export function campusDelAlta({ projectIds = [], projects = [] } = {}) {
+  return [...(projectIds || []), ...(projects || []).map((p) => p?.projectId)];
+}
+
+/**
+ * #694 · Las excepciones de un alta, comprobadas ANTES de crear a nadie, con
+ * las mismas reglas que `guardarExcepciones`: que existan en el catálogo, que
+ * su rol pueda tenerlas, que quien da tenga lo que da, y que los permisos de
+ * un admin solo los toque el superadmin. Así el alta no se queda a medias.
+ */
+export async function exigirExcepcionesDeAlta(quien, { role, roles_extra = [], projectIds = [] }, cambios) {
+  soloClavesDelCatalogo(cambios);
+  if (!Object.keys(cambios || {}).length) return;
+  const suyos = [role, ...(roles_extra || [])];
+  if (quien.role !== 'superadmin' && (suyos.includes('superadmin') || suyos.includes('admin'))) {
+    throw new AppError('Los permisos de un admin los cambia el superadmin', 403, 'FORBIDDEN');
+  }
+  if (!(await campusSuyoEnElAlta(quien, projectIds))) throw new AppError(SIN_CAMPUS_SUYO, 400, 'SIN_CAMPUS_SUYO');
+  const mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+  for (const [clave, valor] of Object.entries(cambios)) {
+    const x = POR_CLAVE[clave];
+    if (valor === true && vetada(x, role, roles_extra)) {
+      throw new AppError(`«${x.nombre}» no se le puede dar a quien es ${suyos.filter(Boolean).join(' y ')}`, 400, 'NUNCA');
+    }
+    if (valor === true && mios && mios[clave] !== true) {
+      throw new AppError(`No puedes dar «${x.nombre}»: tú no lo tienes`, 403, 'NO_LO_TIENES');
+    }
+  }
+}
+
+/**
  * Cambia excepciones de una persona: `{ clave: true | false | null }` (null =
  * como diga su rol). Solo las claves que se mandan; las demás, igual.
  */
-export async function guardarExcepciones(userId, cambios, quien) {
+export async function guardarExcepciones(userId, cambios, quien, { origen = 'ficha_usuario' } = {}) {
   soloClavesDelCatalogo(cambios);
   return enTransaccion(async (db) => {
     const datos = await model.datosDePermisos(userId, db);
@@ -356,6 +458,7 @@ export async function guardarExcepciones(userId, cambios, quien) {
       }
     }
     const despues = (await explicarPermisos(userId, db)).mapa;
+    exigirDependencias(antes, despues);
     for (const clave of Object.keys(cambios)) {
       const exAntes = datos.excepciones[clave];
       const exDespues = cambios[clave];
@@ -364,7 +467,8 @@ export async function guardarExcepciones(userId, cambios, quien) {
         quienId: quien.userId, destino: 'usuario', usuarioId: userId, clave,
         antes: exAntes === undefined ? `como su rol (${antes[clave] ? 'sí' : 'no'})` : (exAntes ? 'sí' : 'no'),
         despues: exDespues === null || exDespues === undefined ? `como su rol (${despues[clave] ? 'sí' : 'no'})` : (exDespues ? 'sí' : 'no'),
-        origen: 'ficha_usuario',
+        // 'alta_usuario' cuando vienen con el alta (#694): así no se confunden con una edición posterior.
+        origen,
       });
     }
     return despues;

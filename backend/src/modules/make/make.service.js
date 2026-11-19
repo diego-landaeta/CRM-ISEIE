@@ -59,6 +59,8 @@ const KNOWN_LEAD_FIELDS = new Set([
   'landing_url', 'canal', 'notas',
   'idempotency_key',
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'referrer',
+  // La publicidad de Meta del prospecto (puerta 8, #487; gemela de CRM#806).
+  'meta_campaign_id', 'meta_adset_id', 'meta_ad_id',
 ]);
 
 export function applyMapping(payload, fieldMapping) {

@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
 
 export async function upsertPayment(p) {
@@ -44,8 +45,120 @@ export async function findLeadByEmail(projectId, email) {
 }
 
 export async function findConversionByLeadId(leadId) {
-  const { rows } = await query(`SELECT id, importe_total, importe_pagado FROM conversions WHERE lead_id=$1 ORDER BY id DESC LIMIT 1`, [leadId]);
+  // Con la formación: la puerta 6 (gemela de CRM#848) la necesita para no colgar
+  // la compra de un curso nuevo en la venta de otro.
+  const { rows } = await query(`SELECT id, importe_total, importe_pagado, producto_contratado_id FROM conversions WHERE lead_id=$1 ORDER BY id DESC LIMIT 1`, [leadId]);
   return rows[0] || null;
+}
+
+/**
+ * Las ventas del campus de TODAS las fichas vivas con ese correo, la más reciente
+ * primero (puerta 6, gemela de CRM#848).
+ *
+ * `findLeadByEmail` se queda con la ficha más nueva, y un duplicado se crea siempre
+ * como ficha nueva (`lead_duplicado_de`): si la alumna volvió a rellenar un
+ * formulario después de comprar, la ficha nueva no tiene venta y el cargo se
+ * quedaba «sin asociar» aunque la venta estuviera en la ficha de antes.
+ */
+export async function ventasPorCorreo(projectId, email) {
+  if (!email) return [];
+  const { rows } = await query(
+    `SELECT c.id, c.lead_id, c.importe_total, c.importe_pagado, c.producto_contratado_id,
+            l.nombre AS lead_nombre, l.responsable_id
+       FROM conversions c
+       JOIN leads l ON l.id = c.lead_id
+      WHERE c.project_id = $1 AND l.project_id = $1
+        AND LOWER(l.email) = LOWER($2) AND l.deleted_at IS NULL
+      ORDER BY c.fecha_conversion DESC NULLS LAST, c.id DESC
+      LIMIT 50`,
+    [projectId, email]
+  );
+  return rows;
+}
+
+/**
+ * La venta de una suscripción de Stripe en este campus (puerta 6): la que la tiene
+ * apuntada (#747) o, si aún no, la de otro cargo de esa misma suscripción que ya
+ * esté asociado. Con dos ventas distintas no se adivina: null.
+ */
+export async function ventaDeLaSuscripcion(projectId, suscripcionId) {
+  if (!suscripcionId) return null;
+  const { rows } = await query(
+    `SELECT DISTINCT c.id, c.lead_id, c.importe_total, c.importe_pagado, c.producto_contratado_id,
+            l.nombre AS lead_nombre, l.responsable_id
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+      WHERE c.project_id = $1
+        AND (c.stripe_subscription_id = $2
+             OR c.id IN (SELECT sp.conversion_id FROM stripe_payments sp
+                          WHERE sp.project_id = $1 AND sp.stripe_subscription_id = $2
+                            AND sp.conversion_id IS NOT NULL))
+      LIMIT 2`,
+    [projectId, suscripcionId]
+  );
+  return rows.length === 1 ? rows[0] : null;
+}
+
+/** Apunta en el cargo de qué suscripción viene (o que no viene de ninguna). */
+export async function guardarSuscripcionDelCargo(stripePaymentId, suscripcionId) {
+  await query(
+    `UPDATE stripe_payments SET stripe_subscription_id = $2, suscripcion_buscada = true WHERE id = $1`,
+    [stripePaymentId, suscripcionId || null]
+  );
+}
+
+/**
+ * ¿Hay ya en el campus un cobro apuntado por ese dinero (mismo importe, a tres
+ * días) que no esté atado a ningún cargo de Stripe? Casi siempre es la asesora,
+ * que registró la venta con otro correo. Antes de crear una venta por una compra
+ * directa se mira esto: si lo hay, no se crea nada y lo mira una persona.
+ */
+export async function hayCobroEquivalenteEnElCampus(projectId, importe, fecha) {
+  const { rows } = await query(
+    `SELECT 1
+       FROM conversion_payments cp
+       JOIN conversions c ON c.id = cp.conversion_id
+      WHERE c.project_id = $1
+        AND ABS(cp.importe::numeric - $2::numeric) < 0.01
+        AND ABS(cp.fecha - $3::date) <= 3
+        AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
+      LIMIT 1`,
+    [projectId, importe, fecha]
+  );
+  return rows.length > 0;
+}
+
+/**
+ * Los cargos de compras en la web (llevan el pedido de WooCommerce en `metadata`)
+ * que siguen sin venta pasado el tiempo de espera (puerta 6). Mismo suelo que
+ * `listPendientesDeAsociar`, y además solo los de los últimos `dias`: encender
+ * esto no crea de golpe las ventas de todo el histórico.
+ */
+export async function listComprasDirectasSinVenta(projectId, { esperaHoras = 24, dias = 30, limit = 25 } = {}) {
+  const { rows } = await query(
+    `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,
+            customer_stripe_id, metadata,
+            EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
+            conversion_id, conversion_payment_id, lead_id
+       FROM stripe_payments
+      WHERE project_id = $1
+        AND status = 'succeeded'
+        AND COALESCE(refunded, false) = false
+        AND conversion_id IS NULL
+        AND conversion_payment_id IS NULL
+        AND UPPER(COALESCE(currency, 'EUR')) = 'EUR'
+        AND COALESCE(metadata, '{}'::jsonb) ? 'order_id'
+        AND stripe_created_at < NOW() - make_interval(hours => $2::int)
+        AND stripe_created_at > NOW() - make_interval(days => $3::int)
+        AND stripe_created_at::date > COALESCE(
+          (SELECT s.stripe_ok_hasta FROM invoicing_status s WHERE s.project_id = $1),
+          (SELECT pr.created_at::date FROM projects pr WHERE pr.id = $1),
+          DATE '1900-01-01')
+      ORDER BY stripe_created_at ASC
+      LIMIT $4`,
+    [projectId, esperaHoras, dias, limit]
+  );
+  return rows;
 }
 
 export async function linkPayment(stripePaymentId, { leadId, conversionId, conversionPaymentId, userId, method }) {
@@ -134,9 +247,11 @@ export async function updateConversionPaid(conversionId, _addAmount) {
 // Las condiciones del listado, en un solo sitio: las usan tanto listPayments
 // como getStats. Antes getStats solo miraba el proyecto, asi que los totales de
 // arriba ignoraban el rango de fechas y el resto de filtros de abajo.
-function construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente }) {
-  const conds = ['sp.project_id = $1'];
-  const params = [projectId];
+function construirFiltro({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  // Un campus o varios (los de quien pide, #428): siempre como lista. Sin
+  // ninguno, una lista vacía, que no casa con nada (nunca «todos»).
+  const conds = ['sp.project_id = ANY($1::int[])'];
+  const params = [comoLista(projectId, projectIds) || []];
   let i = 2;
   if (status) { conds.push(`sp.status = $${i++}`); params.push(status); }
   if (linked === 'yes') conds.push('sp.conversion_id IS NOT NULL');
@@ -209,8 +324,8 @@ function construirFiltro({ projectId, status, linked, search, from, to, facturab
   return { where: conds.join(' AND '), params };
 }
 
-export async function listPayments({ projectId, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente });
+export async function listPayments({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente, page = 1, limit = 50 }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const offset = (page - 1) * limit;
   const { rows } = await query(
     // Se añade a QUÉ pertenece el cobro: el curso/concepto de la conversión y la
@@ -242,6 +357,18 @@ export async function getById(id) {
   return rows[0] || null;
 }
 
+/** El campus de una venta, o null si no existe (#428: asociar solo dentro del campus del cargo). */
+export async function campusDeLaVenta(conversionId) {
+  const { rows } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
+/** El campus de un prospecto, o null si no existe. */
+export async function campusDelLead(leadId) {
+  const { rows } = await query('SELECT project_id FROM leads WHERE id = $1', [leadId]);
+  return rows[0] ? Number(rows[0].project_id) : null;
+}
+
 export async function listProjectsWithStripe() {
   const { rows } = await query(
     `SELECT DISTINCT project_id FROM project_integrations
@@ -253,8 +380,8 @@ export async function listProjectsWithStripe() {
 // Los totales de la cabecera responden al MISMO filtro que el listado: si
 // arriba pone un rango de fechas, las cifras son de ese rango. Antes eran
 // siempre las del historico completo y no cuadraban con lo que se veia debajo.
-export async function getStats({ projectId, status, linked, search, from, to, facturables, sinEquivalente }) {
-  const { where, params } = construirFiltro({ projectId, status, linked, search, from, to, facturables, sinEquivalente });
+export async function getStats({ projectId, projectIds = null, status, linked, search, from, to, facturables, sinEquivalente }) {
+  const { where, params } = construirFiltro({ projectId, projectIds, status, linked, search, from, to, facturables, sinEquivalente });
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,
@@ -317,6 +444,7 @@ export async function listConVentaSinCobro(projectId, limit = 500) {
 export async function listPendientesDeAsociar(projectId, limit = 500) {
   const { rows } = await query(
     `SELECT id, project_id, stripe_id, status, amount, currency, customer_email, customer_name,
+            customer_stripe_id, metadata,
             EXTRACT(EPOCH FROM stripe_created_at)::bigint AS stripe_created_at,
             conversion_id, conversion_payment_id, lead_id
        FROM stripe_payments
@@ -342,4 +470,22 @@ export async function listPendientesDeAsociar(projectId, limit = 500) {
     [projectId, limit]
   );
   return rows;
+}
+
+/**
+ * Las columnas dispute_* del cargo, al dia con la disputa guardada (#396). Las
+ * lee la pantalla de Pagos Stripe; la de Disputas lee `stripe_disputes`.
+ * `d` es la fila de `stripe_disputes` (importes ya en unidades).
+ */
+export async function marcarDisputaEnElCargo(projectId, chargeId, d) {
+  if (!chargeId || !d) return;
+  await query(
+    `UPDATE stripe_payments SET
+       disputed = true,
+       dispute_id = $1, dispute_status = $2, dispute_reason = $3,
+       dispute_amount = $4, dispute_evidence_due_by = $5,
+       updated_at = NOW()
+     WHERE project_id = $6 AND stripe_id = $7`,
+    [d.dispute_id, d.status, d.reason, d.amount, d.evidence_due_by, projectId, chargeId]
+  );
 }

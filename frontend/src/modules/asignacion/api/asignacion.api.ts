@@ -1,4 +1,5 @@
-import client, { API_BASE_URL } from '@/shared/api/client';
+import client from '@/shared/api/client';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 
 /**
  * Conexión → «Asignación de leads» por actividad (CRM#513, 27/10/2026; migración 230).
@@ -69,7 +70,7 @@ export interface DatosConfig {
 }
 
 /** La dirección que llama la entrada de Make (POST, con la clave). */
-export const URL_ENTRADA = `${typeof window !== 'undefined' ? window.location.origin : ''}${API_BASE_URL}/asignacion/entrada`;
+export const URL_ENTRADA = apiPublicUrl('/asignacion/entrada');
 
 export const asignacionApi = {
   listar: () => client.get('/asignacion'),

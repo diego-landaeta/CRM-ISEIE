@@ -20,6 +20,9 @@ vi.mock('@/shared/api/client', () => ({
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/modules/sales/components/RepartoVentaCard', () => ({ default: () => null }));
+// La ficha pide permisos (cargos de Stripe sin enlazar, gemela de CRM#892; links de
+// pago). Aquí no se miran: sin ninguno, esas tarjetas no salen y no hace falta sesión.
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => false, llevaEquipo: false }) }));
 
 const { default: SaleDetailPage } = await import('@/modules/sales/pages/SaleDetailPage');
 

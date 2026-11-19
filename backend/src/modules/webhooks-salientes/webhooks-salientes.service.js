@@ -14,7 +14,8 @@ import { METODOS_QUE_DISPARAN, EVENTO_DE } from './webhooks-salientes.validation
   CUÁNDO. Cuando se apunta un COBRO (`conversion_payments`) con forma de pago
   transferencia o depósito. Todos los caminos que apuntan un cobro pasan por
   `dispararCobro` —el alta de la venta con su primer pago, el abono, la proforma
-  «Cobrada», la cuota cobrada y la edición de una cuota que pasa A transferencia—,
+  «Cobrada», la cuota cobrada, la edición de una cuota que pasa A transferencia y
+  el abono del extracto del banco que se enlaza a una venta (#773)—,
   y la forma de pago se lee de la base, no de quien llama: si no es una de esas
   dos, no sale nada. Con tarjeta, Stripe, efectivo, Bizum o PayPal, nunca.
 

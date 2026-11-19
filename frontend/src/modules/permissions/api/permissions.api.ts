@@ -90,8 +90,18 @@ export interface AccionDelCatalogo {
   /** Ni con excepción si su rol PRINCIPAL es uno de estos (WhatsApp, MCP). */
   nuncaPrincipal?: string[];
   soloPantalla: boolean;
+  /** Solo sobre lo suyo (su factura, sus consultas). */
+  propia?: boolean;
+  /** No pide el «Ver» de su recurso. */
+  independiente?: boolean;
+  /** De serie solo con el rol principal: los roles de más no la suman. */
+  soloPrincipal?: boolean;
 }
-export interface RecursoDelCatalogo { clave: string; nombre: string; acciones: AccionDelCatalogo[] }
+export interface RecursoDelCatalogo {
+  clave: string; nombre: string; acciones: AccionDelCatalogo[];
+  /** Lo que decide el acceso y no es una casilla (en el tablero, quién cierra). */
+  nota?: string;
+}
 export interface SeccionDelCatalogo { clave: string; nombre: string; recursos: RecursoDelCatalogo[] }
 export interface RolFijoDelCatalogo { clave: string; nombre: string; descripcion: string }
 export interface Catalogo { roles: RolFijoDelCatalogo[]; secciones: SeccionDelCatalogo[] }
@@ -134,11 +144,11 @@ export async function guardarRolAMedida(id: number, datos: DatosRolAMedida): Pro
 
 export type Origen =
   | { tipo: 'superadmin' }
-  | { tipo: 'rol'; rol: string }
-  | { tipo: 'ajuste_rol'; rol: string }
+  | { tipo: 'rol'; rol: string; extra?: boolean }
+  | { tipo: 'ajuste_rol'; rol: string; extra?: boolean }
   | { tipo: 'rol_a_medida'; id: number; nombre: string }
   | { tipo: 'excepcion' }
-  | { tipo: 'nunca'; roles: string[] }
+  | { tipo: 'nunca'; roles: string[]; principal?: boolean }
   | { tipo: 'ninguno' };
 
 export interface ApunteDelRegistro {
@@ -160,6 +170,22 @@ export interface FichaDePermisos {
 export async function getFicha(userId: number): Promise<FichaDePermisos> {
   const res = await client.get(`/permissions/personas/${userId}`);
   return res.data as FichaDePermisos;
+}
+
+/** #694: lo que traería un alta, antes de crearla, y si quien la hace puede ajustarlo. */
+export interface VistaPreviaDeAlta {
+  mapa: PermissionMap;
+  origenes: Record<string, Origen>;
+  puedeEditar: boolean;
+  /** Por qué no se pueden dar excepciones (la persona nueva es admin, o falta un campus suyo), o null. */
+  motivo?: string | null;
+  /** Lo que tiene quien da de alta (null = superadmin, todo): no se ofrece dar más. */
+  misPermisos: string[] | null;
+}
+
+export async function vistaPreviaDeAlta(datos: { role: string; roles_extra: string[]; excepciones: PermissionMap; projectIds?: number[] }): Promise<VistaPreviaDeAlta> {
+  const res = await client.post('/permissions/vista-previa-alta', datos);
+  return res.data as VistaPreviaDeAlta;
 }
 
 /** `null` = como diga su rol. */

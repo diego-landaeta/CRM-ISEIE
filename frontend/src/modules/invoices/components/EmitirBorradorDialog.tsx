@@ -8,12 +8,14 @@ import { toast } from '@/shared/hooks/useToast';
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 
 // Campo (fuera del componente para no perder el foco al re-render).
-function F({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+// `bloqueado`: en una factura ya emitida, lo que ya tiene no se cambia (CRM#793).
+function F({ label, value, onChange, bloqueado = false }: { label: string; value: string; onChange: (v: string) => void; bloqueado?: boolean }) {
   return (
     <div>
       <label className="text-[11px] text-muted-foreground">{label} <span className="text-red-500">*</span></label>
-      <input value={value} onChange={(e) => onChange(e.target.value)}
-        className={`w-full h-9 px-2 rounded border bg-background text-sm ${!value.trim() ? 'border-amber-400' : 'border-border'}`} />
+      <input value={value} onChange={(e) => onChange(e.target.value)} readOnly={bloqueado}
+        title={bloqueado ? 'La factura ya está emitida: este dato no se cambia. Si está mal, anúlala con su motivo.' : undefined}
+        className={`w-full h-9 px-2 rounded border bg-background text-sm ${!value.trim() ? 'border-amber-400' : 'border-border'} ${bloqueado ? 'opacity-60 cursor-not-allowed' : ''}`} />
     </div>
   );
 }
@@ -31,6 +33,8 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
   const [ciudad, setCiudad] = useState(limpio(invoice.cliente_ciudad));
   const [cp, setCp] = useState(limpio(invoice.cliente_cp));
   const [pais, setPais] = useState(limpio(invoice.cliente_pais) || 'España');
+  // Emitida (CRM#793): se rellena lo que falta; lo que ya tiene, de solo lectura.
+  const fijo = (v?: string | null) => !esBorrador && !!limpio(v);
   const [working, setWorking] = useState(false);
 
   const completo = nombre.trim() && nif.trim() && direccion.trim() && ciudad.trim() && cp.trim() && pais.trim();
@@ -79,15 +83,15 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
               ⚠️ Para {esBorrador ? 'emitir' : 'descargar o enviar'} la factura debes rellenar estos datos (marcados en ámbar).
             </div>
           )}
-          <F label="Nombre" value={nombre} onChange={setNombre} />
+          <F label="Nombre" value={nombre} onChange={setNombre} bloqueado={fijo(invoice.cliente_nombre)} />
           <div className="grid grid-cols-2 gap-3">
-            <F label="NIF / DNI / CIF" value={nif} onChange={setNif} />
-            <F label="Código postal" value={cp} onChange={setCp} />
+            <F label="NIF / DNI / CIF" value={nif} onChange={setNif} bloqueado={fijo(invoice.cliente_nif)} />
+            <F label="Código postal" value={cp} onChange={setCp} bloqueado={fijo(invoice.cliente_cp)} />
           </div>
-          <F label="Dirección fiscal" value={direccion} onChange={setDireccion} />
+          <F label="Dirección fiscal" value={direccion} onChange={setDireccion} bloqueado={fijo(invoice.cliente_direccion)} />
           <div className="grid grid-cols-2 gap-3">
-            <F label="Ciudad" value={ciudad} onChange={setCiudad} />
-            <F label="País" value={pais} onChange={setPais} />
+            <F label="Ciudad" value={ciudad} onChange={setCiudad} bloqueado={fijo(invoice.cliente_ciudad)} />
+            <F label="País" value={pais} onChange={setPais} bloqueado={fijo(invoice.cliente_pais)} />
           </div>
         </div>
         <div className="p-3 border-t border-border flex justify-end gap-2 bg-muted/20">

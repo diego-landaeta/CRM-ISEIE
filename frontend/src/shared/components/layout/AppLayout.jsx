@@ -162,6 +162,10 @@ export default function AppLayout() {
       </div>
 
       {/* Main */}
+      {/* El relleno del movil (`p-3`, y arriba la barra fija de 56 px + 12) lo
+          anula a mano el chat de WhatsApp para ir de borde a borde (chat.css,
+          `.wa-pagina { margin: -12px }`). Si cambia este relleno, hay que
+          cambiar aquel margen tambien. */}
       <main
         id="main-content"
         className={cn(

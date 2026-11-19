@@ -244,6 +244,17 @@ export default function LeadsPipelinePage() {
       setDragLead(null);
       return;
     }
+    // «Convertido» no se pone arrastrando: hay que registrar la venta, como en
+    // la ficha y en el cambio rápido (QuickStatusChange). Se abre su ficha.
+    if (targetEstado === 'convertido') {
+      toast({
+        title: 'Registra la compra desde la ficha',
+        description: 'Para marcar como convertido entra al lead y registra la conversión con importe.',
+      });
+      setDrawerLeadId(dragLead.id);
+      setDragLead(null);
+      return;
+    }
 
     try {
       // Backend requiere motivo al cambiar status

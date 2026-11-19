@@ -78,6 +78,8 @@ import feedbackModule from './modules/feedback/index.js';
 import facturaAutomaticaModule from './modules/factura-automatica/index.js';
 import novedadesModule from './modules/novedades/index.js';
 import certifexModule from './modules/certifex/index.js';
+// El alumno confirma los datos de su diploma antes de emitirlo (gemela de CRM#847). Apagado de serie.
+import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
 import registroModule from './modules/registro/index.js';
 // Sistema → Mensajes: el chat interno del equipo, como en MultiCRM. Migración 232.
@@ -87,12 +89,20 @@ import mcpModule from './modules/mcp/index.js';
 // cursos pendientes, «qué ha pasado hoy», «Pregunta a tus datos» y los pedidos de WooCommerce.
 import moodleModule from './modules/moodle/index.js';
 import soporteModule from './modules/soporte/index.js';
+// Incidencias (gemela de CRM#612): al lado de Soporte, sobre todo las de capa 8.
+import incidenciasModule from './modules/incidencias/index.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import moodleAvisos from './modules/consultas/consultas.webhook.js';
+import githubWebhook from './modules/tasks/tasks.github.webhook.js';
+import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
+import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
+// Matrícula automática en Moodle, fase 1 (gemela de CRM#838). Apagada de serie.
+import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
@@ -105,17 +115,22 @@ import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.j
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
 import { startPaypalCobrosSyncScheduler } from './jobs/paypalCobrosSyncScheduler.js';
 import { startMonitaskSyncScheduler } from './jobs/monitaskSyncScheduler.js';
+import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js';
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startMoodleSincronizacionScheduler } from './jobs/moodleSincronizacionScheduler.js';
 import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
 import { startConsultasCargaScheduler } from './jobs/consultasCargaScheduler.js';
+import { startCertifexReversionesScheduler } from './jobs/certifexReversionesScheduler.js';
 import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoScheduler.js';
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
+import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -125,8 +140,11 @@ import { startMcpVigilanciaScheduler } from './jobs/mcpVigilanciaScheduler.js';
 import tasksModule from './modules/tasks/index.js';
 import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js';
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
-// Lo que aún no está aprobado para producción: el tablero (#210) y las facturas de colaboradores (#202).
-import { tareasActivas, facturasColaboradorActivas } from './shared/config/soloEnPruebas.js';
+// Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
+// el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
+// Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
 
@@ -167,6 +185,17 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
+// El aviso del plugin del CRM en cada Moodle (#406, gemela de MultiCRM #679): cada mensaje
+// del campus, firmado. Solo en pruebas hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION): sin
+// montar, responde 404 y ningún campus puede conectarse ni avisar al CRM de producción.
+if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
+else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
+
+// El aviso de GitHub (CRM-ISEIE#435): las issues del repositorio, al tablero. Firmado
+// (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
+// GITHUB_TABLERO_ACTIVO encendido (apagado de serie): si no, 404.
+if (tareasActivas() && githubTableroActivo()) app.use('/api/github/webhook', githubWebhook);
+else logger.info('Rutas SKIP (GITHUB_TABLERO_ACTIVO apagado): /api/github/webhook');
 
 // El aviso de Stripe (CRM#680), igual: en bruto y ANTES del express.json general. La firma
 // se calcula sobre el cuerpo tal cual llega; el express.json de abajo lo convertía en
@@ -362,6 +391,8 @@ const MODULES = [
   convocatoriasModule,
   // Certifex: el CRM aprueba y Certifex emite (Matrículas → Certificaciones).
   certifexModule,
+  // El alumno confirma los datos de su diploma antes de emitirlo (gemela de CRM#847). Apagado de serie.
+  diplomaConfirmacionModule,
   // Sistema → Registro (#111): solo lectura sobre lo que ya se apunta. Admin y superadmin.
   registroModule,
   // Mensajes del equipo (/api/mensajes, con /api/messages de alias).
@@ -374,6 +405,8 @@ const MODULES = [
   moodleModule,
   // Soporte (#38): los tickets se guardan en el servidor y llegan a alguien.
   soporteModule,
+  // Incidencias (gemela de CRM#612), al lado de Soporte.
+  incidenciasModule,
   // «Qué ha pasado hoy», para cada gestora con lo suyo (#13).
   actividadModule,
   // Cursos pendientes para las tutoras, por campus (#336).
@@ -382,7 +415,10 @@ const MODULES = [
   iaAnalisisModule,
   // El tablero aún no está aprobado para producción: solo en local y /staging.
   ...(tareasActivas() ? [tasksModule] : []),
+  // Links de pago (#407): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
+  ...(linksPagoActivos() ? [linksPagoModule] : []),
 ];
+if (!linksPagoActivos()) logger.info('Modulo SKIP (solo en pruebas): /api/links-pago');
 if (!tareasActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/tasks');
 
 if (!facturasColaboradorActivas()) logger.info('Modulo SKIP (solo en pruebas): /api/facturas-colaborador');
@@ -540,6 +576,8 @@ if (process.env.NODE_ENV !== 'test') {
         startSuscripcionesPlazosScheduler();
         startFeedbackDia7Scheduler();
         startFacturaAutomaticaScheduler();
+        startDiplomaConfirmacionScheduler();
+        startMatriculaMoodleScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
@@ -560,6 +598,13 @@ if (process.env.NODE_ENV !== 'test') {
     } catch (err) {
       logger.error({ err }, 'Monitask: la sincronización nocturna falló al arrancar');
     }
+    // Disputas de Stripe (#396, gemela de CRM#839): traerlas de cada cuenta y avisar
+    // a los admins. Solo con STRIPE_DISPUTAS_ACTIVO=1; apagado, no arranca.
+    try {
+      startStripeDisputasScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Disputas de Stripe: el sondeo falló al arrancar');
+    }
     // Seguridad del MCP (#237, desde #194 y #195): fuera del bloque de Stripe
     // a propósito, para que apagar la sincronización de Stripe no la apague.
     // Cada uno con su interruptor en el .env, como los demás trabajos.
@@ -573,7 +618,8 @@ if (process.env.NODE_ENV !== 'test') {
     // Lo nuevo de la 2.6.0. Cada uno se apaga con su interruptor del .env, que
     // mira el propio trabajo: TUTORES_CAMPUS_DISABLED, CONSULTAS_CAMPUS_DISABLED,
     // CONSULTAS_ALUMNOS_DISABLED, CONSULTAS_RESUMEN_DISABLED, CONSULTAS_PLAZO_DISABLED,
-    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED y MOODLE_AVISOS_DISABLED.
+    // CONSULTAS_CARGA_RECORDATORIO_DISABLED, CURSOS_PENDIENTES_DISABLED, MOODLE_AVISOS_DISABLED y
+    // CERTIFEX_REVERSIONES_DISABLED (diplomas revertidos que el CRM no llegó a apuntar, #351).
     for (const [nombre, arrancar] of [
       ['tutores en los campus', startTutoresCampusScheduler],
       ['consultas de los campus', startConsultasCampusScheduler],
@@ -583,11 +629,30 @@ if (process.env.NODE_ENV !== 'test') {
       ['carga de los tutores', startConsultasCargaScheduler],
       ['cursos pendientes', startCursosPendientesScheduler],
       ['avisos del Moodle', startMoodleAvisosScheduler],
+      ['diplomas revertidos', startCertifexReversionesScheduler],
+      // El repaso de los campus con el plugin: solo con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
+      ...(pluginMoodleActivo() ? [['repaso de los campus con el plugin', startMoodleSincronizacionScheduler]] : []),
     ]) {
       try {
         arrancar();
       } catch (err) {
         logger.error({ err }, `${nombre}: el trabajo falló al arrancar`);
+      }
+    }
+    // Entregas sin corregir (#457): lee Moodle y escribe a tutoras y administración.
+    // Apagado en producción hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION=1), como en el 360.
+    try {
+      if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
+    } catch (err) {
+      logger.error({ err }, 'entregas sin corregir: el trabajo falló al arrancar');
+    }
+    // Links de pago (#407, gemela de CRM#680): desactivar en Stripe los que caducan sin
+    // pagar. Solo con los links encendidos (LINKS_PAGO_EN_PRODUCCION); sin interruptor propio.
+    if (linksPagoActivos()) {
+      try {
+        startLinksPagoCaducidadScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
       }
     }
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {

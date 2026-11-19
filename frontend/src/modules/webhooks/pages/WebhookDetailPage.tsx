@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback, lazy, Suspense } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import {
@@ -48,7 +49,7 @@ export default function WebhookDetailPage() {
         const w = res.data as WebhookDetail;
         if (w.kind !== 'webhook') {
           toast({ title: 'No es un webhook', variant: 'destructive' });
-          navigate('/webhooks', { replace: true });
+          navigate('/conexion/webhooks/prospectos', { replace: true });
           return;
         }
         setWebhook(w);
@@ -116,7 +117,7 @@ export default function WebhookDetailPage() {
     try {
       await client.delete(`/forms/${id}`);
       toast({ title: 'Eliminado' });
-      navigate('/webhooks');
+      navigate('/conexion/webhooks/prospectos');
     } catch (err: any) { toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' }); }
   }
 
@@ -159,12 +160,12 @@ export default function WebhookDetailPage() {
     return (
       <div className="space-y-5 pb-8">
         <PageHeader title="Webhook no encontrado" />
-        <Link to="/webhooks" className="text-sm text-primary hover:underline">← Volver a webhooks</Link>
+        <Link to="/conexion/webhooks/prospectos" className="text-sm text-primary hover:underline">← Volver a webhooks</Link>
       </div>
     );
   }
 
-  const apiBase = `${window.location.origin}${(import.meta.env.BASE_URL || '/').replace(/\/$/, '')}/api`;
+  const apiBase = apiPublicUrl('');
   const url = webhook.embed_id
     ? `${apiBase}/forms/webhook/${webhook.embed_id}`
     : null;
@@ -179,11 +180,15 @@ export default function WebhookDetailPage() {
     <div className="space-y-5 pb-8">
       <PageHeader
         title={webhook.nombre}
-        subtitle={`${webhook.submissions_count || 0} eventos recibidos · ${webhook.embed_id}`}
+        // `submissions_count` solo sube cuando el aviso se procesa bien (crea el
+        // prospecto o la matrícula, se apunta como reenvío o se salta por
+        // duplicado): los que fallan no cuentan. «Recibidos» hacía creer que no
+        // había llegado nada aunque el historial tuviera avisos.
+        subtitle={`${webhook.submissions_count || 0} procesados con éxito · ${webhook.embed_id}`}
         actions={
           <div className="flex items-center gap-2">
             <Link
-              to="/webhooks"
+              to="/conexion/webhooks/prospectos"
               aria-label="Volver"
               className="flex items-center gap-1 h-9 px-3 rounded-lg border border-border bg-secondary text-sm hover:bg-muted transition-colors"
             >

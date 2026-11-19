@@ -7,13 +7,21 @@ import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
 import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
+import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
+import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
+import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
+  LinkSimple, MinusCircle, Copy,
 } from '@phosphor-icons/react';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────
-type Provider = 'stripe' | 'brevo' | 'moodle' | 'paypal';
+type Provider = 'stripe' | 'brevo' | 'moodle' | 'paypal' | 'stripe_links';
 interface Integration {
   id?: number;
   project_id?: number;
@@ -34,11 +42,10 @@ interface Integration {
 // /api/integrations/stripe/webhook, que no existe en ningun sitio: la ruta
 // buena es /api/stripe-webhook/<projectId>, montada aparte por ser publica.
 // Quien copiara la anterior a Stripe la configuro contra la nada.
+// Con la base de la compilación (ver shared/lib/direccionesPublicas): en el 360
+// salía sin el /crm y daba 404; aquí la base es la raíz, pero la regla es la misma.
 function urlWebhook(projectId: number | null | undefined): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined)
-    || `${window.location.origin}/api`;
-  const raiz = base.replace(/\/+$/, '');
-  return `${raiz}/stripe-webhook/${projectId ?? ''}`;
+  return apiPublicUrl(`/stripe-webhook/${projectId ?? ''}`);
 }
 
 /**
@@ -56,6 +63,10 @@ const EVENTOS_DEL_WEBHOOK = [
   'charge.succeeded', 'charge.updated', 'charge.refunded', 'charge.failed',
   'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed',
   'payment_intent.succeeded', 'payment_intent.payment_failed',
+  // Los links de pago (CRM#680, fase 3): el pago del link y sus intentos. Fuera de
+  // ellos el CRM no hace nada con un checkout (sin la marca del CRM, se descarta).
+  'checkout.session.completed', 'checkout.session.async_payment_succeeded',
+  'checkout.session.async_payment_failed', 'checkout.session.expired',
 ] as const;
 
 const EMPTY = (provider: Provider): Integration => ({
@@ -74,6 +85,10 @@ export default function IntegrationsPage() {
   // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
+  // Links de pago (CRM#680): si el servidor los tiene encendidos (`/auth/me`) y
+  // quien mira puede poner la clave o las reglas.
+  const linksPago = useLinksPagoEncendidos()
+    && (can('links_pago.configurar') || can('integrations.edit'));
 
   return (
     <div className="space-y-5 pb-8">
@@ -85,6 +100,9 @@ export default function IntegrationsPage() {
           </span>
         ) as unknown as string}
         subtitle={`Configura conexiones externas (Stripe, Brevo, el campus Moodle) para ${activeProject?.nombre || 'el proyecto activo'}.`}
+        /* El recorrido de Stripe y los links (18/11): con un campus elegido, que es
+           cuando salen sus tarjetas. */
+        actions={pid ? <VerRecorrido id="integraciones-stripe" /> : null}
       />
 
       <div className="bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg p-4 text-sm space-y-2">
@@ -121,6 +139,12 @@ export default function IntegrationsPage() {
           <StripeCard projectId={pid} />
           {/* PayPal (#766): solo si el servidor tiene encendido PAYPAL_COBROS_ACTIVO. */}
           <PaypalSiEstaEncendido key={`paypal-${pid}`} projectId={pid} />
+          {/* Links de pago (#407, gemela de CRM#680): la clave de escritura, aparte de la
+              de lectura de arriba. Sale si el servidor los tiene encendidos: en
+              producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
+          {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
+              enseñaba un momento el descuento del campus anterior. */}
+          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -130,6 +154,15 @@ export default function IntegrationsPage() {
 }
 
 // ─── Stripe ───────────────────────────────────────────────────────────────
+async function copiarDireccion(url: string) {
+  try {
+    await navigator.clipboard.writeText(url);
+    toast({ title: 'Dirección copiada', description: 'Pégala en Stripe tal cual.' });
+  } catch {
+    toast({ title: 'No se ha podido copiar', description: url, variant: 'destructive' });
+  }
+}
+
 function StripeCard({ projectId }: { projectId: number }) {
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
@@ -295,7 +328,7 @@ function StripeCard({ projectId }: { projectId: number }) {
           </div>
         )}
 
-        <div>
+        <div data-recorrido="stripe-clave">
           <label className="text-[11px] font-semibold text-muted-foreground mb-1 block">
             Access token {data?.has_secret && <span className="font-normal text-muted-foreground/80 ml-1">(actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code> — deja vacío para no cambiar)</span>}
           </label>
@@ -336,7 +369,7 @@ function StripeCard({ projectId }: { projectId: number }) {
             Presentarlo como obligatorio dejaba el alta a
             medias en apariencia, y empujaba a publicar un endpoint que sin
             secreto se rechaza igual. Va plegado. */}
-        <details className="rounded-md border border-border bg-muted/20 p-3">
+        <details className="rounded-md border border-border bg-muted/20 p-3" data-recorrido="stripe-webhook">
           <summary className="text-[11px] font-semibold cursor-pointer select-none">
             Webhook <span className="font-normal text-muted-foreground">— opcional, solo para no esperar los cinco minutos</span>
           </summary>
@@ -359,9 +392,17 @@ function StripeCard({ projectId }: { projectId: number }) {
           <label className="text-[11px] font-semibold text-muted-foreground mt-3 mb-1 block">
             Direccion que hay que pegar en Stripe
           </label>
-          <code className="block w-full px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
-            {urlWebhook(projectId)}
-          </code>
+          <div className="flex items-stretch gap-2">
+            <code className="block flex-1 min-w-0 px-3 py-2 rounded-md border border-border bg-muted/40 text-xs font-mono break-all">
+              {urlWebhook(projectId)}
+            </code>
+            {/* Copiarla tal cual (18/11): a mano se perdía un trozo. */}
+            <button type="button" onClick={() => copiarDireccion(urlWebhook(projectId))}
+              aria-label="Copiar la dirección del webhook"
+              className="inline-flex items-center gap-1 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted">
+              <Copy size={13} weight="bold" aria-hidden="true" /> Copiar
+            </button>
+          </div>
           </div>
         </details>
 
@@ -386,6 +427,211 @@ function StripeCard({ projectId }: { projectId: number }) {
             <button onClick={clear}
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-red-300 dark:border-red-900 bg-card text-sm font-semibold text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/30 ml-auto">
               <Trash size={14} weight="bold" /> Eliminar
+            </button>
+          )}
+        </div>
+      </div>
+      {loading && <div className="px-5 py-3 text-xs text-muted-foreground border-t border-border">Cargando…</div>}
+    </div>
+  );
+}
+
+// ─── Links de pago (Stripe, escritura) ────────────────────────────────────
+// CRM#680, fase 1. La clave que podrá CREAR links de pago, en un hueco aparte de la
+// de lectura del sondeo: si esta falla o se borra, los cobros siguen entrando.
+// «Probar conexión» solo hace GET de un elemento; no crea nada en Stripe.
+const PERMISOS_DE_LA_CLAVE: ReadonlyArray<{ clave: string; nombre: string; nivel: string }> = [
+  { clave: 'payment_links', nombre: 'Payment Links', nivel: 'Escritura' },
+  { clave: 'products', nombre: 'Products', nivel: 'Escritura' },
+  { clave: 'prices', nombre: 'Prices', nivel: 'Escritura' },
+  { clave: 'checkout_sessions', nombre: 'Checkout Sessions', nivel: 'Lectura' },
+  // Fase 2: para ver y cambiar el webhook de la cuenta desde aquí. No se prueba
+  // con «Probar conexión»: si falta, lo dice el bloque del webhook.
+  { clave: 'webhook_endpoints', nombre: 'Webhook Endpoints', nivel: 'Escritura' },
+];
+
+type Permisos = Record<string, boolean | null>;
+
+function StripeLinksCard({ projectId }: { projectId: number }) {
+  const { can } = usePermission();
+  const puedeEditar = can('integrations.edit');
+  const puedeConfigurar = can('links_pago.configurar');
+  const [data, setData] = useState<Integration | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [apiKey, setApiKey] = useState('');
+  const [showKey, setShowKey] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [permisos, setPermisos] = useState<Permisos | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get<Integration>(`/integrations/stripe_links?projectId=${projectId}`);
+      if (res.success) setData(res.data || EMPTY('stripe_links'));
+    } catch {/* ignore */} finally { setLoading(false); }
+  }, [projectId]);
+  useEffect(() => { load(); setPermisos(null); }, [load]);
+
+  async function save() {
+    if (!apiKey.trim()) {
+      toast({ title: 'Falta la clave', description: 'Pega la clave restringida (rk_…) que creó Diego para los links.', variant: 'destructive' });
+      return;
+    }
+    setSaving(true);
+    try {
+      const res = await client.put<Integration>('/integrations', {
+        projectId, provider: 'stripe_links', active: true, api_key: apiKey.trim(),
+      });
+      if (res.success) {
+        setData(res.data);
+        setApiKey('');
+        setPermisos(null);
+        toast({ title: 'Clave de links guardada', description: 'Queda cifrada. Pulsa «Probar conexión».' });
+      }
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido guardar', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setSaving(false); }
+  }
+
+  async function test() {
+    setTesting(true);
+    try {
+      const res = await client.post<{ ok: boolean; message: string; permisos?: Permisos }>(`/integrations/stripe_links/test?projectId=${projectId}`);
+      setPermisos(res.data?.permisos || null);
+      if (res.success) toast({ title: '✓ Conexión OK', description: res.data?.message });
+      else toast({ title: 'La prueba ha fallado', description: res.data?.message || 'Stripe no ha contestado.', variant: 'destructive' });
+      await load();
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string } };
+      toast({ title: 'La prueba ha fallado', description: err?.data?.error || 'Error de red', variant: 'destructive' });
+    } finally { setTesting(false); }
+  }
+
+  async function clear() {
+    if (!confirm('¿Quitar la clave de links de pago de este campus? La de lectura (tarjeta «Stripe») no se toca.')) return;
+    try {
+      await client.delete(`/integrations/stripe_links?projectId=${projectId}`);
+      toast({ title: 'Clave de links quitada' });
+      setData(EMPTY('stripe_links')); setApiKey(''); setPermisos(null);
+    } catch (e: unknown) {
+      const err = e as { message?: string };
+      toast({ title: 'No se ha podido quitar', description: err?.message, variant: 'destructive' });
+    }
+  }
+
+  const modo = data?.config_public?.modo;
+  const restringida = String(data?.config_public?.restringida) === 'true';
+  // Lo de la última prueba: el servidor lo guarda, así se ve también al volver.
+  const vistos: Permisos | null = permisos
+    ?? ((data?.config_public as unknown as { permisos?: Permisos | null } | undefined)?.permisos || null);
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="px-5 py-4 border-b border-border flex items-start gap-3">
+        <div className="w-10 h-10 rounded-lg bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+          <LinkSimple size={22} weight="duotone" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-base flex flex-wrap items-center gap-2">
+            Links de pago
+            {SOLO_EN_PRUEBAS && (
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning-soft text-warning-soft-foreground">PRUEBAS</span>
+            )}
+          </h3>
+          <p className="text-xs text-muted-foreground">
+            La clave con la que el CRM <strong>creará</strong> links de pago en la cuenta de Stripe de este campus.
+            Va aparte de la de lectura de arriba, que no se toca. Con ella se crean los links desde la ficha del prospecto y de la venta.
+          </p>
+        </div>
+        <StatusPill data={data} />
+      </div>
+
+      <div className="p-5 space-y-4">
+        <div className="rounded-md border border-border bg-muted/30 p-3 text-xs space-y-2">
+          <p className="font-semibold">Qué permisos tiene que llevar la clave restringida</p>
+          <p className="text-muted-foreground">
+            En <a href="https://dashboard.stripe.com/apikeys" target="_blank" rel="noopener noreferrer" className="text-primary inline-flex items-center gap-0.5 hover:underline">dashboard.stripe.com/apikeys <ArrowSquareOut size={10} weight="bold" /></a> →
+            «Create restricted key». Primero en <strong>modo test</strong>. Todo lo demás, en <em>None</em>:
+          </p>
+          <ul className="grid grid-cols-1 sm:grid-cols-2 gap-1">
+            {PERMISOS_DE_LA_CLAVE.map((x) => {
+              const visto = vistos ? vistos[x.clave] : undefined;
+              return (
+                <li key={x.clave} className="flex items-center gap-1.5">
+                  {visto === true && <CheckCircle size={12} weight="fill" className="text-success flex-shrink-0" aria-hidden="true" />}
+                  {visto === false && <WarningCircle size={12} weight="fill" className="text-destructive flex-shrink-0" aria-hidden="true" />}
+                  {(visto === undefined || visto === null) && <MinusCircle size={12} className="text-muted-foreground flex-shrink-0" aria-hidden="true" />}
+                  <span><strong>{x.nombre}</strong> · {x.nivel}</span>
+                  {visto === true && <span className="text-success-soft-foreground">(la lee)</span>}
+                  {visto === false && <span className="text-destructive-soft-foreground">(sin permiso)</span>}
+                </li>
+              );
+            })}
+          </ul>
+          <p className="text-muted-foreground">
+            Con cuotas harán falta también <em>Subscriptions</em> y <em>Subscription Schedules</em> con escritura.
+            «Probar conexión» solo lee (no crea nada en Stripe), así que dice si cada permiso <strong>lee</strong>;
+            la escritura se confirmará con el primer link de prueba.
+          </p>
+        </div>
+
+        <div data-recorrido="links-clave">
+          <label htmlFor={`stripe-links-key-${projectId}`} className="text-[11px] font-semibold text-muted-foreground mb-1 block">
+            Clave restringida de escritura
+            {data?.has_secret && (
+              <span className="font-normal text-muted-foreground/80 ml-1">
+                (actualmente: <code className="bg-muted px-1 rounded text-[10px]">{data.secret_preview}</code>
+                {modo && <> · {modo === 'live' ? 'LIVE' : 'TEST'}{restringida ? ', restringida' : ', secreta'}</>}
+                {' '}— deja vacío para no cambiar)
+              </span>
+            )}
+          </label>
+          <div className="relative">
+            <input
+              id={`stripe-links-key-${projectId}`}
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              autoComplete="off"
+              disabled={!puedeEditar}
+              placeholder={data?.has_secret ? 'Sin cambios' : 'rk_test_… (primero en modo test)'}
+              className="w-full h-10 pl-3 pr-10 rounded-md border border-border bg-card text-sm font-mono disabled:opacity-60"
+            />
+            <button type="button" onClick={() => setShowKey((v) => !v)} aria-label={showKey ? 'Ocultar la clave' : 'Ver la clave'}
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground">
+              {showKey ? <EyeSlash size={14} /> : <Eye size={14} />}
+            </button>
+          </div>
+          {data?.has_secret && modo && !restringida && (
+            <p className="text-[11px] text-warning-soft-foreground mt-1.5">
+              Es la clave secreta de la cuenta (sk_…), con todos los permisos. Mejor una restringida solo para los links.
+            </p>
+          )}
+        </div>
+
+        {/* Las reglas del campus y el webhook de la cuenta (CRM#680, fase 2): solo quien configura. */}
+        {puedeConfigurar && <ReglasDeLosLinks key={`reglas-${projectId}`} projectId={projectId} />}
+        {puedeConfigurar && data?.has_secret && <WebhookDeLaCuentaBloque key={`webhook-${projectId}`} projectId={projectId} />}
+
+        <TestStatus data={data} />
+
+        <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
+          <button onClick={save} disabled={saving || !puedeEditar}
+            title={!puedeEditar ? 'Hace falta «Configurar integraciones»' : undefined}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
+            <FloppyDisk size={14} weight="bold" /> {saving ? 'Guardando…' : 'Guardar'}
+          </button>
+          <button onClick={test} disabled={testing || !data?.has_secret || !puedeEditar}
+            title={!data?.has_secret ? 'Guarda primero la clave' : 'Probar la clave con Stripe (solo lee)'}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" /> {testing ? 'Probando…' : 'Probar conexión'}
+          </button>
+          {data?.has_secret && puedeEditar && (
+            <button onClick={clear}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-destructive/30 bg-card text-sm font-semibold text-destructive hover:bg-destructive-soft ml-auto">
+              <Trash size={14} weight="bold" /> Quitar
             </button>
           )}
         </div>
@@ -580,8 +826,7 @@ const EVENTOS_PAYPAL = [
 ] as const;
 
 function urlWebhookPaypal(projectId: number): string {
-  const base = (import.meta.env.VITE_API_URL as string | undefined) || `${window.location.origin}/api`;
-  return `${base.replace(/\/+$/, '')}/paypal-webhook/${projectId}`;
+  return apiPublicUrl(`/paypal-webhook/${projectId}`);
 }
 
 function PaypalSiEstaEncendido({ projectId }: { projectId: number }) {
@@ -771,6 +1016,8 @@ function PaypalCard({ projectId }: { projectId: number }) {
 // config_public.url y el token, cifrado, como las demás claves. Con él, el CRM
 // comprueba que el correo de cada tutor es usuario del campus.
 function MoodleCard({ projectId }: { projectId: number }) {
+  // El plugin del CRM: en /staging y en local, o si el servidor lo tiene aprobado (#517).
+  const pluginMoodle = usePluginMoodle();
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -867,6 +1114,14 @@ function MoodleCard({ projectId }: { projectId: number }) {
       </div>
 
       <div className="p-5 space-y-4">
+        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#406). En producción,
+            solo con PLUGIN_MOODLE_EN_PRODUCCION=1 en el servidor (`shared/lib/pluginMoodle`). */}
+        {pluginMoodle && (
+          <>
+            <PluginDelCrm projectId={projectId} alConectar={load} />
+            <p className="text-xs font-semibold text-muted-foreground">O, sin el plugin, a mano:</p>
+          </>
+        )}
         <button onClick={() => setShowHelp((v) => !v)}
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
           <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo obtener el token del campus'}
@@ -950,6 +1205,137 @@ function MoodleCard({ projectId }: { projectId: number }) {
         </div>
       </div>
       {loading && <div className="px-5 py-3 text-xs text-muted-foreground border-t border-border">Cargando…</div>}
+    </div>
+  );
+}
+
+// ─── Plugin del CRM en el Moodle (#679) ───────────────────────────────────
+interface EstadoPlugin {
+  configurado: boolean;
+  activo: boolean;
+  ultimo_aviso_at: string | null;
+  clave_desde: string | null;
+  ruta: string;
+  /** El repaso de cada 15 minutos (plugin 1.8.0). */
+  sincronizado_at?: string | null;
+  sincronizacion_error?: string | null;
+  version_plugin?: string | null;
+}
+
+/**
+ * Conectar el campus con el plugin `local_crm`, como Certifex: se instala el plugin
+ * en el Moodle y se pega UN código. El plugin crea su token y se presenta al CRM, que
+ * guarda la conexión (dirección, token, «Leer las consultas») y le da su clave. Aquí
+ * se genera el código y se ve si el campus está avisando.
+ */
+function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar: () => void }) {
+  const [estado, setEstado] = useState<EstadoPlugin | null>(null);
+  const [codigo, setCodigo] = useState<{ codigo: string; expira_at: string } | null>(null);
+  const [trabajando, setTrabajando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    try {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) setEstado(res.data);
+    } catch {/* sin permiso: no se enseña */}
+  }, [projectId]);
+  useEffect(() => { setCodigo(null); cargar(); }, [cargar]);
+
+  // Mientras hay un código a la vista, se mira cada 5 s si el campus ya se ha conectado.
+  useEffect(() => {
+    if (!codigo) return undefined;
+    const t = setInterval(async () => {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`).catch(() => null);
+      if (res?.success && res.data.activo && res.data.clave_desde && (!estado?.clave_desde || res.data.clave_desde !== estado.clave_desde)) {
+        setEstado(res.data); setCodigo(null);
+        toast({ title: 'Campus conectado', description: 'El plugin ya está avisando al CRM.' });
+        alConectar();
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [codigo, projectId, estado?.clave_desde, alConectar]);
+
+  async function generar() {
+    setTrabajando(true);
+    try {
+      const res = await client.post<{ codigo: string; expira_at: string }>(`/consultas/campus/${projectId}/plugin/codigo`);
+      if (res.success) setCodigo(res.data);
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido generar el código', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setTrabajando(false); }
+  }
+
+  async function apagar() {
+    if (!confirm('El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?')) return;
+    setTrabajando(true);
+    try {
+      const res = await client.delete<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) { setEstado(res.data); setCodigo(null); }
+    } finally { setTrabajando(false); }
+  }
+
+  if (!estado) return null;
+  const conectado = estado.activo;
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-4" data-testid="plugin-del-crm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">Plugin del CRM <EtiquetaEnPruebas /></p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Los mensajes del campus llegan al momento y las tutoras contestan desde el CRM.
+          </p>
+        </div>
+        {conectado ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[11px] font-bold text-success-soft-foreground">
+            <CheckCircle size={12} weight="fill" aria-hidden />
+            {estado.ultimo_aviso_at ? `Conectado · último aviso ${fmt(estado.ultimo_aviso_at)}` : 'Conectado · sin mensajes todavía'}
+          </span>
+        ) : (
+          <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-bold text-muted-foreground">Sin conectar</span>
+        )}
+      </div>
+      {conectado && (estado.sincronizado_at || estado.sincronizacion_error) && (
+        <p className={`mt-2 text-xs ${estado.sincronizacion_error ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {estado.sincronizacion_error
+            ? <>{estado.sincronizacion_error}{estado.sincronizado_at ? ` · último repaso bueno ${fmt(estado.sincronizado_at)}` : ''}</>
+            : <>Al día · repasado {fmt(estado.sincronizado_at!)}{estado.version_plugin ? ` · plugin ${estado.version_plugin}` : ''}</>}
+        </p>
+      )}
+
+      {codigo ? (
+        <div className="space-y-2 rounded-md bg-muted/60 p-3">
+          <ol className="list-decimal space-y-1 pl-4 text-xs text-foreground">
+            <li>Instala el plugin <code>local_crm</code> en el Moodle (Extensiones › Instalar complementos, con el ZIP).</li>
+            <li>En el Moodle: <strong>Extensiones › Extensiones locales › Conectar con el CRM</strong>.</li>
+            <li>Pega este código y pulsa <strong>Conectar</strong>. Nada más.</li>
+          </ol>
+          <div className="flex items-start gap-2">
+            <code className="min-w-0 flex-1 break-all rounded border border-border bg-card px-2 py-1.5 text-[11px] leading-5" data-testid="codigo-de-conexion">{codigo.codigo}</code>
+            <button type="button"
+              onClick={() => navigator.clipboard?.writeText(codigo.codigo).then(() => toast({ title: 'Código copiado' }), () => {})}
+              className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+              Copiar
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Sirve una vez y caduca el {fmt(codigo.expira_at)}. Esta pantalla avisa sola cuando el campus se conecte.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={generar} disabled={trabajando}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" aria-hidden /> {conectado ? 'Volver a conectar' : 'Conectar campus'}
+          </button>
+          {conectado && (
+            <button type="button" onClick={apagar} disabled={trabajando}
+              className="inline-flex h-9 items-center rounded-md border border-destructive/30 bg-card px-3 text-sm font-semibold text-destructive hover:bg-destructive-soft disabled:opacity-50">
+              Desconectar
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

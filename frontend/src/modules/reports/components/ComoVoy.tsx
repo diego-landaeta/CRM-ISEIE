@@ -273,7 +273,7 @@ interface Facturado {
  * la tarjeta «Productos vendidos» (`rangeFor('mes')`): mismo periodo y misma
  * consulta, así que las dos cifras no pueden salir distintas.
  */
-function mesEnCurso() {
+export function mesEnCurso() {
   const hoy = new Date();
   const iso = (d: Date) =>
     `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;

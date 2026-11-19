@@ -18,7 +18,7 @@ import { toast } from '@/shared/hooks/useToast';
 */
 
 export default function EtiquetasDelChat({
-  conversacionId, puestas, esGrupo, deQuien, alCambiar,
+  conversacionId, puestas, esGrupo, deQuien, alCambiar, conTexto = false,
 }: {
   conversacionId: number;
   /** Las que ya tiene este chat, tal como vienen del servidor. */
@@ -27,6 +27,9 @@ export default function EtiquetasDelChat({
   /** De quién es la sesión, cuando un admin está mirando la de otra persona. */
   deQuien?: number | null;
   alCambiar: () => void;
+  /** Con su nombre al lado del icono: dentro del menu «Mas» del telefono, donde
+   *  va en una lista y un icono suelto no se entiende (#128). */
+  conTexto?: boolean;
 }) {
   const [todas, setTodas] = useState<EtiquetaWhatsapp[] | null>(null);
   const [abierto, setAbierto] = useState(false);
@@ -80,7 +83,7 @@ export default function EtiquetasDelChat({
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
-        className="wa-btn-etiquetas"
+        className={`wa-btn-etiquetas${conTexto ? ' wa-btn-etiquetas-texto' : ''}`}
         aria-expanded={abierto}
         // Sin esto el lector de pantalla anunciaba el contador («2») como nombre del botón.
         aria-label={puestas.length
@@ -91,6 +94,7 @@ export default function EtiquetasDelChat({
           : 'Poner una etiqueta de WhatsApp'}
       >
         <Tag size={17} weight={puestas.length ? 'fill' : 'regular'} />
+        {conTexto && <span aria-hidden="true">Etiquetas de WhatsApp</span>}
         {puestas.length > 0 && <span className="wa-etiquetas-cuantas">{puestas.length}</span>}
       </button>
 

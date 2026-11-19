@@ -17,7 +17,7 @@
   Vive en `shared/` porque los dos CRMs enseñan exactamente el mismo bloque.
 */
 import { useEffect, useState } from 'react';
-import { UserFocus, Clock, Handshake, ChatCircleText, Phone, EnvelopeSimple, NotePencil } from '@phosphor-icons/react';
+import { UserFocus, Clock, Handshake, ChatCircleText, Phone, EnvelopeSimple, NotePencil, WhatsappLogo, Microphone, Paperclip } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
@@ -95,6 +95,9 @@ export default function PanelSeguimiento({ projectId, issuerId, from, to , onDat
   const c = datos.cohorte || {};
   const a = datos.actividad || {};
   const t = a.por_tipo || {};
+  // Escrito contra voz (#180, gemela de CRM#128). Con ceros por defecto: un CRM sin WhatsApp
+  // instalado no tiene estas filas y el bloque no debe pintar «undefined».
+  const vs = a.whatsapp_saliente || { escrito: 0, voz: 0, adjunto: 0, pct_voz: 0 };
   const sinTocar = Math.max(0, Number(c.entraron || 0) - Number(c.con_seguimiento || 0));
 
   const primerContacto = comoSeDice(c.mediana_primer_contacto_seg);
@@ -215,6 +218,36 @@ export default function PanelSeguimiento({ projectId, issuerId, from, to , onDat
                 <strong className="text-foreground tabular-nums">{t[k]}</strong> {label}
               </span>
             ))}
+          </p>
+        )}
+        {/* Escrito contra voz (#180, gemela de CRM#128).
+            Diego lo pidió para los canales de ventas, y el documento comercial
+            dice que el saludo del día 1 «funciona mejor en nota de voz». Hasta
+            ahora eso se repetía de oídas: aquí se cuenta.
+            Solo lo que SALE: los audios que recibe una gestora dirían que
+            trabaja más quien tiene clientes habladores. */}
+        {(vs.escrito > 0 || vs.voz > 0 || vs.adjunto > 0) && (
+          <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
+            <span className="inline-flex items-center gap-1">
+              <WhatsappLogo size={12} />
+              De lo que sale por WhatsApp:
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <strong className="text-foreground tabular-nums">{vs.escrito}</strong> escrito
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <Microphone size={12} />
+              <strong className="text-foreground tabular-nums">{vs.voz}</strong> de voz
+              {(vs.escrito > 0 || vs.voz > 0) && (
+                <span className="tabular-nums"> ({vs.pct_voz}%)</span>
+              )}
+            </span>
+            {vs.adjunto > 0 && (
+              <span className="inline-flex items-center gap-1">
+                <Paperclip size={12} />
+                <strong className="text-foreground tabular-nums">{vs.adjunto}</strong> con archivo
+              </span>
+            )}
           </p>
         )}
         <p className="mt-1.5 text-[11px] text-muted-foreground">

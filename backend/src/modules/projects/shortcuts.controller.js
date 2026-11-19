@@ -75,6 +75,11 @@ export async function getUltimoLead(req, res, next) {
                 responsable_id, id, nombre, entro, producto_interes_id,
                 -- De donde entro. Es lo que Diego pide ver junto al nombre:
                 -- no es lo mismo un lead de WhatsApp que uno de un anuncio.
+                -- Primero el canal que deduce el CRM (#48: UTM y referrer,
+                -- ChatGPT incluido); si no lo hay, lo que trajo el formulario.
+                (SELECT lu.canal_detectado::text FROM lead_utms lu
+                  WHERE lu.lead_id = mios.id AND lu.canal_detectado IS NOT NULL
+                  ORDER BY lu.id DESC LIMIT 1) AS canal_codigo,
                 COALESCE(custom_fields->>'origen', custom_fields->>'canal',
                          CASE WHEN landing_url IS NOT NULL THEN 'Formulario web' END,
                          'Sin origen') AS canal
@@ -85,6 +90,13 @@ export async function getUltimoLead(req, res, next) {
               ul.nombre AS lead_nombre,
               ul.entro  AS lead_entro,
               p.nombre  AS lead_producto,
+              -- La pantalla lee lead_canal. Antes canal se calculaba
+              -- arriba y no se devolvía, y la columna salía «—» en todas (#534,
+              -- parte 6). lead_canal_codigo es el del CRM (meta_ads,
+              -- chatgpt_ia…), para pintarlo con su icono; lead_canal, el
+              -- texto, también cuando no hay código.
+              ul.canal_codigo AS lead_canal_codigo,
+              ul.canal  AS lead_canal,
               ROUND(EXTRACT(EPOCH FROM (NOW() - ul.entro)) / 3600)::int AS horas_sin_recibir,
               COUNT(*) FILTER (WHERE m.entro >= date_trunc('day',   NOW()))::int AS hoy,
               COUNT(*) FILTER (WHERE m.entro >= date_trunc('week',  NOW()))::int AS semana,
@@ -94,7 +106,7 @@ export async function getUltimoLead(req, res, next) {
          LEFT JOIN mios   m  ON m.responsable_id  = u.id
          LEFT JOIN products p ON p.id = ul.producto_interes_id
         WHERE u.id = ANY($2::int[])
-        GROUP BY u.id, u.nombre, u.avatar_url, ul.id, ul.nombre, ul.entro, p.nombre
+        GROUP BY u.id, u.nombre, u.avatar_url, ul.id, ul.nombre, ul.entro, ul.canal_codigo, ul.canal, p.nombre
         ORDER BY ul.entro DESC NULLS LAST`,
       [proyectos, gestores.map((g) => g.id)]
     );
@@ -107,7 +119,8 @@ export async function getUltimoLead(req, res, next) {
       if (!vistos.has(g.id)) {
         filas.push({ id: g.id, gestora: g.nombre, avatar_url: g.avatar_url || null,
                      lead_id: null, lead_nombre: null, lead_entro: null,
-                     lead_producto: null, horas_sin_recibir: null,
+                     lead_producto: null, lead_canal: null, lead_canal_codigo: null,
+                     horas_sin_recibir: null,
                      hoy: 0, semana: 0, mes: 0 });
       }
     }

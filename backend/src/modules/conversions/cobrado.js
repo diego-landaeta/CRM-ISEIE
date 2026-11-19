@@ -20,6 +20,8 @@
   (`scripts/datos-que-no-cuadran.mjs`, «Cobrado guardado distinto de sus pagos»).
 */
 
+import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
+
 /** Subconsulta: lo cobrado de la venta con alias `a` (suma de sus pagos). */
 export const COBRADO_DE = (a = 'c') =>
   `(SELECT COALESCE(SUM(cp.importe), 0) FROM conversion_payments cp WHERE cp.conversion_id = ${a}.id)`;
@@ -30,6 +32,21 @@ export const COBRADO_DE = (a = 'c') =>
  * Devuelve lo cobrado, ya como número.
  */
 export async function recalcularCobrado(db, conversionId) {
+  // Matrícula en Moodle (#767): hace falta saber si ANTES había algo cobrado
+  // («con el primer pago»). Solo se pregunta con el interruptor encendido;
+  // apagado, esta función hace exactamente la misma consulta que antes.
+  // `antes` es el campo guardado: si una venta vieja lo tenía descuadrado por
+  // arriba (#692), su primer pago real no programa nada. Mejor una matrícula
+  // de menos, que se ve, que matricular otra vez a un alumno antiguo.
+  const conMatricula = matriculaMoodleActiva();
+  let antes = null;
+  if (conMatricula) {
+    const { rows: previo } = await db.query(
+      'SELECT importe_pagado FROM conversions WHERE id = $1', [conversionId]
+    );
+    antes = previo[0] ? Number(previo[0].importe_pagado) : null;
+  }
+
   const { rows } = await db.query(
     `UPDATE conversions c
         SET importe_pagado = ${COBRADO_DE('c')}, updated_at = NOW()
@@ -37,5 +54,12 @@ export async function recalcularCobrado(db, conversionId) {
       RETURNING c.importe_pagado`,
     [conversionId]
   );
-  return rows[0] ? Number(rows[0].importe_pagado) : null;
+  const ahora = rows[0] ? Number(rows[0].importe_pagado) : null;
+
+  // En la MISMA transacción que el cobro: si el cobro se deshace, esto también.
+  if (conMatricula && ahora !== null) {
+    const { alCambiarElCobro } = await import('../matricula-moodle/matricula-moodle.service.js');
+    await alCambiarElCobro(db, conversionId, { antes, ahora });
+  }
+  return ahora;
 }
