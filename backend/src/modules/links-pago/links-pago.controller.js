@@ -2,6 +2,7 @@ import * as model from './links-pago.model.js';
 import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
+  ventasProspectoSchema, planQuerySchema, planBodySchema,
 } from './links-pago.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -186,17 +187,113 @@ export async function crear(req, res, next) {
       throw new AppError('Ese curso no es del catálogo de este campus', 400, 'VALIDATION_ERROR');
     }
     const cfg = await model.config(destino.projectId);
+    const pendiente = destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined;
+    // CRM#909: desde una venta, nunca por encima de lo que queda por cobrar.
+    service.noPasaDelPendiente({ importe: b.importe, moneda: b.moneda || cfg.moneda_defecto, pendiente });
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
       modalidad: b.modalidad, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
-      pendiente: destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined,
+      pendiente,
     });
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
       prod, reglas, importe: b.importe, userId: Number(req.user.userId),
     });
     res.status(201).json({ success: true, data: link });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/ventas-del-prospecto?leadId=N (o ?conversionId=N: el de esa venta)
+// El prospecto (nombre, correo y teléfono para mandarle el link) y sus ventas
+// con lo pendiente. Un prospecto fuera de su campus o de su alcance, 404.
+export async function ventasDelProspecto(req, res, next) {
+  try {
+    const parsed = ventasProspectoSchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const destino = await destinoSuyo(req, parsed.data);
+    if (!destino.leadId) throw new AppError('Esa venta no tiene prospecto', 404, 'NOT_FOUND');
+    const [l, ventas] = await Promise.all([model.lead(destino.leadId), model.ventasDelProspecto(destino.leadId)]);
+    res.json({
+      success: true,
+      data: {
+        lead: { id: l.id, nombre: l.nombre, email: l.email, telefono: l.telefono,
+          project_id: Number(l.project_id), producto_interes_id: l.producto_interes_id },
+        ventas,
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+// ─── Plan de pago (Diego, 19/11/2026) ───────────────────────────────────────
+/*
+  «Generar plan de pago»: desde una venta con plan de cuotas, un link de Stripe
+  por cada cuota pendiente, con su importe y su fecha. Al pagarlo, el cobro salda
+  ESA cuota (`installment_id` del link → `addPayment(..., { cuotaId })`).
+  Una cuota que ya tiene un link vivo no se vuelve a generar: se devuelve el suyo.
+*/
+async function planDe(req, conversionId) {
+  const destino = await destinoSuyo(req, { conversionId });
+  const venta = await model.ventaParaPlan(destino.conversionId);
+  const cuotas = await model.cuotasPendientes(destino.conversionId);
+  return { destino, venta, cuotas };
+}
+
+// GET /api/links-pago/plan?conversionId=N
+export async function verPlan(req, res, next) {
+  try {
+    const parsed = planQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const { venta, cuotas } = await planDe(req, parsed.data.conversionId);
+    res.json({ success: true, data: { venta, cuotas } });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/plan { conversionId, cuotaIds? }
+export async function generarPlan(req, res, next) {
+  try {
+    const parsed = planBodySchema.safeParse(req.body || {});
+    if (!parsed.success) throw fallo(parsed);
+    const { destino, venta, cuotas } = await planDe(req, parsed.data.conversionId);
+    if (!cuotas.length) {
+      throw new AppError('Esta venta no tiene cuotas pendientes. Si va a plazos, crea antes su plan de cuotas en la venta.', 400, 'SIN_CUOTAS');
+    }
+    const pedidas = parsed.data.cuotaIds ? new Set(parsed.data.cuotaIds.map(Number)) : null;
+    if (pedidas && [...pedidas].some((cid) => !cuotas.some((c) => Number(c.id) === cid))) {
+      throw new AppError('Alguna de esas cuotas no es de esta venta o ya está cobrada.', 400, 'VALIDATION_ERROR');
+    }
+    const elegidas = cuotas.filter((c) => !pedidas || pedidas.has(Number(c.id)));
+    const nuevas = elegidas.filter((c) => !c.link_id);
+    if (!venta.producto_contratado_id) {
+      throw new AppError('La venta no tiene curso: ponle el curso antes de generar el plan de pago.', 400, 'VENTA_SIN_CURSO');
+    }
+    const prod = await model.producto(venta.producto_contratado_id);
+    if (!prod || Number(prod.project_id) !== destino.projectId) {
+      throw new AppError('El curso de la venta no es del catálogo de este campus.', 400, 'VALIDATION_ERROR');
+    }
+    // Entre todas, nunca más de lo que queda por cobrar de la venta (CRM#909).
+    const suma = nuevas.reduce((t, c) => t + Number(c.importe || 0), 0);
+    if (Math.round(suma * 100) > Math.round(Number(venta.pendiente || 0) * 100)) {
+      throw new AppError(`Las cuotas suman ${suma.toFixed(2)} € y a la venta le quedan ${Number(venta.pendiente || 0).toFixed(2)} € por cobrar. Revisa el plan de cuotas de la venta.`, 400, 'PASA_DEL_PENDIENTE');
+    }
+    const cfg = await model.config(destino.projectId);
+    const userId = Number(req.user.userId);
+    const creados = [];
+    for (const c of nuevas) {
+      const reglas = service.reglasDeCuota({ cfg, prod, vence: c.vence });
+      const link = await service.crear({
+        projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
+        prod, reglas, importe: Number(c.importe), userId, cuota: { id: c.id, numero: c.numero, vence: c.vence },
+      });
+      creados.push(Number(link.id));
+    }
+    // El plan tal como queda: cada cuota con su link (el nuevo o el que ya tenía).
+    const ahora = await model.cuotasPendientes(destino.conversionId);
+    res.status(creados.length ? 201 : 200).json({
+      success: true,
+      data: { venta, cuotas: ahora.filter((c) => !pedidas || pedidas.has(Number(c.id))), creados: creados.length,
+        ya_tenian: elegidas.length - nuevas.length },
+    });
   } catch (err) { next(err); }
 }
 

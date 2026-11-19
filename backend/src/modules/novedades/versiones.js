@@ -13,6 +13,41 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.8.0",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.0",
+    "intro": "Links de pago de Stripe a mano: en el menú, en cada venta y con plan de pago por cuotas.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "«Links de pago» en el menú",
+            "texto": "Una pantalla con todos tus links (creados, abiertos, pagados, caducados) y el botón «Crear link de pago». El asistente busca al alumno, te deja elegir a cuál de sus ventas va el link y te propone lo que le queda por pagar.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "Generar plan de pago",
+            "texto": "En una venta con cuotas, «Generar plan de pago» crea un link de Stripe por cada cuota pendiente, con su importe y su fecha. «Copiar todos» te deja el mensaje listo para mandárselo al alumno. Cuando paga un link, se salda esa cuota.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Los botones, donde los buscas",
+            "texto": "«Crear link de pago» arriba en la ficha del prospecto y en la de la venta, y «Link» y «Plan» en cada venta por cobrar de la lista de Ventas.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "2.7.7",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.7.7",

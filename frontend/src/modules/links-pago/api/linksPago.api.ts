@@ -11,7 +11,11 @@ export interface LinkDePago {
   id: number;
   project_id: number;
   lead_id: number | null;
+  lead_nombre?: string | null;
+  project_nombre?: string | null;
   conversion_id: number | null;
+  /** El programa de la venta a la que va el link (si va a una). */
+  venta_producto_nombre?: string | null;
   product_id: number | null;
   product_nombre: string | null;
   created_by: number | null;
@@ -58,6 +62,37 @@ export function listarLinks(params: { leadId?: number; conversionId?: number }) 
   return client.get<LinkDePago[]>('/links-pago', { params: { ...params, limit: 50 } });
 }
 
+/** La pantalla «Links de pago»: los del alcance de quien mira, paginados. */
+export function listarTodos(params: { estado?: EstadoLink | ''; page?: number; limit?: number; ambito?: { projectId?: number; issuerId?: number } }) {
+  const p: Record<string, unknown> = { page: params.page || 1, limit: params.limit || 25, ...(params.ambito || {}) };
+  if (params.estado) p.estado = params.estado;
+  return client.get<LinkDePago[]>('/links-pago', { params: p });
+}
+
+export interface VentaDelProspecto {
+  id: number;
+  project_id: number;
+  producto_contratado_id: number | null;
+  producto_nombre: string | null;
+  importe_total: number;
+  cobrado: number;
+  pendiente: number;
+  fecha_conversion: string | null;
+}
+
+export interface ProspectoDelLink {
+  lead: {
+    id: number; nombre: string | null; email: string | null; telefono: string | null;
+    project_id: number; producto_interes_id: number | null;
+  };
+  ventas: VentaDelProspecto[];
+}
+
+/** El prospecto (o el de una venta) y sus ventas con lo pendiente, para el asistente. */
+export function ventasDelProspecto(params: { leadId?: number; conversionId?: number }) {
+  return client.get<ProspectoDelLink>('/links-pago/ventas-del-prospecto', { params });
+}
+
 export function crearLink(cuerpo: {
   leadId?: number; conversionId?: number; productId: number; importe: number; moneda: string; caducidad_dias: number;
 }) {
@@ -82,4 +117,36 @@ export function verWebhook(projectId: number) {
 
 export function cambiarWebhook(projectId: number, accion: 'anadir_eventos' | 'activar' | 'desactivar') {
   return client.put<WebhookDeLaCuenta>('/links-pago/webhook', { projectId, accion });
+}
+
+/** «Generar plan de pago» (19/11): la venta y sus cuotas pendientes, cada una con su link vivo si lo tiene. */
+export interface CuotaDelPlan {
+  id: number;
+  numero: number;
+  importe: number;
+  vence: string | null;
+  concepto: string | null;
+  link_id: number | null;
+  link_estado: EstadoLink | null;
+  link_url: string | null;
+  link_caduca_el: string | null;
+}
+export interface PlanDePago {
+  venta: {
+    id: number; project_id: number; lead_id: number | null; lead_nombre: string | null; lead_email: string | null;
+    producto_contratado_id: number | null; producto_nombre: string | null;
+    importe_total: number; cobrado: number; pendiente: number;
+  };
+  cuotas: CuotaDelPlan[];
+  creados?: number;
+  ya_tenian?: number;
+}
+
+export function verPlan(conversionId: number) {
+  return client.get<PlanDePago>('/links-pago/plan', { params: { conversionId } });
+}
+
+/** Un link por cuota pendiente (las elegidas, o todas las que aún no tienen link). */
+export function generarPlan(conversionId: number, cuotaIds?: number[]) {
+  return client.post<PlanDePago>('/links-pago/plan', { conversionId, ...(cuotaIds?.length ? { cuotaIds } : {}) });
 }

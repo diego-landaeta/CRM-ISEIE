@@ -446,16 +446,17 @@ describe('crear un link desde una venta: el tope se mide contra lo pendiente', {
     await api.put('/api/links-pago/config').set(como(p.admin)).send({ projectId: A, descuento_max_pct: 0 });
   });
 
-  it('venta sin nada pendiente: solo el admin', async () => {
+  // CRM#909 (19/11): desde una venta, nunca por encima de lo pendiente, ni el
+  // admin. Una venta cobrada entera no admite links (antes, solo el admin).
+  it('venta sin nada pendiente: nadie le crea un link', async () => {
     const lead = await nuevoLead(A, p.gestora);
     const venta = await nuevaVenta(A, lead, { total: 500, producto: prod.A, vendedora: p.gestora });
     await q(`INSERT INTO conversion_payments (conversion_id, importe, fecha) VALUES ($1, 500, CURRENT_DATE)`, [venta]);
-    const r = await crear(p.gestora, { conversionId: venta, productId: prod.A, importe: 100 });
-    expect(r.status).toBe(403);
-    expect(r.body.code).toBe('SIN_PRECIO_COMPARABLE');
-    expect(r.body.error).toMatch(/nada pendiente/);
-    stripeCreaBien();
-    expect((await crear(p.admin, { conversionId: venta, productId: prod.A, importe: 100 })).status).toBe(201);
+    for (const quien of [p.gestora, p.admin]) {
+      const r = await crear(quien, { conversionId: venta, productId: prod.A, importe: 100 });
+      expect(r.status).toBe(400);
+      expect(r.body.code).toBe('LINK_SUPERA_PENDIENTE');
+    }
   });
 
   it('desde un prospecto, el tope sigue siendo el catálogo', async () => {

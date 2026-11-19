@@ -37,6 +37,7 @@ export interface PasoCobros extends PasoRecorrido {
 export type IdRecorridoCobros =
   | 'integraciones-stripe'
   | 'link-de-pago'
+  | 'links-pago'
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
@@ -158,6 +159,40 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('venta-cuotas'),
         titulo: 'Cuando el alumno paga',
         texto: 'No tienes que apuntar nada: el cobro entra solo en «Pagos registrados» y la cuota se marca como cobrada, con la etiqueta Stripe. El link pasa a «Pagado».',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
+  // ─── 2 bis · Comercial › Links de pago: la pantalla (Diego, 19/11) ──────────────
+  'links-pago': {
+    id: 'links-pago',
+    titulo: 'Links de pago',
+    permiso: ['links_pago.crear', 'links_pago.ver_todos'],
+    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Links de pago',
+        texto: 'Un link de pago es un enlace de Stripe: el alumno lo abre y paga con tarjeta, y el cobro entra solo en el CRM. Aquí los creas y ves cómo va cada uno. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('links-pantalla-crear'),
+        permiso: 'links_pago.crear',
+        titulo: 'Crear link de pago',
+        texto: 'Pulsa aquí. Buscas al prospecto, eliges a cuál de sus ventas va (o «sin venta todavía»), el curso y el importe. Si algo falta o no cuadra, el asistente te dice qué.',
+      },
+      {
+        donde: anclaje('links-pantalla-filtros'),
+        titulo: 'Por estado',
+        texto: 'Pendientes, abiertos, pagados, caducados o anulados. Cada gestora ve los suyos; quien ve los de todos, los de sus campus.',
+      },
+      {
+        donde: anclaje('links-pantalla-lista'),
+        titulo: 'Copiar, abrir o anular',
+        texto: 'Cada link con su alumno, su programa y la venta a la que va. «Copiar» lo deja listo para pegarlo en WhatsApp o en un correo; si te equivocaste, «Anular» y escribe por qué. Cuando lo paga, el cobro entra en su venta y salda su cuota.',
       },
       {
         titulo: 'Y listo',

@@ -18,7 +18,8 @@ import { COBRADO_DE } from '../conversions/cobrado.js';
 const COLUMNAS = `
   pl.id, pl.project_id, p.nombre AS project_nombre,
   pl.lead_id, l.nombre AS lead_nombre,
-  pl.conversion_id,
+  pl.conversion_id, cpr.nombre AS venta_producto_nombre,
+  pl.installment_id, ci.numero AS cuota_numero, ci.fecha_vencimiento AS cuota_vence,
   pl.product_id, pr.nombre AS product_nombre,
   pl.created_by, cr.nombre AS creado_por_nombre,
   pl.precio_catalogo, pl.importe, pl.descuento_pct, pl.moneda,
@@ -33,7 +34,10 @@ const UNIONES = `
   LEFT JOIN leads l     ON l.id = pl.lead_id
   LEFT JOIN products pr ON pr.id = pl.product_id
   LEFT JOIN users cr    ON cr.id = pl.created_by
-  LEFT JOIN users an    ON an.id = pl.anulado_por`;
+  LEFT JOIN users an    ON an.id = pl.anulado_por
+  LEFT JOIN conversions cv ON cv.id = pl.conversion_id
+  LEFT JOIN products cpr   ON cpr.id = cv.producto_contratado_id
+  LEFT JOIN conversion_installments ci ON ci.id = pl.installment_id`;
 
 /**
  * Los links del ámbito, del más nuevo al más viejo, paginados.
@@ -156,8 +160,31 @@ export async function guardarConfig(projectId, cambios) {
 /** El prospecto con lo que hace falta para decidir si la persona puede: campus y responsable. */
 export async function lead(leadId) {
   const { rows } = await query(
-    'SELECT id, project_id, responsable_id, nombre, email FROM leads WHERE id = $1', [leadId]);
+    'SELECT id, project_id, responsable_id, nombre, email, telefono, producto_interes_id FROM leads WHERE id = $1', [leadId]);
   return rows[0] || null;
+}
+
+/*
+  Las ventas de un prospecto, para elegir a cuál va el link (Diego, 19/11: «que
+  ese botón se pueda asociar a las ventas de un lead en específico»). Con su
+  programa, su total, lo cobrado (la suma de sus pagos, #692) y lo pendiente,
+  que es el importe que se propone y el tope del link (CRM#909).
+*/
+export async function ventasDelProspecto(leadId) {
+  const { rows } = await query(
+    `SELECT c.id, c.project_id, c.producto_contratado_id, pr.nombre AS producto_nombre,
+            c.importe_total, ${COBRADO_DE('c')} AS cobrado,
+            GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0) AS pendiente,
+            c.fecha_conversion, c.vendedora_id
+       FROM conversions c
+       LEFT JOIN products pr ON pr.id = c.producto_contratado_id
+      WHERE c.lead_id = $1
+      ORDER BY c.fecha_conversion DESC NULLS LAST, c.id DESC
+      LIMIT 50`,
+    [leadId]);
+  return rows.map((r) => ({
+    ...r, importe_total: Number(r.importe_total), cobrado: Number(r.cobrado), pendiente: Number(r.pendiente),
+  }));
 }
 
 /** La venta, con su prospecto y su curso. */
@@ -182,11 +209,11 @@ export async function producto(productId) {
 export async function insertar(l) {
   const { rows } = await query(
     `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
-        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10))
+        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10), $11)
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
-      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias]);
+      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null]);
   return rows[0];
 }
 
@@ -263,9 +290,45 @@ export async function campusDelWebhook(endpointId, projectIds) {
 export async function paraCobro(id) {
   const { rows } = await query(
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
-            estado, stripe_payment_link_id
+            estado, stripe_payment_link_id, installment_id
        FROM payment_links WHERE id = $1`,
     [id]);
+  return rows[0] || null;
+}
+
+/*
+  EL PLAN DE PAGO (Diego, 19/11): las cuotas por cobrar de la venta, por número,
+  con el link vivo que ya tenga cada una (si lo tiene). Una cuota con link vivo no
+  se vuelve a generar: se reenvía el que hay.
+*/
+export async function cuotasPendientes(conversionId) {
+  const { rows } = await query(
+    `SELECT ci.id, ci.numero, ci.importe_previsto::float8 AS importe, ci.fecha_vencimiento::text AS vence, ci.concepto,
+            l.id AS link_id, l.estado AS link_estado, l.url AS link_url, l.caduca_el AS link_caduca_el
+       FROM conversion_installments ci
+       LEFT JOIN LATERAL (
+         SELECT id, estado, url, caduca_el FROM payment_links
+          WHERE installment_id = ci.id AND estado IN ('creado', 'abierto')
+          ORDER BY id DESC LIMIT 1
+       ) l ON true
+      WHERE ci.conversion_id = $1 AND ci.fecha_cobro IS NULL
+      ORDER BY ci.numero`,
+    [conversionId]);
+  return rows;
+}
+
+/** La venta para el plan: su curso, su total, lo cobrado y lo pendiente, y su prospecto. */
+export async function ventaParaPlan(conversionId) {
+  const { rows } = await query(
+    `SELECT c.id, c.project_id, c.lead_id, l.nombre AS lead_nombre, l.email AS lead_email,
+            c.producto_contratado_id, pr.nombre AS producto_nombre,
+            c.importe_total::float8 AS importe_total, ${COBRADO_DE('c')}::float8 AS cobrado,
+            GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0)::float8 AS pendiente
+       FROM conversions c
+       LEFT JOIN leads l ON l.id = c.lead_id
+       LEFT JOIN products pr ON pr.id = c.producto_contratado_id
+      WHERE c.id = $1`,
+    [conversionId]);
   return rows[0] || null;
 }
 
