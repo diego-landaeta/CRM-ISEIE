@@ -13,6 +13,36 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.8.3",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.3",
+    "intro": "La inicial también por link de pago, y cada link con su venta.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "La inicial, con su link, y las cuotas, con el suyo",
+            "texto": "Al registrar una venta a plazos, en «Parcial» deja marcado «La inicial se paga con link de pago»: la inicial va como cuota 1 de hoy con su link y cada cuota con el suyo, en la fecha que pongas (por ejemplo, el 25 de cada mes). Al registrar la venta te los da todos para copiar.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Todo link de pago va con su venta",
+            "texto": "Ya no se crean links «sin venta»: si el prospecto no tiene ninguna, primero se registra la venta (y al registrarla sale el link).",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El número de la factura o proforma al registrar una venta sigue la numeración de las facturas y no se puede saltar: no se puede saltar ningún número de la serie."
+    ]
+  },
+  {
     "version": "2.8.2",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.8.2",

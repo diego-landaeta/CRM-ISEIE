@@ -56,6 +56,21 @@ export async function reservarNumero(client, projectId, issuerId, ano, serie, nu
        FROM invoices WHERE ano = $1 AND serie = $2 AND numero = $3 LIMIT 1`,
     [ano, serie, n]
   );
+  // Sin saltos (Diego, 19/11/2026: «tiene que seguir el número de las facturas»).
+  // Un 27500 escrito por error dejó el contador de CEDIA ahí y la siguiente iba a
+  // salir con ese número. Vale el siguiente o un hueco de antes, nunca saltar.
+  const { rows: [tope] } = await client.query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS usado`,
+    [ano, serie]);
+  const siguiente = Number(tope?.usado || 0) + 1;
+  if (n > siguiente) {
+    throw new AppError(
+      `El siguiente número de la serie ${serie} es el ${ano}/${String(siguiente).padStart(4, '0')}: `
+      + 'una serie fiscal no se salta números.', 400, 'NUMERO_SALTA');
+  }
   if (ocupado) {
     throw new AppError(
       `El número ${ano}/${String(n).padStart(4, '0')} ya lo tiene la factura de `

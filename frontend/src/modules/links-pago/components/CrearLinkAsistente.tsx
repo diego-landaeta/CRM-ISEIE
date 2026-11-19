@@ -139,10 +139,10 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
         if (!vigente || !r.data) return;
         setProspecto(r.data);
         const ventas = r.data.ventas || [];
-        // Venta elegida: la que viene; si solo tiene una, esa; si no tiene, «sin venta».
+        // Venta elegida: la que viene; si solo tiene una, esa. Sin ventas no hay link
+        // (Diego, 19/11/2026: el link de pago va con una venta).
         if (ventaInicial && ventas.some((v) => v.id === ventaInicial)) setVentaElegida(String(ventaInicial));
         else if (ventas.length === 1) setVentaElegida(String(ventas[0].id));
-        else if (ventas.length === 0) setVentaElegida(SIN_VENTA);
       })
       .catch((e) => { if (vigente) setError(`No se han podido cargar los datos del prospecto: ${errorDe(e)}`); })
       .finally(() => { if (vigente) setCargandoProspecto(false); });
@@ -214,7 +214,8 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   if (!consulta) motivos.push('Busca y elige el prospecto.');
   else if (cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (prospecto) {
-    if (!ventaElegida) motivos.push('Elige a qué venta va el link, o «Sin venta todavía».');
+    if (!(prospecto.ventas || []).length) motivos.push('Este prospecto no tiene ninguna venta: registra antes la venta («Convertir lead» en su ficha). Al registrarla, el link sale solo.');
+    else if (!ventaElegida || ventaElegida === SIN_VENTA) motivos.push('Elige a qué venta va el link.');
     if (!cfg) motivos.push('Cargando las reglas del campus…');
     if (cursosCargados && cursos.length === 0) motivos.push('Este campus no tiene cursos en el catálogo: sin curso no se puede crear el link.');
     if (cursos.length > 0 && !curso) motivos.push('Elige el curso.');
@@ -379,20 +380,25 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                         </span>
                       </label>
                     ))}
-                    <label className={`flex items-start gap-2 p-2 rounded-md border text-sm cursor-pointer ${sinVenta ? 'border-primary bg-primary/5' : 'border-border'}`}>
-                      <input type="radio" name="link-venta" value={SIN_VENTA} checked={sinVenta}
-                        onChange={() => setVentaElegida(SIN_VENTA)} className="mt-1" />
-                      <span>
-                        <span className="font-medium">Sin venta todavía</span>
-                        <span className="block text-xs text-muted-foreground">Cuando lo pague, el CRM crea la venta con este curso y este importe.</span>
-                      </span>
-                    </label>
+                    {/* Sin «Sin venta todavía» (Diego, 19/11/2026): el link va con una venta. */}
+                    {!ventas.length && (
+                      <div className="p-2.5 rounded-md border border-warning/40 bg-warning-soft text-sm" data-recorrido="links-asistente-sin-ventas">
+                        <p className="font-medium text-warning-soft-foreground">Este prospecto no tiene ninguna venta</p>
+                        <p className="text-xs text-warning-soft-foreground">El link de pago va con una venta. Registra antes la venta con «Convertir lead»: al registrarla, el link (o uno por cuota) sale solo.</p>
+                        {prospecto?.lead?.id && (
+                          <button type="button" onClick={() => { onClose(); navigate(`C:/Program Files/Git/leads/${prospecto.lead.id}`); }}
+                            className="mt-1.5 text-xs font-semibold underline text-warning-soft-foreground">
+                            Ir a su ficha para registrar la venta
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </section>
               )}
 
               {/* 3. Curso e importe */}
-              {prospecto && ventaElegida && (
+              {prospecto && venta && (
                 <section className="space-y-3" data-recorrido="links-asistente-importe">
                   <p className="text-xs font-semibold text-muted-foreground">3 · Curso e importe</p>
                   <div>
