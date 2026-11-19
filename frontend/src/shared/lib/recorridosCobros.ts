@@ -131,6 +131,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     pantalla: [
       'modules/links-pago/components/LinksDePagoCard.tsx',
       'modules/sales/pages/SaleDetailPage.tsx',
+      'modules/links-pago/components/AccionesCobroVenta.tsx',
     ],
     pasos: [
       {
@@ -147,8 +148,14 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       {
         donde: anclaje('links-crear'),
         permiso: 'links_pago.crear',
-        titulo: 'Pago único o por cuotas',
-        texto: 'Cada link es un pago. Si paga todo de una vez, un solo link con el total. Si paga en cuotas, crea un link por cuota con su importe: cada pago salda la siguiente cuota pendiente.',
+        titulo: 'Pago único',
+        texto: 'Cada link es un pago. Si paga todo de una vez, un solo link con lo que queda por cobrar.',
+      },
+      {
+        donde: anclaje('ventas-plan-pago'),
+        permiso: 'links_pago.crear',
+        titulo: 'Generar plan de pago',
+        texto: 'Si va a plazos, «Generar plan de pago» crea un link por cada cuota pendiente, con su importe y la fecha que pusiste. Cuando paga uno, se salda ESA cuota. «Copiar todos» te deja el mensaje para el alumno con todos los links.',
       },
       {
         donde: anclaje('links-lista'),
@@ -182,7 +189,11 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('links-pantalla-crear'),
         permiso: 'links_pago.crear',
         titulo: 'Crear link de pago',
-        texto: 'Pulsa aquí. Buscas al prospecto, eliges a cuál de sus ventas va (o «sin venta todavía»), el curso y el importe. Si algo falta o no cuadra, el asistente te dice qué.',
+        texto: 'Pulsa aquí. Buscas al prospecto y eliges a cuál de sus ventas va: todo link va con su venta. Sale lo que le queda por pagar. Si no tiene ninguna venta, primero se registra la venta. Si algo falta o no cuadra, el asistente te dice qué.',
+      },
+      {
+        titulo: 'Al registrar la venta, sale solo',
+        texto: 'Lo más rápido: al registrar la venta («Convertir lead») deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cada cuota con su fecha, y si hay inicial, marca «La inicial se paga con link de pago» y lleva el suyo. Al terminar te los da todos para copiar.',
       },
       {
         donde: anclaje('links-pantalla-filtros'),

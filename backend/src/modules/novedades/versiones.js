@@ -13,6 +13,120 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.8.4",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.4",
+    "intro": "Resumen de todo lo nuevo de hoy: links de pago de Stripe con plan de cuotas, facturación más fácil de corregir y recorridos guiados al día.",
+    "grupos": [
+      {
+        "titulo": "Links de pago de Stripe",
+        "items": [
+          {
+            "titulo": "El link sale al registrar la venta",
+            "texto": "Al registrar una venta («Convertir lead»), deja marcado «Generar link de pago de Stripe». Si paga de una vez, sale un link por lo que queda por pagar. Si va a plazos, sale un link por cada cuota, con su importe y la fecha que pongas tú. Al terminar te los da todos listos para copiar y mandar al alumno.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "La inicial también por link",
+            "texto": "Con «Parcial», marca «La inicial se paga con link de pago» si el alumno aún no la ha pagado: la inicial va como cuota 1 de hoy con su link, y cada cuota lleva el suyo. Cuando paga un link, se salda esa cuota.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "«Generar plan de pago» en cada venta",
+            "texto": "En la ficha de la venta y en la lista de Ventas («Link» y «Plan»): un link por cada cuota pendiente, y «Copiar todos» con el mensaje para el alumno. Los links quedan guardados en la ficha de la venta y del prospecto para volver a buscarlos.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "«Links de pago» en el menú",
+            "texto": "Todos tus links con su estado (pendiente, abierto, pagado, caducado o anulado), para copiarlos o anularlos. Todo link va con su venta: si el prospecto no tiene ninguna, primero se registra la venta.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      },
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Las gestoras corrigen cualquier factura de su campus",
+            "texto": "Ves todas las facturas de tus campus y puedes editarlas (datos del cliente, concepto, IVA y fechas), anularlas con su abono y borrarlas. Una factura emitida solo se borra si se emitió por error; si era buena, se anula y sale su abono. El número no cambia.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "La numeración, siempre seguida",
+            "texto": "El número de la factura o proforma al registrar una venta sigue el de las facturas y no se puede saltar ningún número de la serie.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "«Ventas sin factura», sin las que ya tienen proforma",
+            "texto": "Una venta con su proforma ya cuenta como facturada y no sale en la lista de ventas sin factura.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      },
+      {
+        "titulo": "Recorridos guiados",
+        "items": [
+          {
+            "titulo": "Links de pago y facturas, con su recorrido al día",
+            "texto": "En «Links de pago», en la ficha de la venta y en Facturación, «Ver recorrido» enseña paso a paso lo nuevo: el link al registrar la venta, el plan de pago y cómo corregir, anular o borrar una factura.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ver el recorrido"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El aviso de prospecto nuevo trae lo que rellenó en el formulario (programa, mensaje y página).",
+      "«Links de pago» sale activo en el menú (antes, «Próximamente»)."
+    ]
+  },
+  {
     "version": "2.8.3",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.8.3",
