@@ -4,8 +4,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //
 // En producción, los dos únicos prospectos de una semana con el teléfono sin «+» los
 // había creado la solicitud de admisión: `prospectoDe` pasaba el teléfono tal cual
-// llegaba del formulario. Ahora va normalizado al prospecto y a la solicitud; lo que
-// llegó, intacto, sigue en `datos_admision`. Teléfonos inventados.
+// llegaba del formulario. Desde #536 (18/11) la solicitud ya no crea prospecto; el
+// teléfono va normalizado a la solicitud y lo que llegó, intacto, sigue en
+// `datos_admision`. Teléfonos inventados.
 
 vi.mock('../src/shared/config/db.js', () => ({
   getClient: vi.fn(),
@@ -42,10 +43,11 @@ const enviar = (telefono) => recibirAdmision(TOKEN, {
 beforeEach(() => { vi.clearAllMocks(); });
 
 describe('la solicitud de admisión', () => {
-  it('crea el prospecto con «56 912345678» como +56912345678', async () => {
+  it('«56 912345678» llega a la solicitud como +56912345678, y no se crea prospecto (#536)', async () => {
     const r = await enviar('56 912345678');
     expect(r.status).toBe(200);
-    expect(leadModel.createLeadWithRoundRobin).toHaveBeenCalledWith(expect.objectContaining({ telefono: '+56912345678' }));
+    expect(matriculaModel.create.mock.calls[0][0].telefono).toBe('+56912345678');
+    expect(leadModel.createLeadWithRoundRobin).not.toHaveBeenCalled();
   });
   it('guarda la solicitud con el teléfono normalizado y el envío original intacto', async () => {
     await enviar('593 99999999');

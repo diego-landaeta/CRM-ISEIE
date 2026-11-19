@@ -296,9 +296,9 @@ export async function recibirAdmision(token, body, archivos = [], opcionesArchiv
     persona.nombre = `${persona.nombre ? `${persona.nombre} ` : ''}${apellidos}`.slice(0, LARGO.nombre);
   }
   if (persona.email) persona.email = persona.email.toLowerCase();
-  // EL TELÉFONO, CON SU PREFIJO (17/11/2026): llegaba «56 912345678» y así iba al
-  // prospecto que se crea y a la solicitud, sin «+»: el botón de WhatsApp no
-  // funcionaba. El envío tal cual llegó sigue en `datos_admision`.
+  // EL TELÉFONO, CON SU PREFIJO (17/11/2026): llegaba «56 912345678» y así iba a la
+  // solicitud, sin «+»: el botón de WhatsApp no funcionaba. El envío tal cual llegó
+  // sigue en `datos_admision`.
   persona.telefono = telefonoParaGuardar(persona.telefono);
   persona.fecha_nacimiento = fechaDeNacimiento(mapeado.fecha_nacimiento);
   // La ciudad y el código postal no tienen columna en la matrícula (van en el envío):
