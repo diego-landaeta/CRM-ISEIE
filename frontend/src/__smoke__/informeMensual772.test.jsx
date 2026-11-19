@@ -1,5 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+// @vitest-environment jsdom
+import '@testing-library/jest-dom/vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor, cleanup } from '@testing-library/react';
 
 /*
   #772 · El informe mensual para la gestoría, en Reportes.
@@ -37,6 +39,8 @@ const DATOS = {
   total: cifras(4),
   envio: { activo: false, dia: 1, hora: '09:00', con_destinatarios: false },
 };
+
+afterEach(cleanup);
 
 beforeEach(() => {
   permisos = { 'reports.informe_mensual': true };

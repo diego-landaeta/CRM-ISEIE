@@ -3,6 +3,7 @@ import { CalendarBlank, FileXls, FileZip, PaperPlaneTilt, UsersThree } from '@ph
 import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { informeMensualApi, type InformeMensual as Datos, type CifrasDelMes } from '../api/informeMensual.api';
 
 /**
@@ -102,10 +103,14 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
 
   const envio = datos?.envio;
   return (
-    <section className="bg-card border border-border rounded-lg p-4 space-y-3">
+    <section className="bg-card border border-border rounded-lg p-4 space-y-3" data-recorrido="informe-mensual">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-semibold text-sm flex items-center gap-2"><CalendarBlank size={16} /> Informe mensual para la gestoría</h3>
+          <h3 className="font-semibold text-sm flex flex-wrap items-center gap-2">
+            <CalendarBlank size={16} /> Informe mensual para la gestoría
+            {/* El recorrido para probarlo (CRM-ISEIE#522). */}
+            <VerComoFunciona id="informe-mensual" compacto />
+          </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             El mes natural por equipo y por comercial. Cobrado: los pagos registrados con fecha en el mes; facturado: por fecha de emisión.
           </p>
@@ -114,12 +119,14 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
           <input
             type="month"
             aria-label="Mes del informe"
+            data-recorrido="informe-mes"
             value={periodo}
             onChange={(e) => setPeriodo(e.target.value)}
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
           />
           <select
             aria-label="Empresa"
+            data-recorrido="informe-empresa"
             value={issuerId ?? ''}
             onChange={(e) => setIssuerId(e.target.value ? Number(e.target.value) : null)}
             className="h-8 rounded-md border border-input bg-background px-2 text-sm"
@@ -131,6 +138,7 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
             type="button"
             onClick={() => bajar('excel')}
             disabled={!!bajando}
+            data-recorrido="informe-excel"
             className="h-8 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-sm hover:bg-muted disabled:opacity-50"
           >
             <FileXls size={15} /> {bajando === 'excel' ? 'Preparando…' : 'Excel'}
@@ -139,6 +147,7 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
             type="button"
             onClick={() => bajar('zip')}
             disabled={!!bajando || !issuerId}
+            data-recorrido="informe-zip"
             title={issuerId ? 'Los PDF de las facturas emitidas del mes, el listado y el informe' : 'Elige una empresa: el ZIP es de una'}
             className="h-8 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-sm hover:bg-muted disabled:opacity-50"
           >
@@ -148,7 +157,7 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
       </div>
 
       {envio && (
-        <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+        <p className="text-xs text-muted-foreground flex items-center gap-1.5" data-recorrido="informe-envio">
           <PaperPlaneTilt size={13} />
           {envio.activo
             ? `Envío automático a la gestoría: el día ${envio.dia} de cada mes a las ${envio.hora}, con el mes anterior.`
@@ -159,7 +168,7 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
       {cargando && !datos ? (
         <div className="h-24 bg-muted/50 rounded-md animate-pulse" />
       ) : datos && (
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4" data-recorrido="informe-tablas">
           <div className="overflow-x-auto">
             <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-1 flex items-center gap-1.5"><UsersThree size={13} /> Por equipo</h4>
             <table className="w-full text-sm">
