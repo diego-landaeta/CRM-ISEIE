@@ -32,6 +32,10 @@ router.put('/config', puede('links_pago.configurar'), projectAccess, ctrl.guarda
 router.get('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.verWebhook);
 router.put('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.cambiarWebhook);
 
+// El asistente de crear link: las ventas del prospecto, para elegir a cuál va
+// (o ninguna). El controlador mira que el prospecto sea de su campus y alcance.
+router.get('/ventas-del-prospecto', puede('links_pago.crear'), ctrl.ventasDelProspecto);
+
 // Quien crea links ve los suyos; con «ver todos», los de su alcance. El
 // recorte lo hace el controlador con la sesión.
 router.get('/', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.listar);

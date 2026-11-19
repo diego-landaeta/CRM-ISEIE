@@ -2,6 +2,7 @@ import * as model from './links-pago.model.js';
 import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
+  ventasProspectoSchema,
 } from './links-pago.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -186,17 +187,41 @@ export async function crear(req, res, next) {
       throw new AppError('Ese curso no es del catálogo de este campus', 400, 'VALIDATION_ERROR');
     }
     const cfg = await model.config(destino.projectId);
+    const pendiente = destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined;
+    // CRM#909: desde una venta, nunca por encima de lo que queda por cobrar.
+    service.noPasaDelPendiente({ importe: b.importe, moneda: b.moneda || cfg.moneda_defecto, pendiente });
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
       modalidad: b.modalidad, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
-      pendiente: destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined,
+      pendiente,
     });
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
       prod, reglas, importe: b.importe, userId: Number(req.user.userId),
     });
     res.status(201).json({ success: true, data: link });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/ventas-del-prospecto?leadId=N (o ?conversionId=N: el de esa venta)
+// El prospecto (nombre, correo y teléfono para mandarle el link) y sus ventas
+// con lo pendiente. Un prospecto fuera de su campus o de su alcance, 404.
+export async function ventasDelProspecto(req, res, next) {
+  try {
+    const parsed = ventasProspectoSchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const destino = await destinoSuyo(req, parsed.data);
+    if (!destino.leadId) throw new AppError('Esa venta no tiene prospecto', 404, 'NOT_FOUND');
+    const [l, ventas] = await Promise.all([model.lead(destino.leadId), model.ventasDelProspecto(destino.leadId)]);
+    res.json({
+      success: true,
+      data: {
+        lead: { id: l.id, nombre: l.nombre, email: l.email, telefono: l.telefono,
+          project_id: Number(l.project_id), producto_interes_id: l.producto_interes_id },
+        ventas,
+      },
+    });
   } catch (err) { next(err); }
 }
 
