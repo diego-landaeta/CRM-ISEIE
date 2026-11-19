@@ -81,6 +81,9 @@ const ChannelsConfigPage = lazy(() => import('./modules/settings/pages/ChannelsC
 const ShortcutsConfigPage = lazy(() => import('./modules/settings/pages/ShortcutsConfigPage'));
 const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/ExternalPanelPage'));
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
+// Ayuda › Tutoriales (gemela de CRM#919): los tutoriales, dentro del CRM.
+const TutorialesPage = lazy(() => import('./modules/manual/pages/TutorialesPage'));
+const TutorialPage = lazy(() => import('./modules/manual/pages/TutorialPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
 const IncidenciasPage = lazy(() => import('./modules/incidencias/pages/IncidenciasPage'));
@@ -345,6 +348,8 @@ function App() {
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
           <Route path="/external-panels/:id" element={<ExternalPanelPage />} />
           <Route path="/manual" element={<ManualPage />} />
+          <Route path="/manual/tutoriales" element={<TutorialesPage />} />
+          <Route path="/manual/tutoriales/:id" element={<TutorialPage />} />
           <Route path="/preferencias" element={<PreferencesPage />} />
           {/* #216: enseñaba datos de ejemplo de Search Console. Hasta que esté conectado (#17). */}
           <Route path="/seo" element={<AunNoConectadoPage titulo="Tráfico orgánico" />} />

@@ -68,6 +68,39 @@ export const pasosPara = (r: RecorridoCobros, can: (p: string) => boolean): Paso
 export const claveRecorrido = (id: IdRecorridoCobros, userId?: number | string | null) =>
   `recorrido-${id}-visto-v1${userId != null ? `-u${userId}` : ''}`;
 
+/**
+ * EL RECORRIDO PEDIDO DESDE UN TUTORIAL (Ayuda › Tutoriales, Diego 18/11).
+ *
+ * El botón «Ver recorrido» de un tutorial lleva a la pantalla que explica y deja
+ * aquí el recorrido que se pidió. Esa pantalla lo abre al llegar, aunque esa persona
+ * ya lo hubiera visto. Si vive dentro de una ficha (los links de pago, los cargos
+ * de Stripe), se abre al entrar en la primera ficha. Dura media hora y se gasta al
+ * abrirse: no vuelve a salir solo. En la pestaña (sessionStorage), no en el equipo.
+ */
+const PEDIDO = 'recorrido-pedido';
+const PEDIDO_DURA_MS = 30 * 60 * 1000;
+
+export function pedirRecorrido(id: IdRecorridoCobros) {
+  try {
+    sessionStorage.setItem(PEDIDO, JSON.stringify({ id, hasta: Date.now() + PEDIDO_DURA_MS }));
+  } catch { /* sin almacenamiento: la pantalla tiene su botón «Ver recorrido» */ }
+}
+
+export function recorridoPedido(id: IdRecorridoCobros): boolean {
+  try {
+    const v = JSON.parse(sessionStorage.getItem(PEDIDO) || 'null');
+    return !!v && v.id === id && Number(v.hasta) > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+export function olvidarRecorridoPedido(id: IdRecorridoCobros) {
+  try {
+    if (recorridoPedido(id)) sessionStorage.removeItem(PEDIDO);
+  } catch { /* nada que olvidar */ }
+}
+
 const anclaje = (nombre: string) => `[data-recorrido="${nombre}"]`;
 
 const FINAL = 'No volverá a salir solo. Para repasarlo, pulsa «Ver recorrido» en esta pantalla cuando quieras.';

@@ -447,6 +447,20 @@ export const CAMBIOS_DE_MENU = [
     // Diego lo aprobó el 18/11 en el 360 (CRM#903) para los dos CRM.
     aprobadoPor: 'Diego, 18/11',
   },
+  {
+    id: 'menu-tutoriales',
+    que: '«Sistema › Tutoriales» (Ayuda › Tutoriales): los tutoriales del CRM, cada uno con sus capturas, a quien tiene el permiso de alguno de ellos (gemela de CRM#919).',
+    motivo: 'Diego, 18/11: «tienes que poner los tutoriales», que estaban en páginas sueltas fuera del CRM. Es texto de ayuda: no llama al servidor ni enseña datos. Cada tutorial pide su permiso del catálogo (la gestora ve los suyos; los de configuración, quien ve o configura integraciones o los links de pago), así que no cambia el acceso a nada.',
+    // Solo texto: no hay ruta del servidor detrás.
+    soloMenu: true,
+    perfiles: Object.fromEntries([
+      'superadmin', 'admin', 'soporte', 'gestora', 'project_manager', 'gestora+admin', 'gestora+tutor',
+      'gestora con factura_manager', 'gestora con editar_fechas_factura', 'gestora con usa_mcp',
+      'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((p) => [p, ['+ Sistema › Tutoriales']])),
+    rutas: { 'Sistema › Tutoriales': null },
+    aprobadoPor: 'Diego, 18/11',
+  },
 ];
 
 /**
