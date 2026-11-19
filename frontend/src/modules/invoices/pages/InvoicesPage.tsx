@@ -807,7 +807,7 @@ export default function InvoicesPage() {
                       )}
                       {/* Eliminar: borradores y proformas, y también una emitida POR ERROR (Diego,
                           19/11/2026); lo normal con una emitida es anularla (sale su abono). */}
-                      {gestionaFacturas && inv.estado !== 'cancelada' && (
+                      {gestionaFacturas && inv.estado !== 'cancelada' && !(esFacturaEmitida(inv) && inv.tipo === 'rectificativa') && (
                         <button onClick={() => setDeletingInv(inv)} data-recorrido="factura-eliminar"
                           title={esFacturaEmitida(inv) ? 'Eliminar: solo si se emitió por error (si no, «Anular»)' : inv.tipo === 'proforma' ? 'Eliminar la proforma' : 'Eliminar el borrador'}
                           className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">

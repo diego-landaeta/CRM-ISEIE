@@ -736,7 +736,8 @@ export async function deleteInvoice(id, { permitirEmitida = false } = {}) {
     // Una emitida no se borra (CRM#793): su número no puede quedar libre.
     // Salvo desde la pantalla (Diego, 19/11/2026), por quien tiene «Anular y abonar»:
     // una factura emitida por error. Lo normal sigue siendo anularla (su abono).
-    if (!permitirEmitida) exigirNoEmitida(inv, 'borrar');
+    // El abono (rectificativa) emitido, nunca: deshace otra factura.
+    if (!permitirEmitida || inv.tipo === 'rectificativa') exigirNoEmitida(inv, 'borrar');
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
     // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
     // filas: es como numera `nextNumero`, que coge el mayor de todas.
