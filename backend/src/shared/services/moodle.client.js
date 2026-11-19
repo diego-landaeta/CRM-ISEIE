@@ -171,6 +171,30 @@ export async function usuarioPor(conexion, campo, valor, opciones) {
 }
 
 /**
+ * El alumno en el campus, por su id de Moodle si ya se sabe o, si no, por su correo (como
+ * `usuarioPorCorreo`), con la última vez que entró al campus (#532). Es la misma función
+ * de Moodle; va aparte para no cambiar lo que `usuarioPor` da a quien ya la usa.
+ */
+export async function alumnoDelCampus(conexion, { moodleId = null, correo = null } = {}, opciones) {
+  const email = String(correo || '').trim();
+  const pruebas = Number(moodleId) > 0
+    ? [['id', Number(moodleId)]]
+    : [...new Set([email.toLowerCase(), email])].filter(Boolean).map((v) => ['email', v]);
+  for (const [campo, valor] of pruebas) {
+    const lista = await llamar(conexion, 'core_user_get_users_by_field', { field: campo, 'values[0]': valor }, opciones);
+    const u = Array.isArray(lista) ? lista[0] : null;
+    if (u) {
+      return {
+        id: Number(u.id), nombre: u.fullname || null, suspendido: Boolean(u.suspended),
+        // 0 = nunca ha entrado.
+        ultimoAcceso: Number(u.lastaccess) > 0 ? new Date(Number(u.lastaccess) * 1000) : null,
+      };
+    }
+  }
+  return null;
+}
+
+/**
  * El usuario del campus con ese correo, o null si no hay ninguno.
  *
  * Moodle busca el correo tal cual se guardó: se pregunta en minúsculas, que es
@@ -345,7 +369,46 @@ export async function cursosDe(conexion, moodleUserId, opciones) {
     ultimoAcceso: Number(c.lastaccess) > 0 ? new Date(Number(c.lastaccess) * 1000) : null,
     seguimiento: c.enablecompletion === true || Number(c.enablecompletion) === 1,
     progreso: progresoDeMoodle(c),
+    // Si ese usuario ha terminado el curso según la finalización de Moodle (#532).
+    terminado: c.completed === true || Number(c.completed) === 1,
   }));
+}
+
+/** Lo que necesita el servicio del token para las notas de la ficha del alumno (#532, plugin 1.10.9). */
+export const FUNCIONES_NOTAS = ['gradereport_user_get_grade_items'];
+
+/** Una nota de Moodle: la cifra (null si no hay) y el texto tal como lo enseña el campus. */
+function notaDeMoodle(g) {
+  const raw = g?.graderaw === null || g?.graderaw === undefined || g?.graderaw === '' ? null : Number(g.graderaw);
+  const texto = String(g?.gradeformatted ?? '').trim();
+  return {
+    nota: Number.isFinite(raw) ? raw : null,
+    // «-» es como Moodle dice «sin nota»: no se repite.
+    texto: texto && texto !== '-' ? texto : null,
+    maxima: Number.isFinite(Number(g?.grademax)) ? Number(g.grademax) : null,
+    porcentaje: String(g?.percentageformatted ?? '').trim().replace(/^-$/, '') || null,
+  };
+}
+
+/**
+ * Las notas de UN alumno en UN curso, como las ve en su informe de calificaciones (#532):
+ * la de cada actividad calificada y la final del curso. Solo lee
+ * (`gradereport_user_get_grade_items`). Las ocultas al alumno no salen, y las actividades
+ * sin nota todavía tampoco: aquí se enseña lo que tiene, no la lista de lo que falta.
+ */
+export async function notasDelAlumno(conexion, cursoId, moodleUserId, opciones) {
+  const r = await llamar(conexion, 'gradereport_user_get_grade_items', { courseid: cursoId, userid: moodleUserId }, opciones);
+  const suyas = (r?.usergrades || []).find((u) => Number(u.userid) === Number(moodleUserId));
+  const items = (suyas?.gradeitems || []).filter((g) => !(g.gradeishidden === true || Number(g.gradeishidden) === 1));
+  const total = items.find((g) => g.itemtype === 'course');
+  const finalDelCurso = total ? notaDeMoodle(total) : null;
+  return {
+    final: finalDelCurso && (finalDelCurso.nota !== null || finalDelCurso.texto) ? finalDelCurso : null,
+    actividades: items
+      .filter((g) => g.itemtype === 'mod' || g.itemtype === 'manual')
+      .map((g) => ({ id: Number(g.id), nombre: g.itemname || null, tipo: g.itemmodule || g.itemtype, ...notaDeMoodle(g) }))
+      .filter((g) => g.nota !== null || g.texto),
+  };
 }
 
 /** El % hecho que da Moodle, redondeado y entre 0 y 100; null si no lo da (sin seguimiento). */

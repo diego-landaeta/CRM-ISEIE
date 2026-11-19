@@ -8211,6 +8211,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/leads/:id/campus",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/:id/campus",
+  "relativa": "GET /:id/campus",
+  "controlador": "avanceEnMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/leads/:id/merge",
   "tipo": "ruta",
   "modulo": "leads",

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-873 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+874 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -594,6 +594,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateLeadProduct | `PATCH /api/leads/:id/products/:lpId` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | removeLeadProduct | `DELETE /api/leads/:id/products/:lpId` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | getById | `GET /api/leads/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
+| avanceEnMoodle | `GET /api/leads/:id/campus` | (no existía) | (ruta nueva) | `leads.view` |
 | mergeLeads | `POST /api/leads/:id/merge` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | createManual | `POST /api/leads/` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.create` |
 | bulkCreate | `POST /api/leads/bulk` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.create` |

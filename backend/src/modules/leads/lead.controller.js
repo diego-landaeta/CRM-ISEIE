@@ -10,6 +10,8 @@ import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo, alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
+import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
+import { avanceDelAlumno } from './avance-moodle.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -253,6 +255,30 @@ export async function getById(req, res, next) {
     await exigirQueSeaSuyo(req, id);
     const lead = await leadService.getById(id);
     res.json({ success: true, data: lead });
+  } catch (err) { next(err); }
+}
+
+/**
+ * El avance del alumno en Moodle (#532): sus cursos de cada campus con su último acceso,
+ * el % hecho, las notas y el estado. Los mismos permisos que su ficha (una gestora, solo
+ * los suyos; quien lleva un equipo, los de su equipo) y, además, solo los campus de quien
+ * mira. Con el plugin del CRM sin aprobar en este servidor (PLUGIN_MOODLE_EN_PRODUCCION)
+ * contesta `disponible: false` y no llama a ningún campus: el frontal no enseña el bloque.
+ */
+export async function avanceEnMoodle(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
+    if (!pluginMoodleActivo()) return res.json({ success: true, data: { disponible: false, campus: [] } });
+    const { rows } = await query(
+      'SELECT id, project_id, email FROM leads WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!rows[0]) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
+    await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
+    const campusPermitidos = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
+    const refrescar = ['1', 'true'].includes(String(req.query.refrescar || ''));
+    const data = await avanceDelAlumno(rows[0], { campusPermitidos, refrescar });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 

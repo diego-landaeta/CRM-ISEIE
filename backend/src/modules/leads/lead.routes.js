@@ -54,6 +54,8 @@ router.patch('/:id/products/:lpId',      puede('leads.edit'), leadController.upd
 router.delete('/:id/products/:lpId',     puede('leads.edit'), leadController.removeLeadProduct);
 
 router.get('/:id', puede('leads.view'), leadController.getById);
+// Su avance en Moodle (#532): último acceso, % hecho y notas, curso a curso. Solo lee.
+router.get('/:id/campus', puede('leads.view'), leadController.avanceEnMoodle);
 router.post('/:id/merge', puede('leads.edit'), leadController.mergeLeads);
 
 // Creacion manual (formulario interno)

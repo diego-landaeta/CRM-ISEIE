@@ -84,6 +84,9 @@ $services = [
             'mod_assign_get_assignments',
             'mod_assign_get_submissions',
             'mod_assign_get_grades',
+            // 1.10.9 (#532): las notas de un alumno (las de cada actividad y la final) para
+            // su ficha en el CRM. Solo lee. Moodle la añade al servicio al actualizar.
+            'gradereport_user_get_grade_items',
             'local_crm_calificar',
             'local_crm_disponibilidad',
             'local_crm_mensajes_desde',

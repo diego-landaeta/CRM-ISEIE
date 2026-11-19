@@ -120,5 +120,14 @@ function xmldb_local_crm_upgrade($oldversion) {
         }
         upgrade_plugin_savepoint(true, 2026111501, 'local', 'crm');
     }
+    if ($oldversion < 2026111800) {
+        // 1.10.9 (#532): el rol del servicio puede leer el informe de notas de un alumno
+        // (gradereport/user:view), para las notas de su ficha en el CRM. Como en la 1.10.7:
+        // solo si el campus ya está conectado; si no, se le da al conectarlo.
+        if ($DB->record_exists('user', ['username' => \local_crm\conexion::USUARIO_SERVICIO, 'deleted' => 0])) {
+            \local_crm\conexion::usuario_servicio();
+        }
+        upgrade_plugin_savepoint(true, 2026111800, 'local', 'crm');
+    }
     return true;
 }

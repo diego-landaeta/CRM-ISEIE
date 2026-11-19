@@ -28,8 +28,8 @@
 defined('MOODLE_INTERNAL') || die();
 
 $plugin->component = 'local_crm';
-$plugin->version   = 2026111700;
+$plugin->version   = 2026111800;
 $plugin->requires  = 2024042200; // Moodle 4.4.
 $plugin->supported = [404, 502]; // Del 4.4 (ISEIE) al 5.2 (ISECD, ISSLOGG, ISEF).
 $plugin->maturity  = MATURITY_STABLE;
-$plugin->release   = '1.10.8';
+$plugin->release   = '1.10.9';
