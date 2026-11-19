@@ -133,7 +133,7 @@ function QueNoEsEsto() {
       </p>
 
       <Link
-        to="/webhooks"
+        to="/conexion/webhooks/prospectos"
         className="flex items-start gap-3 rounded-md border border-border bg-card p-3 transition-colors hover:bg-muted"
       >
         <ArrowSquareOut size={16} className="mt-0.5 shrink-0 text-muted-foreground" />

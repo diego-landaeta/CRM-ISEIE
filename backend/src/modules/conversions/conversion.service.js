@@ -7,6 +7,8 @@ import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import * as leadModel from '../leads/lead.model.js';
 import { dispararCobro } from '../webhooks-salientes/webhooks-salientes.service.js';
+import { buscarVentaRepetida, errorVentaYaExiste, apuntarForzada } from './venta-repetida.js';
+import { alVender } from '../cursos-pendientes/cursos-pendientes.venta.js';
 
 /**
  * SE HA APUNTADO (O CAMBIADO) UN COBRO: el único sitio desde el que
@@ -81,7 +83,17 @@ async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
   }
 }
 
-export async function create(data, userId) {
+/**
+ * Alta de una venta.
+ *
+ * `opciones.repetida` (CRM#898): quien llama ya buscó la venta repetida y
+ * trae lo que encontró (o null). Lo usa `createSale`, que lo mira ANTES de
+ * crear el prospecto. Sin él, se busca aquí con el prospecto de la venta.
+ * `data.forzar` crea la venta aunque repita otra, y lo deja apuntado.
+ */
+export async function create(data, userId, opciones = {}) {
+  const forzar = Boolean(data.forzar);
+  delete data.forzar;
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
@@ -147,7 +159,24 @@ export async function create(data, userId) {
     }
   }
 
+  // EL MISMO ALUMNO YA TIENE ESTE PROGRAMA (CRM#898): 409 con la venta que
+  // existe, para apuntar ahí el cobro en vez de crear otra.
+  const repetida = 'repetida' in opciones
+    ? opciones.repetida
+    : await buscarVentaRepetida({
+      projectId: data.project_id,
+      productoId: data.producto_contratado_id || null,
+      productoTexto: data.producto_contratado || null,
+      leadId: data.lead_id,
+    });
+  if (repetida && !forzar) throw errorVentaYaExiste(repetida);
+
   const conv = await conversionModel.create({ ...data, changed_by: userId });
+
+  if (repetida && forzar) {
+    await apuntarForzada(conv.id, repetida.id, userId);
+    logger.info({ conversionId: conv.id, repetidaDe: repetida.id, userId }, 'venta repetida creada igualmente (forzar)');
+  }
 
   // Si al cliente ya se le habia emitido una PROFORMA antes de registrar la venta,
   // se engancha ahora. Sin esto la proforma quedaba suelta y no aparecia en su ficha
@@ -167,6 +196,12 @@ export async function create(data, userId) {
   } catch (err) {
     logger.warn({ err: err.message }, 'enganche de proforma suelta fallo (no bloqueante)');
   }
+
+  // Cursos vendidos sin desarrollar (#770): si la venta lleva alguno marcado así
+  // en Productos, se crea su «Curso pendiente» (o se suma la alumna), se asigna
+  // a su responsable y se le avisa con la fecha límite. `alVender` no lanza:
+  // un fallo se queda en el log y la venta sigue.
+  await alVender({ conversionId: conv.id, userId });
 
   // Hook: crear comision automaticamente si hay regla
   commissionModel.createCommissionForConversion(conv.id).catch(err =>
@@ -324,6 +359,15 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
       `Ya hay un pago de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} en esta venta. `
       + 'Si de verdad son dos cobros distintos, marca la casilla de duplicado permitido.',
       409, 'DUPLICATE_PAYMENT');
+  }
+  if (result.error === 'CARGO_STRIPE_SUELTO') {
+    // Mismo código que el duplicado: la pantalla ya pregunta «¿registrarlo
+    // igualmente?» y, con un sí, vuelve con `permitir_duplicado` (CRM#888).
+    const d = result.existing;
+    throw new AppError(
+      `Ese pago ya entró por Stripe: un cargo de ${Number(d.importe).toFixed(2)} EUR el ${String(d.fecha).slice(0, 10)} `
+      + 'de este cliente, sin enlazar a ningún cobro. Enlázalo desde la ficha de la venta en vez de apuntarlo otra vez.',
+      409, 'DUPLICATE_PAYMENT', { cargo: d });
   }
   if (result.error === 'DUPLICATE_AUTOMATICO') {
     const d = result.existing;

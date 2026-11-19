@@ -223,8 +223,10 @@ export default function ConexionPage() {
 
   const conectado = estado?.conectado;
 
+  // `color-scheme` oscuro en el tema oscuro: las casillas y los botones de opcion los pinta el
+  // navegador y no siguen los tokens; sin esto salian claros (#128).
   return (
-    <div className="max-w-5xl mx-auto space-y-4">
+    <div className="max-w-5xl mx-auto space-y-4 dark:[color-scheme:dark]">
       <div className="bg-card border border-border rounded-lg p-5">
         {/* Se parte en dos filas cuando no cabe. Antes era una sola fila con el
             titulo, el selector y dos botones: en un telefono el titulo se

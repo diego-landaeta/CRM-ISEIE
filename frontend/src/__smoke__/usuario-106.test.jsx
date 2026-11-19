@@ -21,6 +21,7 @@ vi.mock('@/shared/hooks/useToast', () => ({ toast: avisos.toast }));
 vi.mock('@/shared/api/client', () => ({ default: { get: vi.fn().mockResolvedValue({ data: [] }), post: vi.fn(), patch: vi.fn() } }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, role: 'admin' }, projects: [] }) }));
 vi.mock('@/modules/permissions/components/PermisosDePersona', () => ({ default: () => null }));
+vi.mock('@/modules/permissions/components/PermisosDelAlta', () => ({ default: () => null }));
 
 const { InviteUserModal, EditUserModal } = await import('@/shared/pages/SettingsPage');
 

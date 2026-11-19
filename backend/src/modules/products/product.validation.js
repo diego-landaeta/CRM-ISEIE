@@ -58,6 +58,15 @@ const convocatoriaFields = {
   ),
 };
 
+// #770 · Cursos vendidos sin desarrollar. La marca, quién lo desarrolla (tutor o
+// tutor redactor; vacío = lo asigna administración tras la venta) y el plazo en
+// días desde la venta (vacío = el de serie por tipo, CURSOS_PENDIENTES_PLAZO_DIAS).
+const desarrolloFields = {
+  sin_desarrollar: z.boolean().optional(),
+  responsable_desarrollo_id: z.preprocess(vacioEsNulo, z.coerce.number().int().positive().nullable().optional()),
+  plazo_desarrollo_dias: z.preprocess(vacioEsNulo, z.coerce.number().int().min(1, 'El plazo va de 1 a 365 días').max(365, 'El plazo va de 1 a 365 días').nullable().optional()),
+};
+
 export const createProductSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   nombre: z.string().min(1).max(200),
@@ -66,6 +75,7 @@ export const createProductSchema = z.object({
   subcategoria_id: z.number().int().positive().nullable().optional(),
   regimen_fiscal_id: z.number().int().positive().nullable().optional(),
   ...pricingFields,
+  ...desarrolloFields,
 });
 
 export const updateProductSchema = z.object({
@@ -77,6 +87,7 @@ export const updateProductSchema = z.object({
   ...pricingFields,
   ...richFields,
   ...convocatoriaFields,
+  ...desarrolloFields,
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
 });

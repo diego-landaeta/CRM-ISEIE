@@ -1,7 +1,7 @@
 import * as leadService from './lead.service.js';
 import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, quickCountsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
 import { leerFiltroPais } from './pais.js';
 import * as leadProducts from './lead-products.service.js';
@@ -111,6 +111,34 @@ export async function list(req, res, next) {
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/leads/quick-counts — cuántos hay en cada filtro rápido (gemela de la
+ * #132 del 360), con la misma regla que el listado: solo campus propios (uno
+ * ajeno, 403) y una gestora cuenta lo suyo (con equipo, lo de su equipo).
+ */
+export async function quickCounts(req, res, next) {
+  try {
+    const parsed = quickCountsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const filtros = { ...parsed.data };
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user?.userId);
+      if (filtros.projectId && !mios.includes(Number(filtros.projectId))) {
+        throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+      }
+      if (Array.isArray(filtros.projectIds)) {
+        const quedan = filtros.projectIds.filter((id) => mios.includes(Number(id)));
+        filtros.projectIds = quedan.length ? quedan : [-1];
+      }
+    }
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filtros.responsableId = personasDentro(alcance, filtros.responsableId);
+    res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
   } catch (err) { next(err); }
 }
 

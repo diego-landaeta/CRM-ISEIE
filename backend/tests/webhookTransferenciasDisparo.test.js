@@ -94,7 +94,8 @@ describe('cada camino que apunta un cobro avisa', () => {
       params: { instId: '3' }, body: { fecha_cobro: '2026-10-15', importe_cobrado: 150, metodo: 'transferencia', referencia: 'TRF-9' },
     });
     expect(error).toBeNull();
-    expect(installments.markPaid).toHaveBeenCalledWith(3, expect.objectContaining({ metodo: 'transferencia', referencia: 'TRF-9' }));
+    expect(installments.markPaid).toHaveBeenCalledWith(3, expect.objectContaining({ metodo: 'transferencia', referencia: 'TRF-9' }),
+      { confirmar: false });
     expect(disparados).toEqual([{ paymentId: 902, userId: 3, metodo: 'transferencia' }]);
   });
 

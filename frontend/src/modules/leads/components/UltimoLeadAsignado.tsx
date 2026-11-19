@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Users, ArrowsClockwise, WarningCircle, Clock } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { lista } from '@/shared/lib/lista';
+import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 
 /**
  * Último lead asignado a cada gestora (#11).
@@ -42,7 +43,10 @@ interface FilaGestora {
   lead_nombre: string | null;
   lead_entro: string | null;
   lead_producto: string | null;
+  /** El texto del canal: el deducido o, si no lo hay, lo que trajo el formulario. */
   lead_canal: string | null;
+  /** El canal que deduce el CRM (#48): meta_ads, chatgpt_ia… Se pinta con su icono. */
+  lead_canal_codigo?: string | null;
   horas_sin_recibir: number | null;
   hoy: number;
   semana: number;
@@ -200,7 +204,9 @@ export default function UltimoLeadAsignado(
                     )}
                   </td>
                   <td className="py-2 pr-3 text-muted-foreground whitespace-nowrap">
-                    {f.lead_canal || '—'}
+                    {f.lead_canal_codigo
+                      ? <ChannelBadge channel={f.lead_canal_codigo} />
+                      : (f.lead_canal || '—')}
                   </td>
                   <td className={`py-2 pr-3 whitespace-nowrap ${parada ? 'text-warning font-semibold' : 'text-muted-foreground'}`}>
                     {parada && <Clock size={11} weight="bold" className="inline mr-1 -mt-0.5" />}

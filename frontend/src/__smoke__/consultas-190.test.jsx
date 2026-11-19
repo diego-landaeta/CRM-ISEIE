@@ -21,7 +21,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
   empezó el tutor, de la #189).
 */
 
-const api = vi.hoisted(() => ({ ver: vi.fn(), tutoresPosibles: vi.fn(), toast: vi.fn(), user: { role: 'admin' } }));
+// La página trae la bandeja lateral y la ficha del alumno (#679): vacías aquí.
+const api = vi.hoisted(() => ({
+  mias: vi.fn(async () => ({ success: true, data: { consultas: [], plazoHoras: 24 } })),
+  panel: vi.fn(async () => ({ success: true, data: { consultas: [], plazoHoras: 24 } })),
+  contexto: vi.fn(async () => ({ success: true, data: null })),
+  ver: vi.fn(), tutoresPosibles: vi.fn(), toast: vi.fn(), user: { role: 'admin' } }));
 vi.mock('@/modules/consultas/api/consultas.api', async (original) => {
   const real = await original();
   return { ...real, consultasApi: api };

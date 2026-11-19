@@ -1197,6 +1197,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "GET",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "GET /diplomas/revertir",
+  "controlador": "disponibilidad",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/certifex/diplomas/revertir",
+  "tipo": "ruta",
+  "modulo": "certifex",
+  "metodo": "POST",
+  "ruta": "/api/certifex/diplomas/revertir",
+  "relativa": "POST /diplomas/revertir",
+  "controlador": "revertir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.revertir"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/certifex/diplomas/corregir",
   "tipo": "ruta",
   "modulo": "certifex",
@@ -2449,6 +2493,158 @@
   ]
  },
  {
+  "id": "GET /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "GET /campus/:projectId/plugin",
+  "controlador": "estadoDelPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/campus/:projectId/plugin/codigo",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/campus/:projectId/plugin/codigo",
+  "relativa": "POST /campus/:projectId/plugin/codigo",
+  "controlador": "codigoDeConexion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/campus/:projectId/plugin",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/campus/:projectId/plugin",
+  "relativa": "DELETE /campus/:projectId/plugin",
+  "controlador": "desactivarPlugin",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "consultas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "GET /respuestas",
+  "controlador": "respuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas",
+  "relativa": "POST /respuestas",
+  "controlador": "crearRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/respuestas/importar",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/respuestas/importar",
+  "relativa": "POST /respuestas/importar",
+  "controlador": "importarRespuestas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "PUT",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "PUT /respuestas/:rid",
+  "controlador": "cambiarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/consultas/respuestas/:rid",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "DELETE",
+  "ruta": "/api/consultas/respuestas/:rid",
+  "relativa": "DELETE /respuestas/:rid",
+  "controlador": "borrarRespuesta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/consultas/",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2489,6 +2685,22 @@
   "puertas": []
  },
  {
+  "id": "GET /api/consultas/:id/contexto",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "GET",
+  "ruta": "/api/consultas/:id/contexto",
+  "relativa": "GET /:id/contexto",
+  "controlador": "contexto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/consultas/:id/responder",
   "tipo": "ruta",
   "modulo": "consultas",
@@ -2512,6 +2724,22 @@
   "ruta": "/api/consultas/:id/cerrar",
   "relativa": "POST /:id/cerrar",
   "controlador": "cerrar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/consultas/:id/notas",
+  "tipo": "ruta",
+  "modulo": "consultas",
+  "metodo": "POST",
+  "ruta": "/api/consultas/:id/notas",
+  "relativa": "POST /:id/notas",
+  "controlador": "anotar",
   "publica": false,
   "guardias": [
    {
@@ -2663,6 +2891,28 @@
     "tipo": "puede",
     "claves": [
      "conversions.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/conversions/posibles-repetidas",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/posibles-repetidas",
+  "relativa": "GET /posibles-repetidas",
+  "controlador": "posiblesRepetidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
     ]
    }
   ],
@@ -3435,6 +3685,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/cursos-pendientes/subidas",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "GET",
+  "ruta": "/api/cursos-pendientes/subidas",
+  "relativa": "GET /subidas",
+  "controlador": "controlSubidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/cursos-pendientes/",
   "tipo": "ruta",
   "modulo": "cursos-pendientes",
@@ -3544,6 +3816,163 @@
     "tipo": "token"
    }
   ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cursos-pendientes/:id/subidas",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "POST",
+  "ruta": "/api/cursos-pendientes/:id/subidas",
+  "relativa": "POST /:id/subidas",
+  "controlador": "abrirSubidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/cursos-pendientes/:id/subidas/:punto",
+  "tipo": "ruta",
+  "modulo": "cursos-pendientes",
+  "metodo": "PATCH",
+  "ruta": "/api/cursos-pendientes/:id/subidas/:punto",
+  "relativa": "PATCH /:id/subidas/:punto",
+  "controlador": "marcarSubida",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/diploma-confirmacion/",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "GET",
+  "ruta": "/api/diploma-confirmacion/",
+  "relativa": "GET /",
+  "controlador": "estados",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.view",
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/pedir",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/pedir",
+  "relativa": "POST /pedir",
+  "controlador": "pedir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/:matriculaId/reenviar",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/:matriculaId/reenviar",
+  "relativa": "POST /:matriculaId/reenviar",
+  "controlador": "reenviar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/diploma-confirmacion/:matriculaId/aplicar",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/diploma-confirmacion/:matriculaId/aplicar",
+  "relativa": "POST /:matriculaId/aplicar",
+  "controlador": "reaplicar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "diplomas.emit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/cd/:token",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "GET",
+  "ruta": "/api/cd/:token",
+  "relativa": "GET /:token",
+  "controlador": "formulario",
+  "publica": true,
+  "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/cd/:token",
+  "tipo": "ruta",
+  "modulo": "diploma-confirmacion",
+  "metodo": "POST",
+  "ruta": "/api/cd/:token",
+  "relativa": "POST /:token",
+  "controlador": "responder",
+  "publica": true,
+  "guardias": [],
   "puertas": []
  },
  {
@@ -5088,6 +5517,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/facturas-colaborador/facturas/:id/validar",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "POST",
+  "ruta": "/api/facturas-colaborador/facturas/:id/validar",
+  "relativa": "POST /facturas/:id/validar",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas_colaborador.validar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/facturas-colaborador/facturas/:id/anular",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",
@@ -5750,6 +6201,184 @@
   "puertas": []
  },
  {
+  "id": "GET /api/incidencias/",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/metricas",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/metricas",
+  "relativa": "GET /metricas",
+  "controlador": "metricas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/adjuntos/:adjuntoId",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/adjuntos/:adjuntoId",
+  "relativa": "GET /adjuntos/:adjuntoId",
+  "controlador": "descargarAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/personas",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create",
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/incidencias/",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "POST",
+  "ruta": "/api/incidencias/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/incidencias/:id",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "GET",
+  "ruta": "/api/incidencias/:id",
+  "relativa": "GET /:id",
+  "controlador": "porId",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/incidencias/:id",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "PATCH",
+  "ruta": "/api/incidencias/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "editar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/incidencias/:id/adjuntos",
+  "tipo": "ruta",
+  "modulo": "incidencias",
+  "metodo": "POST",
+  "ruta": "/api/incidencias/:id/adjuntos",
+  "relativa": "POST /:id/adjuntos",
+  "controlador": "subirAdjunto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "incidencias.create",
+     "incidencias.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/informe-mensual/descarga/:issuerId/:periodo",
   "tipo": "ruta",
   "modulo": "informe-mensual",
@@ -5893,6 +6522,50 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/integrations/salud",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/salud",
+  "relativa": "GET /salud",
+  "controlador": "salud",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/integrations/salud/comprobar",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "POST",
+  "ruta": "/api/integrations/salud/comprobar",
+  "relativa": "POST /salud/comprobar",
+  "controlador": "comprobar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.salud"
+    ]
    }
   ],
   "puertas": []
@@ -6177,6 +6850,10 @@
     "claves": [
      "facturas.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []
@@ -6986,6 +7663,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/invoices/:id/anular",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "POST",
+  "ruta": "/api/invoices/:id/anular",
+  "relativa": "POST /:id/anular",
+  "controlador": "anular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "DELETE /api/invoices/:id",
   "tipo": "ruta",
   "modulo": "invoices",
@@ -7141,6 +7840,28 @@
   "ruta": "/api/leads/stats",
   "relativa": "GET /stats",
   "controlador": "stats",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/leads/quick-counts",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/quick-counts",
+  "relativa": "GET /quick-counts",
+  "controlador": "quickCounts",
   "publica": false,
   "guardias": [
    {
@@ -7902,6 +8623,202 @@
     "tipo": "puede",
     "claves": [
      "leads.assign"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/config",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/config",
+  "relativa": "GET /config",
+  "controlador": "verConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar",
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/config",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/config",
+  "relativa": "PUT /config",
+  "controlador": "guardarConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/webhook",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/webhook",
+  "relativa": "GET /webhook",
+  "controlador": "verWebhook",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/webhook",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/webhook",
+  "relativa": "PUT /webhook",
+  "controlador": "cambiarWebhook",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/:id",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/:id",
+  "relativa": "GET /:id",
+  "controlador": "detalle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/:id/anular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/:id/anular",
+  "relativa": "POST /:id/anular",
+  "controlador": "anular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
     ]
    }
   ],
@@ -10328,6 +11245,28 @@
   "guardias": [
    {
     "tipo": "token"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/permissions/vista-previa-alta",
+  "tipo": "ruta",
+  "modulo": "permissions",
+  "metodo": "POST",
+  "ruta": "/api/permissions/vista-previa-alta",
+  "relativa": "POST /vista-previa-alta",
+  "controlador": "vistaPreviaDeAlta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.create"
+    ]
    }
   ],
   "puertas": []
@@ -13302,6 +14241,80 @@
     "claves": [
      "stripe.view"
     ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/disputas",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/disputas",
+  "relativa": "GET /disputas",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/disputas/sincronizar",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/disputas/sincronizar",
+  "relativa": "POST /disputas/sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/de-la-venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/de-la-venta/:conversionId",
+  "relativa": "GET /de-la-venta/:conversionId",
+  "controlador": "deLaVenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
    }
   ],
   "puertas": []
@@ -13404,6 +14417,116 @@
   "controlador": "webhook",
   "publica": true,
   "guardias": [],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tasks/github",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "GET",
+  "ruta": "/api/tasks/github",
+  "relativa": "GET /github",
+  "controlador": "githubEstado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/tasks/github",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PATCH",
+  "ruta": "/api/tasks/github",
+  "relativa": "PATCH /github",
+  "controlador": "githubConfig",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/tasks/github/secretos",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PUT",
+  "ruta": "/api/tasks/github/secretos",
+  "relativa": "PUT /github/secretos",
+  "controlador": "githubSecretos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/tasks/github/usuarios/:login",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "PUT",
+  "ruta": "/api/tasks/github/usuarios/:login",
+  "relativa": "PUT /github/usuarios/:login",
+  "controlador": "githubPonerUsuario",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/tasks/github/usuarios/:login",
+  "tipo": "ruta",
+  "modulo": "tasks",
+  "metodo": "DELETE",
+  "ruta": "/api/tasks/github/usuarios/:login",
+  "relativa": "DELETE /github/usuarios/:login",
+  "controlador": "githubQuitarUsuario",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tasks.github"
+    ]
+   }
+  ],
   "puertas": []
  },
  {
@@ -15233,6 +16356,72 @@
   "puertas": [
    "tutores.gestionar"
   ]
+ },
+ {
+  "id": "POST /api/tutores/:id/campus/:projectId/desvincular",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/:id/campus/:projectId/desvincular",
+  "relativa": "POST /:id/campus/:projectId/desvincular",
+  "controlador": "desvincularCuenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/:id/campus/:projectId/buscar-cuenta",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/:id/campus/:projectId/buscar-cuenta",
+  "relativa": "GET /:id/campus/:projectId/buscar-cuenta",
+  "controlador": "buscarCuentaMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tutores/:id/campus/:projectId/vincular",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/:id/campus/:projectId/vincular",
+  "relativa": "POST /:id/campus/:projectId/vincular",
+  "controlador": "vincularCuentaMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
  },
  {
   "id": "POST /api/tutores/:id/empresas",

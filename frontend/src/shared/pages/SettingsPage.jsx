@@ -11,10 +11,12 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
+import Select from '@/shared/components/ui/Select';
 import MarcaSection from './MarcaSection';
 import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
@@ -38,7 +40,7 @@ const NAV = [
   { label: 'Árbol de categorías',  icon: TreeStructure,  to: '/configuracion/categorias-arbol' },
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
-  { label: 'Webhooks',             icon: PlugsConnected, to: '/make-webhooks' },
+  { label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
   { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
@@ -68,13 +70,34 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880). Sin él, el
+// servidor contesta 403: Usuarios y Disponibilidad leen `/users*` (users.view)
+// y APIs globales lee `/credentials` (credentials.view). Antes se pintaban
+// igual, y una gestora abría Configuración en Usuarios con tres peticiones
+// fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
+// veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
+// Las que no salen aquí no piden permiso para leerse.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+};
+
+// Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
+const PESTANA_SIN_PERMISO = 'security';
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la pestaña elegida (la de entrada es Usuarios), Seguridad.
+  // Se calcula en cada pintado: si el mapa de permisos llega un instante
+  // después, se pasa sola a Usuarios.
+  const tab = permitida(elegida) ? elegida : PESTANA_SIN_PERMISO;
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-
-  const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
   return (
     <div className="space-y-6">
@@ -102,7 +125,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 
@@ -390,9 +413,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
   // Facturación y fechas de facturas ya no son casillas de aquí (#230, gemela de
-  // CRM#423): son permisos del catálogo y se dan en «Ver permisos», con su
+  // CRM#423): son permisos del catálogo y se dan en el apartado «Permisos» de la ficha, con su
   // registro de quién y cuándo.
-  const [verPermisos, setVerPermisos] = useState(false);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -463,7 +485,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
         ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
       });
       toast(cambiaCorreo
-        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` }
         : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
@@ -482,7 +504,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
     setSavingPass(true);
     try {
       await client.patch(`/users/${user.id}/password`, { password: newPass, confirmPassword: newPass2 });
-      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Sus sesiones se han cerrado.` });
+      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setNewPass('');
       setNewPass2('');
     } catch (e) {
@@ -514,7 +536,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
               className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
             <p className="text-[10px] text-muted-foreground mt-1">
               {isSuperadmin
-                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
+                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá (una sesión que ya tuviera abierta puede seguir hasta 8 horas). Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
                 : 'Solo un superadmin puede cambiar el correo.'}
             </p>
             {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
@@ -534,16 +556,24 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
             ))}
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Rol</label>
-            <select value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              <option value="gestor">Gestor</option>
-              <option value="admin">Admin</option>
-              <option value="soporte">Soporte</option>
-              {/* Tablero de tareas (#210): equipo de desarrollo, solo ve sus Tareas. */}
-              <option value="colaborador">Colaborador</option>
-              {/* CRM-ISEIE#420: hace los cursos y responde en Moodle. */}
-              <option value="tutor_redactor">Tutor redactor</option>
-            </select>
+            <label htmlFor="editar-usuario-rol" className="text-xs text-muted-foreground mb-1 block">Rol</label>
+            {/* El desplegable del CRM, no el del navegador (#106). «Colaborador» es el
+                del tablero de tareas (#210) y «Tutor redactor» el de CRM-ISEIE#420. */}
+            <Select
+              id="editar-usuario-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol"
+              options={[
+                { value: 'gestor', label: 'Gestor' },
+                { value: 'admin', label: 'Admin' },
+                { value: 'soporte', label: 'Soporte' },
+                { value: 'colaborador', label: 'Colaborador' },
+                { value: 'tutor_redactor', label: 'Tutor redactor' },
+                // Un rol que no está en la lista (super admin, tutor…): se enseña el suyo, no un hueco.
+                ...(['gestor', 'admin', 'soporte', 'colaborador', 'tutor_redactor'].includes(role) ? [] : [{ value: role, label: NOMBRE_ROL[role] || role }]),
+              ]}
+            />
           </div>
           <div>
             <label className="text-xs text-muted-foreground mb-1 block">Y además es…</label>
@@ -596,19 +626,13 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
         </div>
 
-        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423): su
-            rol, su rol a medida o una excepción suya. Ahí mismo se le cambian. */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <span className="text-sm">
-            Permisos
-            <span className="block text-xs text-muted-foreground">Lo que puede hacer, de dónde le viene y sus excepciones.</span>
-          </span>
-          <button type="button" onClick={() => setVerPermisos(true)}
-            className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">
-            Ver permisos
-          </button>
+        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423),
+            siempre a la vista en su ficha (gemela de CRM#698/#752): su rol, su rol
+            a medida o una excepción suya, y ahí mismo se le cambian (cada cambio
+            se guarda al momento). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDePersona userId={user.id} enLinea />
         </div>
-        {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
         <EquipoComercial userId={user.id} />
 
         <div className="flex justify-end gap-2">
@@ -628,7 +652,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                 {savingPass ? '…' : 'Cambiar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, con la anterior ya no entra; una sesión que ya tuviera abierta puede seguir hasta 8 horas.</p>
           </div>
         )}
       </div>
@@ -651,6 +675,9 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Las excepciones de permisos que van con el alta (gemela de CRM#698): se
+  // crean en la misma operación que el usuario.
+  const [excepciones, setExcepciones] = useState({});
   // Escape cierra, como los demás formularios (#106).
   useEscapeKey(onClose);
   // Qué roles puede dar quien invita (gemela de CRM#644: Tony, cinco altas
@@ -717,6 +744,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
       await client.post('/users', {
         nombre: nombre.trim(), email: email.trim().toLowerCase(), role, projects: projList,
         ...(conEmpresa ? { empresaIds: empresasEnteras } : {}),
+        ...(Object.keys(excepciones).length ? { excepciones } : {}),
       });
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
@@ -747,13 +775,19 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
           </div>
           <div>
             <label htmlFor="invitar-rol" className="text-xs text-muted-foreground mb-1 block">Rol *</label>
-            <select id="invitar-rol" value={role} onChange={(e) => setRole(e.target.value)} className="w-full h-9 px-3 rounded-md border border-border bg-background text-sm">
-              {ROLES_ALTA.map(([v, texto]) => (
-                <option key={v} value={v} disabled={!!motivoPrincipal(v)}>
-                  {motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto}
-                </option>
-              ))}
-            </select>
+            {/* El desplegable del CRM, no el del navegador (#106). El rol que no se puede
+                dar sale en la lista, desactivado y diciéndolo. */}
+            <Select
+              id="invitar-rol"
+              value={role}
+              onChange={setRole}
+              ariaLabel="Rol *"
+              options={ROLES_ALTA.map(([v, texto]) => ({
+                value: v,
+                label: motivoPrincipal(v) ? `${NOMBRE_ROL[v]} (no puedes darlo)` : texto,
+                disabled: !!motivoPrincipal(v),
+              }))}
+            />
             {/* Los roles que no se pueden dar, con su porqué, a la vista sin abrir la lista. */}
             {ROLES_ALTA.some(([v]) => motivoPrincipal(v)) && (
               <ul className="mt-1 space-y-1 text-[10px] text-muted-foreground">
@@ -783,6 +817,12 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
               esColaborador={role === 'colaborador'}
             />
           </div>
+        </div>
+        {/* Lo que trae el rol, con sus excepciones antes de crearla (gemela de CRM#698). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDelAlta role={role} rolesExtra={[]}
+            projectIds={Object.keys(assigned).map(Number)}
+            excepciones={excepciones} onCambiar={setExcepciones} />
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

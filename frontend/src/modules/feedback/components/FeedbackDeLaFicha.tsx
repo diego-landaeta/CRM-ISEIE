@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { EnvelopeSimple, ChatCircleText, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { envioDeUnLead, enviarLoRevisado, noEnviar, type EnvioDeUnLead } from '../api/feedback.api';
@@ -27,11 +27,40 @@ const dia = (s: string | null) => (s ? new Date(s).toLocaleDateString('es-ES') :
 
 export default function FeedbackDeLaFicha({ leadId }: { leadId: number }) {
   const [envio, setEnvio] = useState<EnvioDeUnLead | undefined>(undefined);
+  const [fallo, setFallo] = useState(false);
   const [yendo, setYendo] = useState(false);
 
-  const cargar = () => envioDeUnLead(leadId).then(setEnvio).catch(() => setEnvio(null));
-  useEffect(() => { cargar(); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [leadId]);
+  // Solo vale la respuesta del prospecto que se está mirando: al pasar de una
+  // ficha a otra, la de la anterior puede llegar tarde y pintar su feedback
+  // —y su «Enviar ahora»— en la nueva (#593).
+  const pedido = useRef(0);
+  const cargar = () => {
+    const este = ++pedido.current;
+    return envioDeUnLead(leadId)
+      .then((e) => { if (este === pedido.current) { setEnvio(e); setFallo(false); } })
+      .catch((e) => {
+        if (este !== pedido.current) return;
+        setEnvio(null);
+        // Un prospecto borrado o de un campus que no es suyo no tiene bloque:
+        // eso no es un fallo. Lo demás (servidor caído, red) sí se dice.
+        setFallo(![403, 404].includes((e as { status?: number })?.status ?? 0));
+      });
+  };
+  useEffect(() => {
+    setEnvio(undefined);
+    setFallo(false);
+    cargar();
+    /* eslint-disable-next-line react-hooks/exhaustive-deps */
+  }, [leadId]);
 
+  // Si no se pudo saber, se dice: callarse es igual que «nunca se le preguntó».
+  if (fallo) {
+    return (
+      <p className="flex items-start gap-1.5 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+        <EnvelopeSimple size={14} className="mt-0.5 shrink-0" /> No se ha podido cargar el correo de feedback de esta persona.
+      </p>
+    );
+  }
   if (!envio) return null;
 
   async function decidir(enviar: boolean) {
@@ -116,7 +145,7 @@ export default function FeedbackDeLaFicha({ leadId }: { leadId: number }) {
     bloqueado: 'El correo de feedback no salió: lo paró el freno de correos de pruebas.',
     sin_correo: 'No se le pudo mandar el correo de feedback: no tiene correo.',
     fallido: `El correo de feedback no salió${envio.nota_envio ? `: ${envio.nota_envio}` : '.'}`,
-    cancelado: 'Se decidió no mandarle el correo de feedback.',
+    cancelado: envio.nota_envio ? `No se le mandó el correo de feedback: ${envio.nota_envio}.` : 'Se decidió no mandarle el correo de feedback.',
     pendiente: 'El correo de feedback está saliendo.',
   }[envio.estado] || null;
   if (!linea) return null;

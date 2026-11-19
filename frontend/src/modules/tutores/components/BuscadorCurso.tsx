@@ -117,7 +117,9 @@ export default function BuscadorCurso({
             if (e.key === 'ArrowDown') { e.preventDefault(); setResaltado((r) => Math.min(r + 1, resultados.length - 1)); }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setResaltado((r) => Math.max(r - 1, 0)); }
             else if (e.key === 'Enter' && resultados[resaltado]) { e.preventDefault(); elegir(resultados[resaltado].id); }
-            else if (e.key === 'Escape') setAbierto(false);
+            // Con la lista abierta, Escape la cierra a ella y no llega a la
+            // ventana: si no, cerraba «Añadir formación» entera (#106).
+            else if (e.key === 'Escape' && abierto) { e.stopPropagation(); setAbierto(false); }
           }}
           placeholder={placeholder}
           className="flex-1 bg-transparent text-sm outline-none min-w-0"

@@ -1,0 +1,12 @@
+# Todos los días a las 03:15 de Madrid (lejos del resumen diario, 21:31-22:00, y con poco uso).
+# Persistent=true: si el VPS estaba apagado a esa hora, la copia se hace al arrancar.
+[Unit]
+Description=Copia diaria de las bases - #634
+
+[Timer]
+OnCalendar=*-*-* 03:15:00 Europe/Madrid
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

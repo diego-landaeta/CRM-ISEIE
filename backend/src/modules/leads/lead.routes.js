@@ -22,6 +22,8 @@ router.use(verifyToken);
 router.get('/', puede('leads.view'), leadController.list);
 router.get('/export/wasapi', puede('leads.exportar_wasapi'), leadController.exportWasapi);
 router.get('/stats', puede('leads.view'), leadController.stats);
+// Cuántos hay en cada filtro rápido, de una consulta (gemela de la #132 del 360).
+router.get('/quick-counts', puede('leads.view'), leadController.quickCounts);
 router.get('/today', puede('leads.view'), leadController.today);
 router.get('/dashboard-summary', puede('leads.view'), leadController.dashboardSummary);
 // Lookup público para gestores: devuelve metadata mínima de leads con el

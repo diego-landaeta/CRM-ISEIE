@@ -61,6 +61,17 @@ export interface ConexionCertifex {
 
 /** Una matrícula de Certifex a decidir (o ya decidida). Contrato: docs/integracion-crm.md. */
 export interface Candidato {
+  /**
+   * #351, prevención: el programa que se imprimiría si se emite ahora y lo revisado a mano.
+   * Lo traen Diplomas y Emisiones en lo que no tiene título; sin el dato, no se sabe.
+   */
+  programaCrm?: ProgramaDelCrm | null;
+  edicion?: EdicionSolicitud | null;
+  /**
+   * #351: la última vez que se revirtió su diploma (el número anulado, por qué, quién y
+   * cuándo), o null. Lo traen «Aprobados sin diploma» y Emisiones, en lo que no tiene título.
+   */
+  revertido?: Revertido | null;
   matriculaId: number;
   centro: string;
   /** `dni`: el DNI / NIE / pasaporte que se imprime. Obligatorio para emitir (Diego, 20/10). */
@@ -186,9 +197,10 @@ export const emisionesApi = {
   estado: () => client.get('/certifex/emisiones/estado') as R<ConexionCertifex>,
   centros: () => client.get('/certifex/emisiones/centros') as R<CampusCertifex[]>,
   cursos: (centro: string) => client.get(`/certifex/emisiones/cursos?centro=${encodeURIComponent(centro)}`) as R<CursoCertifex[]>,
-  listar: (f: { estado?: EstadoEmision; centro?: string; pagina?: number; curso?: number; q?: string } = {}) => {
+  /** `conPrograma` (#351, prevención): que cada fila sin título traiga `programaCrm` y `edicion`. */
+  listar: (f: { estado?: EstadoEmision; centro?: string; pagina?: number; curso?: number; q?: string; conPrograma?: boolean } = {}) => {
     const p = new URLSearchParams();
-    for (const [k, v] of Object.entries(f)) if (v) p.set(k, String(v));
+    for (const [k, v] of Object.entries(f)) if (v) p.set(k, k === 'conPrograma' ? '1' : String(v));
     return client.get(`/certifex/emisiones?${p.toString()}`) as R<PaginaCandidatos>;
   },
   decidir: (items: { matriculaId: number; decision: 'aprobada' | 'rechazada'; motivo?: string | null }[]) =>
@@ -242,7 +254,8 @@ export const emisionesApi = {
 // --- Diplomas (#272): lo que el alumno pide desde Moodle y los diplomas emitidos ---
 // Emitir NO avisa al alumno: el correo sale solo cuando alguien lo aprueba aquí.
 
-export type PestanaDiplomas = 'pendientes' | 'terminados' | 'enviados' | 'rechazados' | 'revocados';
+/** `revertidos` (#351): los números anulados al revertir, con quién, cuándo, por qué y el nuevo. */
+export type PestanaDiplomas = 'pendientes' | 'terminados' | 'enviados' | 'rechazados' | 'revocados' | 'revertidos';
 export type ResultadoAviso = 'enviado' | 'correo_apagado' | 'sin_correo' | 'error';
 /** 'fuera': emitido fuera del CRM (desde Certifex, o los antiguos) y sin aviso. */
 export type FiltroAviso = 'pendiente' | 'fuera' | 'enviado' | 'no_salio';
@@ -316,6 +329,12 @@ export interface CambiosSolicitud {
   emailCrm?: string | null;
   productoId?: number | null;
   programa?: ProgramaOficial | null;
+  /**
+   * #351: solo para encontrar una matrícula que no es una solicitud (desde Emisiones): su
+   * campus y su correo acotan la búsqueda en Certifex. No se guardan.
+   */
+  centro?: string;
+  q?: string;
 }
 
 /**
@@ -340,8 +359,21 @@ export interface Solicitud extends Candidato {
   firma?: FirmaDelAlumno | null;
   /** El aviso de rechazo que ya se aprobó (solo en las rechazadas). */
   avisoRechazo?: { en: string; por: string; resultado: string } | null;
+  /**
+   * Solo en «Aprobados sin diploma» (#351): la última vez que se revirtió su diploma (el
+   * número anulado, por qué, quién y cuándo), o null.
+   */
+  revertido?: Revertido | null;
   /** Solo en «por avisar»: el diploma emitido. */
   diploma?: Diploma | null;
+}
+
+/** Una reversión apuntada en el CRM (#351, migración 301). */
+export interface Revertido {
+  nexpediente: string;
+  motivo: string;
+  por: string;
+  en: string;
 }
 
 export interface Diploma {
@@ -354,6 +386,17 @@ export interface Diploma {
   emitidaPor: string | null;
   revocada: boolean;
   revocacion: { en: string | null; motivo: string | null; por: string | null } | null;
+  /**
+   * #351: revertido antes de enviarlo (Certifex 0045). El número queda anulado; `sustituidaPor`
+   * es el que salió al volver a emitir y `vigente`, el que vale hoy (si se revirtió más de una
+   * vez, `sustituidaPor` también está anulado). Un Certifex anterior no los manda.
+   */
+  anulada?: boolean;
+  /**
+   * `cursoCerrado`: una credencial de esa persona y ese curso está revocada (revocar cierra el curso:
+   * ya no se vuelve a emitir). `porEsteCrm`: lo revirtió este CRM. Un Certifex anterior no los manda.
+   */
+  anulacion?: { en: string | null; motivo: string | null; por: string | null; porEsteCrm?: boolean; sustituidaPor: string | null; vigente?: string | null; cursoCerrado?: boolean } | null;
   /** Null si Certifex no tiene dirección pública (`sinEnlaces` en la lista dice por qué). */
   verificarUrl: string | null;
   diplomaUrl: string | null;
@@ -361,8 +404,18 @@ export interface Diploma {
   aviso: { resultado: ResultadoAviso; en: string; por: string; porNombre?: string | null } | null;
   /** El correo del alumno, al que Certifex manda el diploma (05/11/2026). Null si no se sabe. */
   titularEmail?: string | null;
+  /**
+   * #351: entregado para Certifex (aviso aprobado, haya salido o no, o correo enviado desde su
+   * panel). Lo entregado no se revierte. Un Certifex anterior no lo manda.
+   */
+  entregado?: boolean;
   /** Lo emitió este CRM («persona (CRM …)»). Lo emitido fuera no está «pendiente de aviso». */
   emitidoEnCrm?: boolean;
+  /**
+   * #351: este CRM lo puede revertir (lo emitió él, según Certifex: con dos CRM en un campus, cada
+   * uno lo suyo). Solo decide «Revertir»; «Enviar» sigue con `emitidoEnCrm`. Sin el campo, sí.
+   */
+  revertibleAqui?: boolean;
   /** Su diploma tiene versión de imprenta A3 (hoy, solo ISEIE). La da Certifex. */
   imprenta?: boolean;
 }
@@ -458,8 +511,9 @@ export const diplomasApi = {
     client.get(`/certifex/diplomas/terminados?${qs(f)}`) as R<Pagina<Terminado>>,
   porAvisar: (f: { centro?: string; q?: string }) =>
     client.get(`/certifex/diplomas/por-avisar?${qs(f)}`) as R<{ porAvisar: Solicitud[]; sinEmitir: Solicitud[]; truncado?: boolean }>,
-  diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'todos'; aviso?: FiltroAviso }) =>
-    client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma>>,
+  diplomas: (f: FiltrosDiplomas & { estado?: 'vigentes' | 'revocados' | 'anulados' | 'todos'; aviso?: FiltroAviso }) =>
+    // `sinRevertir` (#351): con `anulados`, el Certifex conectado aún no revierte (no hay esa lista).
+    client.get(`/certifex/diplomas?${qs(f)}`) as R<Pagina<Diploma> & { sinRevertir?: boolean }>,
   /** Los correos del diploma en Brevo: enviado, entregado, abierto, Message-ID (justificante). */
   envios: (nexpediente: string) =>
     client.get(`/certifex/diplomas/envios?${qs({ exp: nexpediente })}`) as R<EnviosDeDiploma>,
@@ -473,6 +527,19 @@ export const diplomasApi = {
   avisos: (nexpedientes: string[]) => client.post('/certifex/diplomas/avisos', { nexpedientes }) as R<RespuestaAvisos>,
   avisosRechazo: (matriculaIds: number[]) =>
     client.post('/certifex/diplomas/avisos-rechazo', { matriculaIds }) as R<RespuestaAvisosRechazo>,
+  /** ¿El Certifex conectado ya revierte (su 0045)? Si no, `motivo` dice por qué (#351). */
+  revertirDisponible: () =>
+    client.get('/certifex/diplomas/revertir') as R<{ disponible: boolean; motivo: string | null }>,
+  /**
+   * «Revertir» (#351): el número se anula (no vale ni se reutiliza) y la matrícula vuelve a
+   * «Aprobados sin diploma» para editarla y volver a emitir, con otro número. `aviso`:
+   * revertido en Certifex, pero el CRM no lo pudo apuntar.
+   */
+  revertir: (nexpediente: string, motivo: string) =>
+    client.post('/certifex/diplomas/revertir', { nexpediente, motivo }) as R<{
+      ok: true; nexpediente: string; anulada: { en: string; por: string; motivo: string };
+      matriculaId: number | null; registrado: boolean; aviso?: string;
+    }>,
   revocar: (nexpediente: string, motivo: string) =>
     client.post('/certifex/diplomas/revocar', { nexpediente, motivo }) as R<{ ok: true; nexpediente: string }>,
   corregirNombre: (nexpediente: string, valor: string, motivo: string) =>

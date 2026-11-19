@@ -27,6 +27,8 @@ export function normalizeStats(raw) {
     en_seguimiento: Number(d.en_seguimiento) || 0,
     convertido,
     no_interesado: noInteresado,
+    // Abiertos sin gestora: la alerta del Dashboard (gemela de CRM#884).
+    sin_asignar: Number(d.sin_asignar) || 0,
     conversionRate: total > 0 ? Math.round((convertido / total) * 100) : 0,
     abandonRate: total > 0 ? Math.round((noInteresado / total) * 100) : 0,
   };

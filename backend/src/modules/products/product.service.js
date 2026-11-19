@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { saveLocal, deleteLocal } from '../../shared/services/localStorage.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import crypto from 'crypto';
+import { query } from '../../shared/config/db.js';
 
 export async function listByProject(projectId, opts = {}) {
   return ProductModel.findByProject(projectId, opts);
@@ -15,9 +16,22 @@ export async function getById(id, projectId) {
   return product;
 }
 
+/**
+ * #770 · El responsable de desarrollar un curso: un tutor o un tutor redactor de
+ * alta. Lo comprueba el servidor: el desplegable solo propone, y sin esto se
+ * podría fijar a cualquiera (y la venta acabaría asignándole el pendiente).
+ */
+async function comprobarResponsable(data) {
+  if (!data.responsable_desarrollo_id) return;
+  const { rows } = await query(
+    `SELECT 1 FROM users WHERE id = $1 AND role IN ('tutor', 'tutor_redactor') AND active`, [data.responsable_desarrollo_id]);
+  if (!rows.length) throw new AppError('El responsable tiene que ser un tutor o un tutor redactor activo', 400, 'VALIDATION_ERROR');
+}
+
 export async function create(data) {
   const existing = await ProductModel.findByProjectAndName(data.projectId, data.nombre);
   if (existing) throw new AppError('Ya existe un producto con ese nombre en este proyecto', 409, 'PRODUCT_DUPLICATE');
+  await comprobarResponsable(data);
   return ProductModel.create(data);
 }
 
@@ -27,6 +41,7 @@ export async function update(id, projectId, data) {
     const existing = await ProductModel.findByProjectAndName(projectId, data.nombre);
     if (existing) throw new AppError('Ya existe un producto con ese nombre en este proyecto', 409, 'PRODUCT_DUPLICATE');
   }
+  await comprobarResponsable(data);
   return ProductModel.update(id, data);
 }
 

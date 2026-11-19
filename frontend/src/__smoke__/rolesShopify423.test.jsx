@@ -106,7 +106,7 @@ describe('<PermisosDePersona>', () => {
     render(<PermisosDePersona userId={7} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText('Permisos de Laura')).toBeTruthy());
     fireEvent.change(screen.getByLabelText('Buscar un permiso'), { target: { value: 'ver diplomas' } });
-    expect(screen.getByText('Excepción suya')).toBeTruthy();
+    expect(screen.getByText('Excepción suya: dado a mano')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Buscar un permiso'), { target: { value: 'ver prospectos' } });
     expect(screen.getByText('Su rol: Gestora')).toBeTruthy();
     expect(screen.getByText(/Diego · diplomas.view: como su rol \(no\) → sí/)).toBeTruthy();

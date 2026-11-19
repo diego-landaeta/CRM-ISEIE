@@ -23,11 +23,16 @@
  *
  * `origen` de cada clave, para la ficha:
  *   { tipo: 'superadmin' }
- *   { tipo: 'rol', rol }                el valor de serie de ese rol
- *   { tipo: 'ajuste_rol', rol }         lo cambiado a ese rol en Roles
+ *   { tipo: 'rol', rol, extra }         el valor de serie de ese rol; `extra`
+ *                                       si es uno de sus roles de más (#694)
+ *   { tipo: 'ajuste_rol', rol, extra }  lo cambiado a ese rol en Roles
  *   { tipo: 'rol_a_medida', id, nombre }
  *   { tipo: 'excepcion' }
- *   { tipo: 'nunca', roles }
+ *   { tipo: 'nunca', roles, principal } su rol no puede tenerlo, ni con
+ *                                       excepción; `principal` si lo veta su
+ *                                       rol principal (`nuncaPrincipal`). Sale
+ *                                       aunque nadie se lo diera: la ficha
+ *                                       enseña la casilla bloqueada (#694)
  *   { tipo: 'ninguno' }                 nadie se lo da
  */
 import { ACCIONES, valoresPorDefecto, vetada } from './catalogo.js';
@@ -77,7 +82,8 @@ export function resolverPermisos({ role, roles_extra = [], customRole = null, ex
     for (const r of (x.soloPrincipal ? roles.filter((y) => y === principal) : roles)) {
       const cambiado = ajuste[`${r}|${k}`];
       const v = cambiado !== undefined ? cambiado : SERIE[r]?.[k] === true;
-      if (v) { valor = true; origen = cambiado !== undefined ? { tipo: 'ajuste_rol', rol: r } : { tipo: 'rol', rol: r }; break; }
+      const extra = r !== principal ? { extra: true } : {};
+      if (v) { valor = true; origen = { tipo: cambiado !== undefined ? 'ajuste_rol' : 'rol', rol: r, ...extra }; break; }
     }
     if (medida && medida.permissions && k in medida.permissions) {
       valor = medida.permissions[k] === true;
@@ -87,9 +93,10 @@ export function resolverPermisos({ role, roles_extra = [], customRole = null, ex
       valor = excepciones[k] === true;
       origen = { tipo: 'excepcion' };
     }
-    if (valor && vetada(x, role, comoLista(roles_extra))) {
+    // Vetada: no la tiene, y la ficha lo dice aunque nadie se la diera (#694).
+    if (vetada(x, role, comoLista(roles_extra))) {
       valor = false;
-      origen = { tipo: 'nunca', roles: todosSusRoles };
+      origen = { tipo: 'nunca', roles: todosSusRoles, principal: Boolean(x.nuncaPrincipal?.includes(role)) };
     }
     mapa[k] = valor;
     origenes[k] = origen;

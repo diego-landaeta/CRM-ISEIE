@@ -31,9 +31,8 @@ export const SECTIONS = [
     roles: ['admin', 'superadmin'],
     tabs: [
       { to: '/forms',                label: 'Formularios',     icon: FileText },
-      { to: '/make-webhooks',        label: 'Make',            icon: WebhooksLogo },
-      // Su propia pantalla desde el #226: antes /webhooks llevaba a la de Make.
-      { to: '/webhooks',             label: 'Webhooks',        icon: WebhooksLogo },
+      // Make y Webhooks eran pestañas de aquí; desde la gemela de CRM#755 viven
+      // en Conexión › Webhooks, con todos los demás (sus direcciones redirigen).
       { to: '/captacion/whatsapp',   label: 'Widget WhatsApp', icon: WebhooksLogo },
     ],
   },

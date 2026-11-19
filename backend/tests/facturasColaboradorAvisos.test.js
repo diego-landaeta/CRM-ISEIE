@@ -90,8 +90,9 @@ async function colaborador(clave, empresa) {
 async function recibida(clave, colab, empresa, { periodo = MARZO, importe = 600, moneda = 'EUR', hace = 10 } = {}) {
   F[clave] = (await one(
     `INSERT INTO facturas_colaborador
-       (colaborador_id, issuer_id, periodo, subida_at, numero_recepcion, importe, moneda, numero_factura, archivo_key, tamano)
-     VALUES ($1, $2, $3, NOW() - make_interval(mins => $4::int), $5, $6, $7, $8, $9, 30) RETURNING id`,
+       (colaborador_id, issuer_id, periodo, subida_at, numero_recepcion, importe, moneda, numero_factura, archivo_key, tamano, validada_at)
+     -- Recibida y ya validada por la empresa (CRM#710): lo que aquí se prueba es el aviso y el pago.
+     VALUES ($1, $2, $3, NOW() - make_interval(mins => $4::int), $5, $6, $7, $8, $9, 30, NOW()) RETURNING id`,
     [colab.id, empresa.id, periodo, hace, `REC-AV-${clave}-${MARCA}`, importe, moneda, `F-${clave}`,
       `facturas-colaborador/2026-03/${clave}/2026-03_${MARCA}_${clave}.pdf`])).id;
   return F[clave];
@@ -322,12 +323,15 @@ describe('resumen diario «Faltan facturas por pagar» (Diego 04/11)', () => {
   it('sin pendientes no manda nada', async () => {
     encender();
     // Todas las de A, pagadas.
-    await q("UPDATE facturas_colaborador SET pagada_at = '2026-11-01' WHERE issuer_id = $1 AND subida_at IS NOT NULL", [E.A.id]);
+    // Solo se paga una validada (chk_fc_pagada_validada): se validan a la vez.
+    await q("UPDATE facturas_colaborador SET validada_at = COALESCE(validada_at, subida_at), pagada_at = '2026-11-01' WHERE issuer_id = $1 AND subida_at IS NOT NULL", [E.A.id]);
     sendEmail.mockClear();
     await resumenPorPagar({ ahora: new Date('2026-11-07T09:00:00Z') });
     expect(correosA(CORREO_A)).toHaveLength(0);
     expect(await resumenesDeA('2026-11-07')).toHaveLength(0);
+    // Y se deja como estaba: sin pagar, y sin validar las que se validaron solo para esto.
     await q('UPDATE facturas_colaborador SET pagada_at = NULL WHERE issuer_id = $1', [E.A.id]);
+    await q('UPDATE facturas_colaborador SET validada_at = NULL WHERE issuer_id = $1 AND validada_at = subida_at', [E.A.id]);
   });
 
   it('el día se cuenta en Madrid', () => {
@@ -370,6 +374,8 @@ describe('«He recibido el pago y lo confirmo» y su opinión (Diego 04/11)', ()
   it('el correo de «Factura pagada» lleva el botón, con su enlace firmado', async () => {
     encender();
     sendEmail.mockClear();
+    // La subió por su enlace: primero la empresa la valida, después se paga (validar antes de pagar).
+    expect((await request.post(`${API}/facturas/${F.laura}/validar`).set('Authorization', `Bearer ${tokenAdmin}`)).status).toBe(200);
     const res = await pagar([F.laura]);
     expect(res.status, JSON.stringify(res.body)).toBe(200);
     await vi.waitFor(() => expect(correosA(C.laura.email)).toHaveLength(1));

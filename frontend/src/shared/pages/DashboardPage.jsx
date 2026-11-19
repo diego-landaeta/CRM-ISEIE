@@ -5,6 +5,10 @@ import { useDashboard } from '@/shared/hooks/useDashboard';
 import ActividadDeHoy from '@/shared/components/dashboard/ActividadDeHoy';
 import { TarjetaActividad } from '@/modules/reports/components/ActividadPorComercial';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
+import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
+import CifrasDeHoy from '@/shared/components/dashboard/CifrasDeHoy';
+import BloquePlegable from '@/shared/components/ui/BloquePlegable';
+import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
 const LeadDrawer = lazy(() => import('@/modules/leads/components/LeadDrawer'));
@@ -208,8 +212,9 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Dashboard"
-        subtitle={`${todayDate} - ${activeProject?.nombre || 'Sin proyecto'}`}
+        // «Hoy» (gemela de CRM#884): lo primero es el día, no el nombre de la pantalla.
+        title={`Hoy, ${todayDate}`}
+        subtitle={activeProject?.nombre || 'Sin proyecto'}
       />
 
       {/* Si falta algun numero en la serie de facturas, se avisa arriba del
@@ -217,305 +222,332 @@ export default function DashboardPage() {
           del formulario de crear una factura. */}
       <AvisoHuecosFacturas projectId={activeProject?.id} />
 
-      {/* Como va quien mira: su puesto y, a quien dirige, el podio y el
-          ranking de gestoras por lo cobrado. Como en MultiCRM.
-          Diego, 22/10/2026: «¿por qué en ISEIE dejaron de aparecer los
-          ranking de las gestoras para los admin?». Desde el 22/09 estaba
-          dentro del «Cargando datos…» —se veía un instante y se iba— y
-          desde el 28/09 (480e7de), además, detrás de PROCESO_EN_PRUEBAS. El
-          ranking no es el proceso comercial: va a producción por su cuenta
-          desde el 08/10 («por lo cobrado»), así que no depende de esa
-          bandera.
-          12/11/2026, Diego: «los montos de los rankings de todas las vistas
-          son del monto cobrado». El ranking de aquí vuelve a lo cobrado,
-          como en Prospectos, Clientes, Ventas y Reportes (iba por lo
-          facturado desde el #224). */}
-      <ComoVoy />
+      {/* LAS CIFRAS DE HOY (gemela de CRM#884): cuatro cifras con su nombre y su
+          recuento, y las dos alertas, que llevan a Prospectos ya filtrado. */}
+      <CifrasDeHoy stats={stats} today={today} />
 
-      {/* Actividad por comercial de ayer (#203, parte B), como en MultiCRM. Al
-          admin, las 3 primeras y el equipo; a una gestora, su línea (lo recorta
-          el servidor). */}
-      <TarjetaActividad ambito={ambitoComoObjeto({ activeProject })} />
+      {/* Lo que toca, de la cola del proceso (#130). Va ANTES de lo demás: lo
+          primero de la mañana es qué hay que hacer. En ISEIE el proceso
+          comercial solo está en /staging (`PROCESO_EN_PRUEBAS`), como en
+          Prospectos: en producción no sale. */}
+      {PROCESO_EN_PRUEBAS && <ParaHoyYManana projectId={proyectoReal} />}
 
-      {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
-      <ActividadDeHoy projectId={proyectoReal} mostrarProyecto={!proyectoReal} />
+      {/* TODO LO DEMÁS, PLEGADO (gemela de CRM#884). Arriba queda lo que se mira
+          cada mañana; esto se abre cuando hace falta y cada bloque recuerda
+          cómo lo dejaste. No se ha quitado nada. */}
+      <BloquePlegable clave="dashboard-equipo" titulo="El equipo este mes" abiertoPorDefecto={false} resumen="Ranking por lo cobrado">
+        <div className="space-y-6">
+          {/* Como va quien mira: su puesto y, a quien dirige, el podio y el
+              ranking de gestoras por lo cobrado. Como en MultiCRM.
+              Diego, 22/10/2026: «¿por qué en ISEIE dejaron de aparecer los
+              ranking de las gestoras para los admin?». El ranking no es el
+              proceso comercial: no depende de PROCESO_EN_PRUEBAS.
+              12/11/2026, Diego: «los montos de los rankings de todas las vistas
+              son del monto cobrado». */}
+          <ComoVoy />
+        </div>
+      </BloquePlegable>
 
-      {/* SECCION HOY */}
-      {today && (
-        <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
-          <div className="flex items-center justify-between mb-3">
-            <div>
-              <h2 className="font-semibold text-base">Tu día de hoy</h2>
-              <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del día</p>
-            </div>
+      <BloquePlegable clave="dashboard-productos" titulo="Productos vendidos" abiertoPorDefecto={false} resumen="Top 10 del mes">
+        <div className="space-y-6">
+          {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos.
+              Las dos tarjetas de productos cuentan lo FACTURADO (#224, Diego
+              10/10) y salen de `/ventas/facturado`. El ranking de gestoras,
+              no: desde el 12/11/2026 va por lo cobrado. */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Suspense fallback={null}>
+              <CursosVendidosCard projectId={proyectoReal} medida="facturado" />
+            </Suspense>
+            <Suspense fallback={null}>
+              <TopProductsCard projectId={proyectoReal} days={null} limit={5} medida="facturado" />
+            </Suspense>
+          </div>
+        </div>
+      </BloquePlegable>
+
+      <BloquePlegable clave="dashboard-embudo" titulo="Embudo y orígenes" abiertoPorDefecto={false} resumen="Prospectos por estado y por canal">
+        <div className="space-y-6">
+          {/* Top KPI row */}
+          <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <KpiCard
+              icon={Users}
+              iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
+              label="Total prospectos"
+              numericValue={Number(total) || 0}
+            />
+            <KpiCard
+              icon={Sparkle}
+              iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
+              label="Nuevos"
+              numericValue={Number(nuevos) || 0}
+            />
+            <KpiCard
+              icon={CheckCircle}
+              iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+              label="Convertidos"
+              numericValue={Number(convertidos) || 0}
+              badge={`${tasa}%`}
+              badgeColor="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
+              trend="up"
+            />
+            <KpiCard
+              icon={ChartLineUp}
+              iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
+              label="Tasa conversión"
+              numericValue={Number(tasa) || 0}
+              format={(n) => `${Math.round(n)}%`}
+            />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
-            <button onClick={() => navigate('/leads?qf=urgent')}
-              className="bg-card rounded-md p-3 border border-border text-left hover:border-orange-300 hover:bg-orange-50/30 dark:hover:bg-orange-950/10 transition-colors">
-              <p className="text-xs font-medium text-muted-foreground">Pendientes</p>
-              <p className="text-2xl font-semibold tabular-nums text-orange-600">{today.reminders_pendientes?.length || 0}</p>
-              <p className="text-[10px] text-muted-foreground">recordatorios hoy</p>
-            </button>
-            <button onClick={() => navigate('/leads')}
-              className="bg-card rounded-md p-3 border border-border text-left hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
-              <p className="text-xs font-medium text-muted-foreground">Nuevos</p>
-              <p className="text-2xl font-semibold tabular-nums text-blue-600">{today.nuevos_hoy || 0}</p>
-              <p className="text-[10px] text-muted-foreground">hoy ({today.nuevos_semana || 0} semana)</p>
-            </button>
-            <button onClick={() => navigate('/leads?qf=no-contact')}
-              className="bg-card rounded-md p-3 border border-border text-left hover:border-amber-300 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-colors">
-              <p className="text-xs font-medium text-muted-foreground">Inactivos</p>
-              <p className="text-2xl font-semibold tabular-nums text-amber-600">{today.inactivos || 0}</p>
-              <p className="text-[10px] text-muted-foreground">prospectos sin actividad</p>
-            </button>
-            <button onClick={() => navigate('/accounting/receivable')}
-              className="bg-card rounded-md p-3 border border-border text-left hover:border-red-300 hover:bg-red-50/30 dark:hover:bg-red-950/10 transition-colors">
-              <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
-              <p className="text-2xl font-semibold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
-              <p className="text-[10px] text-muted-foreground" title="Cuenta ventas con saldo pendiente y fecha de pago ya pasada. «Cuentas por cobrar» (Finanzas) cuenta cuotas e importes; son dos cifras distintas.">ventas con la fecha de pago pasada</p>
-            </button>
-            <button onClick={() => navigate('/accounting/income')}
-              className="bg-card rounded-md p-3 border border-border text-left hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
-              <p className="text-xs font-medium text-muted-foreground">Ingresos hoy</p>
-              <p className="text-2xl font-semibold tabular-nums text-emerald-600">{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(today.ingresos_hoy || 0)}</p>
-              <p className="text-[10px] text-muted-foreground">cobrado hoy</p>
-            </button>
-          </div>
-
-          {/* Reminders pendientes */}
-          {today.reminders_pendientes && today.reminders_pendientes.length > 0 ? (
-            <div>
-              <h3 className="text-xs font-medium text-muted-foreground mb-2">Seguimientos pendientes</h3>
-              <div className="space-y-2">
-                {today.reminders_pendientes.slice(0, 5).map((r) => (
-                  <button
-                    key={r.id}
-                    onClick={() => setDrawerLeadId(r.lead_id)}
-                    className="w-full text-left bg-card border border-border rounded-md p-3 hover:bg-muted/30 transition-colors flex items-center gap-3"
-                  >
-                    <div className={`w-2 h-10 rounded-full ${r.vencido ? 'bg-red-500' : 'bg-orange-500'}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-sm truncate">{r.lead_nombre}</span>
-                        {r.vencido && <span className="text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded">VENCIDO</span>}
-                      </div>
-                      <p className="text-xs text-muted-foreground truncate">{r.nota || 'Sin nota'}</p>
-                    </div>
-                    <ArrowRight size={14} className="text-muted-foreground flex-shrink-0" />
-                  </button>
-                ))}
-                {today.reminders_pendientes.length > 5 && (
-                  <p className="text-xs text-center text-muted-foreground pt-1">
-                    + {today.reminders_pendientes.length - 5} más pendientes
-                  </p>
-                )}
+          {/* Charts row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            <div className="bg-card p-5 rounded-lg border border-border">
+              <div className="mb-4">
+                <h3 className="font-semibold">Prospectos por estado</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Distribución actual del pipeline</p>
               </div>
+              {total === 0 ? (
+                <div className="h-[220px] flex items-center justify-center">
+                  <p className="text-xs text-muted-foreground">Sin datos aun</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200} minHeight={180}>
+                  <BarChart data={statusBarData} barSize={36}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#a1a1aa', fontWeight: 600 }} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#a1a1aa' }} allowDecimals={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
+                    <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                      {statusBarData.map((entry) => (
+                        <Cell key={entry.key} fill={STATUS_BAR_COLORS[entry.key] || '#64748b'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
-          ) : (
-            <div className="bg-card border border-border rounded-lg p-4 text-center">
-              <CheckCircle size={20} className="text-emerald-500 mx-auto mb-1" weight="regular" />
-              <p className="text-sm font-semibold">Nada pendiente para hoy</p>
-              <p className="text-xs text-muted-foreground">Al día con los seguimientos</p>
+
+            <div className="bg-card p-5 rounded-lg border border-border">
+              <div className="mb-4">
+                <h3 className="font-semibold">Prospectos por canal</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Orígenes de los prospectos recientes</p>
+              </div>
+              {channelBarData.length === 0 ? (
+                <div className="h-[220px] flex items-center justify-center">
+                  <p className="text-xs text-muted-foreground">Sin datos aun</p>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={200} minHeight={180}>
+                  <BarChart data={channelBarData} layout="vertical" barSize={18}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
+                    <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#a1a1aa' }} allowDecimals={false} />
+                    <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={90} tick={{ fontSize: 11, fill: '#71717a', fontWeight: 600 }} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
+                    <Bar dataKey="value" radius={[0, 6, 6, 0]}>
+                      {channelBarData.map((entry) => (
+                        <Cell key={entry.key} fill={CHANNEL_BAR_COLORS[entry.key] || '#64748b'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
-          )}
-        </div>
-      )}
-
-      {/* Top KPI row */}
-      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-3">
-        <KpiCard
-          icon={Users}
-          iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
-          label="Total prospectos"
-          numericValue={Number(total) || 0}
-        />
-        <KpiCard
-          icon={Sparkle}
-          iconBg="bg-orange-50 text-orange-600 dark:bg-orange-950/30 dark:text-orange-400"
-          label="Nuevos"
-          numericValue={Number(nuevos) || 0}
-        />
-        <KpiCard
-          icon={CheckCircle}
-          iconBg="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
-          label="Convertidos"
-          numericValue={Number(convertidos) || 0}
-          badge={`${tasa}%`}
-          badgeColor="bg-violet-50 text-violet-600 dark:bg-violet-950/30 dark:text-violet-400"
-          trend="up"
-        />
-        <KpiCard
-          icon={ChartLineUp}
-          iconBg="bg-emerald-50 text-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-400"
-          label="Tasa conversión"
-          numericValue={Number(tasa) || 0}
-          format={(n) => `${Math.round(n)}%`}
-        />
-      </div>
-
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <div className="bg-card p-5 rounded-lg border border-border">
-          <div className="mb-4">
-            <h3 className="font-semibold">Prospectos por estado</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Distribución actual del pipeline</p>
           </div>
-          {total === 0 ? (
-            <div className="h-[220px] flex items-center justify-center">
-              <p className="text-xs text-muted-foreground">Sin datos aun</p>
-            </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200} minHeight={180}>
-              <BarChart data={statusBarData} barSize={36}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" vertical={false} />
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#a1a1aa', fontWeight: 600 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#a1a1aa' }} allowDecimals={false} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
-                <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                  {statusBarData.map((entry) => (
-                    <Cell key={entry.key} fill={STATUS_BAR_COLORS[entry.key] || '#64748b'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
-          )}
-        </div>
 
-        <div className="bg-card p-5 rounded-lg border border-border">
-          <div className="mb-4">
-            <h3 className="font-semibold">Prospectos por canal</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Orígenes de los prospectos recientes</p>
+          {/* Embudo + Insights — content que acompana las graficas */}
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
+            <div className="lg:col-span-3">
+              <ConversionFunnel stats={stats} total={total} />
+            </div>
+            <div className="lg:col-span-2">
+              <PerformanceInsights stats={stats} today={today} recentLeads={leadsRecientes} />
+            </div>
           </div>
-          {channelBarData.length === 0 ? (
-            <div className="h-[220px] flex items-center justify-center">
-              <p className="text-xs text-muted-foreground">Sin datos aun</p>
+        </div>
+      </BloquePlegable>
+
+      <BloquePlegable clave="dashboard-ayer-hoy" titulo="Ayer y hoy" abiertoPorDefecto={false} resumen="Actividad y seguimientos">
+        <div className="space-y-6">
+          {/* Actividad por comercial de ayer (#203, parte B), como en MultiCRM. Al
+              admin, las 3 primeras y el equipo; a una gestora, su línea (lo recorta
+              el servidor). */}
+          <TarjetaActividad ambito={ambitoComoObjeto({ activeProject })} />
+
+          {/* Qué ha pasado hoy (#13): altas, ventas, estados y contactos. Cada gestora ve lo suyo. */}
+          <ActividadDeHoy projectId={proyectoReal} mostrarProyecto={!proyectoReal} />
+
+          {/* SECCION HOY */}
+          {today && (
+            <div className="bg-gradient-to-br from-blue-50 to-violet-50 dark:from-blue-950/30 dark:to-violet-950/30 border border-border rounded-lg p-4">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h2 className="font-semibold text-base">Tu día de hoy</h2>
+                  <p className="text-xs text-muted-foreground">Seguimientos pendientes y actividad del día</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-3">
+                <button onClick={() => navigate('/leads?qf=urgent')}
+                  className="bg-card rounded-md p-3 border border-border text-left hover:border-orange-300 hover:bg-orange-50/30 dark:hover:bg-orange-950/10 transition-colors">
+                  <p className="text-xs font-medium text-muted-foreground">Pendientes</p>
+                  <p className="text-2xl font-semibold tabular-nums text-orange-600">{today.reminders_pendientes?.length || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">recordatorios hoy</p>
+                </button>
+                <button onClick={() => navigate('/leads')}
+                  className="bg-card rounded-md p-3 border border-border text-left hover:border-blue-300 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 transition-colors">
+                  <p className="text-xs font-medium text-muted-foreground">Nuevos</p>
+                  <p className="text-2xl font-semibold tabular-nums text-blue-600">{today.nuevos_hoy || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">hoy ({today.nuevos_semana || 0} semana)</p>
+                </button>
+                <button onClick={() => navigate('/leads?qf=no-contact')}
+                  className="bg-card rounded-md p-3 border border-border text-left hover:border-amber-300 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 transition-colors">
+                  <p className="text-xs font-medium text-muted-foreground">Inactivos</p>
+                  <p className="text-2xl font-semibold tabular-nums text-amber-600">{today.inactivos || 0}</p>
+                  <p className="text-[10px] text-muted-foreground">prospectos sin actividad</p>
+                </button>
+                <button onClick={() => navigate('/accounting/receivable')}
+                  className="bg-card rounded-md p-3 border border-border text-left hover:border-red-300 hover:bg-red-50/30 dark:hover:bg-red-950/10 transition-colors">
+                  <p className="text-xs font-medium text-muted-foreground">Cobros vencidos</p>
+                  <p className="text-2xl font-semibold tabular-nums text-red-600">{today.cobros_vencidos || 0}</p>
+                  <p className="text-[10px] text-muted-foreground" title="Cuenta ventas con saldo pendiente y fecha de pago ya pasada. «Cuentas por cobrar» (Finanzas) cuenta cuotas e importes; son dos cifras distintas.">ventas con la fecha de pago pasada</p>
+                </button>
+                <button onClick={() => navigate('/accounting/income')}
+                  className="bg-card rounded-md p-3 border border-border text-left hover:border-emerald-300 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 transition-colors">
+                  <p className="text-xs font-medium text-muted-foreground">Ingresos hoy</p>
+                  <p className="text-2xl font-semibold tabular-nums text-emerald-600">{new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(today.ingresos_hoy || 0)}</p>
+                  <p className="text-[10px] text-muted-foreground">cobrado hoy</p>
+                </button>
+              </div>
+
+              {/* Reminders pendientes */}
+              {today.reminders_pendientes && today.reminders_pendientes.length > 0 ? (
+                <div>
+                  <h3 className="text-xs font-medium text-muted-foreground mb-2">Seguimientos pendientes</h3>
+                  <div className="space-y-2">
+                    {today.reminders_pendientes.slice(0, 5).map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => setDrawerLeadId(r.lead_id)}
+                        className="w-full text-left bg-card border border-border rounded-md p-3 hover:bg-muted/30 transition-colors flex items-center gap-3"
+                      >
+                        <div className={`w-2 h-10 rounded-full ${r.vencido ? 'bg-red-500' : 'bg-orange-500'}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-sm truncate">{r.lead_nombre}</span>
+                            {r.vencido && <span className="text-[9px] font-bold bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 px-1.5 py-0.5 rounded">VENCIDO</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground truncate">{r.nota || 'Sin nota'}</p>
+                        </div>
+                        <ArrowRight size={14} className="text-muted-foreground flex-shrink-0" />
+                      </button>
+                    ))}
+                    {today.reminders_pendientes.length > 5 && (
+                      <p className="text-xs text-center text-muted-foreground pt-1">
+                        + {today.reminders_pendientes.length - 5} más pendientes
+                      </p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-card border border-border rounded-lg p-4 text-center">
+                  <CheckCircle size={20} className="text-emerald-500 mx-auto mb-1" weight="regular" />
+                  <p className="text-sm font-semibold">Nada pendiente para hoy</p>
+                  <p className="text-xs text-muted-foreground">Al día con los seguimientos</p>
+                </div>
+              )}
             </div>
-          ) : (
-            <ResponsiveContainer width="100%" height={200} minHeight={180}>
-              <BarChart data={channelBarData} layout="vertical" barSize={18}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f4f4f5" horizontal={false} />
-                <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: '#a1a1aa' }} allowDecimals={false} />
-                <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} width={90} tick={{ fontSize: 11, fill: '#71717a', fontWeight: 600 }} />
-                <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(0,0,0,0.03)' }} />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]}>
-                  {channelBarData.map((entry) => (
-                    <Cell key={entry.key} fill={CHANNEL_BAR_COLORS[entry.key] || '#64748b'} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
           )}
         </div>
-      </div>
-
-      {/* Embudo + Insights — content que acompana las graficas */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-3">
-        <div className="lg:col-span-3">
-          <ConversionFunnel stats={stats} total={total} />
-        </div>
-        <div className="lg:col-span-2">
-          <PerformanceInsights stats={stats} today={today} recentLeads={leadsRecientes} />
-        </div>
-      </div>
-
-      {/* Cursos vendidos (hoy / semana / mes / personalizado) + Programas más vendidos.
-          Las dos tarjetas de productos cuentan lo FACTURADO (#224, Diego
-          10/10) y salen de `/ventas/facturado`. El ranking de gestoras de
-          arriba, no: desde el 12/11/2026 va por lo cobrado. */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <Suspense fallback={null}>
-          <CursosVendidosCard projectId={proyectoReal} medida="facturado" />
-        </Suspense>
-        <Suspense fallback={null}>
-          <TopProductsCard projectId={proyectoReal} days={null} limit={5} medida="facturado" />
-        </Suspense>
-      </div>
+      </BloquePlegable>
 
       {/* Monitor SaaS — solo proyectos IA */}
       {activeProject?.type === 'ia' && <SaasMonitor projectId={activeProject.id} />}
 
-      {/* Recent Leads */}
-      <div className="bg-card rounded-lg border border-border overflow-x-auto">
-        <div className="p-4 flex items-center justify-between">
-          <div>
-            <h3 className="font-semibold">Prospectos recientes</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 10 prospectos registrados</p>
-          </div>
-          <button
-            onClick={() => navigate('/leads')}
-            aria-label="Ver todos los prospectos"
-            className="h-9 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
-          >
-            <span className="hidden sm:inline">Ver todos</span> <ArrowRight size={12} weight="bold" />
-          </button>
-        </div>
-
-        {leadsRecientes.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="Sin prospectos registrados"
-            description="Aun no hay prospectos para este proyecto. Apareceran aqui cuando alguien complete un formulario o llegue via webhook."
-            action={
+      <BloquePlegable clave="dashboard-recientes" titulo="Prospectos recientes" abiertoPorDefecto={false} resumen="Los últimos registrados">
+        <div className="space-y-6">
+          {/* Recent Leads */}
+          <div className="bg-card rounded-lg border border-border overflow-x-auto">
+            <div className="p-4 flex items-center justify-between">
+              <div>
+                <h3 className="font-semibold">Prospectos recientes</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 10 prospectos registrados</p>
+              </div>
               <button
                 onClick={() => navigate('/leads')}
-                className="text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 rounded"
+                aria-label="Ver todos los prospectos"
+                className="h-9 text-xs font-semibold text-muted-foreground hover:text-foreground border border-border bg-card px-3 rounded-lg hover:bg-muted transition-all duration-200 flex items-center gap-1.5 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2"
               >
-                Ir a Gestión de Prospectos
+                <span className="hidden sm:inline">Ver todos</span> <ArrowRight size={12} weight="bold" />
               </button>
-            }
-          />
-        ) : (
-          <>
-            <div className="hidden md:block">
-              <table className="w-full text-[13px]">
-                <thead className="bg-muted/50 border-y">
-                  <tr>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
-                    <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {leadsRecientes.map((lead) => (
-                    <tr
-                      key={lead.id}
-                      className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
-                      onClick={() => setDrawerLeadId(lead.id)}
-                    >
-                      <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
-                      <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
-                      <td className="px-5 py-3"><ChannelBadge channel={lead.origen} /></td>
-                      <td className="px-5 py-3"><StatusBadge status={lead.estado} showIcon /></td>
-                      <td className="px-5 py-3 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
 
-            <div className="md:hidden divide-y">
-              {leadsRecientes.map((lead) => (
-                <div
-                  key={lead.id}
-                  className="p-4 space-y-2 cursor-pointer active:bg-muted/50 transition-colors"
-                  onClick={() => setDrawerLeadId(lead.id)}
-                >
-                  <p className="text-[13px] font-semibold">{lead.nombre}</p>
-                  <p className="text-[13px] text-muted-foreground">{lead.email}</p>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <StatusBadge status={lead.estado} />
-                    <ChannelBadge channel={lead.origen} />
-                    <span className="text-[12px] text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</span>
-                  </div>
+            {leadsRecientes.length === 0 ? (
+              <EmptyState
+                icon={Users}
+                title="Sin prospectos registrados"
+                description="Aun no hay prospectos para este proyecto. Apareceran aqui cuando alguien complete un formulario o llegue via webhook."
+                action={
+                  <button
+                    onClick={() => navigate('/leads')}
+                    className="text-xs font-semibold text-primary hover:underline focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2 rounded"
+                  >
+                    Ir a Gestión de Prospectos
+                  </button>
+                }
+              />
+            ) : (
+              <>
+                <div className="hidden md:block">
+                  <table className="w-full text-[13px]">
+                    <thead className="bg-muted/50 border-y">
+                      <tr>
+                        <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Nombre</th>
+                        <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Email</th>
+                        <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Origen</th>
+                        <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Estado</th>
+                        <th className="px-5 py-2.5 text-left text-xs text-muted-foreground">Gestor</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {leadsRecientes.map((lead) => (
+                        <tr
+                          key={lead.id}
+                          className="border-b last:border-0 hover:bg-muted/50 transition-colors cursor-pointer"
+                          onClick={() => setDrawerLeadId(lead.id)}
+                        >
+                          <td className="px-5 py-3 font-semibold">{lead.nombre}</td>
+                          <td className="px-5 py-3 text-muted-foreground">{lead.email}</td>
+                          <td className="px-5 py-3"><ChannelBadge channel={lead.origen} /></td>
+                          <td className="px-5 py-3"><StatusBadge status={lead.estado} showIcon /></td>
+                          <td className="px-5 py-3 text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
+
+                <div className="md:hidden divide-y">
+                  {leadsRecientes.map((lead) => (
+                    <div
+                      key={lead.id}
+                      className="p-4 space-y-2 cursor-pointer active:bg-muted/50 transition-colors"
+                      onClick={() => setDrawerLeadId(lead.id)}
+                    >
+                      <p className="text-[13px] font-semibold">{lead.nombre}</p>
+                      <p className="text-[13px] text-muted-foreground">{lead.email}</p>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <StatusBadge status={lead.estado} />
+                        <ChannelBadge channel={lead.origen} />
+                        <span className="text-[12px] text-muted-foreground">{lead.responsable_nombre || lead.gestor || 'Sin asignar'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </BloquePlegable>
 
       <Suspense fallback={null}>
         <LeadDrawer

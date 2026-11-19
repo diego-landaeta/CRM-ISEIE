@@ -5,11 +5,12 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, CreditCard, WarningCircle, WhatsappLogo,
+  Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond,
+  CalendarCheck, ArrowCounterClockwise } from '@phosphor-icons/react';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -22,6 +23,7 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+import { reagruparMenu } from './bloquesDelMenu';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
@@ -39,7 +41,22 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 // enlace). Las que SÍ existen en algún CRM se hacen funcionar donde falten».
 // Lo vigila `__smoke__/menuSinRutasRotas.test.jsx`: cada `to` tiene su <Route> en
 // App.jsx, o lleva `comingSoon: true`.
-export const NAV_SECTIONS = [
+// Conexión › Webhooks (gemela de CRM#755): la entrada se ve con el permiso de
+// alguna de las TRES entradas que sustituye (Captación › Webhooks, Captación ›
+// Make y Conexión › Webhook de transferencias), ni uno más: así la ve
+// exactamente quien veía alguna de ellas, también con permisos quitados o dados
+// a mano. Lo demás que reúne el resumen (Stripe, formularios…) tiene su
+// pantalla propia, y dentro cada tarjeta pide su permiso. Lo vigila
+// __smoke__/webhooksJuntos755.test.jsx y el traslado de `trasladosDeMenu.js`.
+export const PERMISOS_WEBHOOKS = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
+
+/*
+  LAS SECCIONES DE ANTES, tal cual: cada entrada con sus permisos y sus roles.
+  El menú que se pinta (`NAV_SECTIONS`, abajo) sale de repartirlas por bloques
+  de uso (gemela de CRM#900, `bloquesDelMenu.js`): ahí se dice adónde va cada
+  una, y aquí sigue todo lo que decide quién la ve.
+*/
+export const SECCIONES_DE_ANTES = [
   {
     label: 'Principal',
     items: [
@@ -52,10 +69,12 @@ export const NAV_SECTIONS = [
         defaultOpen: true,
         children: [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'], permiso: 'leads.view' },
-          { to: '/leads/cola', label: 'La cola del día', permiso: 'proceso.view' },
+          // La cola y el seguimiento salen del grupo, a «Hoy» (gemela de CRM#900):
+          // llevan su icono porque ahí se pintan sueltos.
+          { to: '/leads/cola', label: 'La cola del día', icon: CalendarCheck, permiso: 'proceso.view' },
           // El quinto paso no cabe en la cola: es toda la base que no compro.
           // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
-          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', permiso: 'proceso.view' }] : []),
+          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', icon: ArrowCounterClockwise, permiso: 'proceso.view' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial', permiso: 'proceso.view' },
           // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
           // Sin aprobar para producción (07/10): solo en /staging.
@@ -90,8 +109,8 @@ export const NAV_SECTIONS = [
           // Vuelve cuando se rehaga sobre el chat nuevo.
         ],
       },
-      // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
-      // y Revisión duplicados pasan a la sección Clientes al final.
+      // Ventas estaba en Principal y también en Finanzas: con los bloques de uso
+      // queda una sola, en Comercial (gemela de CRM#900).
       { to: '/ventas',      label: 'Ventas',     icon: Receipt, permiso: 'ventas.view' },
     ],
   },
@@ -110,7 +129,10 @@ export const NAV_SECTIONS = [
       { to: '/tareas/configurar', label: 'Configurar tablero', icon: SlidersHorizontal, roles: ROLES_TAREAS, permiso: 'tasks.manage', oPermiso: 'tasks.manage' },
       // «Mi factura» (#202): el colaborador con usuario sube aquí su factura del mes.
       // Aquí, junto a su tablero, como en MultiCRM: es lo otro que ve un colaborador.
-      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir' },
+      // Y la vendedora de la lista (CRM-ISEIE#422): con su ficha se le da «Subir su factura» a ella
+      // (`oPermiso`), sin perder lo que ve como gestora. `conFicha`: solo quien tiene ficha viva;
+      // un super admin (que lo puede todo) no la ve si no factura.
+      { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir', oPermiso: 'facturas_colaborador.subir', conFicha: true },
       // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
       // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
@@ -121,18 +143,13 @@ export const NAV_SECTIONS = [
     items: [
       { to: '/secuencias-email', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'], permiso: 'email_sequences.view' },
       { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'], permiso: 'forms.view' },
-      { to: '/make-webhooks',   label: 'Make',      icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'make.view' },
-      // Llevaba a la pantalla de Make (una redirección): dos entradas para lo
-      // mismo. Desde el #226 es la de Webhooks, traída de MultiCRM.
-      { to: '/webhooks',        label: 'Webhooks',  icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'webhooks.view' },
+      // Make y Webhooks estaban aquí: desde la gemela de CRM#755, en Conexión ›
+      // Webhooks. Lo que Webhooks pedía además (`forms.view`) va con su parte y su pestaña.
       { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
-      // Próximamente (#226): no hay pantalla en ISEIE. La de MultiCRM enseña
-      // datos INVENTADOS —sus llamadas a Meta y Google van con `USE_MOCKS =
-      // true`— y traer cifras falsas a un CRM con dinero real es peor que no
-      // tenerla. Vuelve cuando haya datos de verdad detrás.
-      { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], comingSoon: true },
-      // Lleva a «Aún no conectado» (#216): enseñaba datos de ejemplo de Search Console.
-      { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
+      // Campañas («Próximamente», #226) y Tráfico orgánico (que llevaba a «Aún no
+      // conectado», #216) salen del menú hasta que tengan pantalla de verdad
+      // (gemela de CRM#900; `menu-sin-proximamente-534`). La dirección /seo sigue
+      // existiendo: solo se quita la entrada.
     ],
   },
   {
@@ -141,7 +158,8 @@ export const NAV_SECTIONS = [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
       // `meta_ads.view` (26/10/2026: Jonathan, Gustavo, Ruth, Julián, Jesús), también si es solo colaborador.
       { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
-      { to: '/google-ads', label: 'Google Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Google Ads («Próximamente», #226) sale del menú hasta que tenga pantalla
+      // (gemela de CRM#900; `menu-sin-proximamente-534`).
     ],
   },
   {
@@ -149,7 +167,11 @@ export const NAV_SECTIONS = [
     items: [
       { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'], permiso: 'products.view' },
       // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
+      // `oPermiso` (gemela de CRM#843): el tutor y el tutor redactor no tienen «Ver
+      // productos», pero sus avisos («Te han asignado un curso») llevan aquí. Con
+      // «Sus cursos» la pantalla se les abre (`rutaPermitida`); el menú no cambia,
+      // porque la entrada sigue pidiendo `products.view` para salir.
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
@@ -185,6 +207,8 @@ export const NAV_SECTIONS = [
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
       { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
+      // Disputas de Stripe (#396, gemela de CRM#839): solo admin y super admin, cada uno las de sus campus.
+      { to: '/accounting/disputas', label: 'Disputas de Stripe', icon: Warning, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'stripe.edit' },
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
@@ -243,9 +267,15 @@ export const NAV_SECTIONS = [
       // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
       { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
-      // Diego, 15/10: «un apartado en Conexión para enviar esos datos ÚNICAMENTE
-      // CUANDO SE PONGA DATOS POR TRANSFERENCIA BANCARIA / DEPÓSITO BANCARIO».
-      { to: '/conexion/webhook-transferencias', label: 'Webhook de transferencias', icon: Bank, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
+      // Todos los webhooks en un sitio, señalados por su función (gemela de
+      // CRM#755, Diego 05/11: «hay demasiados y están repartidos por el menú»).
+      // Reúne los que estaban en Captación (Webhooks, Make) y el de
+      // transferencias, que estaba aquí suelto (Diego, 15/10). Se ve con el
+      // permiso de alguna de las tres entradas que sustituye (PERMISOS_WEBHOOKS,
+      // arriba); dentro, cada tarjeta pide el suyo. La de Webhooks pedía además
+      // `forms.view`: la pantalla lee `/api/forms`.
+      { to: '/conexion/webhooks', label: 'Webhooks', icon: WebhooksLogo, roles: ['admin', 'superadmin'], permiso: PERMISOS_WEBHOOKS,
+        partes: [{ permiso: 'webhooks.view', tambienPermiso: 'forms.view' }, { permiso: 'make.view' }, { permiso: 'webhooks_salientes.view' }] },
       { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
     ],
   },
@@ -262,6 +292,9 @@ export const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
+      // Incidencias (gemela de CRM#612), al lado de Soporte. Los mismos roles
+      // que traen `incidencias.view` de serie (la gestora ve las suyas).
+      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos
@@ -270,6 +303,10 @@ export const NAV_SECTIONS = [
     ],
   },
 ];
+
+// El menú por bloques de uso (gemela de CRM#900 y #903). Las secciones del menú
+// de ISEIE no llevan icono: solo el nombre.
+export const NAV_SECTIONS = reagruparMenu(SECCIONES_DE_ANTES);
 
 // Interruptor de compilacion para dejar una parte fuera de una instalacion sin
 // borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
@@ -308,6 +345,16 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   // diciendo a quién se le enseña de serie. `permiso` puede ser una lista: basta
   // con uno (Diplomas: ver O emitir).
   if (item.permiso && !(typeof can === 'function' && [].concat(item.permiso).some((p) => can(p) === true))) return false;
+  if (!tieneLosDeMas(item, can)) return false;
+  // «Mi factura» (CRM-ISEIE#422): quien no es colaborador ni tutor redactor la ve solo si
+  // tiene ficha viva en Facturas de colaboradores (`factura_propia`, de /auth/me): la
+  // lista explícita de vendedoras, no el rol. Ni el super admin sin ficha.
+  if (item.conFicha && !es('colaborador', 'tutor_redactor') && permisos?.factura_propia !== true) return false;
+  // Una entrada que junta varias (Conexión › Webhooks, gemela de CRM#755): sale
+  // si alguna de sus `partes` se puede abrir, cada una con su permiso y lo que
+  // pide además (`tambienPermiso`), como salían las entradas que sustituye.
+  if (Array.isArray(item.partes) && !item.partes.some((p) => (!p.permiso || (typeof can === 'function' && can(p.permiso) === true))
+    && tieneLosDeMas(p, can))) return false;
   // MCP de Claude: «Usar el MCP» del catálogo, como el servidor.
   // Va ANTES del atajo de soporte y del recorte del tutor: «roles únicamente».
   if (item.accesoMcp) return tieneAccesoMcp(can);
@@ -377,6 +424,17 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
 const SIN_ENTRADA = {
   // El chat de WhatsApp también se abre por `/whatsapp` (App.jsx), sin entrada.
   '/whatsapp': ['whatsapp.usar', 'whatsapp.supervisar'],
+  // Las pestañas de Conexión › Webhooks (gemela de CRM#755): el permiso de las
+  // entradas que tenían en el menú antes de juntarse.
+  '/conexion/webhooks/prospectos': ['webhooks.view'],
+  '/conexion/webhooks/make': ['make.view'],
+  '/conexion/webhooks/transferencias': ['webhooks_salientes.view'],
+};
+// Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
+// del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
+// lee y escribe en `/api/forms`: con `webhooks.view` solo, daba 403.
+const SIN_ENTRADA_TAMBIEN = {
+  '/conexion/webhooks/prospectos': 'forms.view',
 };
 
 export function rutaPermitida(pathname, can) {
@@ -391,9 +449,21 @@ export function rutaPermitida(pathname, can) {
   };
   for (const s of NAV_SECTIONS) recorrer(s.items);
   // Rutas sin entrada propia en el menú: su permiso, aquí.
-  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta] });
+  if (!suyas.length && SIN_ENTRADA[ruta]) suyas.push({ permiso: SIN_ENTRADA[ruta], tambienPermiso: SIN_ENTRADA_TAMBIEN[ruta] });
   if (!suyas.length) return true;
-  return suyas.some((it) => !it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso)));
+  return suyas.some((it) => tieneLosDeMas(it, can) && (!it.permiso || tiene(it.permiso) || (it.oPermiso && tiene(it.oPermiso))));
+}
+
+/**
+ * `tambienPermiso`: lo que pide ADEMÁS la pantalla, porque es lo que mira el
+ * servidor. Todos, no basta uno. Captación › Webhooks pide `webhooks.view`
+ * —lo que dice el catálogo— pero la pantalla lee y escribe en `/api/forms`
+ * (los webhooks de captación son formularios con `kind='webhook'`), que pide
+ * `forms.*`: con uno solo de los dos la pantalla se abría y daba 403.
+ */
+export function tieneLosDeMas(item, can) {
+  if (!item?.tambienPermiso) return true;
+  return typeof can === 'function' && [].concat(item.tambienPermiso).every((p) => can(p) === true);
 }
 
 /**
@@ -413,7 +483,7 @@ export function permisoQueFalta(pathname, can) {
     }
   };
   for (const s of NAV_SECTIONS) recorrer(s.items);
-  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]));
+  if (!claves.length && SIN_ENTRADA[ruta]) claves.push(...[].concat(SIN_ENTRADA[ruta]), ...[].concat(SIN_ENTRADA_TAMBIEN[ruta] || []));
   return claves.find((c) => String(c).includes('.') && !(typeof can === 'function' && can(c) === true)) || null;
 }
 
@@ -592,7 +662,7 @@ function NavGroup({ label, icon: Icon, items, defaultOpen, role, soloColab, perm
   );
 }
 
-// Decide qué sección debe estar abierta por defecto: Principal (siempre) +
+// Decide qué sección debe estar abierta por defecto: Hoy y Comercial (siempre) +
 // la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
 function defaultOpenSections(sections, pathname) {
   const out = {};
@@ -607,7 +677,8 @@ function defaultOpenSections(sections, pathname) {
       if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
       return false;
     });
-    out[s.label] = s.label === 'Principal' || containsActive;
+    // Abiertos de entrada, lo de cada día: Hoy y Comercial (gemela de CRM#900).
+    out[s.label] = s.label === 'Hoy' || s.label === 'Comercial' || containsActive;
   }
   return out;
 }
@@ -817,7 +888,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
 
       {/* Nav — secciones colapsables. El estado se persiste en localStorage por
           sección. Por defecto se abre la sección que contiene la ruta activa
-          (más "Principal" siempre como ancla). El usuario puede plegar/expandir
+          (más «Hoy» y «Comercial» siempre como ancla). El usuario puede plegar/expandir
           libremente con click en el header de sección. */}
       <CollapsibleNav
         sections={secciones}

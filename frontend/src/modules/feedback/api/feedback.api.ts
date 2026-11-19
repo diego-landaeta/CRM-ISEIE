@@ -15,6 +15,8 @@ export type ResumenPregunta = {
   media?: number | null;
   /** Lo que escribieron: en «Otro», tras una nota de 3 o menos (con esa `nota`) o en «Deja tus comentarios». */
   escritos?: Array<{ texto: string; lead_id: number; lead_nombre: string | null; gestora: string | null; fecha: string; nota?: number }>;
+  /** Cuántos escribieron en total: `escritos` trae solo los 40 últimos. */
+  escritos_total?: number;
 };
 
 /** Lo que contestó una persona, por clave de pregunta. */

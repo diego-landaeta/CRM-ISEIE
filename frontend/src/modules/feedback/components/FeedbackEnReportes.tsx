@@ -4,6 +4,7 @@ import { ChatCircleText, DownloadSimple, EnvelopeSimple, Percent, Star, ArrowRig
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import { toast } from '@/shared/hooks/useToast';
+import { celdaCsv, diaDeMadrid, rangoEnNombre } from '@/shared/lib/csv';
 import { traerPanel, traerLista, type PanelFeedback, type FilaFeedback } from '../api/feedback.api';
 
 /**
@@ -26,7 +27,8 @@ type Props = {
   onDatos?: (d: PanelFeedback | null) => void;
 };
 
-const celda = (v: unknown) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+// Lo escribe gente de fuera (la encuesta es pública): a salvo de fórmulas (#593).
+const celda = celdaCsv;
 
 /** Lo contestado por una persona, en texto: «Otro motivo: «me mudo»», «4 · Bien»… */
 function respuestaEnTexto(datos: PanelFeedback, clave: string, valor: unknown) {
@@ -41,8 +43,8 @@ export function feedbackEnCsv(datos: PanelFeedback, sep: (fila: unknown[]) => st
   const t = datos.totales;
   const filas: string[] = [];
   filas.push(sep(['Feedback · por qué no compran']));
-  filas.push(sep(['Enviados', 'Respondidos', 'Tasa de respuesta (%)', 'Esperando revisión', 'Sin correo', 'Fallidos']));
-  filas.push(sep([t.enviados, t.respondidos, t.tasa, t.en_revision, t.sin_correo, t.fallidos]));
+  filas.push(sep(['Enviados', 'Respondidos', 'Tasa de respuesta (%)', 'Esperando revisión', 'Sin correo', 'Fallidos', 'Bloqueados']));
+  filas.push(sep([t.enviados, t.respondidos, t.tasa, t.en_revision, t.sin_correo, t.fallidos, t.bloqueados]));
   filas.push('');
   if (datos.porMotivo.length) {
     filas.push(sep(['Motivo', 'Respuestas']));
@@ -74,6 +76,7 @@ export function feedbackEnCsv(datos: PanelFeedback, sep: (fila: unknown[]) => st
 
 export default function FeedbackEnReportes({ from, to, issuerId, project, onDatos }: Props) {
   const [datos, setDatos] = useState<PanelFeedback | null>(null);
+  const [fallo, setFallo] = useState(false);
   const [bajando, setBajando] = useState(false);
 
   const base = useMemo(() => {
@@ -85,14 +88,29 @@ export default function FeedbackEnReportes({ from, to, issuerId, project, onDato
 
   useEffect(() => {
     let vivo = true;
+    setFallo(false);
     traerPanel(base).then((d) => {
       if (!vivo) return;
       setDatos(d);
       onDatos?.(d);
-    }).catch(() => { if (vivo) { setDatos(null); onDatos?.(null); } });
+    }).catch((e) => {
+      if (!vivo) return;
+      setDatos(null);
+      onDatos?.(null);
+      // Sin permiso (una gestora sin feedback.view) no hay bloque, y está bien.
+      // Si es una avería, se dice: antes el bloque desaparecía sin más (#593).
+      setFallo(![401, 403].includes((e as { status?: number })?.status ?? 0));
+    });
     return () => { vivo = false; };
   }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  if (fallo) {
+    return (
+      <p role="alert" className="rounded-lg border border-border bg-card p-4 text-sm text-muted-foreground">
+        No se han podido cargar las cifras de feedback. Se pueden ver en <Link to="/informes/feedback" className="font-semibold text-primary hover:underline">el panel de Feedback</Link>.
+      </p>
+    );
+  }
   if (!datos) return null;
   const t = datos.totales;
   const nota = datos.preguntas.find((p) => p.clave === 'nota_atencion');
@@ -105,6 +123,8 @@ export default function FeedbackEnReportes({ from, to, issuerId, project, onDato
     try {
       const p = new URLSearchParams(base);
       p.set('que', 'respondidos');
+      // Todas: antes se cortaba en 500 sin avisar (#593). El servidor da hasta 5000.
+      p.set('limite', '5000');
       const filas: FilaFeedback[] = await traerLista(p);
       const preguntas = datos!.preguntas;
       const conOtro = preguntas.filter((q) => filas.some((f) => f.respuestas?.[`${q.clave}_otro`]));
@@ -114,7 +134,7 @@ export default function FeedbackEnReportes({ from, to, issuerId, project, onDato
       for (const f of filas) {
         const r = f.respuestas || {};
         lineas.push([
-          f.respondido_at?.slice(0, 10), f.lead_nombre, f.email, f.proyecto, f.gestora,
+          diaDeMadrid(f.respondido_at), f.lead_nombre, f.email, f.proyecto, f.gestora,
           datos!.disparadores[f.disparador] || f.disparador,
           ...preguntas.map((q) => respuestaEnTexto(datos!, q.clave, r[q.clave] ?? (q.clave === 'motivo' ? f.motivo : undefined))),
           ...conOtro.map((q) => r[`${q.clave}_otro`] ?? ''),
@@ -124,10 +144,13 @@ export default function FeedbackEnReportes({ from, to, issuerId, project, onDato
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `feedback-respuestas-${from}_${to}.csv`;
+      a.download = `feedback-respuestas-${rangoEnNombre(from, to)}.csv`;
       a.click();
       URL.revokeObjectURL(url);
-      toast({ title: `${filas.length} ${filas.length === 1 ? 'respuesta descargada' : 'respuestas descargadas'}` });
+      const total = datos!.totales.respondidos;
+      toast(filas.length < total
+        ? { title: `${filas.length} de ${total} respuestas descargadas`, description: 'Son las más recientes: para el resto, acota las fechas.' }
+        : { title: `${filas.length} ${filas.length === 1 ? 'respuesta descargada' : 'respuestas descargadas'}` });
     } catch (err) {
       toast({ title: 'No se ha podido descargar', description: (err as Error).message, variant: 'destructive' });
     } finally { setBajando(false); }
@@ -152,13 +175,17 @@ export default function FeedbackEnReportes({ from, to, issuerId, project, onDato
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <KpiCard icon={EnvelopeSimple} label="Enviados" value={t.enviados} />
         <KpiCard icon={ChatCircleText} label="Respondidos" value={t.respondidos} tone="success" />
-        <KpiCard icon={Percent} label="Tasa de respuesta" value={`${t.tasa}%`} />
-        <KpiCard icon={Star} label="Nota de atención" value={nota?.media != null ? `${nota.media} / 5` : '—'} />
+        <KpiCard icon={Percent} label="Tasa de respuesta" value={`${Number(t.tasa).toLocaleString('es-ES')} %`} />
+        <KpiCard icon={Star} label="Nota de atención" value={nota?.media != null ? `${nota.media.toLocaleString('es-ES')} / 5` : '—'} />
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
         {textoMotivo
           ? <>El motivo que más se repite: <strong className="text-foreground">{textoMotivo}</strong> ({motivoTop!.n} de {t.respondidos}).</>
-          : 'Todavía no ha contestado nadie en este periodo.'}
+          : (from || to)
+            // Las respuestas llegan poco a poco: a principio de mes, el mes en
+            // curso sale casi vacío. Se dice, y se lleva a verlo entero (#242, #593).
+            ? <>Todavía no ha contestado nadie en estas fechas. <Link to="/informes/feedback" className="font-semibold text-primary hover:underline">Ver todo en el panel</Link>, que abre «Desde siempre».</>
+            : 'Todavía no ha contestado nadie.'}
       </p>
     </section>
   );

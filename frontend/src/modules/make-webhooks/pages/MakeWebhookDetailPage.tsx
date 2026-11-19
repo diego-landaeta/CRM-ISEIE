@@ -1,3 +1,4 @@
+import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { rutaApp } from '@/shared/lib/rutaApp';
@@ -153,7 +154,7 @@ export default function MakeWebhookDetailPage() {
   async function deleteHook() {
     if (!(await confirm({ title: 'Eliminar conector', message: 'Eliminar este conector? Make dejara de poder enviar leads aqui.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     await client.delete(`/make-webhooks/${id}`);
-    navigate('/make-webhooks');
+    navigate('/conexion/webhooks/make');
   }
 
   function copy(text: string, what: string) {
@@ -163,13 +164,12 @@ export default function MakeWebhookDetailPage() {
 
   if (loading || !hook) return <div className="p-8 text-muted-foreground">Cargando...</div>;
 
-  const baseUrl = window.location.origin + (import.meta.env.BASE_URL || '/').replace(/\/$/, '');
-  const webhookUrl = `${baseUrl}/api/webhooks/make/${hook.slug}`;
+  const webhookUrl = apiPublicUrl(`/webhooks/make/${hook.slug}`);
   const detectedKeys = hook.sample_payload ? jsonKeys(hook.sample_payload) : [];
 
   return (
     <div className="space-y-5 pb-8">
-      <button onClick={() => navigate('/make-webhooks')} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+      <button onClick={() => navigate('/conexion/webhooks/make')} className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft size={14} /> Volver
       </button>
 

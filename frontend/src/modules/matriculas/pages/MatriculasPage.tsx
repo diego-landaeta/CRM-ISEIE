@@ -83,13 +83,26 @@ export default function MatriculasPage() {
   const nombreAmbito = activeIssuerId ? (activeIssuer?.nombre || 'esta empresa')
     : campusElegido ? (campusElegido.nombre || 'este campus') : 'todos los campus';
   const { can, tieneRol } = usePermission();
-  const [tab, setTab] = useState('list');
   // Certificaciones tiene dirección propia (/matriculas/certificaciones):
   // la campana enlaza ahí y no depende del proyecto elegido, porque Certifex va por
   // campus de Certifex, no por proyecto del CRM.
   const location = useLocation();
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
+  // `?pestana=webhooks` abre la de webhooks: el apartado Conexión › Webhooks
+  // (gemela de CRM#755) enlaza aquí el de admisión. Al pasar a otra pestaña se
+  // quita de la dirección, para que recargar no devuelva a la de webhooks.
+  const [tab, setTab] = useState(() => (params.get('pestana') === 'webhooks' ? 'webhooks' : 'list'));
+  useEffect(() => {
+    if (params.get('pestana') === 'webhooks') setTab('webhooks');
+  }, [params]);
+  useEffect(() => {
+    if (tab !== 'webhooks' && params.has('pestana')) {
+      const sin = new URLSearchParams(params);
+      sin.delete('pestana');
+      setParams(sin, { replace: true });
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
   // Certificaciones y Diplomas (Certifex) se encienden por configuración
   // (VITE_CERTIFEX_PANEL, ver shared/lib/certifexPanel.ts): apagadas en producción
   // mientras no se enlace Certifex; apagadas, la dirección cae en el listado.
@@ -237,8 +250,10 @@ export default function MatriculasPage() {
       <div className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
         <button
           onClick={() => { setTab('list'); if (enCertifex) navigate('/matriculas'); }}
-          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && tab === 'list' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
+          className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && (tab === 'list' || (tab === 'webhooks' && !verEmisiones)) ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
         >
+          {/* Con `?pestana=webhooks` y sin permiso para esa pestaña se enseña el
+              listado (más abajo): se marca el listado, no ninguna. */}
           <GraduationCap size={14} /> Listado
         </button>
         {/* Los webhooks, como en la API: solo admin y super admin (#198). */}
@@ -275,7 +290,7 @@ export default function MatriculasPage() {
           <EmptyState icon={SealCheck} title="Solo administración" description="Los diplomas los aprueba, envía y revoca administración. Para verlos, pide que te den «Diplomas (Certifex) · Ver»." />
         ) : (
           <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} />
+            <CertifexDiplomasPage soloLectura={diplomasSoloLectura} soloEmitir={diplomasSoloEmitir} puedeRevertir={can('diplomas.revertir')} />
           </Suspense>
         )
       ) : enCertificaciones ? (
@@ -305,7 +320,7 @@ export default function MatriculasPage() {
               </div>
             )}
             <Suspense fallback={<SkeletonTable rows={5} columns={6} />}>
-              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida />}
+              {vistaCert === 'consultas' ? <CertifexConsultasPage embebida /> : <CertifexEmisionesPage embebida puedeEditar={can('diplomas.emit')} />}
             </Suspense>
           </div>
         )
@@ -465,9 +480,10 @@ export default function MatriculasPage() {
 
       </>}
 
-      {/* Los botones de estado, solo para quien puede usarlos: el servidor deja
-          cambiar el estado a admin y super admin (a la gestora le daba 403). La
-          clave con el estado vuelve a montar la ficha con lo nuevo tras validar. */}
+      {/* Los botones de estado, solo para quien puede usarlos: el servidor pide
+          `matriculas.cambiar_estado` (a la gestora le daba 403; soporte lo trae
+          de serie y no le salían). La clave con el estado vuelve a montar la
+          ficha con lo nuevo tras validar. */}
       {detail && (
         <MatriculaDetail key={`${detail.id}-${detail.estado}`} matricula={detail} onClose={cerrarFicha} onChange={() => load()}
           onEstado={can('matriculas.cambiar_estado') ? handleEstado : undefined} pausada={!!rechazoTarget}

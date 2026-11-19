@@ -132,11 +132,17 @@ export function correoDe(d, token, { vista = false } = {}) {
   return { asunto, html };
 }
 
-async function avisarAGestora(envio, { titulo, mensaje }) {
-  if (!envio?.gestora_id) return;
+/**
+ * El aviso, a la gestora del envío salvo que se diga otra (`a`): la respuesta
+ * va a quien tiene que actuar, que es quien lleva ahora al prospecto o quien
+ * recibió el recordatorio (#593).
+ */
+async function avisarAGestora(envio, { titulo, mensaje, a = null }) {
+  const destinataria = a || envio?.gestora_id;
+  if (!destinataria) return;
   try {
     await notifyUsers({
-      targetUserIds: [envio.gestora_id],
+      targetUserIds: [destinataria],
       type: 'feedback',
       title: titulo,
       message: mensaje,
@@ -188,12 +194,19 @@ async function mandar(envio, datos) {
     clave: `feedback:${envio.lead_id}`,
   };
   // Por la cuenta de Brevo de la marca si la tiene; si no sale con su
-  // remitente, `sendEmail` lo reintenta solo por la del CRM.
-  const r = await sendEmail(correo);
+  // remitente, `sendEmail` lo reintenta solo por la del CRM. Si algo revienta
+  // por el camino, la fila queda «fallido» y no «pendiente» para siempre: así
+  // la vuelta siguiente la reintenta (#593).
+  let r;
+  try {
+    r = await sendEmail(correo);
+  } catch (err) {
+    r = { sent: false, reason: 'ERROR', message: err.message };
+  }
 
   let fila;
   if (r?.sent || r?.reason === 'YA_ENVIADO') {
-    fila = await model.marcarEnvio(envio.id, { estado: 'enviado', enviado: true });
+    fila = await model.marcarEnvio(envio.id, { estado: 'enviado', enviado: true, intento: true });
     await apuntarEnSuHistorial(envio.lead_id,
       `📨 Correo de feedback enviado («¿por qué has desistido?») · ${DISPARADORES[envio.disparador]}`);
     await avisarAGestora(fila, {
@@ -201,10 +214,10 @@ async function mandar(envio, datos) {
       mensaje: `A ${datos.nombre || 'un prospecto'}: le preguntamos por qué no siguió (${DISPARADORES[envio.disparador].toLowerCase()}).`,
     });
   } else if (r?.reason === 'FRENO_DE_PRUEBAS') {
-    fila = await model.marcarEnvio(envio.id, { estado: 'bloqueado', nota: r.detalle || 'Freno de correos de pruebas' });
+    fila = await model.marcarEnvio(envio.id, { estado: 'bloqueado', nota: r.detalle || 'Freno de correos de pruebas', intento: true });
   } else {
     fila = await model.marcarEnvio(envio.id, {
-      estado: 'fallido', nota: r?.message || r?.reason || 'Brevo no lo aceptó' });
+      estado: 'fallido', nota: r?.message || r?.reason || 'Brevo no lo aceptó', intento: true });
     logger.warn({ leadId: envio.lead_id, r }, 'feedback: el correo no salió');
   }
   return fila;
@@ -325,6 +338,11 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   const f = await model.porToken(token);
   if (!f) throw new AppError('Este enlace no es válido', 404, 'NOT_FOUND');
   if (f.respondido_at) return { ya: true };
+  // Solo cuenta lo que se le mandó a la persona. La vista previa («quiero
+  // verlo») lleva el token de verdad y solo el navegador impedía contestarla:
+  // una respuesta así sumaba en «Por qué no compran» y no en «Respondidos»,
+  // y las cifras dejaban de cuadrar (#593).
+  if (f.estado !== 'enviado') throw new AppError('Esta encuesta no está abierta', 409, 'NO_ABIERTA');
   const fila = await model.guardarRespuesta(f.id, { motivo: r.motivo, comentario: r.motivo_otro || null, respuestas: r });
   if (!fila) return { ya: true };
   // En su historial, TODO lo que contestó, pregunta a pregunta y tal como se
@@ -342,10 +360,11 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
   const comento = r.comentarios ? ` · comentó: «${corto(r.comentarios)}»` : '';
   // «Que me contacte más adelante»: a la agenda de su gestora, el día que eligió.
   let volver = '';
+  let rec = null;
   if (r.avisar === 'si') {
     const avisar = PREGUNTAS.find((p) => p.clave === 'avisar');
     const cuando = avisar.sub.opciones.find((o) => o.clave === r.avisar_cuando)?.texto.toLowerCase() || 'sin decir cuándo';
-    const rec = await model.agendarVuelta(f.lead_id, {
+    rec = await model.agendarVuelta(f.lead_id, {
       dias: diasHastaVolver(r),
       nota: `📅 Volver a contactar: lo pidió en la encuesta de feedback (${cuando}). No siguió por: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}`,
       gestoraDelEnvio: f.gestora_id,
@@ -353,16 +372,21 @@ export async function responder(token, { motivo, comentario, respuestas = {} } =
       logger.warn({ err: err.message, leadId: f.lead_id }, 'feedback: no se pudo agendar la vuelta');
       return null;
     });
+    const deBaja = rec && rec.disponible === false ? ' (su gestora no está disponible ahora: habría que reasignarlo)' : '';
     await apuntarEnSuHistorial(f.lead_id, rec
-      ? `📅 Pidió que le volvamos a contactar (${cuando}): recordatorio puesto para el ${rec.dia}.`
+      ? `📅 Pidió que le volvamos a contactar (${cuando}): recordatorio puesto para el ${rec.dia}${deBaja}.`
       : `📅 Pidió que le volvamos a contactar (${cuando}), pero no tiene gestora: no se ha podido agendar.`);
     volver = rec
       ? ` · quiere que le vuelvas a contactar: lo tienes en recordatorios para el ${rec.dia}`
       : ' · quiere que le vuelvan a contactar';
   }
+  // A quien tiene el recordatorio o, si no lo hay, a quien lleva ahora al
+  // prospecto: si lo reasignaron después del envío, la de antes recibía «lo
+  // tienes en recordatorios» de un recordatorio que estaba en otra agenda (#593).
   await avisarAGestora(fila, {
     titulo: 'Te han contestado al feedback',
     mensaje: `${f.lead_nombre || 'Un prospecto'}: ${textoDeRespuesta('motivo', r.motivo, r.motivo_otro)}${nota}${volver}${comento}`,
+    a: rec?.created_by || f.responsable_actual || null,
   });
   return { ya: false };
 }
@@ -380,9 +404,14 @@ export function resumenDePreguntas(contestadas) {
       .filter((x) => x.v !== undefined);
     const base = { clave: p.clave, tipo: p.tipo, texto: textos[i].texto, respondieron: valores.length };
     const escrito = p.tipo === 'texto' ? p.clave : `${p.clave}_otro`;
-    const escritos = p.escribir || p.tipo === 'texto'
-      ? contestadas
-        .filter((c) => (c.respuestas || {})[escrito])
+    const conTexto = p.escribir || p.tipo === 'texto'
+      ? contestadas.filter((c) => (c.respuestas || {})[escrito])
+      : null;
+    // Se enseñan los 40 últimos, pero se dice cuántos escribieron en total: el
+    // panel ponía «40 de 120 respuestas» como si solo hubieran escrito 40 (#593).
+    if (conTexto) base.escritos_total = conTexto.length;
+    const escritos = conTexto
+      ? conTexto
         .slice(0, 40)
         .map((c) => ({
           texto: c.respuestas[escrito], lead_id: c.lead_id, lead_nombre: c.lead_nombre,
@@ -427,8 +456,13 @@ export function resumenDePreguntas(contestadas) {
 export async function vueltaDelDia7({ pila = 25, tope = 200, maxDias = 30, inicio = null } = {}) {
   const hoy = await model.correosDeHoy();
   const hueco = Math.max(0, Math.min(pila, tope - hoy));
-  if (!hueco) return { candidatos: 0, pedidos: 0, hoy, tope };
-  const ids = await model.candidatosDelDia7({ tope: hueco, maxDias, inicio });
+  if (!hueco) return { candidatos: 0, pedidos: 0, reintentos: 0, hoy, tope };
+
+  // Primero lo que se quedó sin salir: esa persona lleva más esperando (#593).
+  const reintentos = await reintentar(hueco);
+  const quedan = hueco - reintentos;
+
+  const ids = quedan > 0 ? await model.candidatosDelDia7({ tope: quedan, maxDias, inicio }) : [];
   let pedidos = 0;
   for (const id of ids) {
     try {
@@ -437,7 +471,33 @@ export async function vueltaDelDia7({ pila = 25, tope = 200, maxDias = 30, inici
       logger.warn({ err: err.message, leadId: id }, 'feedback: fallo pidiéndolo al 7.º día');
     }
   }
-  return { candidatos: ids.length, pedidos, hoy: hoy + pedidos, tope };
+  return { candidatos: ids.length, pedidos, reintentos, hoy: hoy + pedidos + reintentos, tope };
+}
+
+/**
+ * Vuelve a mandar los que fallaron o se quedaron a medias. Antes, la persona
+ * ya tenía fila y el día 7 la saltaba: si Brevo caía una tarde, esas personas
+ * se quedaban sin encuesta para siempre (#593). Si entretanto compró o ya la
+ * recibió por otra ficha, no se manda: queda «cancelado» y dicho por qué.
+ */
+async function reintentar(tope) {
+  const filas = await model.reintentables({ tope });
+  let hechos = 0;
+  for (const envio of filas) {
+    try {
+      if (!(await model.sigueTocandole(envio.lead_id))) {
+        await model.marcarEnvio(envio.id, { estado: 'cancelado', nota: 'No se reintenta: ya compró o ya la recibió por otra ficha' });
+        continue;
+      }
+      const datos = await model.datosDelLead(envio.lead_id);
+      if (!datos || datos.deleted_at || datos.es_prueba) continue;
+      await mandar(envio, datos);
+      hechos += 1;
+    } catch (err) {
+      logger.warn({ err: err.message, leadId: envio.lead_id }, 'feedback: fallo reintentándolo');
+    }
+  }
+  return hechos;
 }
 
 export { model };

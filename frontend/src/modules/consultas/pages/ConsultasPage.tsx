@@ -69,6 +69,9 @@ export default function ConsultasPage() {
   // principal; admin, también de más. Si no, el botón sale y el servidor da 403.
   const esAdmin = (['superadmin', 'soporte'].includes(user?.role || '') || tieneRol(user as never, 'admin')) && can('consultas.view');
   const sinAcceso = !can('consultas.view') && !can('consultas.atender');
+  // «Leer el campus ahora»: el servidor pide `consultas.gestionar`
+  // (POST /consultas/leer-ahora), no `consultas.view`.
+  const puedeLeerElCampus = can('consultas.gestionar');
   const [vista, setVista] = useState<Vista>(esTutor ? 'mias' : 'todas');
   const [pestana, setPestana] = useState<(typeof PESTANAS)[number]['clave']>('pendientes');
   const [sinTutor, setSinTutor] = useState(false);
@@ -161,7 +164,7 @@ export default function ConsultasPage() {
         subtitle={vista === 'mias'
           ? 'Las dudas que te escriben tus alumnos en el campus. Responde desde aquí: les llega al campus.'
           : `Todas las consultas de ${activeIssuerId ? 'la empresa elegida' : activeProject?.id && activeProject.id > 0 ? activeProject.nombre : 'tus campus'}.`}
-        actions={esAdmin && vista === 'todas' ? (
+        actions={puedeLeerElCampus && vista === 'todas' ? (
           <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo}>
             <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
           </Button>

@@ -82,11 +82,13 @@ describe('el menú de ISEIE no lleva a «Página no encontrada»', () => {
     expect(conPantalla).toEqual([]);
   });
 
-  it('las que no existen en ISEIE están marcadas como «Próximamente»', () => {
-    const marcadas = entradasDelMenu.filter((e) => e.comingSoon).map((e) => e.to).sort();
-    // «Chat IA» ya no sale ni como «Próximamente»: las pantallas de IA del CRM
-    // están apagadas (#30, Diego 10/11, `PANTALLAS_IA`).
-    expect(marcadas).toEqual(['/campaigns', '/google-ads']);
+  it('Google Ads, Campañas y Tráfico orgánico ya no están en el menú (gemela de CRM#900)', () => {
+    // «Fuera del menú hasta que funcionen» (`menu-sin-proximamente-534`). Si una
+    // vuelve, que sea con su pantalla, no como «Próximamente». «Chat IA» tampoco
+    // sale: las pantallas de IA del CRM están apagadas (#30, Diego 10/11, `PANTALLAS_IA`).
+    const rutas = entradasDelMenu.map((e) => e.to);
+    for (const r of ['/campaigns', '/seo', '/google-ads']) expect(rutas).not.toContain(r);
+    expect(entradasDelMenu.filter((e) => e.comingSoon)).toEqual([]);
   });
 
   it('dentro de una misma sección, dos entradas no llevan a la misma pantalla', () => {

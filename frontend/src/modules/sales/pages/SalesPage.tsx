@@ -15,6 +15,7 @@ const ResumenVentas = lazy(() => import('../components/ResumenVentas'));
 const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
+const PosiblesRepetidasCard = lazy(() => import('../components/PosiblesRepetidasCard'));
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
@@ -247,6 +248,13 @@ export default function SalesPage() {
           {!allProjects && (
             <Suspense fallback={null}>
               <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
+            </Suspense>
+          )}
+
+          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898). */}
+          {can('conversions.edit') && (
+            <Suspense fallback={null}>
+              <PosiblesRepetidasCard projectId={projectIdParam} />
             </Suspense>
           )}
 

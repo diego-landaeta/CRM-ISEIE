@@ -4,9 +4,11 @@ import Portal from '@/shared/components/ui/portal';
 import client from '@/shared/api/client';
 import { inputClass } from '@/shared/lib/ui';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 import {
   cursosApi, ESTADOS, TIPOS, type Alumna, type Detalle,
 } from '../api/cursosPendientes.api';
+import SubidasDelCurso from './SubidasDelCurso';
 
 /**
  * La ficha de un pendiente (#336): lo que hace la tutora y lo que supervisa quien manda.
@@ -30,6 +32,7 @@ const fecha = (iso: string | null) => (iso
 const ACCIONES: Record<string, string> = {
   creado: 'Creado', alumna_sumada: 'Alumna sumada', tutora_cambiada: 'Tutora cambiada', fecha_movida: 'Fecha movida',
   estado_cambiado: 'Estado cambiado', avance: 'Avance', publicado: 'Publicado', alumna_marcada: 'Alumna marcada', cerrado_solo: 'Cerrado solo',
+  subidas_abiertas: 'Lista de subidas abierta', subida_marcada: 'Subida marcada',
 };
 
 interface Tutora { id: number; nombre: string }
@@ -47,6 +50,9 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
   const [cancelando, setCancelando] = useState(false);
   const [ocupado, setOcupado] = useState(false);
   const [notas, setNotas] = useState('');
+  // Control de subidas (#771): lo marca quien lleva las colaboraciones (el servidor lo vuelve a mirar).
+  const { can } = usePermission();
+  const puedeMarcarSubidas = can('tutores.gestionar');
 
   const cargar = useCallback(async () => {
     try {
@@ -89,7 +95,7 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
   }
   if (!c) return null;
 
-  const abierto = ['pendiente_asignar', 'asignado', 'en_desarrollo', 'publicado'].includes(c.estado);
+  const abierto = ['pendiente_asignar', 'asignado', 'en_desarrollo', 'entregado', 'publicado'].includes(c.estado);
   const hayFecha = !!c.fecha_comprometida;
   const cambiaFecha = fechaNueva && fechaNueva !== (c.fecha_comprometida?.slice(0, 10) || '');
   const puedeActuar = abierto && (supervisa || esTutora);
@@ -180,7 +186,28 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
               </button>
             )}
 
+            {/* «Entregado» (#770): el tutor lo da por hecho; administración lo sube y lo publica. */}
             {puedeActuar && c.estado === 'en_desarrollo' && (
+              <button type="button" disabled={ocupado}
+                onClick={() => hacer(() => cursosApi.modificar(c.id, { estado: 'entregado' }), 'Entregado: administración ya lo sabe')}
+                className="inline-flex h-8 items-center rounded-md border border-border px-3 text-xs font-bold hover:bg-muted disabled:opacity-50">
+                Marcar entregado
+              </button>
+            )}
+
+            {supervisa && c.estado === 'entregado' && (
+              <section className="space-y-2 rounded-md border border-border p-3">
+                <p className="text-[11px] font-bold uppercase text-muted-foreground">Devolver a «En desarrollo»</p>
+                <input value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Qué falta (obligatorio)" className={inputClass} aria-label="Motivo de la devolución" />
+                <button type="button" disabled={ocupado || !motivo.trim()}
+                  onClick={() => hacer(() => cursosApi.modificar(c.id, { estado: 'en_desarrollo', motivo }).then(() => setMotivo('')), 'Devuelto al tutor')}
+                  className="inline-flex h-7 items-center rounded-md border border-border px-2.5 text-[11px] font-bold hover:bg-muted disabled:opacity-50">
+                  Devolver
+                </button>
+              </section>
+            )}
+
+            {puedeActuar && ['en_desarrollo', 'entregado'].includes(c.estado) && (
               <section className="space-y-2 rounded-md border border-border p-3">
                 <p className="text-[11px] font-bold uppercase text-muted-foreground">Marcar publicado</p>
                 <input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://… la dirección definitiva del curso" className={inputClass} aria-label="URL definitiva" />
@@ -263,6 +290,11 @@ export default function FichaDelPendiente({ id, esTutora, supervisa, onCerrar, o
                 )}
               </section>
             )}
+
+            <SubidasDelCurso
+              cursoId={c.id} subidas={c.subidas || []} puedeMarcar={puedeMarcarSubidas} cancelado={c.estado === 'cancelado'}
+              onCambio={() => { cargar(); onCambio(); }}
+            />
 
             {/* Historial */}
             <section>

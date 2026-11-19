@@ -27,7 +27,12 @@ publicRouter.get('/cabecera/:projectId', servirCabecera);
 publicRouter.get('/cabecera/:projectId.png', servirCabecera);
 // El logo de cada empresa en los resúmenes al equipo, dibujado igual.
 publicRouter.get('/insignia/:projectId', servirInsignia);
-publicRouter.use(rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false }));
+publicRouter.use(rateLimit({
+  windowMs: 60 * 1000, max: 30, standardHeaders: true, legacyHeaders: false,
+  // En JSON, como el resto de la API: la encuesta lo lee con .json() y con el
+  // texto plano de siempre enseñaba un error técnico en inglés (#593).
+  message: { success: false, error: 'Has hecho demasiados intentos seguidos. Espera un minuto y vuelve a probar.', code: 'RATE_LIMIT' },
+}));
 publicRouter.get('/:token', ctrl.encuesta);
 publicRouter.post('/:token', ctrl.responder);
 

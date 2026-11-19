@@ -175,8 +175,11 @@ export default function BancoPage() {
 
   const campo = 'h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
+  // `color-scheme` oscuro en el tema oscuro: el icono del calendario de las
+  // fechas y la lista del desplegable los pinta el navegador y no siguen los
+  // tokens; sin esto salian claros (#128).
   return (
-    <div className="space-y-4 pb-8">
+    <div className="space-y-4 pb-8 dark:[color-scheme:dark]">
       <PageHeader
         title="Banco de mensajes"
         subtitle="Todo lo que ha pasado por WhatsApp, para buscarlo y guardarlo. No depende de que la sesión siga enlazada."

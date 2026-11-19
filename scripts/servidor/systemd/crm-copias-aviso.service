@@ -1,0 +1,9 @@
+# Aviso de fallo de la copia diaria (#634). Lo lanza OnFailure= de crm-copias.service.
+[Unit]
+Description=Aviso: ha fallado la copia diaria de las bases - #634
+
+[Service]
+Type=oneshot
+User=root
+EnvironmentFile=-/etc/crm-copias/aviso.env
+ExecStart=/usr/local/sbin/crm-copias-aviso

@@ -138,7 +138,25 @@ export interface Invoice {
   total_divisa?: number | string | null;
   /** Gestora responsable del lead de la factura. */
   gestora_nombre?: string | null;
+  /** Anulada (CRM#793): cuándo, por qué, quién y con qué abono. Sigue contando: su abono la deja a cero. */
+  anulada_at?: string | null;
+  motivo_anulacion?: string | null;
+  anulada_por_nombre?: string | null;
+  anulada_abono_codigo?: string | null;
 }
+
+/**
+ * ¿Factura EMITIDA? Con número fiscal, y ni borrador ni proforma (CRM#793).
+ * Una emitida no se borra ni se cambia: se anula con su motivo y sale su abono.
+ * Es la misma regla que el servidor (invoices.inmutable.js), que responde 409.
+ */
+export function esFacturaEmitida(inv: Pick<Invoice, 'tipo' | 'estado' | 'numero'>): boolean {
+  return inv.tipo !== 'proforma' && inv.estado !== 'borrador' && inv.numero != null;
+}
+
+/** Lo que se dice al pasar el ratón por un botón que una emitida no tiene. */
+export const NO_SE_CAMBIA_EMITIDA =
+  'Emitida: no se puede borrar ni cambiar. Si hay que dejarla sin efecto, «Anular» con el motivo (sale su abono).';
 
 export interface LeadConversion {
   id: number;
@@ -240,7 +258,9 @@ export const invoicesApi = {
     `/invoices/ventas-sin-factura?${new URLSearchParams({ projectId: String(projectId), ...(periodo.from ? { from: periodo.from } : {}), ...(periodo.to ? { to: periodo.to } : {}) })}`),
   get: (id: number) => client.get<Invoice>(`/invoices/${id}`),
   byConversion: (conversionId: number) => client.get<Invoice | null>(`/invoices/by-conversion/${conversionId}`),
-  leadFiscalData: (leadId: number) => client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}`),
+  /** Con `conversionId`, la factura de esa venta: si el alumno dio sus datos fiscales (#452), vienen esos. */
+  leadFiscalData: (leadId: number, conversionId?: number | null) =>
+    client.get<LeadFiscalData>(`/invoices/lead-fiscal/${leadId}${conversionId ? `?conversionId=${conversionId}` : ''}`),
   create: (body: CreateInvoiceBody) => client.post<Invoice>('/invoices', body),
   /** Editar una factura en BORRADOR (solo admin/superadmin). */
   update: (id: number, body: Partial<CreateInvoiceBody> & { fechaEmision?: string }) => client.patch<Invoice>(`/invoices/${id}`, body),
@@ -304,7 +324,11 @@ export const invoicesApi = {
   // «Cobrada» en una proforma: apunta el cobro en la venta y la proforma pasa a factura.
   cobrarProforma: (id: number, body: { importe: number; fecha: string; metodo?: string | null; notas?: string | null; referencia?: string | null }) =>
     client.post<Invoice>(`/invoices/${id}/cobrar-proforma`, body),
-  cancel: (id: number) => client.post(`/invoices/${id}/cancel`, {}),
+  // Cancelar un borrador o una proforma, con su motivo.
+  cancel: (id: number, motivo: string) => client.post(`/invoices/${id}/cancel`, { motivo }),
+  // Anular una factura EMITIDA (CRM#793): con su motivo; sale su abono.
+  anular: (id: number, motivo: string) =>
+    client.post<{ factura: Invoice; abono: Invoice | null }>(`/invoices/${id}/anular`, { motivo }),
   // Eliminar factura + liberar su número (errores de carga) — admin/superadmin.
   remove: (id: number) => client.delete<{ id: number; codigo: string | null }>(`/invoices/${id}`),
   rectificar: (id: number, body: { motivo: string; parcial?: number | null; issuerId?: number }) => client.post<Invoice>(`/invoices/${id}/rectificar`, body),

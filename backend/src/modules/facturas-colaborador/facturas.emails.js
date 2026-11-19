@@ -64,8 +64,9 @@ const CONCEPTOS = {
 };
 
 /** El concepto que se le sugiere: «Servicios de desarrollo web · septiembre 2026». */
-export const conceptoSugerido = (area, periodo) =>
-  `${CONCEPTOS[area] || CONCEPTOS.otra} · ${mesDe(periodo)} ${anioDe(periodo)}`;
+// A una vendedora (CRM#710), «Servicios comerciales», sea cual sea el área.
+export const conceptoSugerido = (area, periodo, tipo = null) =>
+  `${tipo === 'vendedora' ? 'Servicios comerciales' : CONCEPTOS[area] || CONCEPTOS.otra} · ${mesDe(periodo)} ${anioDe(periodo)}`;
 
 /** La dirección de la página del enlace. */
 export const urlDelEnlace = (token) => enlace(`factura-colaborador/${token}`);
@@ -85,7 +86,7 @@ function aNombreDe(e) {
  * El correo del mes y el recordatorio del día 5: lo mismo, cambia el asunto.
  * `f`: la fila con colaborador y empresa (CAMPOS_ENLACE de facturas.model.js).
  */
-export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, marca = null }) {
+export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, marca = null, devuelta = null }) {
   const mes = mesDe(f.periodo);
   const corta = empresaCorta(f.razon_social);
   const acordado = f.importe_esperado === null || f.importe_esperado === undefined ? null : Number(f.importe_esperado);
@@ -103,12 +104,14 @@ export function armarCorreoDelMes({ f, token, recordatorio = false, nuevo = fals
     resumen: `Súbela desde tu enlace personal: ${mes} ${anioDe(f.periodo)} · ${corta}`,
     bloques: [
       nuevo ? parrafo('Te mandamos un enlace nuevo para subir esta factura. El anterior ya no sirve.') : null,
+      // Devuelta por la empresa al revisarla (CRM#710): qué tiene que corregir.
+      devuelta ? parrafo(`Tu factura anterior se ha devuelto: <strong>«${esc(devuelta)}»</strong>. Corrígela y súbela de nuevo.`) : null,
       acordado !== null ? parrafo(`Importe acordado: <strong>${esc(euros(acordado, f))}</strong>`) : null,
       aNombreDe({
         razon_social: f.razon_social, nif: f.empresa_nif, direccion: f.direccion,
         cp: f.cp, ciudad: f.ciudad, pais: f.pais,
       }),
-      parrafo(`Concepto sugerido: <strong>${esc(conceptoSugerido(f.area, f.periodo))}</strong>`),
+      parrafo(`Concepto sugerido: <strong>${esc(conceptoSugerido(f.area, f.periodo, f.tipo))}</strong>`),
       boton({ texto: `Subir mi factura de ${mes}`, url: urlDelEnlace(token) }),
       // Caduca a las 00:00: el último día para subirla es el anterior.
       f.caduca_at ? parrafo(`El enlace es solo tuyo. Puedes subirla hasta el ${esc(diaMes(new Date(f.caduca_at).getTime() - 1))}.`) : null,
@@ -202,8 +205,8 @@ export async function enviarAvisoDePago({ f, vez = 1, marca = null, urlConfirmar
 }
 
 /** Manda el del mes (o el recordatorio, o el enlace nuevo). La clave evita repetirlo. */
-export async function enviarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, clave, marca = null }) {
-  const c = armarCorreoDelMes({ f, token, recordatorio, nuevo, marca });
+export async function enviarCorreoDelMes({ f, token, recordatorio = false, nuevo = false, clave, marca = null, devuelta = null }) {
+  const c = armarCorreoDelMes({ f, token, recordatorio, nuevo, marca, devuelta });
   return despachar({
     projectId: marca?.id ?? null,
     to: para(f), subject: c.asunto, htmlContent: c.htmlContent, textContent: c.textContent,

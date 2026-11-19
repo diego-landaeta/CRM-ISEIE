@@ -1,6 +1,8 @@
 import { query } from '../../shared/config/db.js';
 // El país de entrada de un prospecto (#221).
 import { sqlPaisDelLead, sqlPaisDeLaVenta } from '../leads/pais.js';
+// Lo cobrado de una venta es la suma de sus pagos (#692), no `importe_pagado`.
+import { COBRADO_DE } from '../conversions/cobrado.js';
 
 // A que proyectos se acota un informe.
 //
@@ -112,8 +114,11 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
     `SELECT
        ${pAses ? `COALESCE(SUM(${PESO()}), 0)::float8` : 'COUNT(*)::int'} as total,
        COALESCE(SUM(importe_total * ${PESO()}), 0)::numeric as ventas_brutas,
-       COALESCE(SUM(importe_pagado * ${PESO()}), 0)::numeric as cobrado,
-       COALESCE(SUM((importe_total - importe_pagado) * ${PESO()}), 0)::numeric as por_cobrar
+       COALESCE(SUM(${COBRADO_DE('conversions')} * ${PESO()}), 0)::numeric as cobrado,
+       -- Venta a venta y nunca por debajo de 0 (#692): una venta cobrada de
+       -- más no resta de lo que deben las demás. Lo de más va aparte.
+       COALESCE(SUM(GREATEST(importe_total - ${COBRADO_DE('conversions')}, 0) * ${PESO()}), 0)::numeric as por_cobrar,
+       COALESCE(SUM(GREATEST(${COBRADO_DE('conversions')} - importe_total, 0) * ${PESO()}), 0)::numeric as cobrado_de_mas
      FROM conversions
      WHERE 1=1 ${pFilter} ${suVenta()}
        AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -127,7 +132,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
                     NULLIF(TRIM(regexp_replace(regexp_replace(regexp_replace(producto_contratado, '^[[:space:]]*Producto/servicio:[[:space:]]*servicio[[:space:]]+acad[eé]mico[,;]?[[:space:]]*', '', 'i'), '^[[:space:]]*pago[[:space:]]+(de[[:space:]]+)?(la[[:space:]]+)?(mensualidad|cuota|matr[ií]cula)[^,]*[,]?[[:space:]]*', '', 'i'), '^[[:space:]]*servicio[[:space:]]+acad[eé]mico[[:space:]]*$', '', 'i')), ''), '— sin producto —') as producto,
             ${pAses ? `COALESCE(SUM(${PESO()}), 0)::float8` : 'COUNT(*)::int'} as ventas,
             COALESCE(SUM(importe_total * ${PESO()}), 0)::numeric as total,
-            COALESCE(SUM(importe_pagado * ${PESO()}), 0)::numeric as cobrado
+            COALESCE(SUM(${COBRADO_DE('conversions')} * ${PESO()}), 0)::numeric as cobrado
      FROM conversions
      WHERE 1=1 ${pFilter} ${suVenta()}
        AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -187,7 +192,7 @@ export async function overview({ projectId, projectIds, from, to, asesoraId }) {
        LEFT JOIN LATERAL (
          SELECT ${pAses ? `SUM(${PESO()})::float8` : 'COUNT(*)::int'} AS total,
                 SUM(importe_total * ${PESO()})  AS facturado,
-                SUM(importe_pagado * ${PESO()}) AS cobrado
+                SUM(${COBRADO_DE('conversions')} * ${PESO()}) AS cobrado
            FROM conversions
           WHERE project_id = p.id ${suVenta()}
             AND (${fromParam}::date IS NULL OR fecha_conversion >= ${fromParam}::date)
@@ -397,6 +402,42 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
     par
   );
 
+  // ESCRITO CONTRA VOZ (#180, gemela de CRM#128).
+  //
+  // Diego: «en los canales de ventas hay que diferenciar cuanto es escrito, por
+  // voz en el caso de WhatsApp, si envian audios o no». Y no es curiosidad: el
+  // documento comercial dice que el saludo del dia 1 «funciona mejor en nota de
+  // voz, sube mucho la tasa de respuesta». Hasta ahora eso se repetia de oidas
+  // porque no habia forma de contarlo.
+  //
+  // Sale de `wa_mensajes`, no de `lead_interactions`: la interaccion apunta que
+  // hubo un WhatsApp, pero no de que tipo. El dato ya estaba guardado.
+  //
+  // Solo lo SALIENTE. Lo que se mide es lo que hace la gestora, no lo que le
+  // mandan: contar los audios que recibe diria que trabaja mas quien tiene
+  // clientes habladores.
+  //
+  // `sticker` no cuenta como escrito ni como voz — no es un mensaje comercial —
+  // y las fotos y documentos van a su propia columna: mandar el dossier no es
+  // «escribir», y meterlo en el mismo saco desdibujaria justo lo que se compara.
+  const { rows: vozTexto } = await query(
+    `SELECT count(*) FILTER (WHERE m.tipo = 'texto')::int    AS escrito,
+            count(*) FILTER (WHERE m.tipo = 'audio')::int    AS voz,
+            count(*) FILTER (WHERE m.tipo IN ('imagen', 'video', 'documento'))::int AS adjunto
+       FROM wa_mensajes m
+       JOIN wa_conversaciones c ON c.id = m.conversacion_id
+       JOIN leads l ON l.id = c.lead_id
+      WHERE m.direccion = 'saliente'
+        AND l.deleted_at IS NULL ${pProj} ${pAses}
+            ${entre(`(m.ts AT TIME ZONE '${TZ}')::date`)}`,
+    par
+  ).catch((err) => {
+    // Sin las tablas de WhatsApp —un CRM donde no se ha instalado— el informe
+    // entero no puede caerse por una fila de mas.
+    if (err.code !== '42P01') throw err;
+    return { rows: [{ escrito: 0, voz: 0, adjunto: 0 }] };
+  });
+
   // EL EMBUDO: cuantos llegan al seguimiento 1, al 2, al 3...
   //
   // Es lo que convierte «99 % con seguimiento» en algo accionable: enseña
@@ -494,6 +535,19 @@ export async function seguimientoYTiempos({ projectId, projectIds, from, to, ase
       // no hay cola larga, y «2,3 toques por persona» se entiende solo.
       toques_por_persona: Number(act[0].personas) > 0
         ? Math.round((Number(act[0].toques) * 10) / Number(act[0].personas)) / 10 : 0,
+      // Lo que sale por WhatsApp, separado (#180). El porcentaje se calcula
+      // sobre escrito + voz y no sobre el total: un dossier mandado no compite
+      // con una nota de voz, y meterlo en el divisor haria bajar el numero por
+      // trabajar bien.
+      whatsapp_saliente: {
+        escrito: Number(vozTexto[0].escrito),
+        voz: Number(vozTexto[0].voz),
+        adjunto: Number(vozTexto[0].adjunto),
+        pct_voz: (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz)) > 0
+          ? Math.round((Number(vozTexto[0].voz) * 1000)
+              / (Number(vozTexto[0].escrito) + Number(vozTexto[0].voz))) / 10
+          : 0,
+      },
     },
   };
 }
@@ -674,7 +728,7 @@ export async function resumenMensual({ projectId, projectIds, from, to, asesoraI
        SELECT to_char(date_trunc('month', fecha_conversion), 'YYYY-MM') AS mes,
               COUNT(*)::int AS convertidos,
               COALESCE(SUM(importe_total),0)::numeric AS ventas,
-              COALESCE(SUM(importe_pagado),0)::numeric AS cobrado
+              COALESCE(SUM(${COBRADO_DE('conversions')}),0)::numeric AS cobrado
        FROM conversions ${cSql} GROUP BY 1
      )
      SELECT COALESCE(e.mes, c.mes) AS mes,
@@ -720,11 +774,11 @@ export async function ventasReport({ projectId, projectIds, from, to, asesoraId,
             l.nombre AS cliente,
             c.producto_contratado AS formacion,
             c.importe_total AS venta_total,
-            c.importe_pagado AS cobrado,
-            (c.importe_total - c.importe_pagado) AS pendiente,
+            cob.cobrado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS pendiente,
             CASE
-              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
-              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              WHEN cob.cobrado >= c.importe_total THEN 'Pagada'
+              WHEN cob.cobrado > 0 THEN 'Pago parcial'
               ELSE 'Pendiente'
             END AS estado_pago,
             ${PAIS} AS pais,
@@ -734,6 +788,7 @@ export async function ventasReport({ projectId, projectIds, from, to, asesoraId,
             u.nombre AS responsable,
             p.nombre AS proyecto
      FROM conversions c
+     CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
      LEFT JOIN leads l ON l.id = c.lead_id
      -- Se atribuye a la vendedora de la VENTA; si no la tiene, al responsable del lead.
      LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
@@ -753,8 +808,8 @@ export async function generalReport({ projectId, projectIds, from, to, asesoraId
             ${PAIS} AS pais,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
             conv.producto_contratado, conv.importe_total AS venta_total,
-            conv.importe_pagado AS venta_cobrado,
-            (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
+            conv.cobrado AS venta_cobrado,
+            GREATEST(conv.importe_total - conv.cobrado, 0) AS venta_pendiente,
             conv.metodo_pago, conv.fecha_conversion AS fecha_venta,
             COALESCE(uv.nombre, u.nombre) AS responsable, ${ENTRY} AS fecha_entrada
      FROM (SELECT * FROM leads WHERE deleted_at IS NULL) l
@@ -762,7 +817,8 @@ export async function generalReport({ projectId, projectIds, from, to, asesoraId
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN LATERAL (
-       SELECT * FROM conversions c WHERE c.lead_id = l.id
+       -- Lo cobrado, de sus pagos (#692). Sin venta, conv es NULL entero.
+       SELECT c.*, ${COBRADO_DE('c')} AS cobrado FROM conversions c WHERE c.lead_id = l.id
        ORDER BY c.fecha_conversion DESC LIMIT 1
      ) conv ON TRUE
      -- Si la venta tiene vendedora propia, ella manda sobre el responsable del lead.
@@ -781,8 +837,8 @@ export async function generalFacturacionReport({ projectId, projectIds, from, to
     `SELECT p.nombre AS proyecto, l.nombre, l.telefono, l.status AS estado,
             prod.nombre AS producto_interes, prod.precio AS valor_estimado,
             conv.producto_contratado, conv.importe_total AS venta_total,
-            conv.importe_pagado AS venta_cobrado,
-            (conv.importe_total - conv.importe_pagado) AS venta_pendiente,
+            conv.cobrado AS venta_cobrado,
+            GREATEST(conv.importe_total - conv.cobrado, 0) AS venta_pendiente,
             conv.fecha_conversion AS fecha_venta,
             COALESCE(fac.num_facturas, 0) AS num_facturas,
             COALESCE(fac.facturado, 0) AS facturado,
@@ -793,7 +849,8 @@ export async function generalFacturacionReport({ projectId, projectIds, from, to
      LEFT JOIN users u ON u.id = l.responsable_id
      LEFT JOIN projects p ON p.id = l.project_id
      LEFT JOIN LATERAL (
-       SELECT * FROM conversions c WHERE c.lead_id = l.id
+       -- Lo cobrado, de sus pagos (#692). Sin venta, conv es NULL entero.
+       SELECT c.*, ${COBRADO_DE('c')} AS cobrado FROM conversions c WHERE c.lead_id = l.id
        ORDER BY c.fecha_conversion DESC LIMIT 1
      ) conv ON TRUE
      LEFT JOIN LATERAL (
@@ -830,6 +887,48 @@ export async function cobrosMensuales({ projectId, projectIds, from, to, asesora
   return rows;
 }
 
+// 6b) LO MISMO, NETO DE REEMBOLSOS: para el conector de Claude (puerta 3,
+// CRM#806). Son los mismos cobros que «cobrosMensuales» (`tipo: 'cobro'`) y,
+// además, cada reembolso en negativo y por SU fecha (`tipo: 'reembolso'`): así la
+// suma de un mes es lo que de verdad se quedó ese mes. La pantalla de Reportes
+// sigue con «cobrosMensuales» tal cual.
+//
+// Un reembolso que llega de Stripe (`origen = 'stripe'`) se guarda en la moneda
+// ORIGINAL del cargo, mientras que su cobro está en euros liquidados: si el cargo
+// era en otra moneda, se pasa a euros con la proporción de ese cargo. Sin esto,
+// un reembolso de 100.000 COP restaba 100.000 € (revisión de la PR, 16/11).
+export async function cobrosMensualesNetos(filtros) {
+  const cobros = await cobrosMensuales(filtros);
+  const { where, params } = buildFilter(filtros, 'cr.fecha', 'c.project_id');
+  const { rows: reembolsos } = await query(
+    `SELECT to_char(date_trunc('month', cr.fecha), 'YYYY-MM') AS mes,
+            cr.fecha, l.nombre AS cliente, c.producto_contratado AS producto,
+            -(CASE WHEN conv.factor IS NOT NULL THEN ROUND(cr.importe * conv.factor, 2) ELSE cr.importe END) AS importe,
+            'reembolso' AS metodo_pago, p.nombre AS proyecto
+     FROM conversion_refunds cr
+     JOIN conversions c ON c.id = cr.conversion_id
+     LEFT JOIN leads l ON l.id = c.lead_id
+     LEFT JOIN projects p ON p.id = c.project_id
+     LEFT JOIN LATERAL (
+       SELECT sp.amount / (sp.metadata->>'original_amount')::numeric AS factor
+         FROM stripe_payments sp
+        WHERE cr.origen = 'stripe' AND cr.payment_id IS NOT NULL
+          AND sp.conversion_payment_id = cr.payment_id
+          AND (sp.metadata->>'original_amount') ~ '^[0-9.]+$'
+          AND (sp.metadata->>'original_amount')::numeric > 0
+        LIMIT 1
+     ) conv ON true
+     ${where}
+     ORDER BY cr.fecha DESC, cr.id DESC`,
+    params
+  );
+  const hora = (f) => new Date(f).getTime();
+  return [
+    ...cobros.map((r) => ({ ...r, tipo: 'cobro' })),
+    ...reembolsos.map((r) => ({ ...r, tipo: 'reembolso' })),
+  ].sort((a, b) => hora(b.fecha) - hora(a.fecha));
+}
+
 // 7) VENTAS POR VENDEDORA. Ojo con las dos fechas: lo VENDIDO se cuenta por la
 // fecha de la venta, pero lo COBRADO se cuenta por la fecha de cada pago. Antes
 // se sumaba el importe_pagado de las ventas del rango, que mete en el periodo
@@ -852,7 +951,8 @@ export async function ventasVendedora({ projectId, projectIds, from, to, asesora
               COALESCE(SUM(r.peso), 0)::float8 AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
               COALESCE(SUM(c.importe_total * r.peso), 0)::numeric AS total,
-              COALESCE(SUM((c.importe_total - c.importe_pagado) * r.peso), 0)::numeric AS pendiente
+              -- De los pagos y nunca por debajo de 0, venta a venta (#692).
+              COALESCE(SUM(GREATEST(c.importe_total - ${COBRADO_DE('c')}, 0) * r.peso), 0)::numeric AS pendiente
          FROM conversions c
          JOIN conversion_reparto r ON r.conversion_id = c.id
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -900,11 +1000,11 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
             l.pais_origen AS pais_entrada,
             c.producto_contratado AS formacion,
             c.importe_total AS venta_total,
-            c.importe_pagado AS cobrado,
-            (c.importe_total - c.importe_pagado) AS pendiente,
+            cob.cobrado,
+            GREATEST(c.importe_total - cob.cobrado, 0) AS pendiente,
             CASE
-              WHEN c.importe_pagado >= c.importe_total THEN 'Pagada'
-              WHEN c.importe_pagado > 0 THEN 'Pago parcial'
+              WHEN cob.cobrado >= c.importe_total THEN 'Pagada'
+              WHEN cob.cobrado > 0 THEN 'Pago parcial'
               ELSE 'Pendiente'
             END AS estado_pago,
             c.metodo_pago,
@@ -917,6 +1017,7 @@ export async function ventasPorAsesoraReport({ projectId, projectIds, from, to, 
             ${ENTRY}::date AS fecha_entrada,
             p.nombre AS proyecto
        FROM conversions c
+       CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob
        LEFT JOIN leads l ON l.id = c.lead_id
        LEFT JOIN users u ON u.id = COALESCE(c.vendedora_id, l.responsable_id)
        LEFT JOIN projects p ON p.id = c.project_id

@@ -13,7 +13,8 @@ import { MemoryRouter } from 'react-router-dom';
  * NO_LO_TIENES, se dice qué rol quitar.
  */
 
-const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] } };
+// Sin users.view la pestaña Usuarios no sale (gemela de CRM#880); el admin la trae.
+const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] }, permissions: { 'users.view': true } };
 const si = { puede: true, faltan: [], cuantos: 0 };
 const no = { puede: false, faltan: ['Recuperar prospectos borrados', 'Forma de los avisos', 'Ver las credenciales'], cuantos: 6 };
 const LISTA = ['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'].map((rol) => ({
@@ -54,12 +55,14 @@ describe('Invitar usuario: los roles que no puedes dar (gemela de CRM#644)', () 
     const screen = await abrirInvitar();
     const aviso = await screen.findByTestId('rol-no-asignable-soporte');
     expect(aviso.textContent).toContain('No puedes dar este rol: le daría permisos que tú no tienes (Recuperar prospectos borrados, Forma de los avisos, Ver las credenciales…). Pídeselo a un superadmin.');
-    const select = screen.getByLabelText('Rol *');
-    const soporte = [...select.options].find((o) => o.value === 'soporte');
-    expect(soporte.disabled).toBe(true);
-    expect(soporte.textContent).toBe('Soporte (no puedes darlo)');
+    // El rol es el desplegable del CRM (#106): se abre y se miran sus opciones.
+    fireEvent.click(screen.getByLabelText('Rol *'));
+    const opciones = screen.getAllByRole('option');
+    const soporte = opciones.find((o) => o.textContent === 'Soporte (no puedes darlo)');
+    expect(soporte).toBeTruthy();
+    expect(soporte.getAttribute('aria-disabled')).toBe('true');
     // Los que sí puede dar, no.
-    expect([...select.options].filter((o) => o.disabled).map((o) => o.value)).toEqual(['soporte']);
+    expect(opciones.filter((o) => o.getAttribute('aria-disabled') === 'true')).toHaveLength(1);
     expect(api.get).toHaveBeenCalledWith('/users/roles-asignables');
   });
 
@@ -71,7 +74,8 @@ describe('Invitar usuario: los roles que no puedes dar (gemela de CRM#644)', () 
     const screen = await abrirInvitar();
     await waitFor(() => expect(api.get).toHaveBeenCalledWith('/users/roles-asignables'));
     expect(screen.queryByTestId('rol-no-asignable-soporte')).toBeNull();
-    expect([...screen.getByLabelText('Rol *').options].some((o) => o.disabled)).toBe(false);
+    fireEvent.click(screen.getByLabelText('Rol *'));
+    expect(screen.getAllByRole('option').some((o) => o.getAttribute('aria-disabled') === 'true')).toBe(false);
   });
 });
 

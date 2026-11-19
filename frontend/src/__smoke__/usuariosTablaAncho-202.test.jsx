@@ -18,6 +18,8 @@ const ADMIN = {
   loading: false,
   projects: [],
   user: { id: 1, role: 'admin', roles_extra: [] },
+  // Sin users.view la pestaña Usuarios no sale (gemela de CRM#880); el admin la trae.
+  permissions: { 'users.view': true },
 };
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ADMIN }));
 vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => async () => true }));

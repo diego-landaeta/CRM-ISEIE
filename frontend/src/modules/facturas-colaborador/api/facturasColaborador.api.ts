@@ -15,6 +15,15 @@ export const AREA_ES: Record<Area, string> = {
   soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido', otra: 'Otra',
 };
 
+// Quién factura (CRM-ISEIE#422): un colaborador externo o una vendedora de la lista (gestoras y comerciales).
+export const TIPOS = ['colaborador', 'vendedora'] as const;
+export type Tipo = typeof TIPOS[number];
+export const TIPO_ES: Record<Tipo, string> = { colaborador: 'Colaborador', vendedora: 'Vendedora' };
+/** El filtro «Vendedoras / Colaboradores»: vacío = todos. */
+export const TIPO_FILTRO: { value: '' | Tipo; label: string }[] = [
+  { value: '', label: 'Vendedoras y colaboradores' }, { value: 'vendedora', label: 'Vendedoras' }, { value: 'colaborador', label: 'Colaboradores' },
+];
+
 export type EstadoFactura = 'sin_enviar' | 'enviado' | 'abierto' | 'recibida' | 'sin_factura' | 'anulada' | 'no_enviado' | 'caducado';
 
 // La moneda (247, 31/10): Andrea factura a CEDIA en dólares. No se convierte: cada una se suma por su lado.
@@ -39,8 +48,9 @@ export type FormaPago = typeof FORMAS_PAGO[number];
 export const FORMA_PAGO_ES: Record<FormaPago, string> = {
   transferencia: 'Transferencia', bizum: 'Bizum', paypal: 'PayPal', efectivo: 'Efectivo', otro: 'Otra',
 };
-// Las pestañas de la segunda parte: «Del mes · Enviadas · Por pagar · Pagadas · Historial».
-export type VistaDeFacturas = 'enviadas' | 'por_pagar' | 'pagadas' | 'historial';
+// Las pestañas de la segunda parte: «Del mes · Enviadas · Por validar · Por pagar · Pagadas · Historial».
+// «Por validar» (CRM#710): la empresa revisa la factura antes de pagarla.
+export type VistaDeFacturas = 'enviadas' | 'por_validar' | 'por_pagar' | 'pagadas' | 'historial';
 
 /**
  * El desglose de una factura, para administración. Sin desglose: `lineas` vacías.
@@ -83,6 +93,8 @@ export interface Colaborador {
   email: string;
   nif: string | null;
   area: Area;
+  /** Colaborador o vendedora (CRM#710). */
+  tipo?: Tipo;
   notas: string | null;
   user_id: number | null;
   usuario_nombre: string | null;
@@ -99,6 +111,7 @@ export interface ColaboradorEnvio {
   email: string;
   nif?: string | null;
   area: Area;
+  tipo?: Tipo;
   notas?: string | null;
   alta_desde?: string | null;
   empresas: {
@@ -116,6 +129,8 @@ export interface FacturaDelMes {
   colaborador_nombre: string;
   email: string;
   area: Area;
+  /** Colaborador o vendedora (CRM#710). */
+  tipo?: Tipo;
   empresa: string;
   importe_esperado: string | null;
   importe: string | null;
@@ -151,6 +166,8 @@ export interface FacturaDelMes {
   /** «No lo he recibido» (04/11): lo dijo el colaborador; la lista lo enseña mientras no confirme. */
   pago_no_recibido_at?: string | null;
   pago_no_recibido_comentario?: string | null;
+  /** La empresa la validó (CRM#710): solo entonces se paga. */
+  validada_at?: string | null;
   estado: EstadoFactura;
 }
 
@@ -223,6 +240,8 @@ export interface FacturaDelColaborador {
   };
   /** El estado del pago (segunda parte): la fecha y la forma. */
   pago: null | { pagada_at: string; forma_pago: FormaPago | null };
+  /** La empresa la revisó y la dio por buena (CRM#710). */
+  validada?: boolean;
   enlace?: string | null;
 }
 
@@ -284,7 +303,7 @@ const subida = (archivo: File, importe: string, numeroFactura: string, desglose:
 export const facturasColaboradorApi = {
   // ── Administración: la lista de colaboradores ──
   empresas: () => client.get(`${BASE}/empresas`) as R<EmpresaDelGrupo[]>,
-  colaboradores: (f: { estado?: 'activos' | 'de_baja' | 'todos'; issuerId?: number; q?: string } = {}) =>
+  colaboradores: (f: { estado?: 'activos' | 'de_baja' | 'todos'; issuerId?: number; q?: string; tipo?: Tipo } = {}) =>
     client.get(`${BASE}/colaboradores${query(f)}`) as R<Colaborador[]>,
   crear: (b: ColaboradorEnvio) => client.post(`${BASE}/colaboradores`, b) as R<Colaborador>,
   editar: (id: number, b: Partial<ColaboradorEnvio>) => client.patch(`${BASE}/colaboradores/${id}`, b) as R<Colaborador>,
@@ -293,13 +312,15 @@ export const facturasColaboradorApi = {
   registroDelColaborador: (id: number) => client.get(`${BASE}/colaboradores/${id}/registro`) as R<LineaRegistro[]>,
 
   // ── Administración: las facturas del mes ──
-  mes: (f: { periodo: string; issuerId?: number; estado?: EstadoFactura; area?: Area }) =>
+  mes: (f: { periodo: string; issuerId?: number; estado?: EstadoFactura; area?: Area; tipo?: Tipo }) =>
     client.get(`${BASE}/mes${query(f)}`) as R<Mes>,
   archivo: (id: number) => client.get(`${BASE}/facturas/${id}/archivo`) as R<{ url: string; nombre: string | null }>,
   registroDeLaFactura: (id: number) => client.get(`${BASE}/facturas/${id}/registro`) as R<LineaRegistro[]>,
   desgloseDeLaFactura: (id: number) => client.get(`${BASE}/facturas/${id}/desglose`) as R<DesgloseDeFactura>,
   anular: (id: number, motivo: string) => client.post(`${BASE}/facturas/${id}/anular`, { motivo }) as R<{ anulada: number; nueva: number }>,
   reenviar: (id: number) => client.post(`${BASE}/facturas/${id}/reenviar`, {}) as R<{ id: number }>,
+  /** «Validar» (CRM#710): la empresa la da por buena; después se paga. */
+  validar: (id: number) => client.post(`${BASE}/facturas/${id}/validar`, {}) as R<{ id: number; validada: boolean }>,
 
   // ── El pago (segunda parte): una o varias, con el justificante si se quiere ──
   pagar: (ids: number[], datos: { fecha: string; forma_pago: FormaPago; referencia_pago?: string }, justificante?: File | null) => {
@@ -316,7 +337,7 @@ export const facturasColaboradorApi = {
   justificante: (id: number) => client.get(`${BASE}/facturas/${id}/justificante`) as R<{ url: string }>,
 
   // ── Enviadas, Por pagar, Pagadas e Historial, y el coste por campus (segunda parte) ──
-  vista: (f: { vista: VistaDeFacturas; issuerId?: string; colaboradorId?: string; periodo?: string; estado?: string }) =>
+  vista: (f: { vista: VistaDeFacturas; issuerId?: string; colaboradorId?: string; periodo?: string; estado?: string; tipo?: string }) =>
     client.get(`${BASE}/facturas${query(f)}`) as R<{ vista: VistaDeFacturas; resumen: { total: number; importe: number; pendiente: number; por_moneda?: SumaPorMoneda<'importe' | 'pendiente'>[] }; facturas: FacturaDelMes[] }>,
   /**
    * El ZIP del mes de una empresa, como descarga. Con su propio fetch, como el

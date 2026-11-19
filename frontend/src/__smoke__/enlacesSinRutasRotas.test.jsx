@@ -123,7 +123,7 @@ describe('los enlaces del frontal llevan a una pantalla que existe', () => {
   });
 
   it.each([
-    ['modules/connectors/pages/ConnectorsPage.tsx', '/webhooks'],
+    ['modules/connectors/pages/ConnectorsPage.tsx', '/conexion/webhooks/prospectos'],
     ['modules/connectors/pages/ConnectorsPage.tsx', '/woocommerce'],
     ['modules/invoices/components/AvisoHuecosFacturas.tsx', '/accounting/facturas/nueva'],
   ])('%s lleva a %s (#360)', (fichero, to) => {

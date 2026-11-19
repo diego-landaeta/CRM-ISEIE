@@ -58,8 +58,11 @@ describe('el correo de feedback sale solo tras 7 días sin interacción', () => 
   it('cuenta desde la ÚLTIMA interacción, de cualquier tipo, y no desde el primer contacto', async () => {
     await feedback.candidatosDelDia7({ tope: 5, maxDias: 30, inicio: '2026-09-29' });
     const sql = consultas[0].sql;
-    expect(sql).toMatch(/MAX\(li\.fecha\)::date AS ultima/);
-    expect(sql).toMatch(/pc\.ultima BETWEEN CURRENT_DATE - \$2::int AND CURRENT_DATE - 7/);
+    // La última de cualquiera de sus fichas, también por WhatsApp (#593); el
+    // comportamiento se prueba contra la base en feedbackPorPersona593.
+    expect(sql).toMatch(/SELECT MAX\(li\.fecha\) FROM lead_interactions li/);
+    expect(sql).toMatch(/SELECT MAX\(m\.ts\) FROM wa_conversaciones wc/);
+    expect(sql).toMatch(/act\.ultima BETWEEN CURRENT_DATE - \$2::int AND CURRENT_DATE - 7/);
     expect(sql).not.toMatch(/pc\.primer_contacto BETWEEN/);
     expect(sql).toMatch(/pc\.primer_contacto >= \$3::date/);
   });

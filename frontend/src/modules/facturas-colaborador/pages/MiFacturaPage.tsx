@@ -74,7 +74,11 @@ export default function MiFacturaPage() {
                     Pagada {diaDelPago(m.pago.pagada_at)}{m.pago.forma_pago ? ` · ${FORMA_PAGO_ES[m.pago.forma_pago]}` : ''}
                   </span>
                 ) : (
-                  <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground">Por pagar</span>
+                  // Primero la empresa la revisa y la valida; después la paga (CRM#710).
+                  <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground"
+                    title={m.validada === false ? 'La empresa la está revisando. Cuando la valide, se paga.' : 'Validada por la empresa: se paga en cuanto se haga la transferencia.'}>
+                    {m.validada === false ? 'En revisión' : 'Validada · por pagar'}
+                  </span>
                 ))}
                 {m.recibida && (
                   <Button variant="outline" size="sm" onClick={() => verArchivo(m.id!)}>

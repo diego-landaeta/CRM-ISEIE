@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { CaretDown, CaretRight, Coins, FileCsv, Info, TrendDown, TrendUp } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
-import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 
@@ -15,7 +15,8 @@ import { ponerAmbito } from '@/shared/lib/ambitoInforme';
  *
  * Lo cobrado sale de los cobros apuntados, como en Finanzas. Solo hay gasto de
  * Meta de momento: en el resto de canales el gasto sale como «—» (sin dato), no
- * como 0 €, que diría que no cuestan nada. Solo admin y super admin: lleva el gasto.
+ * como 0 €, que diría que no cuestan nada. Solo con `reports.dinero`, como el
+ * servidor (admin y project manager de serie): lleva el gasto.
  */
 
 interface Fila {
@@ -67,7 +68,6 @@ function Delta({ ahora, antes, masEsMejor = true }: { ahora: number | null; ante
 }
 
 export default function DondePonerElDinero({ from, to }: { from: string; to: string }) {
-  const { user } = useAuth() as { user: { role?: string } | null };
   const { activeProject, activeIssuerId } = useProjectContext() as {
     activeProject: { id: number } | null; activeIssuerId: number | null;
   };
@@ -75,7 +75,8 @@ export default function DondePonerElDinero({ from, to }: { from: string; to: str
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
-  const permitido = user?.role === 'admin' || user?.role === 'superadmin';
+  const { can } = usePermission();
+  const permitido = can('reports.dinero');
 
   useEffect(() => {
     if (!permitido) return undefined;

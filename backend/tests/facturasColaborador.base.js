@@ -34,6 +34,9 @@ const t0 = () => ({
   registro: [],
   lineas: [],
   notificaciones: [],
+  // Las excepciones de permisos y su registro (CRM-ISEIE#422: la ficha de vendedora da «Subir su factura»).
+  overrides: [],
+  permisos_registro: [],
   sec: { colaborador: 0, factura: 0, registro: 0, linea: 0, notificacion: 0 },
 });
 
@@ -85,7 +88,7 @@ function filaEnlace(f) {
     numero_recepcion: f.numero_recepcion, subida_at: f.subida_at, abierto_at: f.abierto_at, caduca_at: f.caduca_at,
     anulada_at: f.anulada_at, nombre_original: f.nombre_original,
     estado: estado(f),
-    colaborador_nombre: c.nombre, colaborador_email: c.email, area: c.area, colaborador_nif: c.nif,
+    colaborador_nombre: c.nombre, colaborador_email: c.email, area: c.area, tipo: c.tipo ?? 'colaborador', colaborador_nif: c.nif,
     razon_social: ii.razon_social, empresa_nif: ii.nif, direccion: ii.direccion ?? null, cp: ii.cp ?? null,
     ciudad: ii.ciudad ?? null, pais: ii.pais ?? null, logo_url: ii.logo_url ?? null,
     modalidad: ce.modalidad ?? null, importe_fijo: n2(ce.importe_fijo), tarifa_hora: n2(ce.tarifa_hora),
@@ -94,6 +97,7 @@ function filaEnlace(f) {
     cuadra: f.cuadra ?? null, importe_pdf: n2(f.importe_pdf), mime: f.mime ?? null,
     pagada_at: f.pagada_at ?? null, pagada_por: f.pagada_por ?? null, forma_pago: f.forma_pago ?? null,
     referencia_pago: f.referencia_pago ?? null, justificante: f.justificante ?? null,
+    validada_at: f.validada_at ?? null,
   };
 }
 
@@ -104,7 +108,7 @@ function filaLista(f) {
     ? n2(Number(f.base ?? f.importe) - Number(f.importe_esperado)) : null;
   return {
     id: f.id, colaborador_id: f.colaborador_id, issuer_id: f.issuer_id, periodo: f.periodo.slice(0, 7),
-    colaborador_nombre: c.nombre, email: c.email, area: c.area, empresa: emisor(f.issuer_id).razon_social,
+    colaborador_nombre: c.nombre, email: c.email, area: c.area, tipo: c.tipo ?? 'colaborador', empresa: emisor(f.issuer_id).razon_social,
     importe_esperado: n2(f.importe_esperado), importe: n2(f.importe), diferencia,
     numero_factura: f.numero_factura ?? null, numero_recepcion: f.numero_recepcion ?? null,
     subida_at: f.subida_at ?? null, enviado_at: f.enviado_at ?? null, abierto_at: f.abierto_at ?? null,
@@ -116,6 +120,7 @@ function filaLista(f) {
     // f.moneda de FILA_DE_LISTA (247): la columna es NOT NULL DEFAULT 'EUR'.
     moneda: f.moneda ?? 'EUR',
     con_justificante: Boolean(f.justificante),
+    validada_at: f.validada_at ?? null,
     estado: estado(f),
   };
 }
@@ -132,7 +137,7 @@ function filaColaborador(c, issuerIds) {
     }))
     .sort((a, b) => a.razon_social.localeCompare(b.razon_social));
   return {
-    id: c.id, nombre: c.nombre, email: c.email, nif: c.nif ?? null, area: c.area, notas: c.notas ?? null,
+    id: c.id, nombre: c.nombre, email: c.email, nif: c.nif ?? null, area: c.area, tipo: c.tipo ?? 'colaborador', notas: c.notas ?? null,
     user_id: c.user_id ?? null, activo: activo(c), alta_desde: mes(c.alta_desde), baja_desde: mes(c.baja_desde),
     created_at: c.created_at, updated_at: c.updated_at,
     usuario_nombre: c.user_id ? usuario(c.user_id)?.nombre ?? null : null,
@@ -165,6 +170,16 @@ const CONSULTAS = [
 
   // ── permisos (resolvePermission) ──
   [(s) => s.includes('FROM user_permission_overrides'), () => nada()],
+  // La ficha de vendedora le da «Subir su factura» a ella (CRM-ISEIE#422), salvo que ya tenga la excepción.
+  [(s) => s.includes('INSERT INTO user_permission_overrides'), ([userId, quien]) => {
+    if (datos.overrides.some((o) => o.user_id === Number(userId) && o.resource === 'facturas_colaborador' && o.action === 'subir')) return { rows: [], rowCount: 0 };
+    datos.overrides.push({ user_id: Number(userId), resource: 'facturas_colaborador', action: 'subir', allowed: true, updated_by: quien });
+    return { rows: [], rowCount: 1 };
+  }],
+  [(s) => s.includes('INSERT INTO permisos_registro'), ([quien, userId, motivo]) => {
+    datos.permisos_registro.push({ quien_id: quien, usuario_id: Number(userId), clave: 'facturas_colaborador.subir', origen: 'ficha_vendedora', motivo });
+    return filas([]);
+  }],
   [(s) => s.includes('FROM custom_roles'), () => nada()],
   // Lo cambiado en Configuración › Roles para cada rol (migración 211, la del tablero): nada.
   [(s) => s.includes('FROM role_permission_overrides'), () => nada()],
@@ -187,7 +202,7 @@ const CONSULTAS = [
     filas(datos.issuers.filter((e) => e.activo !== false && enLista(issuerIds, e.id))
       .sort((a, b) => a.razon_social.localeCompare(b.razon_social))
       .map((e) => ({ id: e.id, razon_social: e.razon_social, nif: e.nif })))],
-  [(s) => s.includes('FROM colaboradores c') && s.includes('ORDER BY activo DESC, c.nombre'), ([issuerIds, issuerId, est, like]) => {
+  [(s) => s.includes('FROM colaboradores c') && s.includes('ORDER BY activo DESC, c.nombre'), ([issuerIds, issuerId, est, like, tipo]) => {
     const patron = like ? new RegExp(String(like).slice(1, -1).replace(/\\([\\%_])|([.*+?^${}()|[\]])|(%)|(_)/g,
       (m, esc, re, pct, und) => (esc ? `\\${esc}` : re ? `\\${re}` : pct ? '.*' : '.')), 'i') : null;
     const lista = datos.colaboradores
@@ -195,6 +210,7 @@ const CONSULTAS = [
       .filter((c) => !issuerId || datos.ce.some((x) => x.colaborador_id === c.id && x.issuer_id === Number(issuerId)))
       .filter((c) => est === 'todos' || (est === 'activos') === activo(c))
       .filter((c) => !patron || patron.test(c.nombre) || patron.test(c.email))
+      .filter((c) => !tipo || (c.tipo ?? 'colaborador') === tipo)
       .map((c) => filaColaborador(c, issuerIds))
       .sort((a, b) => (Number(b.activo) - Number(a.activo)) || a.nombre.localeCompare(b.nombre));
     return filas(lista);
@@ -214,11 +230,21 @@ const CONSULTAS = [
     const suyos = [usuario(id)?.role, ...(usuario(id)?.roles_extra || [])];
     return filas(suyos.some((r) => ['colaborador', 'tutor_redactor'].includes(r)) ? [{ '?column?': 1 }] : []);
   }],
+  // La vendedora (CRM-ISEIE#422): gestora o comercial (gestor o admin, o gestor añadido) y activa.
+  [(s) => s.includes('FROM users WHERE id = $1 AND active = true'), ([id]) => {
+    const u = usuario(id);
+    const vale = u && u.active !== false && (['gestor', 'admin'].includes(u.role) || (u.roles_extra || []).includes('gestor'));
+    return filas(vale ? [{ '?column?': 1 }] : []);
+  }],
+  [(s) => s.includes("FROM colaboradores WHERE user_id = $1 AND tipo = 'vendedora'"), ([userId, salvo]) => {
+    const c = datos.colaboradores.find((x) => x.user_id === Number(userId) && x.tipo === 'vendedora' && (!salvo || x.id !== Number(salvo)));
+    return filas(c ? [{ id: c.id }] : []);
+  }],
   [(s) => s.includes('FROM colaborador_empresas') && s.includes('NOT (issuer_id = ANY($2::int[])) LIMIT 1'), ([id, issuerIds]) =>
     filas(datos.ce.some((x) => x.colaborador_id === Number(id) && !issuerIds.includes(x.issuer_id)) ? [{ '?column?': 1 }] : [])],
-  [(s) => s.includes('INSERT INTO colaboradores'), ([nombre, email, nif, area, notas, userId, altaDesde, porUserId]) => {
+  [(s) => s.includes('INSERT INTO colaboradores'), ([nombre, email, nif, area, notas, userId, altaDesde, porUserId, tipo]) => {
     const c = {
-      id: ++datos.sec.colaborador, nombre, email, nif, area, notas, user_id: userId, activo: true,
+      id: ++datos.sec.colaborador, nombre, email, nif, area, notas, user_id: userId, activo: true, tipo: tipo || 'colaborador',
       alta_desde: altaDesde, baja_desde: null, creado_por: porUserId, created_at: new Date(), updated_at: new Date(),
     };
     datos.colaboradores.push(c);
@@ -307,6 +333,7 @@ const CONSULTAS = [
     return filas(f ? [{
       id: f.id, colaborador_id: f.colaborador_id, issuer_id: f.issuer_id, periodo: f.periodo,
       subida_at: f.subida_at, anulada_at: f.anulada_at, caduca_at: f.caduca_at, token_hash: f.token_hash, pagada_at: f.pagada_at ?? null,
+      validada_at: f.validada_at ?? null,
     }] : []);
   }],
   [(s) => s.includes('SET enviado_at = NOW() WHERE id = $1'), ([id]) => { factura(id).enviado_at = new Date(); return filas([]); }],
@@ -373,7 +400,12 @@ const CONSULTAS = [
   }],
   [(s) => s.includes('WHERE f.id = ANY($1::int[]) ORDER BY f.id FOR UPDATE'), ([ids]) =>
     filas(datos.facturas.filter((f) => ids.includes(f.id)).sort((a, b) => a.id - b.id)
-      .map((f) => ({ id: f.id, subida_at: f.subida_at, anulada_at: f.anulada_at, pagada_at: f.pagada_at ?? null })))],
+      .map((f) => ({ id: f.id, subida_at: f.subida_at, anulada_at: f.anulada_at, pagada_at: f.pagada_at ?? null, validada_at: f.validada_at ?? null })))],
+  // «Validar» (CRM-ISEIE#422).
+  [(s) => s.includes('SET validada_at = NOW(), validada_por = $2'), ([id, por]) => {
+    Object.assign(factura(id), { validada_at: new Date(), validada_por: por });
+    return filas([]);
+  }],
   [(s) => s.includes('SET pagada_at = $2, pagada_por = $3'), ([id, fechaPago, por, forma, justificante, referencia]) => {
     Object.assign(factura(id), { pagada_at: fechaPago, pagada_por: por, forma_pago: forma, justificante, referencia_pago: referencia });
     return filas([]);
@@ -403,23 +435,27 @@ const CONSULTAS = [
     Object.assign(factura(id), { token_hash: hash, token_semilla: semilla, caduca_at: caduca, abierto_at: null, enviado_at: null });
     return filas([]);
   }],
-  [(s) => s.includes("ORDER BY (t.estado = 'anulada')"), ([periodo, issuerIds, issuerId, est, area]) =>
+  [(s) => s.includes("ORDER BY (t.estado = 'anulada')"), ([periodo, issuerIds, issuerId, est, area, tipo]) =>
     filas(datos.facturas
       .filter((f) => f.periodo === periodo && enLista(issuerIds, f.issuer_id) && (!issuerId || f.issuer_id === Number(issuerId))
-        && (!area || colaborador(f.colaborador_id).area === area))
+        && (!area || colaborador(f.colaborador_id).area === area)
+        && (!tipo || (colaborador(f.colaborador_id).tipo ?? 'colaborador') === tipo))
       .map(filaLista)
       .filter((t) => !est || t.estado === est)
       .sort((a, b) => (Number(a.estado === 'anulada') - Number(b.estado === 'anulada'))
         || a.colaborador_nombre.localeCompare(b.colaborador_nombre) || a.empresa.localeCompare(b.empresa) || a.id - b.id))],
-  [(s) => s.includes('LIMIT 1000'), ([issuerIds, issuerId, colaboradorId, periodo, est], s) => {
+  [(s) => s.includes('LIMIT 1000'), ([issuerIds, issuerId, colaboradorId, periodo, est, , tipo], s) => {
     let vista;
-    if (s.includes('f.pagada_at IS NULL')) vista = (f) => f.subida_at && !f.anulada_at && !f.pagada_at;
+    // «Por validar» y «Por pagar» (solo las validadas), CRM-ISEIE#422.
+    if (s.includes('f.validada_at IS NULL')) vista = (f) => f.subida_at && !f.anulada_at && !f.validada_at;
+    else if (s.includes('f.pagada_at IS NULL')) vista = (f) => f.subida_at && !f.anulada_at && f.validada_at && !f.pagada_at;
     else if (s.includes('WHERE f.pagada_at IS NOT NULL')) vista = (f) => f.pagada_at && !f.anulada_at;
     else if (s.includes('WHERE f.subida_at IS NOT NULL AND f.anulada_at IS NULL')) vista = (f) => f.subida_at && !f.anulada_at;
     else vista = () => true;
     return filas(datos.facturas
       .filter((f) => vista(f) && enLista(issuerIds, f.issuer_id) && (!issuerId || f.issuer_id === Number(issuerId))
-        && (!colaboradorId || f.colaborador_id === Number(colaboradorId)) && (!periodo || f.periodo === periodo))
+        && (!colaboradorId || f.colaborador_id === Number(colaboradorId)) && (!periodo || f.periodo === periodo)
+        && (!tipo || (colaborador(f.colaborador_id).tipo ?? 'colaborador') === tipo))
       .map(filaLista)
       .filter((t) => !est || t.estado === est || (est === 'no_cuadra' && t.cuadra === false && t.estado !== 'anulada'))
       .sort((a, b) => b.periodo.localeCompare(a.periodo) || a.colaborador_nombre.localeCompare(b.colaborador_nombre)
@@ -446,19 +482,20 @@ const CONSULTAS = [
       .map(({ ids, ...g }) => ({ ...g, facturas: ids.size }))
       .sort((a, b) => a.empresa.localeCompare(b.empresa) || (Number(a.project_id === null) - Number(b.project_id === null)) || b.importe - a.importe));
   }],
-  [(s) => s.includes('f.archivo_key IS NOT NULL') && s.includes('ORDER BY c.nombre, f.id'), ([periodo, issuerId]) =>
+  // Primero los colaboradores y luego las vendedoras (CRM-ISEIE#422: `ORDER BY c.tipo, c.nombre`).
+  [(s) => s.includes('f.archivo_key IS NOT NULL') && s.includes('ORDER BY c.tipo, c.nombre, f.id'), ([periodo, issuerId]) =>
     filas(datos.facturas
       .filter((f) => f.periodo === periodo && f.issuer_id === Number(issuerId) && f.subida_at && !f.anulada_at && f.archivo_key)
       .map((f) => {
         const c = colaborador(f.colaborador_id);
         const l = filaLista(f);
         return {
-          id: f.id, colaborador: c.nombre, area: c.area, nif: c.nif ?? null, numero_factura: f.numero_factura,
+          id: f.id, colaborador: c.nombre, area: c.area, tipo: c.tipo ?? 'colaborador', nif: c.nif ?? null, numero_factura: f.numero_factura,
           importe: n2(f.importe), importe_esperado: n2(f.importe_esperado), moneda: l.moneda, diferencia: l.diferencia,
           subida_at: f.subida_at, numero_recepcion: f.numero_recepcion, archivo_key: f.archivo_key,
         };
       })
-      .sort((a, b) => a.colaborador.localeCompare(b.colaborador) || a.id - b.id))],
+      .sort((a, b) => a.tipo.localeCompare(b.tipo) || a.colaborador.localeCompare(b.colaborador) || a.id - b.id))],
   [(s) => s.includes('SELECT razon_social FROM invoice_issuers WHERE id = $1'), ([id]) =>
     filas(emisor(id) ? [{ razon_social: emisor(id).razon_social }] : [])],
   [(s) => s.includes('FROM facturas_colaborador_registro r') && s.includes('WHERE r.factura_id = $1'), ([id]) =>
