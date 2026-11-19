@@ -11,6 +11,7 @@ import FilaCampos from '@/shared/components/ui/FilaCampos';
 import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
+import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from '@/modules/conversions/components/VentaYaExisteAviso';
 
 // Las notas y la dirección: la clase común, con la altura que pidan sus filas.
 const textareaClass = `${inputClass} h-auto py-2 resize-none`;
@@ -108,6 +109,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   const [installments, setInstallments] = useState<Array<{ importe_previsto: string; fecha_vencimiento: string }>>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  // El alumno ya tiene una venta de este programa (CRM#898): la que existe y
+  // lo que se iba a mandar, por si se crea igualmente.
+  const [ventaExistente, setVentaExistente] = useState<{ venta: VentaExistente; body: Record<string, unknown> } | null>(null);
+  useEffect(() => { if (!open) setVentaExistente(null); }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -280,8 +285,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     }
 
     setSaving(true);
+    let body: Record<string, unknown> = {};
     try {
-      const body: Record<string, unknown> = {
+      body = {
         project_id: pid,
         producto_interes_id: productoId,
         importe_total: totalNum,
@@ -317,19 +323,41 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
       if (direccionFiscal.trim()) {
         body.direccion_fiscal = direccionFiscal.trim();
       }
-      const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/ventas', body);
-      const data = res.data;
-      const desc = mode === 'existing'
-        ? `Venta añadida al cliente existente${data.retroactiva ? ' (histórica)' : ''}`
-        : (data.retroactiva ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}` : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`);
-      toast({ title: 'Venta creada', description: desc });
-      onSaved?.(data);
-      onClose();
+      await registrar(body);
     } catch (err: unknown) {
+      // Ya tiene una venta de este programa: se pregunta, no se crea a ciegas.
+      const ya = ventaYaExistente(err);
+      if (ya) {
+        setVentaExistente({ venta: ya, body });
+        return;
+      }
       const e = err as { data?: { error?: string }; message?: string };
       toast({ title: 'No se pudo registrar la venta', description: e?.data?.error || e?.message, variant: 'destructive' });
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function registrar(body: Record<string, unknown>) {
+    const res = await client.post<{ sale_id: number; lead_id: number; retroactiva: boolean; duplicado: boolean }>('/ventas', body);
+    const data = res.data;
+    const desc = mode === 'existing'
+      ? `Venta añadida al cliente existente${data.retroactiva ? ' (histórica)' : ''}`
+      : (data.retroactiva ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}` : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`);
+    toast({ title: 'Venta creada', description: desc });
+    onSaved?.(data);
+    onClose();
+  }
+
+  // «Crear otra venta igualmente»: lo mismo, con `forzar`. El servidor apunta quién.
+  async function crearIgualmente() {
+    if (!ventaExistente) return;
+    try {
+      await registrar({ ...ventaExistente.body, forzar: true });
+      setVentaExistente(null);
+    } catch (err: unknown) {
+      const e = err as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se pudo registrar la venta', description: e?.data?.error || e?.message, variant: 'destructive' });
     }
   }
 
@@ -725,6 +753,12 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
           </div>
         </div>
       </div>
+      <VentaYaExisteAviso
+        venta={ventaExistente?.venta ?? null}
+        onCancelar={() => setVentaExistente(null)}
+        onCrearIgualmente={crearIgualmente}
+        onCobroApuntado={() => { setVentaExistente(null); onClose(); }}
+      />
     </Portal>
   );
 }

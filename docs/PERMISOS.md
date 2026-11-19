@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-842 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
+845 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -218,6 +218,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listProductos | `GET /api/conversions/productos` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | cuotas | `GET /api/conversions/cuotas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | filas | `GET /api/conversions/filas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
+| posiblesRepetidas | `GET /api/conversions/posibles-repetidas` | (no existía) | (ruta nueva) | `conversions.edit` |
 | listByLead | `GET /api/conversions/by-lead/:leadId` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | getById | `GET /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.create` |
@@ -967,6 +968,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | stats | `GET /api/stripe-payments/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | sync | `POST /api/stripe-payments/sync` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | deLaVenta | `GET /api/stripe-payments/de-la-venta/:conversionId` | (no existía) | (ruta nueva) | `stripe.edit` |
+| listar | `GET /api/stripe-payments/disputas` | (no existía) | (ruta nueva) | `stripe.edit` |
+| sincronizar | `POST /api/stripe-payments/disputas/sincronizar` | (no existía) | (ruta nueva) | `stripe.edit` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |

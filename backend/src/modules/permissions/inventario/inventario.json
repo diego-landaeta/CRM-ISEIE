@@ -2713,6 +2713,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conversions/posibles-repetidas",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/posibles-repetidas",
+  "relativa": "GET /posibles-repetidas",
+  "controlador": "posiblesRepetidas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/conversions/by-lead/:leadId",
   "tipo": "ruta",
   "modulo": "conversions",
@@ -13751,6 +13773,54 @@
     "claves": [
      "stripe.edit"
     ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/disputas",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/disputas",
+  "relativa": "GET /disputas",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/disputas/sincronizar",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/disputas/sincronizar",
+  "relativa": "POST /disputas/sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
    }
   ],
   "puertas": []

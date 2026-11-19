@@ -6,6 +6,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 // Lo facturado tiene UNA definición y vive en los informes (#224).
 import { IMPORTE_FACTURADO, FACTURA_QUE_CUENTA } from '../reports/report.model.js';
+import { buscarVentaRepetida, errorVentaYaExiste } from '../conversions/venta-repetida.js';
 
 /**
  * Registra una venta — flujo orquestado:
@@ -16,7 +17,13 @@ import { IMPORTE_FACTURADO, FACTURA_QUE_CUENTA } from '../reports/report.model.j
  *
  * Por la fecha el sistema marca internamente si es retroactiva (informativo).
  */
-export async function createSale(data, requestUser) {
+/*
+ * `opciones.comprobarRepetida` (CRM#898), por defecto sí. Solo la apaga la
+ * compra directa de la web (Stripe): la crea el CRM sin nadie delante que
+ * pueda elegir entre apuntar el cobro o crear otra, y un 409 dejaría el cargo
+ * sin venta. Si repite, sale en «Posibles repetidas».
+ */
+export async function createSale(data, requestUser, { comprobarRepetida: mirarRepetida = true } = {}) {
   const today = new Date().toISOString().slice(0, 10);
   const isRetroactive = data.fecha_pago < today;
   const importePagado = data.importe_pagado ?? data.importe_total;
@@ -28,6 +35,17 @@ export async function createSale(data, requestUser) {
   let leadResult = { duplicado: false, duplicado_de: null };
   let leadNombre = data.nombre;
 
+  // ¿ESTE ALUMNO YA TIENE ESTE PROGRAMA? (CRM#898). Se mira ANTES de tocar
+  // nada: con cliente nuevo, el alta crea el prospecto, y un 409 después
+  // dejaría una ficha suelta. Sin `forzar`, 409 con la venta que existe.
+  const forzar = Boolean(data.forzar);
+  let repetida = null;
+  const comprobarRepetida = async (quien) => {
+    if (!mirarRepetida || !data.producto_interes_id) return;
+    repetida = await buscarVentaRepetida({ projectId: data.project_id, productoId: data.producto_interes_id, ...quien });
+    if (repetida && !forzar) throw errorVentaYaExiste(repetida);
+  };
+
   if (data.lead_id) {
     // Modo "cliente existente": usar el lead seleccionado tal cual.
     const existing = await query(`SELECT id, nombre, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL`, [data.lead_id]);
@@ -37,7 +55,9 @@ export async function createSale(data, requestUser) {
     }
     leadId = existing.rows[0].id;
     leadNombre = existing.rows[0].nombre;
+    await comprobarRepetida({ leadId });
   } else {
+    await comprobarRepetida({ email: data.email || null, nombre: data.nombre || null });
     // Modo "cliente nuevo": crear lead manual con canal=directo.
     // createManualLead detecta duplicados: si existe lead con mismo email/tel, lo reusa.
     // Si quien registra es admin/superadmin → dejamos round-robin (no se auto-asignan ventas).
@@ -151,8 +171,12 @@ export async function createSale(data, requestUser) {
       // lo manda (no está en createSaleSchema) y sigue igual; lo pide quien sabe que
       // el importe ya es el precio final, como la compra directa de la web (puerta 6).
       ...(data.iva_incluido != null ? { iva_incluido: Boolean(data.iva_incluido) } : {}),
+      ...(forzar ? { forzar: true } : {}),
     },
-    requestUser?.userId || null
+    requestUser?.userId || null,
+    // Ya mirado arriba, con el alumno tal como llegó (correo y nombre del
+    // cliente nuevo incluidos): no se vuelve a buscar.
+    { repetida },
   );
 
   // 3b) DE QUIEN ES LA VENTA, cuando se dice a proposito.

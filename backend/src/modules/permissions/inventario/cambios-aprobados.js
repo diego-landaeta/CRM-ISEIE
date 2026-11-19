@@ -254,7 +254,8 @@ export const CAMBIOS_DE_MENU = [
       superadmin: ['- Equipo de Desarrollo › Mi factura'],
     },
     rutas: { 'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias' },
-    aprobadoPor: 'Pendiente de Diego (CRM-ISEIE#422)',
+    // Diego lo aprobó el 19/11 en la sesión de trabajo: «sube todo y aprueba».
+    aprobadoPor: 'Diego, 19/11',
   },
   {
     id: 'menu-sin-403',
@@ -406,6 +407,40 @@ export const CAMBIOS_DE_MENU = [
     // La pantalla se va con su ruta: no es que se le cierre a alguien, es que ya no existe.
     quitadas: ['Equipo de Desarrollo › Por revisar'],
     aprobadoPor: 'Diego, 10/11',
+  },
+  {
+    id: 'menu-disputas-stripe-396',
+    que: '«Finanzas › Disputas de Stripe»: las disputas abiertas de cada cuenta de Stripe, por empresa y por campus, solo lectura (gemela de CRM#839, tarea 396). La ve quien tiene `stripe.edit` («llevar las disputas»), cada uno en sus campus.',
+    motivo: 'Tarea #396 del tablero (Manuel): ver las disputas abiertas por empresa y proyecto. No cambia el acceso: `stripe.edit` ya decidía las disputas en Pagos Stripe.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Disputas de Stripe'],
+      admin: ['+ Finanzas › Disputas de Stripe'],
+      soporte: ['+ Finanzas › Disputas de Stripe'],
+      'gestora+admin': ['+ Finanzas › Disputas de Stripe'],
+    },
+    rutas: {
+      'Finanzas › Disputas de Stripe': 'GET /api/stripe-payments/disputas',
+    },
+    // Aprobado por Diego el 18/11 en el CRM 360 (CRM#865), tras probarla en /testeo (permisos por rol, filtros, sin claves, solo lectura y móvil).
+    aprobadoPor: 'Diego, 18/11',
+  },
+  {
+    id: 'menu-actividad-paypal-incidencias',
+    que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) salen en el menú a quien tiene su permiso (gemela de CRM#922).',
+    motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
+    perfiles: {
+      superadmin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
+      admin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
+      'gestora+admin': ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
+      soporte: ['+ Finanzas › PayPal y banco'],
+      project_manager: ['+ Finanzas › PayPal y banco'],
+    },
+    rutas: {
+      'Equipo de Desarrollo › Actividad': 'GET /api/monitask/actividad',
+      'Finanzas › PayPal y banco': 'GET /api/cobros-externos/estado',
+    },
+    // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
+    aprobadoPor: 'Diego, 18/11',
   },
 ];
 
