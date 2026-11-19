@@ -2,6 +2,7 @@ import { query } from '../../shared/config/db.js';
 import { sendLeadAssignedEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
+import { cargarLeadParaElAviso, resumenParaElAviso } from './aviso-formulario.js';
 
 /*
   AVISAR A LA GESTORA DE SU PROSPECTO NUEVO: la campana (#111) y el correo.
@@ -27,6 +28,27 @@ import { notifyUsers } from '../notifications/notifications.service.js';
   Nunca lanza ni hace esperar al alta: la campana y el correo van por detrás
   (el webhook tiene que contestar en menos de 500 ms).
 */
+
+/**
+ * El lead tal como lo lee el correo: sus datos de contacto y lo que rellenó en
+ * el formulario (programa, mensaje, página, por dónde entró y el resto de
+ * campos; ver `aviso-formulario.js`). Se lee de la base porque cada camino de
+ * alta devuelve el lead con columnas distintas. Si la lectura falla, el correo
+ * sale igual con lo que trae el alta: es mejor un aviso corto que ninguno.
+ */
+export async function leadParaElCorreo(lead, canal = null) {
+  let fila = null;
+  try {
+    fila = await cargarLeadParaElAviso(lead.id);
+  } catch (err) {
+    logger.warn({ err: err.message, leadId: lead.id }, 'Aviso a la gestora: no se pudo leer el formulario del lead');
+  }
+  // Con la fila leída manda la base (un correo vacío es que no lo dejó).
+  const datos = fila
+    ? { id: lead.id, nombre: fila.nombre ?? lead.nombre, email: fila.email, telefono: fila.telefono }
+    : { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono };
+  return { ...datos, ...resumenParaElAviso({ ...(fila || {}), ...datos }, canal) };
+}
 
 /**
  * @param {object} p
@@ -63,7 +85,7 @@ export async function avisarGestoraDelLeadNuevo({ lead, proyecto = null, canal =
       const baseUrl = process.env.CRM_BASE_URL || 'http://localhost:5173/crm';
       await sendLeadAssignedEmail({
         gestor: rows[0],
-        lead: { id: lead.id, nombre: lead.nombre, email: lead.email, telefono: lead.telefono },
+        lead: await leadParaElCorreo(lead, canal),
         proyecto: p ? { id: p.id, nombre: p.nombre, slug: p.slug, logo_url: p.logo_url, emoji: p.emoji } : null,
         baseUrl,
       });
