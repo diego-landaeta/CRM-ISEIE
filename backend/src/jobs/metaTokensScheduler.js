@@ -84,7 +84,7 @@ async function hayTabla(nombre) {
 }
 
 // ig_accounts la crea #465 con (épica #464): project_id, ig_user_id, username,
-// access_token_cifrado (así lo nombra la migración 317; la 284 en el 360), token_expires_at,
+// access_token_cifrado (así lo nombra la migración 318; la 284 en el 360), token_expires_at,
 // token_refreshed_at, active.
 async function cuentasInstagram(proyectoId) {
   if (!(await hayTabla('ig_accounts'))) return [];

@@ -1,5 +1,10 @@
--- 317 · Instagram con IA y datos de atribución de Meta: las tablas
+-- 318 · Instagram con IA y datos de atribución de Meta: las tablas
 --       (gemela de diego-landaeta/CRM#845; en el 360 es la 284, #465, épica #464)
+--
+-- Se fusionó como la 317, el mismo número que `317_ventas_repetidas_forzadas`
+-- (#577). El contenido no cambia, y se puede pasar dos veces: donde ya se
+-- aplicó como 317, aplicar la 318 no hace nada (todo va con IF NOT EXISTS) y
+-- solo queda apuntarla con su nombre nuevo.
 --
 -- Fase 1 de la épica: solo prepara el terreno. No hay código que use nada de
 -- esto todavía; lo usan #466 (webhook), #467 (conectar cuenta), #468 (DM),

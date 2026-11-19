@@ -5,13 +5,13 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 
 /**
- * Migración 317 · Instagram con IA y atribución de Meta (gemela de CRM#845; en el 360, la 284, #465).
+ * Migración 318 · Instagram con IA y atribución de Meta (gemela de CRM#845; en el 360, la 284, #465).
  *
  * En una base NUEVA y desechable dentro del Postgres local (Docker
  * `crm-db-local`, 127.0.0.1:15432):
  *
  *   · se aplican TODAS las migraciones en orden, como `npm run db:preparar`;
- *   · se vuelven a aplicar las de esta tarea (317 en adelante): tienen que poder
+ *   · se vuelven a aplicar las de esta tarea (318 en adelante): tienen que poder
  *     pasarse dos veces. Las antiguas no se repiten: muchas no se protegen
  *     (001 crea tablas sin IF NOT EXISTS) y no es lo que se prueba aquí;
  *   · existen las tablas, las columnas, las claves foráneas, los únicos que
@@ -24,7 +24,7 @@ import pg from 'pg';
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const MIGRACIONES = path.join(AQUI, '..', 'migrations');
-const PRIMERA_DE_ESTA_TAREA = '317_';
+const PRIMERA_DE_ESTA_TAREA = '318_';
 
 const URL_LOCAL = process.env.DATABASE_URL || 'postgresql://crm_user:crm_local@127.0.0.1:15432/crm_dev';
 const esLocal = /@(127\.0\.0\.1|localhost):15432\//.test(URL_LOCAL);
@@ -68,7 +68,7 @@ const foraneas = async (tabla) => (await db.query(
     WHERE c.contype = 'f' AND c.conrelid = $1::regclass`, [tabla],
 )).rows.map((r) => `${r.col} → ${r.destino} (${r.al_borrar})`);
 
-describe.skipIf(!disponible)('Migración 317: Instagram y atribución de Meta (#465)', () => {
+describe.skipIf(!disponible)('Migración 318: Instagram y atribución de Meta (#465)', () => {
   beforeAll(async () => {
     admin = new pg.Client({ connectionString: conBase('postgres') });
     await admin.connect();
@@ -86,7 +86,7 @@ describe.skipIf(!disponible)('Migración 317: Instagram y atribución de Meta (#
   });
 
   it('hay migraciones de esta tarea', () => {
-    expect(deEstaTarea).toContain('317_instagram_y_atribucion_meta.sql');
+    expect(deEstaTarea).toContain('318_instagram_y_atribucion_meta.sql');
   });
 
   it('todas las migraciones se aplican en orden en una base vacía', async () => {
