@@ -18,6 +18,7 @@ import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import AnularFacturaDialog from '../components/AnularFacturaDialog';
 import TutorialButton from '../components/TutorialButton';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 
@@ -296,6 +297,8 @@ export default function InvoicesPage() {
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
+            {/* Anular una emitida, la rectificativa y los huecos (recorrido, 18/11). */}
+            <VerRecorrido id="anular-factura" listo={!loading} />
             {/* Los abonos (rectificativas) solo los emite un administrador. Las
                 gestoras pueden ver la pestaña pero no crear abonos. */}
             {!(esAbonos && !canManage) && (
@@ -331,7 +334,7 @@ export default function InvoicesPage() {
       ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
-      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
+      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold" data-recorrido="facturas-pestanas">
         {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText], ['abonos', 'Abonos', ArrowCounterClockwise]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
@@ -745,7 +748,7 @@ export default function InvoicesPage() {
                       )}
                       {/* Una emitida no se cambia (CRM#793): el botón se ve, desactivado, con el porqué. */}
                       {gestionaFacturas && esFacturaEmitida(inv) && (
-                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex">
+                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex" data-recorrido="factura-bloqueada">
                           <button type="button" disabled aria-label={`Editar: ${NO_SE_CAMBIA_EMITIDA}`}
                             className="h-7 px-2 rounded border border-border text-muted-foreground text-[11px] font-semibold inline-flex items-center gap-1 opacity-50 cursor-not-allowed pointer-events-none">
                             <Gear size={11} weight="bold" /> Editar
@@ -802,7 +805,7 @@ export default function InvoicesPage() {
                       )}
                       {/* Anular una emitida (ISEIE#478, gemela de CRM#793): con su motivo; sale su abono. */}
                       {gestionaFacturas && esFacturaEmitida(inv) && inv.tipo !== 'rectificativa' && !inv.anulada_at && inv.estado !== 'cancelada' && (
-                        <button onClick={() => setAnularInv(inv)}
+                        <button onClick={() => setAnularInv(inv)} data-recorrido="factura-anular"
                           title="Anular la factura indicando el motivo: queda apuntado quién y por qué, y sale su abono"
                           className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
                           <X size={11} weight="bold" /> Anular

@@ -14,6 +14,12 @@ import { Button } from '@/shared/components/ui/button';
  *  · Se marca como visto en el navegador AL ABRIRSE (es una preferencia de cada persona,
  *    no un dato del CRM). Para volver a verlo, el botón de la pantalla.
  *  · Escape, la X o pulsar fuera lo cierran.
+ *  · El cartel nunca se sale de lo que se VE (18/11, testeo en móvil: a 375 px se
+ *    iba por la derecha y «Siguiente» quedaba fuera). Se mide con `visualViewport`,
+ *    no con `innerWidth`: si la página es más ancha que la pantalla, `innerWidth`
+ *    es el ancho de la página y el cartel se colocaba fuera de la vista. Como
+ *    mucho, el ancho de la vista menos 32 px; en pantallas estrechas va pegado
+ *    abajo (o arriba, si lo señalado está abajo), con los botones siempre a la vista.
  */
 export interface PasoRecorrido {
   /** A qué se apunta (selector CSS). Sin él, el cartel sale centrado. */
@@ -21,6 +27,49 @@ export interface PasoRecorrido {
   titulo: string;
   /** `{pasos}` se cambia por el número de pasos de este recorrido. */
   texto: string;
+}
+
+/** Lo que se ve de la ventana: ancho, alto y dónde empieza (con zoom o página más ancha). */
+interface Vista { w: number; h: number; x: number; y: number }
+
+function medirVista(): Vista {
+  const vv = typeof window !== 'undefined' ? window.visualViewport : null;
+  if (vv && vv.width > 0 && vv.height > 0) {
+    return { w: vv.width, h: vv.height, x: vv.offsetLeft || 0, y: vv.offsetTop || 0 };
+  }
+  return { w: window.innerWidth, h: window.innerHeight, x: 0, y: 0 };
+}
+
+/** Margen con los bordes de la vista: el cartel mide, como mucho, el ancho menos 32 px. */
+export const MARGEN_CARTEL = 16;
+/** Por debajo de este ancho, el cartel va pegado abajo (o arriba), a todo lo ancho. */
+export const ANCHO_ESTRECHO = 640;
+
+/**
+ * Dónde va el cartel (en coordenadas de la ventana, como `position: fixed`).
+ * `hueco`: lo que se señala, o null (cartel centrado).
+ */
+export function colocarCartel(vista: Vista, hueco: Pick<DOMRect, 'left' | 'top' | 'bottom'> | null, alto: number) {
+  const m = MARGEN_CARTEL;
+  const ancho = Math.max(0, Math.min(340, vista.w - m * 2));
+  const minX = vista.x + m;
+  const maxX = vista.x + vista.w - m - ancho;
+  const minY = vista.y + m;
+  const maxY = Math.max(minY, vista.y + vista.h - m - alto);
+  if (vista.w < ANCHO_ESTRECHO) {
+    // Pegado abajo, a todo lo ancho; arriba si lo señalado está en la mitad de abajo.
+    const abajo = !hueco || hueco.top - vista.y < vista.h / 2;
+    return { izquierda: minX, arriba: abajo ? maxY : minY, ancho };
+  }
+  let izquierda = hueco ? hueco.left : vista.x + vista.w / 2 - ancho / 2;
+  let arriba = hueco ? hueco.bottom + 12 : vista.y + vista.h / 2 - alto / 2;
+  izquierda = Math.max(minX, Math.min(izquierda, maxX));
+  if (arriba + alto + m > vista.y + vista.h) {
+    const encima = (hueco?.top ?? vista.y + vista.h) - alto - 12;
+    arriba = encima >= minY ? encima : minY;
+  }
+  arriba = Math.max(minY, Math.min(arriba, maxY));
+  return { izquierda, arriba, ancho };
 }
 
 const visto = (clave: string) => {
@@ -37,16 +86,23 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
   const [hueco, setHueco] = useState<DOMRect | null>(null);
   const cartel = useRef<HTMLDivElement | null>(null);
   const [altoCartel, setAltoCartel] = useState(0);
-  const [ventana, setVentana] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const [ventana, setVentana] = useState<Vista>(medirVista);
 
   useEffect(() => {
     try { localStorage.setItem(clave, '1'); } catch { /* navegador sin permiso */ }
   }, [clave]);
 
   useEffect(() => {
-    const alRedimensionar = () => setVentana({ w: window.innerWidth, h: window.innerHeight });
+    const alRedimensionar = () => setVentana(medirVista());
+    const vv = window.visualViewport;
     window.addEventListener('resize', alRedimensionar);
-    return () => window.removeEventListener('resize', alRedimensionar);
+    vv?.addEventListener('resize', alRedimensionar);
+    vv?.addEventListener('scroll', alRedimensionar);
+    return () => {
+      window.removeEventListener('resize', alRedimensionar);
+      vv?.removeEventListener('resize', alRedimensionar);
+      vv?.removeEventListener('scroll', alRedimensionar);
+    };
   }, []);
 
   useEffect(() => {
@@ -111,18 +167,10 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
   if (!actual) return null;
   const ultimo = paso === pasos.length - 1;
 
-  // El cartel, pegado a lo que señala y sin salirse de la pantalla (debajo; si no cabe,
-  // encima; si tampoco, arriba del todo, para que los botones se puedan pulsar siempre).
-  const margen = 12;
-  const anchoCartel = Math.min(340, ventana.w - margen * 2);
-  const alto = altoCartel || 200;
-  let izquierda = hueco ? hueco.left : ventana.w / 2 - anchoCartel / 2;
-  let arriba = hueco ? hueco.bottom + margen : ventana.h / 2 - alto / 2;
-  izquierda = Math.max(margen, Math.min(izquierda, ventana.w - anchoCartel - margen));
-  if (arriba + alto + margen > ventana.h) {
-    const encima = (hueco?.top ?? ventana.h) - alto - margen;
-    arriba = encima >= margen ? encima : margen;
-  }
+  // El cartel, pegado a lo que señala y sin salirse de lo que se ve (debajo; si no cabe,
+  // encima; si tampoco, arriba del todo; en móvil, abajo a todo lo ancho), para que los
+  // botones se puedan pulsar siempre.
+  const { izquierda, arriba, ancho: anchoCartel } = colocarCartel(ventana, hueco, altoCartel || 200);
 
   return (
     <div className="fixed inset-0 z-[90]" onClick={cerrar} role="presentation">
@@ -144,8 +192,12 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
         role="dialog"
         aria-modal="true"
         aria-labelledby="recorrido-titulo"
-        className="fixed rounded-lg border border-border bg-card p-4 shadow-xl"
-        style={{ left: izquierda, top: arriba, width: anchoCartel }}
+        className="fixed overflow-y-auto rounded-lg border border-border bg-card p-4 shadow-xl"
+        style={{
+          left: izquierda, top: arriba, width: anchoCartel,
+          // Por si algo se mide mal: nunca más ancho ni más alto que la vista.
+          maxWidth: `calc(100vw - ${MARGEN_CARTEL * 2}px)`, maxHeight: `calc(100dvh - ${MARGEN_CARTEL * 2}px)`,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-3">

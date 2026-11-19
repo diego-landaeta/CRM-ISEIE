@@ -100,7 +100,7 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
 
   const id = (s: string) => `links-${s}-${projectId}`;
   return (
-    <div className="rounded-md border border-border p-3 space-y-3">
+    <div className="rounded-md border border-border p-3 space-y-3" data-recorrido="links-reglas">
       <div>
         <p className="text-sm font-semibold">Reglas de los links en este campus</p>
         <p className="text-xs text-muted-foreground">
@@ -212,7 +212,7 @@ export function WebhookDeLaCuentaBloque({ projectId }: { projectId: number }) {
 
   const boton = 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50';
   return (
-    <div className="rounded-md border border-border p-3 space-y-2 text-xs">
+    <div className="rounded-md border border-border p-3 space-y-2 text-xs" data-recorrido="links-webhook">
       <p className="text-sm font-semibold flex items-center gap-1.5">
         <Broadcast size={14} weight="bold" aria-hidden="true" /> Webhook de la cuenta de Stripe
       </p>

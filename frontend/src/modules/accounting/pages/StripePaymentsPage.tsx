@@ -3,6 +3,7 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { toast } from '@/shared/hooks/useToast';
 import {
@@ -121,8 +122,10 @@ export default function StripePaymentsPage() {
         title="Pagos Stripe"
         subtitle={`Histórico de pagos sincronizados desde Stripe — ${activeProject?.nombre || ''}`}
         actions={(
-          <div className="flex gap-2">
-            <button onClick={() => syncNow(false)} disabled={syncing}
+          <div className="flex flex-wrap gap-2">
+            {/* El recorrido de la pantalla (18/11). */}
+            <VerRecorrido id="pagos-stripe" listo={!loading} />
+            <button onClick={() => syncNow(false)} disabled={syncing} data-recorrido="stripe-sincronizar"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
               <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} /> {syncing ? 'Sincronizando…' : 'Sincronizar'}
             </button>
@@ -137,7 +140,7 @@ export default function StripePaymentsPage() {
 
       {/* KPIs */}
       {stats && (
-        <div className={`grid grid-cols-2 gap-3 ${puedeAsociar ? 'md:grid-cols-4' : 'md:grid-cols-3'}`}>
+        <div className={`grid grid-cols-2 gap-3 ${puedeAsociar ? 'md:grid-cols-4' : 'md:grid-cols-3'}`} data-recorrido="stripe-cifras">
           {/* El importe global de la pasarela es informacion de direccion:
               la gestora ve sus cobros en la ficha de cada cliente, no el total. */}
           {puedeAsociar && (
@@ -162,7 +165,7 @@ export default function StripePaymentsPage() {
       )}
 
       {/* Filtros */}
-      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center">
+      <div className="bg-card border border-border rounded-md p-3 flex flex-wrap gap-2 items-center" data-recorrido="stripe-filtros">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input value={filters.search} onChange={(e) => setFilters(f => ({ ...f, search: e.target.value }))}
@@ -239,7 +242,7 @@ export default function StripePaymentsPage() {
                   </td>
                   <td className="px-3 py-2">
                     {p.disputed ? (
-                      <button onClick={() => setDisputeDialog(p)}
+                      <button onClick={() => setDisputeDialog(p)} data-recorrido="stripe-disputa"
                         className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 hover:bg-amber-200"
                         title="Ver detalle de disputa">
                         DISPUTA ↗
@@ -267,14 +270,14 @@ export default function StripePaymentsPage() {
                       </div>
                     ) : (
                       puedeAsociar ? (
-                      <button onClick={() => setLinkDialog(p)}
+                      <button onClick={() => setLinkDialog(p)} data-recorrido="stripe-asociar"
                         title="Este cobro no está asociado a ningún cliente: asócialo para que genere su factura"
                         className="text-[11px] font-bold text-red-700 dark:text-red-400 hover:underline inline-flex items-center gap-1 text-left">
                         <LinkIcon size={11} weight="bold" />
                         NO ASOCIADO A UN CLIENTE · ASOCIAR
                       </button>
                       ) : (
-                      <span
+                      <span data-recorrido="stripe-sin-asociar"
                         title={`Pon el correo ${p.customer_email || 'del cobro'} en la ficha del cliente y pulsa Sincronizar: se asocia solo`}
                         className="text-[11px] font-bold text-red-700 dark:text-red-400 inline-flex items-center gap-1 text-left">
                         <LinkIcon size={11} weight="bold" />
