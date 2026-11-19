@@ -21,6 +21,13 @@ import MiCampusPage from '@/modules/tutores/pages/MiCampusPage';
 
 afterEach(cleanup);
 
+// La fecha en hora LOCAL, como la cuenta la pantalla: con toISOString() salía el día UTC
+// y de 20:00 a 24:00 en América (UTC-4) la prueba veía «11 días» en vez de 10.
+const dentroDeDias = (n) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 const hace = (h) => new Date(Date.now() - h * 3600 * 1000).toISOString();
 const MOODLE = 'https://campus.test';
 
@@ -53,7 +60,7 @@ const datos = () => ({
   }],
   pendientes: [{
     id: 5, nombre: 'Diplomado en Neuropsicología', tipo: 'diplomado', estado: 'en_desarrollo', campus: 'ISEIE Madrid',
-    fechaComprometida: new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10), avance: { foto: true, video: false, modulos: 50 },
+    fechaComprometida: dentroDeDias(10), avance: { foto: true, video: false, modulos: 50 },
   }],
   sinConectar: [],
 });
