@@ -154,9 +154,27 @@ export function esFacturaEmitida(inv: Pick<Invoice, 'tipo' | 'estado' | 'numero'
   return inv.tipo !== 'proforma' && inv.estado !== 'borrador' && inv.numero != null;
 }
 
+/** El rango de la fecha de emisión y el historial de cambios (GET /invoices/:id/fechas). */
+export interface FechasDeLaFactura {
+  id: number;
+  codigo: string | null;
+  fecha_emision: string | null;
+  fecha_pago: string | null;
+  ano: number | null;
+  desde: string | null;
+  desde_codigo: string | null;
+  hasta: string | null;
+  hasta_codigo: string | null;
+  historial: Array<{
+    id: number; created_at: string; usuario: string | null;
+    fecha_emision_antes: string | null; fecha_emision_despues: string | null;
+    fecha_pago_antes: string | null; fecha_pago_despues: string | null;
+  }>;
+}
+
 /** Lo que se dice al pasar el ratón por un botón que una emitida no tiene. */
 export const NO_SE_CAMBIA_EMITIDA =
-  'Emitida: no se puede borrar ni cambiar. Si hay que dejarla sin efecto, «Anular» con el motivo (sale su abono).';
+  'Emitida: no se puede borrar ni cambiar (la fecha sí, con «Cambiar fecha»). Si hay que dejarla sin efecto, «Anular» con el motivo (sale su abono).';
 
 export interface LeadConversion {
   id: number;
@@ -343,8 +361,10 @@ export const invoicesApi = {
     clienteCiudad?: string; clienteCp?: string; clientePais?: string;
     clienteEmail?: string; clienteTelefono?: string;
   }) => client.patch<Invoice>(`/invoices/${id}/corregir`, body),
-  /** Cambiar SOLO las fechas (emisión y/o pago) de una factura — admin o permiso editar_fechas_factura. */
+  /** Cambiar SOLO las fechas (emisión y/o pago), también de una emitida, en su sitio de la serie (19/11). Permiso «Cambiar fechas». */
   updateFechas: (id: number, body: { fechaEmision?: string; fechaPago?: string }) => client.patch<Invoice>(`/invoices/${id}/fechas`, body),
+  /** Entre qué fechas puede ir la de emisión y los cambios de fecha que ya tuvo. */
+  fechas: (id: number) => client.get<FechasDeLaFactura>(`/invoices/${id}/fechas`),
   /** Asociar una factura existente a una venta (conversión) del cliente — Opción B. */
   asociarVenta: (id: number, conversionId: number) => client.patch<Invoice>(`/invoices/${id}/asociar`, { conversionId }),
   /** Validar y emitir un borrador (opcionalmente completando datos del cliente). */

@@ -330,8 +330,9 @@ export async function corregir(req, res, next) {
   }
 }
 
-// PATCH /:id/fechas — cambiar SOLO la fecha de emisión y/o de pago de una factura.
-// Para admins y para usuarios con el permiso editar_fechas_factura (que solo pueden eso).
+// PATCH /:id/fechas — cambiar SOLO la fecha de emisión y/o de pago de una factura,
+// también de una emitida (Diego, 19/11/2026), dentro de su sitio en la serie.
+// Para quien tenga «Cambiar fechas» (admin, o la casilla editar_fechas_factura).
 export async function updateFechas(req, res, next) {
   try {
     const id = Number(req.params.id);
@@ -346,12 +347,21 @@ export async function updateFechas(req, res, next) {
     if (fechaEmision == null && fechaPago == null) {
       throw new AppError('Indica al menos una fecha.', 400, 'NO_DATE');
     }
-    const inv = await model.updateFechas(id, { fechaEmision, fechaPago });
+    const inv = await model.updateFechas(id, { fechaEmision, fechaPago }, { userId: req.user?.userId });
     res.json({ success: true, data: inv });
   } catch (e) {
     logger.error({ e: e.message }, 'updateFechas failed');
     next(e);
   }
+}
+
+// GET /:id/fechas — entre qué fechas puede ir la de emisión y quién las cambió.
+export async function fechas(req, res, next) {
+  try {
+    const data = await model.fechasDeLaFactura(Number(req.params.id));
+    if (!data) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    res.json({ success: true, data });
+  } catch (e) { next(e); }
 }
 
 // PATCH /:id/asociar — Opción B: asociar una factura existente a una venta del cliente.

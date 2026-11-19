@@ -7481,6 +7481,28 @@
   ]
  },
  {
+  "id": "GET /api/invoices/:id/fechas",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "GET",
+  "ruta": "/api/invoices/:id/fechas",
+  "relativa": "GET /:id/fechas",
+  "controlador": "fechas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PATCH /api/invoices/:id/fechas",
   "tipo": "ruta",
   "modulo": "invoices",

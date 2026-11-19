@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-874 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+875 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -554,6 +554,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | create | `POST /api/invoices/` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.create` |
 | update | `PATCH /api/invoices/:id` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `facturas.edit` |
 | corregir | `PATCH /api/invoices/:id/corregir` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
+| fechas | `GET /api/invoices/:id/fechas` | (no existía) | (ruta nueva) | `facturas.view` |
 | updateFechas | `PATCH /api/invoices/:id/fechas` | sesión · a mano: invoices.model.js · puedeEditarFechas | superadmin, admin y gestor/soporte/project_manager con «editar_fechas_factura» | `facturas.editar_fechas` |
 | marcarEntregada | `PATCH /api/invoices/:id/entregada` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.completar` |
 | asociarVenta | `PATCH /api/invoices/:id/asociar` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |

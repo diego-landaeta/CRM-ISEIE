@@ -117,11 +117,13 @@ describe('#793 · una emitida no se borra ni se cambia', () => {
     expect((await factura(EMITIDA_4)).numero).toBe(4);
   });
 
-  it('cambiarle las fechas: 409', async () => {
+  // Desde el 19/11 la fecha sí se cambia, pero solo en su sitio de la serie
+  // (tests/facturasCambiarFecha.test.js): otro año, no.
+  it('cambiarle las fechas fuera de su sitio: 409', async () => {
     const antes = (await factura(EMITIDA)).fecha_emision;
     const r = await request.patch(`/api/invoices/${EMITIDA}/fechas`).set(como(ADMIN)).send({ fechaEmision: '2020-01-01' });
     expect(r.status).toBe(409);
-    expect(r.body.code).toBe('FACTURA_EMITIDA');
+    expect(r.body.code).toBe('FECHA_FUERA_DE_ORDEN');
     expect((await factura(EMITIDA)).fecha_emision).toEqual(antes);
   });
 

@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money } from '@phosphor-icons/react';
+import { ArrowLeft, FloppyDisk, MagnifyingGlass, User, Buildings, Money, CalendarBlank } from '@phosphor-icons/react';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
@@ -8,6 +8,7 @@ import { CURRENCIES } from '../currencies';
 import { invoicesApi, esFacturaEmitida, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
+import EditarFechasDialog from '../components/EditarFechasDialog';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
@@ -83,6 +84,9 @@ export default function InvoiceCreatePage() {
   const [editEstado, setEditEstado] = useState<string | null>(null);
   // Una EMITIDA no se cambia (CRM#793): se enseña, pero no se guarda.
   const [editEmitida, setEditEmitida] = useState(false);
+  // «Cambiar fecha» de una emitida (19/11): su propio cuadro, en su sitio de la serie.
+  const [cambiandoFecha, setCambiandoFecha] = useState(false);
+  const [editCodigo, setEditCodigo] = useState<string | null>(null);
   // Si lo que se esta corrigiendo es un abono: cambia el rotulo y el signo.
   const [esAbono, setEsAbono] = useState(false);
   // Fechas de la factura (emisión y pago). Se editan aquí mismo, en el panel.
@@ -382,6 +386,7 @@ export default function InvoiceCreatePage() {
       const f = res.data as import('../api/invoices.api').Invoice;
       setEditEstado(f.estado || null);
       setEditEmitida(esFacturaEmitida(f));
+      setEditCodigo(f.codigo || null);
         const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : '');
         setFechaEmision(d10(f.fecha_emision));
         setFechaPago(d10(f.fecha_pago));
@@ -494,7 +499,22 @@ export default function InvoiceCreatePage() {
           <b>Esta factura ya está emitida: no se puede cambiar.</b> Ni el importe, ni el número, ni el cliente,
           ni la fecha. Si hay que dejarla sin efecto, vuelve a Facturas y pulsa «Anular» indicando el motivo:
           queda apuntado quién y por qué, y sale su abono.
+          {puedeFechas && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span>La <b>fecha</b> sí se puede cambiar, en su sitio de la serie (entre la del número anterior y la del siguiente).</span>
+              <button type="button" onClick={() => setCambiandoFecha(true)} data-recorrido="factura-cambiar-fecha"
+                className="h-8 px-3 rounded-md border border-border bg-card text-foreground text-xs font-semibold hover:bg-muted inline-flex items-center gap-1.5">
+                <CalendarBlank size={13} weight="bold" /> Cambiar fecha
+              </button>
+            </div>
+          )}
         </div>
+      )}
+      {cambiandoFecha && editId && (
+        <EditarFechasDialog
+          invoice={{ id: Number(editId), codigo: editCodigo, fecha_emision: fechasIniciales.emision || null, fecha_pago: fechasIniciales.pago || null }}
+          onClose={() => setCambiandoFecha(false)}
+          onSaved={() => { setCambiandoFecha(false); navigate(`${invBase}/facturas`); }} />
       )}
 
       {/* Tipo de documento: factura fiscal vs proforma (presupuesto).
@@ -840,7 +860,7 @@ export default function InvoiceCreatePage() {
             </div>
           )}
           {/* Fechas de la factura: se editan aquí, en el panel (antes había un botón aparte). */}
-          {editId && puedeFechas && (
+          {editId && puedeFechas && !editEmitida && (
             <FilaCampos>
               <Field label="Fecha de emisión" htmlFor="factura-fecha-emision">
                 <input id="factura-fecha-emision" type="date" value={fechaEmision} onChange={(e) => setFechaEmision(e.target.value)} className={inputClass} />

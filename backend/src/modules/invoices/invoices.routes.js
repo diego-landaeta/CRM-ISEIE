@@ -56,15 +56,18 @@ router.get('/lead-fiscal/:leadId',    puede('facturas.view'), prospectoDelParame
 router.get('/by-conversion/:conversionId', puede('facturas.view'), ventaDelParametro, ctrl.byConversion);
 router.get('/:id',                    puede('facturas.view'), facturaDeSuCampus, ctrl.getOne);
 router.post('/',                      puede('facturas.create'), campusDelCuerpo, ctrl.create);
-// Una factura EMITIDA no se borra ni se cambia (CRM#793): editar, corregir,
-// cambiar fechas y borrar responden 409 FACTURA_EMITIDA. Se anula con su motivo.
+// Una factura EMITIDA no se borra ni se cambia (CRM#793): editar, corregir y
+// borrar responden 409 FACTURA_EMITIDA. Se anula con su motivo. Las FECHAS sí
+// (19/11), con su permiso y en su sitio de la serie: ver '/:id/fechas'.
 // Editar una factura en borrador: SOLO admin/superadmin.
 router.patch('/:id',                  puede('facturas.edit'), facturaDeSuCampus, ctrl.update);
 // Corregir una factura YA emitida/pagada (IVA, datos, concepto): admin/superadmin
 // o gestora con permiso factura_manager (el controller valida que sea suya).
 router.patch('/:id/corregir',         puede('facturas.gestionar'), facturaDeSuCampus, ctrl.corregir);
-// Cambiar solo fechas (emisión/pago). Sin roleGuard: el controller valida el permiso
-// editar_fechas_factura (admins y usuarios acotados a "solo fechas").
+// Cambiar solo fechas (emisión/pago), también de una emitida (Diego, 19/11/2026):
+// solo las fechas, y la de emisión dentro de su sitio en la serie (entre la del
+// número anterior y la del siguiente). Queda apuntado quién y de qué a qué.
+router.get('/:id/fechas',             puede('facturas.view'), facturaDeSuCampus, ctrl.fechas);
 router.patch('/:id/fechas',           puede('facturas.editar_fechas'), facturaDeSuCampus, ctrl.updateFechas);
 // Apuntar que una factura ya se le paso al cliente. NO manda correo: es una
 // marca, y las facturas salen por donde cada uno las mande.

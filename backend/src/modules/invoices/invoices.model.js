@@ -14,6 +14,7 @@ import { datosParaFacturar } from '../factura-automatica/factura-automatica.mode
 import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 // Lo emitido no se borra ni se cambia (CRM#793): se anula con su motivo.
 import { esFacturaEmitida, exigirNoEmitida } from './invoices.inmutable.js';
+import { exigirFechaEnOrden, limitesDeFecha } from './invoices.orden.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
 async function issuerOfProject(exec, projectId) {
@@ -884,20 +885,96 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
   return rows.length > 0;
 }
 
-// Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
-export async function updateFechas(id, { fechaEmision, fechaPago }) {
-  // Las fechas de una emitida no se cambian (CRM#793).
-  exigirNoEmitida(await findById(id), 'cambiar sus fechas');
-  const { rows } = await query(
-    `UPDATE invoices
-        SET fecha_emision = COALESCE($2::date, fecha_emision),
-            fecha_pago    = COALESCE($3::date, fecha_pago),
-            pdf_path = NULL, updated_at = NOW()
-      WHERE id = $1
-      RETURNING *`,
-    [id, fechaEmision || null, fechaPago || null]
+/*
+  CAMBIAR LAS FECHAS (emisión y/o pago). Regenera el PDF (pdf_path=NULL).
+
+  Diego, 19/11/2026: «habilita la edición para que puedan editar las fechas».
+  La #793 cerró las emitidas a todo cambio, también las fechas. Se abren SOLO
+  las fechas —el número, el importe y el cliente siguen cerrados— y la de
+  emisión solo dentro de su sitio en la serie (`invoices.orden.js`): entre la
+  del número anterior y la del siguiente, y en su año. El permiso lo pide la
+  ruta (`facturas.editar_fechas`).
+
+  Cada cambio queda apuntado en `invoice_cambios_fecha`: quién, cuándo, y la
+  fecha de antes y la de después. Se ve en la ficha de la factura.
+*/
+export async function updateFechas(id, { fechaEmision, fechaPago }, { userId = null } = {}) {
+  const client = await getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows: [inv] } = await client.query('SELECT * FROM invoices WHERE id = $1 FOR UPDATE', [id]);
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    if (inv.estado === 'cancelada') {
+      throw new AppError('La factura está cancelada: sus fechas no se cambian.', 409, 'CANCELADA');
+    }
+    const exec = (sql, params) => client.query(sql, params);
+    if (fechaEmision && inv.numero != null && inv.serie != null) {
+      // El cerrojo de la serie: que nadie numere en medio mientras se comprueba.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`invoice_serie:${inv.ano}:${inv.serie}`]);
+      await exigirFechaEnOrden(exec, {
+        id: inv.id, ano: inv.ano, serie: inv.serie, numero: inv.numero, fecha: fechaEmision,
+      });
+    }
+    const { rows } = await client.query(
+      `UPDATE invoices
+          SET fecha_emision = COALESCE($2::date, fecha_emision),
+              fecha_pago    = COALESCE($3::date, fecha_pago),
+              pdf_path = NULL, updated_at = NOW()
+        WHERE id = $1
+        RETURNING *`,
+      [id, fechaEmision || null, fechaPago || null]
+    );
+    await client.query(
+      `INSERT INTO invoice_cambios_fecha
+         (invoice_id, user_id, fecha_emision_antes, fecha_emision_despues, fecha_pago_antes, fecha_pago_despues)
+       VALUES ($1, $2, $3::date, $4::date, $5::date, $6::date)`,
+      [id, userId || null, inv.fecha_emision, rows[0].fecha_emision, inv.fecha_pago, rows[0].fecha_pago]
+    );
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Para el cuadro «Cambiar fecha»: entre qué fechas puede ir la de emisión y los
+ * cambios que ya tuvo (quién, cuándo, de qué fecha a cuál).
+ */
+export async function fechasDeLaFactura(id) {
+  const inv = await findById(id);
+  if (!inv) return null;
+  const limites = inv.numero != null
+    ? await limitesDeFecha((sql, params) => query(sql, params), { id: inv.id, ano: inv.ano, serie: inv.serie, numero: inv.numero })
+    : { ano: inv.ano, anterior: null, siguiente: null };
+  const { rows: historial } = await query(
+    `SELECT c.id, c.created_at, u.nombre AS usuario,
+            c.fecha_emision_antes::text AS fecha_emision_antes, c.fecha_emision_despues::text AS fecha_emision_despues,
+            c.fecha_pago_antes::text AS fecha_pago_antes, c.fecha_pago_despues::text AS fecha_pago_despues
+       FROM invoice_cambios_fecha c
+       LEFT JOIN users u ON u.id = c.user_id
+      WHERE c.invoice_id = $1
+      ORDER BY c.created_at DESC, c.id DESC
+      LIMIT 50`,
+    [id]
   );
-  return rows[0];
+  return {
+    id: inv.id,
+    codigo: inv.codigo,
+    fecha_emision: inv.fecha_emision,
+    fecha_pago: inv.fecha_pago,
+    // El rango que admite la fecha de emisión (null = sin tope por ese lado,
+    // salvo el año de la serie).
+    ano: inv.ano != null ? Number(inv.ano) : null,
+    desde: limites.anterior?.fecha || null,
+    desde_codigo: limites.anterior?.codigo || null,
+    hasta: limites.siguiente?.fecha || null,
+    hasta_codigo: limites.siguiente?.codigo || null,
+    historial,
+  };
 }
 
 // Opción B: asocia una factura YA existente a una venta (conversión) del mismo
