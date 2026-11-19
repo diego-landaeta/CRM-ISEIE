@@ -317,7 +317,8 @@ export const CAMBIOS_DE_MENU = [
       'gestora+tutor': ['+ Tutores › Mi campus'],
     },
     rutas: { 'Tutores › Mi campus': 'GET /api/tutores/mi-campus' },
-    aprobadoPor: 'Pendiente de Diego (PR de la #408)',
+    // Diego lo aprobó el 19/11 en la sesión de trabajo: «sí, apruébala».
+    aprobadoPor: 'Diego, 19/11',
   },
   {
     // Gemela de CRM#643. En ISEIE solo el Banco: Status tiene aquí una parte
