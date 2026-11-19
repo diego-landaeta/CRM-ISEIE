@@ -886,8 +886,8 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
 export async function updateFechas(id, { fechaEmision, fechaPago }) {
-  // Las fechas de una emitida no se cambian (CRM#793).
-  exigirNoEmitida(await findById(id), 'cambiar sus fechas');
+  // Diego, 19/11/2026: quien tiene «Cambiar fechas» (admin y superadmin) corrige
+  // las fechas también de una emitida. La ruta ya exige el permiso.
   const { rows } = await query(
     `UPDATE invoices
         SET fecha_emision = COALESCE($2::date, fecha_emision),
@@ -1641,7 +1641,10 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
     // Ni el importe, ni el número, ni el cliente, ni la fecha de una emitida
     // (CRM#793, Diego 18/11/2026). Borradores y proformas, como siempre.
-    exigirNoEmitida(inv, 'cambiar');
+    // Diego, 19/11/2026: «editar las facturas en general» para admin y superadmin.
+    // La corrección (soloBorrador=false, ruta /corregir con su permiso) vuelve a
+    // dejar corregir una emitida; la edición de borrador sigue sin tocarlas.
+    if (soloBorrador) exigirNoEmitida(inv, 'cambiar');
     // soloBorrador=false → corrección admin de una factura ya emitida/pagada
     // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
     if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
