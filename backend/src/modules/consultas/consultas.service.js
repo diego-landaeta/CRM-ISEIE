@@ -504,6 +504,14 @@ export function textoParaElCampus(texto, adjuntos = []) {
 }
 
 /**
+ * ¿La respuesta desde el CRM sale por el plugin en ese campus? Entonces no hace falta el
+ * token personal de la tutora. Lo usan el envío (abajo) y la ficha del tutor (#850).
+ */
+export async function respondePorElPlugin(projectId) {
+  return pluginMoodleActivo() && pluginActivo(projectId);
+}
+
+/**
  * Manda al campus una respuesta ya guardada. Si no puede (sin token del tutor,
  * campus caído…), se queda guardada con el motivo y se puede reintentar.
  */
@@ -516,7 +524,7 @@ export async function enviarAlCampus(mensaje, consulta, adjuntos = [], { db = nu
     error = conexion?.error || 'El campus no está conectado en Integraciones.';
   } else if (!consulta.alumno_moodle_id) {
     error = 'No se sabe quién es el alumno en el campus.';
-  } else if (pluginMoodleActivo() && await pluginActivo(consulta.project_id)) {
+  } else if (await respondePorElPlugin(consulta.project_id)) {
     // #679: por el plugin, en nombre de la tutora, con el token del campus. Solo con el
     // interruptor encendido (PLUGIN_MOODLE_EN_PRODUCCION); apagado, como siempre (abajo).
     const desde = await moodleIdDelTutor(consulta.tutor_id, consulta.project_id);

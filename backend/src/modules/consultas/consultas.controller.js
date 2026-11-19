@@ -298,8 +298,11 @@ export async function tokensDelTutor(req, res, next) {
     const { rows } = await query(
       'SELECT project_id, (token_cifrado IS NOT NULL) AS tiene FROM tutor_campus WHERE tutor_id = $1', [tutorId]);
     const tiene = new Map(rows.map((r) => [Number(r.project_id), r.tiene]));
-    res.json({ success: true, data: campus.map((c) => ({
+    // #850: en el campus conectado por el plugin la respuesta no usa su token.
+    const porPlugin = await Promise.all(campus.map((c) => servicio.respondePorElPlugin(c.project_id)));
+    res.json({ success: true, data: campus.map((c, i) => ({
       project_id: c.project_id, campus: c.campus, estado: c.estado, tiene_token: Boolean(tiene.get(c.project_id)),
+      por_plugin: Boolean(porPlugin[i]),
     })) });
   } catch (err) { next(err); }
 }

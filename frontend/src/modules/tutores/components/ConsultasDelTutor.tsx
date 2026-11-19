@@ -9,7 +9,7 @@ import { inputClass } from '@/shared/lib/ui';
 import {
   campusTutorApi, type CampusDelTutor, type CuentaMoodle, type EstadoMatricula, type PanelCampusTutor,
 } from '../api/campusTutor.api';
-import { consultasApi } from '@/modules/consultas/api/consultas.api';
+import { consultasApi, type TokenDelTutor } from '@/modules/consultas/api/consultas.api';
 
 /*
   Consultas de alumnos, fase 1 (#187), en la ficha del tutor:
@@ -52,7 +52,9 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
   const [empresaNueva, setEmpresaNueva] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
   // #188: el token del tutor en cada campus, para que la respuesta salga en su nombre.
-  const [tokens, setTokens] = useState<Array<{ project_id: number; campus: string; estado: string | null; tiene_token: boolean }>>([]);
+  const [tokens, setTokens] = useState<TokenDelTutor[]>([]);
+  // Los campus donde su respuesta va con su token; donde va por el plugin (#850), no se pide.
+  const campusPorToken = tokens.filter((t) => t.estado === 'activa' && !t.por_plugin);
   const [campusToken, setCampusToken] = useState<number | null>(null);
   const [token, setToken] = useState('');
 
@@ -263,11 +265,14 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
           <p className="text-sm font-semibold">Responder en su nombre</p>
           <ul className="flex flex-wrap gap-2 text-xs" aria-label="Token del tutor por campus">
             {tokens.filter((t) => t.estado === 'activa').map((t) => (
-              <li key={t.project_id} className={`rounded px-1.5 py-0.5 font-semibold ${t.tiene_token ? 'bg-success-soft text-success-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>
-                {t.campus}: {t.tiene_token ? 'token puesto' : 'falta su token'}
+              // #850: con el campus conectado por el plugin, la respuesta sale en su nombre por
+              // el plugin y su token no hace falta: no se avisa de que falta.
+              <li key={t.project_id} className={`rounded px-1.5 py-0.5 font-semibold ${t.por_plugin || t.tiene_token ? 'bg-success-soft text-success-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>
+                {t.campus}: {t.por_plugin ? 'responde por el plugin' : t.tiene_token ? 'token puesto' : 'falta su token'}
               </li>
             ))}
           </ul>
+          {campusPorToken.length > 0 && (<>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end">
             <Field label="Campus">
               <Select<number | null>
@@ -275,7 +280,7 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
                 onChange={setCampusToken}
                 ariaLabel="Campus del token"
                 options={[{ value: null, label: 'Elige el campus…' },
-                  ...tokens.filter((t) => t.estado === 'activa').map((t) => ({ value: t.project_id, label: t.campus }))]}
+                  ...campusPorToken.map((t) => ({ value: t.project_id, label: t.campus }))]}
               />
             </Field>
             <Field label="Token del tutor en ese campus" htmlFor={`token-tutor-${tutorId}`}>
@@ -293,6 +298,7 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
             En el Moodle: <strong>Administración del sitio → Servidor → Servicios web → Administrar tokens → Crear token</strong>,
             para su usuario y el servicio del CRM (con <code>core_message_send_instant_messages</code>). Su rol necesita el permiso <code>webservice/rest:use</code>.
           </p>
+          </>)}
         </div>
       )}
 

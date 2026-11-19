@@ -13,7 +13,8 @@
 
   Se lee de Moodle en el momento, con el token del campus, para que las cifras
   sean las de Moodle y no las de ayer. Para no castigar al campus, se guarda
-  dos minutos por tutora; «Actualizar» lo vuelve a pedir.
+  dos minutos por tutora; «Actualizar» lo vuelve a pedir. Las dudas que ya no
+  esperan se quitan también de esa copia: son del CRM, no de Moodle (#850).
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -288,10 +289,30 @@ export async function leerSusCampus(tutorId, opciones = {}) {
   return campus;
 }
 
+/**
+ * La copia de dos minutos es para no castigar a Moodle; las dudas son del CRM. Una que ya
+ * no espera (contestada desde el CRM o en Moodle, cerrada, o pasada a otra tutora) no puede
+ * seguir saliendo «sin contestar» hasta que caduque la copia (#850).
+ */
+async function sinLasYaAtendidas(tutorId, datos) {
+  const { rows } = await query(
+    `SELECT id FROM consultas WHERE tutor_id = $1 AND estado = 'abierta'`, [tutorId]);
+  const abiertas = new Set(rows.map((r) => Number(r.id)));
+  const espera = (d) => abiertas.has(d.consultaId);
+  return {
+    ...datos,
+    campus: datos.campus.map((c) => ({
+      ...c,
+      dudasSinCurso: c.dudasSinCurso.filter(espera),
+      cursos: c.cursos.map((k) => ({ ...k, dudas: k.dudas.filter(espera) })),
+    })),
+  };
+}
+
 /** Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. */
 export async function miCampus(tutorId, { refrescar = false, ...opciones } = {}) {
   const guardado = cache.get(tutorId);
-  if (!refrescar && guardado && Date.now() - guardado.at < CACHE_MS) return guardado.datos;
+  if (!refrescar && guardado && Date.now() - guardado.at < CACHE_MS) return sinLasYaAtendidas(tutorId, guardado.datos);
   const campus = await leerSusCampus(tutorId, opciones);
   const datos = {
     leidoAt: new Date().toISOString(), campus, pendientes: await pendientesDeDesarrollar(tutorId),

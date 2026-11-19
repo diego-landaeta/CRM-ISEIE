@@ -168,6 +168,12 @@ export interface Metricas {
 
 export interface Ambito { projectId?: number | null; issuerId?: number | null }
 
+/**
+ * El token del tutor en cada campus (#188). Con `por_plugin` (#850), la respuesta desde el
+ * CRM sale por el plugin del campus en su nombre y su token no hace falta.
+ */
+export interface TokenDelTutor { project_id: number; campus: string; estado: string | null; tiene_token: boolean; por_plugin?: boolean }
+
 const qs = (o: Record<string, string | number | boolean | null | undefined>) => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null && v !== '' && v !== false) p.set(k, String(v));
@@ -215,7 +221,7 @@ export const consultasApi = {
       issuerId: ambito.issuerId || undefined,
     })}`, {}) as Promise<ApiResponse<Array<{ projectId: number; nuevos?: number; errores?: string[] }>>>,
   tokensDelTutor: (tutorId: number) =>
-    client.get(`/consultas/tutores/${tutorId}/tokens`) as Promise<ApiResponse<Array<{ project_id: number; campus: string; estado: string | null; tiene_token: boolean }>>>,
+    client.get(`/consultas/tutores/${tutorId}/tokens`) as Promise<ApiResponse<Array<TokenDelTutor>>>,
   guardarToken: (tutorId: number, projectId: number, token: string | null) =>
     client.put(`/consultas/tutores/${tutorId}/token`, { projectId, token }) as Promise<ApiResponse<{ project_id: number; tiene_token: boolean }>>,
 
