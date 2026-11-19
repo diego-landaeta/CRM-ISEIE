@@ -109,6 +109,17 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
     if (cartel.current) setAltoCartel(cartel.current.offsetHeight);
   }, [paso, hueco]);
 
+  // Y cada vez que el cartel cambia de alto sin cambiar de paso (#619, 375 px: la
+  // letra llega después de abrirse, el texto pasa a una línea más y el cartel se
+  // salía 6 px por abajo, porque se colocaba con el alto de antes).
+  useEffect(() => {
+    const el = cartel.current;
+    if (!el || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => setAltoCartel(el.offsetHeight));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
   const actual = pasos[paso];
   const cerrar = useCallback(() => alCerrar(), [alCerrar]);
 

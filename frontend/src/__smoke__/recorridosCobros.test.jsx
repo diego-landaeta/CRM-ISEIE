@@ -37,6 +37,7 @@ vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
 }));
 
 const { RECORRIDOS_COBROS, pasosPara, claveRecorrido } = await import('@/shared/lib/recorridosCobros');
+const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 const { default: VerRecorrido } = await import('@/shared/components/ui/VerRecorrido');
 const { CLAVES } = await import('../../../backend/src/modules/permissions/catalogo.js');
 
@@ -68,7 +69,8 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
   it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), y la de Ventas (#619)', () => {
-    expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
+    // Los del bloque Finanzas (#619) se cuentan en su propia prueba (recorridosFinanzas619).
+    expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS)).sort()).toEqual([
       'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe', 'ventas',
     ]);
   });
