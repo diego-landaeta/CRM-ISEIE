@@ -306,23 +306,59 @@ export async function sendCorreoCambiadoEmail({ nombre, de, a }) {
   return await sendEmail({ to: [{ email: de, name: nombre }], subject, htmlContent, textContent, tags: ['correo-cambiado', 'crm'] });
 }
 
-// Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).
-export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
+/**
+ * El aviso «Nuevo prospecto» a su gestora, SIN mandarlo: asunto, HTML y texto.
+ *
+ * Con la plantilla común y la marca del campus del prospecto (Diego, 10/10).
+ * Desde el 19/11 trae lo que rellenó en el formulario (Yosbely, ICTESS: el
+ * correo solo decía nombre, correo, teléfono y campus). `lead` puede llevar,
+ * además de id, nombre, email y telefono, lo que prepara `aviso-formulario.js`:
+ * programa, mensaje, pagina, entrada, campos [{etiqueta, valor}] y soloTelefono.
+ * Lo que no viene no sale. Todo lo que viene de la base va escapado.
+ */
+export function componerAvisoDeProspecto({ gestor, lead, proyecto, baseUrl }) {
   const P = plantilla;
   const link = `${baseUrl}/leads/${lead.id}`;
-  const subject = `Nuevo prospecto asignado: ${lead.nombre}`;
+  const nombre = lead.sinNombre
+    ? `Sin nombre${lead.telefono ? ` (${lead.telefono})` : ''}`
+    : (lead.nombre || 'Sin nombre');
+  const subject = `Nuevo prospecto: ${nombre}${lead.programa ? ` · ${lead.programa}` : ''}`;
   const datos = [lead.email, lead.telefono].filter(Boolean).map((d) => P.esc(d)).join('<br>');
+
+  const linea = (etiqueta, html) => `<strong>${P.esc(etiqueta)}:</strong> ${html}`;
+  const lineas = [
+    lead.programa ? linea('Programa que le interesa', P.esc(lead.programa)) : '',
+    lead.entrada ? linea('Por dónde entró', P.esc(lead.entrada)) : '',
+    lead.pagina && /^https?:\/\//i.test(lead.pagina)
+      ? linea('Desde la página', `<a href="${P.esc(lead.pagina)}" style="color:inherit">${P.esc(lead.pagina)}</a>`)
+      : '',
+  ].filter(Boolean);
+  const campos = (lead.campos || []).filter((c) => c && c.etiqueta && c.valor)
+    .map((c) => `${P.esc(c.etiqueta)}: <strong>${P.esc(c.valor)}</strong>`);
+
   const { htmlContent, textContent } = P.correo({
     proyecto: proyecto || MARCA_CORREOS,
     titulo: 'Te han asignado un prospecto',
     saludo: gestor.nombre,
-    resumen: `${lead.nombre}${proyecto?.nombre ? ` · ${proyecto.nombre}` : ''}`,
+    resumen: `${nombre}${lead.programa ? ` · ${lead.programa}` : ''}${proyecto?.nombre ? ` · ${proyecto.nombre}` : ''}`,
     bloques: [
-      P.nota(`<strong>${P.esc(lead.nombre)}</strong>${datos ? `<br>${datos}` : ''}${proyecto?.nombre ? `<br><span style="color:#71717a">${P.esc(proyecto.nombre)}</span>` : ''}`),
+      P.nota(`<strong>${P.esc(nombre)}</strong>${datos ? `<br>${datos}` : ''}${proyecto?.nombre ? `<br><span style="color:#71717a">${P.esc(proyecto.nombre)}</span>` : ''}`),
+      // Los que crea Make desde WhatsApp («S/N», sin correo ni formulario).
+      lead.soloTelefono
+        ? P.nota('<strong>Contacto de WhatsApp: solo tenemos su teléfono.</strong> No dejó correo ni rellenó un formulario.')
+        : '',
+      lineas.length ? P.parrafo(lineas.join('<br>')) : '',
+      lead.mensaje ? P.seccion('Su mensaje') + P.nota(P.esc(lead.mensaje).replace(/\r?\n/g, '<br>')) : '',
+      campos.length ? P.seccion('Lo demás que rellenó') + P.parrafo(campos.join('<br>')) : '',
       P.boton({ texto: 'Ver el prospecto', url: link }),
       letraPequena('Cuanto antes lo contactes, más fácil es que se matricule.'),
     ],
   });
+  return { subject, htmlContent, textContent };
+}
+
+export async function sendLeadAssignedEmail({ gestor, lead, proyecto, baseUrl }) {
+  const { subject, htmlContent, textContent } = componerAvisoDeProspecto({ gestor, lead, proyecto, baseUrl });
   return await sendEmail({
     to: [{ email: gestor.email, name: gestor.nombre }],
     subject,
