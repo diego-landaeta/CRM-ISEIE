@@ -10,13 +10,15 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
 import { fmtMoneda } from '../currencies';
-import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
+import { invoicesApi, invoiceFaltantes, esFacturaEmitida, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
 import AsociarVentaDialog from '../components/AsociarVentaDialog';
 import CobrarProformaDialog from '../components/CobrarProformaDialog';
+import AnularFacturaDialog from '../components/AnularFacturaDialog';
 import TutorialButton from '../components/TutorialButton';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 
@@ -128,6 +130,8 @@ export default function InvoicesPage() {
   const [asociarInv, setAsociarInv] = useState<Invoice | null>(null);
   // Proforma que se está marcando cobrada (apunta el cobro y la pasa a factura).
   const [cobrarInv, setCobrarInv] = useState<Invoice | null>(null);
+  // Anular una emitida con su motivo (CRM#793).
+  const [anularInv, setAnularInv] = useState<Invoice | null>(null);
   // Cobro por Stripe: al descargar se elige entre la factura del alumno (bruto)
   // y la copia de gestión (neto liquidado).
   const [descargarInv, setDescargarInv] = useState<Invoice | null>(null);
@@ -293,6 +297,8 @@ export default function InvoicesPage() {
         actions={(
           <div className="flex gap-2">
             <TutorialButton />
+            {/* Anular una emitida, la rectificativa y los huecos (recorrido, 18/11). */}
+            <VerRecorrido id="anular-factura" listo={!loading} />
             {/* Los abonos (rectificativas) solo los emite un administrador. Las
                 gestoras pueden ver la pestaña pero no crear abonos. */}
             {!(esAbonos && !canManage) && (
@@ -328,7 +334,7 @@ export default function InvoicesPage() {
       ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos) */}
-      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold">
+      <div className="inline-flex rounded-lg border border-border bg-muted/30 p-1 text-sm font-semibold" data-recorrido="facturas-pestanas">
         {([['facturas', 'Facturas', Receipt], ['proformas', 'Proformas', FileText], ['abonos', 'Abonos', ArrowCounterClockwise]] as const).map(([k, label, Icon]) => (
           <button key={k} type="button" onClick={() => setTab(k)}
             className={`inline-flex items-center gap-1.5 px-4 h-8 rounded-md transition ${tab === k ? 'bg-primary text-primary-foreground shadow' : 'text-muted-foreground hover:text-foreground'}`}>
@@ -554,6 +560,21 @@ export default function InvoicesPage() {
                     {inv.rectifica_codigo && (
                       <div className="text-[10px] text-muted-foreground font-normal">rectifica {inv.rectifica_codigo}</div>
                     )}
+                    {/* Anulada (CRM#793): el número sigue ahí, con su motivo y su abono. */}
+                    {inv.anulada_at && inv.tipo !== 'proforma' && inv.estado !== 'cancelada' && (
+                      <div className="mt-0.5 font-normal">
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-destructive-soft text-destructive-soft-foreground"
+                          title="Anulada: sigue en la serie, y su abono la deja a cero">
+                          ANULADA
+                        </span>
+                        <div className="text-[10px] text-muted-foreground whitespace-normal break-words max-w-[16rem]">
+                          {inv.motivo_anulacion}
+                          {inv.anulada_por_nombre ? ` · ${inv.anulada_por_nombre}` : ''}
+                          {inv.anulada_at ? ` · ${fmtDate(inv.anulada_at)}` : ''}
+                          {inv.anulada_abono_codigo ? ` · abono ${inv.anulada_abono_codigo}` : ''}
+                        </div>
+                      </div>
+                    )}
                     {/*
                       Venta nueva o cuota.
 
@@ -718,12 +739,21 @@ export default function InvoicesPage() {
                       )}
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
-                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && (
+                      {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && !esFacturaEmitida(inv) && (
                         <Link to={`nueva?editId=${inv.id}`}
                           title="Editar IVA, datos del cliente o concepto"
-                          className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
+                          className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
+                      )}
+                      {/* Una emitida no se cambia (CRM#793): el botón se ve, desactivado, con el porqué. */}
+                      {gestionaFacturas && esFacturaEmitida(inv) && (
+                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex" data-recorrido="factura-bloqueada">
+                          <button type="button" disabled aria-label={`Editar: ${NO_SE_CAMBIA_EMITIDA}`}
+                            className="h-7 px-2 rounded border border-border text-muted-foreground text-[11px] font-semibold inline-flex items-center gap-1 opacity-50 cursor-not-allowed pointer-events-none">
+                            <Gear size={11} weight="bold" /> Editar
+                          </button>
+                        </span>
                       )}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && inv.tipo !== 'proforma' && invoiceFaltantes(inv).length > 0 && (
                         <button onClick={() => setEmittingInv(inv)}
@@ -758,7 +788,7 @@ export default function InvoicesPage() {
                           <CheckCircle size={11} weight="bold" /> Cobrada
                         </button>
                       )}
-                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && gestionaFacturas && (
+                      {inv.estado !== 'borrador' && inv.tipo !== 'rectificativa' && !inv.anulada_at && gestionaFacturas && (
                         <button onClick={() => rectificar(inv)}
                           title="Crear factura rectificativa (de abono)"
                           className="h-7 px-2 rounded border border-rose-300 text-[11px] text-rose-600 hover:bg-rose-50 inline-flex items-center gap-1">
@@ -773,13 +803,28 @@ export default function InvoicesPage() {
                           <LinkSimple size={11} /> Venta
                         </button>
                       )}
-                      {/* Eliminar factura + liberar número (errores de carga) — admin. */}
-                      {gestionaFacturas && inv.estado !== 'cancelada' && (
+                      {/* Anular una emitida (ISEIE#478, gemela de CRM#793): con su motivo; sale su abono. */}
+                      {gestionaFacturas && esFacturaEmitida(inv) && inv.tipo !== 'rectificativa' && !inv.anulada_at && inv.estado !== 'cancelada' && (
+                        <button onClick={() => setAnularInv(inv)} data-recorrido="factura-anular"
+                          title="Anular la factura indicando el motivo: queda apuntado quién y por qué, y sale su abono"
+                          className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
+                          <X size={11} weight="bold" /> Anular
+                        </button>
+                      )}
+                      {gestionaFacturas && inv.estado !== 'cancelada' && !esFacturaEmitida(inv) && (
                         <button onClick={() => setDeletingInv(inv)}
-                          title="Eliminar la factura y liberar su número (se equivocaron al cargarla)"
-                          className="h-7 px-2 rounded border border-red-300 text-[11px] text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 inline-flex items-center gap-1">
+                          title={inv.tipo === 'proforma' ? 'Eliminar la proforma' : 'Eliminar el borrador'}
+                          className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
                           <Trash size={11} weight="bold" />
                         </button>
+                      )}
+                      {gestionaFacturas && esFacturaEmitida(inv) && (
+                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex">
+                          <button type="button" disabled aria-label={`Eliminar: ${NO_SE_CAMBIA_EMITIDA}`}
+                            className="h-7 px-2 rounded border border-border text-[11px] text-muted-foreground inline-flex items-center gap-1 opacity-50 cursor-not-allowed pointer-events-none">
+                            <Trash size={11} weight="bold" />
+                          </button>
+                        </span>
                       )}
                     </div>
                   </td>
@@ -871,6 +916,10 @@ export default function InvoicesPage() {
         <CobrarProformaDialog invoice={cobrarInv} onClose={() => setCobrarInv(null)}
           onSaved={() => { setCobrarInv(null); load(); }} />
       )}
+      {anularInv && (
+        <AnularFacturaDialog invoice={anularInv} onClose={() => setAnularInv(null)}
+          onAnulada={() => { setAnularInv(null); load(); }} />
+      )}
 
       {/* Confirmación de borrado de factura (libera el número). */}
       {deletingInv && (
@@ -880,7 +929,8 @@ export default function InvoicesPage() {
             <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-red-600"><Trash size={18} weight="bold" /> Eliminar factura</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Vas a eliminar <b>{deletingInv.tipo === 'proforma' ? 'la proforma' : 'la factura'} {deletingInv.codigo}</b> ({fmt(Number(deletingInv.total))}).
-              Se <b>liberará su número</b> si es el último de la serie. La venta se mantiene y podrás volver a facturarla. Esta acción no se puede deshacer.
+              Es {deletingInv.tipo === 'proforma' ? 'una proforma' : 'un borrador'}: no es una factura emitida, así que se puede borrar.
+              La venta se mantiene y podrás volver a facturarla. Esta acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-2">
               <button onClick={() => setDeletingInv(null)} disabled={deleting}
@@ -890,14 +940,14 @@ export default function InvoicesPage() {
                   setDeleting(true);
                   try {
                     const res = await invoicesApi.remove(deletingInv.id);
-                    if (res.success) { toast({ title: '✓ Factura eliminada', description: `${deletingInv.codigo} · número liberado` }); setDeletingInv(null); load(); }
+                    if (res.success) { toast({ title: '✓ Eliminada', description: deletingInv.codigo || undefined }); setDeletingInv(null); load(); }
                     else toast({ title: 'Error', description: (res as { error?: string }).error, variant: 'destructive' });
                   } catch (e: any) {
                     toast({ title: 'Error', description: e?.data?.error || e?.message, variant: 'destructive' });
                   } finally { setDeleting(false); }
                 }}
                 className="h-9 px-4 rounded-md bg-red-600 text-white text-sm font-semibold hover:bg-red-700 inline-flex items-center gap-1.5 disabled:opacity-50">
-                <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar y liberar número'}
+                <Trash size={15} weight="bold" /> {deleting ? 'Eliminando…' : 'Eliminar'}
               </button>
             </div>
           </div>

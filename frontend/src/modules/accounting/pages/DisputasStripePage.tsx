@@ -4,6 +4,7 @@ import { WarningCircle, Clock, ArrowSquareOut, ArrowsClockwise, Buildings, Gradu
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import { toast } from '@/shared/hooks/useToast';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
@@ -173,18 +174,24 @@ export default function DisputasStripePage() {
       <PageHeader
         title="Disputas de Stripe"
         subtitle="Las abiertas de cada cuenta de Stripe, por empresa y por campus. Se responden en Stripe."
-        actions={unCampus ? (
-          <button type="button" onClick={traerAhora} disabled={trayendo}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+          {/* El recorrido de la pantalla (18/11). */}
+          <VerRecorrido id="disputas-stripe" listo={!cargando} />
+          {unCampus && (
+          <button type="button" onClick={traerAhora} disabled={trayendo} data-recorrido="disputas-traer"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40">
             <ArrowsClockwise size={14} weight="bold" className={trayendo ? 'animate-spin' : ''} />
             {trayendo ? 'Trayendo…' : 'Traer ahora'}
           </button>
-        ) : null}
+          )}
+          </div>
+        )}
       />
 
       {/* Arriba, lo que hay que mirar: cuántas, cuánto y cuáles vencen. */}
       {resumen && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3" data-recorrido="disputas-cifras">
           <KpiCard icon={WarningCircle} iconBg="bg-warning-soft text-warning-soft-foreground"
             label="Disputas abiertas" numericValue={resumen.total.abiertas}
             badge={resumen.total.abiertas ? importes(resumen.total.importes) : null}
@@ -213,7 +220,7 @@ export default function DisputasStripePage() {
       )}
 
       {/* Controles: la vista (empresa / campus), el estado y el plazo. */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2" data-recorrido="disputas-controles">
         <div role="group" aria-label="Agrupar por" className="inline-flex rounded-md border border-border overflow-hidden">
           {([['empresa', 'Por empresa', Buildings], ['proyecto', 'Por campus', GraduationCap]] as const).map(([v, t, I]) => (
             <button key={v} type="button" onClick={() => setVista(v)} aria-pressed={vista === v}
@@ -323,7 +330,7 @@ export default function DisputasStripePage() {
                         {d.lead_id && <Link to={`/leads/${d.lead_id}`} className="block text-[11px] text-primary hover:underline">Ficha del cliente</Link>}
                       </td>
                       <td className="px-3 py-2">
-                        <a href={d.stripe_url} target="_blank" rel="noopener noreferrer"
+                        <a href={d.stripe_url} target="_blank" rel="noopener noreferrer" data-recorrido="disputas-responder"
                           aria-label={`Abrir la disputa de ${d.customer_name || d.customer_email || 'este cliente'} en Stripe`}
                           className="inline-flex items-center gap-1 text-primary hover:underline whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 rounded">
                           Stripe <ArrowSquareOut size={12} weight="bold" />

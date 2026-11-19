@@ -24,6 +24,8 @@ const api = vi.hoisted(() => ({
   mias: vi.fn(), panel: vi.fn(), ver: vi.fn(), responder: vi.fn(), reintentar: vi.fn(), cerrar: vi.fn(),
   tutoresPosibles: vi.fn(), reasignar: vi.fn(), leerAhora: vi.fn(), abrirAdjunto: vi.fn(), toast: vi.fn(),
   campusSinTutor: vi.fn(),
+  // La ficha del alumno junto al chat (#679): vacía en estas pruebas.
+  contexto: vi.fn(async () => ({ success: true, data: null })),
   user: { role: 'tutor' },
 }));
 vi.mock('@/modules/consultas/api/consultas.api', async (original) => {
@@ -118,7 +120,7 @@ describe('Consultas (#188) · una consulta', () => {
     api.responder.mockResolvedValue({ success: true, data: { enviado: true, error: null, consulta: detalle({ estado: 'respondida' }) } });
     enLaFicha();
     await screen.findByText('No encuentro el tema 3', { selector: 'p' });
-    fireEvent.click(screen.getByRole('button', { name: /Responder/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     expect(await screen.findByText('Falta la respuesta: escríbela aquí.')).toBeTruthy();
     expect(api.responder).not.toHaveBeenCalled();
 
@@ -126,7 +128,7 @@ describe('Consultas (#188) · una consulta', () => {
     const pdf = new File(['%PDF'], 'temario.pdf', { type: 'application/pdf' });
     fireEvent.change(document.getElementById('consulta-adjuntos'), { target: { files: [pdf] } });
     expect(screen.getByText('temario.pdf')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: /Responder/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
     await waitFor(() => expect(api.responder).toHaveBeenCalledWith(5, 'Está en la sección 2.', [pdf]));
     expect(api.toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Respuesta enviada' }));
   });
@@ -148,7 +150,7 @@ describe('Consultas (#188) · una consulta', () => {
     api.ver.mockResolvedValue({ success: true, data: detalle({ puedes: 'admin' }) });
     api.reasignar.mockResolvedValue({ success: true, data: detalle({ puedes: 'admin', tutor_id: 8 }) });
     enLaFicha();
-    await screen.findByText('Alumna Uno');
+    await screen.findAllByText('Alumna Uno');
     expect(screen.queryByLabelText(/^Tu respuesta/)).toBeNull();
     fireEvent.click(await screen.findByRole('combobox', { name: 'Reasignar a otro tutor' }));
     expect(screen.queryByRole('option', { name: 'Tutora' })).toBeNull();
@@ -181,7 +183,7 @@ describe('Consultas (#188) · lo que salió en la revisión final (18/10)', () =
     api.ver.mockResolvedValue({ success: true, data: detalle({ puedes: 'admin' }) });
     api.tutoresPosibles.mockRejectedValue(new Error('caído'));
     enLaFicha();
-    expect(await screen.findByText('Alumna Uno')).toBeTruthy();
+    expect((await screen.findAllByText('Alumna Uno')).length).toBeGreaterThan(0);
     expect(screen.getByText('No encuentro el tema 3', { selector: 'p' })).toBeTruthy();
   });
 

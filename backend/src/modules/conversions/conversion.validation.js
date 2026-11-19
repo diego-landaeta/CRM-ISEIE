@@ -26,6 +26,8 @@ export const createConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
+  // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el día anterior.
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   // Multi-item + IVA + descuento
   items: z.array(conversionItemSchema).optional(),
   iva_pct: z.number().min(0).max(100).optional(),
@@ -34,6 +36,8 @@ export const createConversionSchema = z.object({
   descuento_tipo: z.enum(['none', 'pct', 'monto']).optional(),
   descuento_valor: z.number().min(0).optional(),
   subtotal_bruto: z.number().min(0).optional(),
+  // Crear la venta aunque el alumno ya tenga una de este programa (CRM#898).
+  forzar: z.boolean().optional(),
 }).refine((d) => d.importe_pagado <= d.importe_total + 0.01, {
   message: 'importe_pagado no puede ser mayor que importe_total',
   path: ['importe_pagado'],
@@ -47,6 +51,7 @@ export const updateConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
+  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 
 export const createPaymentSchema = z.object({
@@ -67,6 +72,8 @@ export const payInstallmentSchema = z.object({
   metodo: z.enum(PAYMENT_METHODS).optional().nullable(),
   notas: z.string().max(500).optional().nullable(),
   referencia,
+  // «Apuntarlo igualmente» tras el aviso de posible duplicado (CRM#888).
+  confirmar: z.boolean().optional(),
 });
 
 // Editar el pago de una cuota ya cobrada: fecha, importe y, desde el 15/10, la

@@ -102,6 +102,11 @@ export const listLeadsSchema = z.object({
   conConversion: z.coerce.boolean().optional(),
   // Filtro operativo exclusivo de Clientes. No depende de importes de venta.
   installmentStatus: z.enum(['pending', 'completed', 'no_plan']).optional(),
+  // Filtro rápido que filtra el servidor: las dos alertas del Dashboard (gemela
+  // de CRM#884). Enum porque su valor elige un fragmento de SQL (`FILTROS_RAPIDOS`):
+  // cerrado por construcción, no por confianza.
+  // Los filtros rápidos, todos en el servidor (gemela de la #132 del 360).
+  qf: z.enum(['overdue', 'today', 'tomorrow', 'week', 'no-reminder', 'no-contact', 'urgent', 'sin-gestora', 'sin-actividad']).optional(),
 }).refine(
   (d) => d.projectId || (d.projectIds && d.projectIds.length > 0),
   { message: 'projectId o projectIds requerido', path: ['projectId'] },
@@ -197,4 +202,13 @@ export const updateLeadSchema = z.object({
   custom_fields: z.record(z.string(), z.any()).nullable().optional(),
 }).refine((data) => Object.keys(data).length > 0, {
   message: 'Al menos un campo debe ser proporcionado',
+});
+
+/** Contadores de los filtros rápidos (gemela de la #132 del 360). */
+export const quickCountsSchema = z.object({
+  projectId: z.coerce.number().int().positive().optional(),
+  projectIds: z.string().regex(/^\d+(,\d+)*$/).optional()
+    .transform((v) => (v ? v.split(',').map(Number) : undefined)),
+  responsableId: z.coerce.number().int().positive().optional(),
+  includeConverted: z.enum(['true', 'false']).optional().transform((v) => v === 'true'),
 });

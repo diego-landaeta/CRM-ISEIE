@@ -37,6 +37,8 @@ export interface ApiClient {
 
 export function setAccessToken(token: string | null): void;
 export function getAccessToken(): string | null;
+/** Si es `GET /leads` sin ningún campus válido (gemela de CRM#913). */
+export function pideLeadsSinCampus(url: string): boolean;
 /** La base de la app y de la API (client.js): "/staging" en pruebas, "" en producción. */
 export const APP_BASE_URL: string;
 export const API_BASE_URL: string;

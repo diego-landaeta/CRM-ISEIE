@@ -62,6 +62,22 @@ const COMO_SE_DICE: Record<string, string> = {
 /** El título original, para devolverlo cuando no queda nada sin leer. */
 const TITULO_BASE = typeof document !== 'undefined' ? document.title : '';
 
+/*
+  SI EL SERVIDOR DICE QUE NO, SE DEJA DE PREGUNTAR (CRM#859).
+
+  El layout solo monta esto a quien tiene WhatsApp en su mapa de permisos
+  (`tieneWhatsapp`), igual que el servidor. Aun así, en producción salían de 600
+  a 2.000 `403 SIN_WHATSAPP` al día: basta con que el mapa del navegador sea de
+  antes de que le quitaran el permiso, y entonces se preguntaba cada pocos
+  segundos durante toda la jornada. Tras el primer 403, se calla hasta que se
+  recargue la página (que trae el mapa nuevo). Vive fuera del componente para
+  que volver a montarlo no reabra el grifo.
+*/
+let cortadoEnEstaSesion = false;
+
+/** Para las pruebas: vuelve a dejar preguntar. */
+export function _volverAPreguntar() { cortadoEnEstaSesion = false; }
+
 export default function AvisoDeMensaje() {
   // Con WhatsApp apagado no hay nada que avisar, y esto vive en el layout: sin
   // la comprobacion estaria preguntando desde todas las pantallas del CRM y
@@ -83,8 +99,10 @@ export default function AvisoDeMensaje() {
   // La primera vuelta no avisa: al entrar al CRM puede haber cosas sin leer de
   // ayer, y saltarian todas de golpe como si acabaran de entrar.
   const primera = useRef(true);
+  const [cortado, setCortado] = useState(cortadoEnEstaSesion);
 
   const preguntar = useCallback(async () => {
+    if (cortadoEnEstaSesion) return;
     try {
       const r = await client.get('/whatsapp/sin-leer');
       if (!r.success) return;
@@ -136,16 +154,23 @@ export default function AvisoDeMensaje() {
           aviso.close();
         };
       } catch { /* si el navegador no deja, queda el numero en la pestaña */ }
-    } catch { /* sin conexion se calla; la siguiente vuelta lo reintenta */ }
+    } catch (err) {
+      // Sin permiso: no se vuelve a preguntar en esta sesión (#859). Sin
+      // conexion o un fallo del servidor, se calla y la siguiente vuelta lo reintenta.
+      if ((err as { status?: number })?.status === 403) {
+        cortadoEnEstaSesion = true;
+        setCortado(true);
+      }
+    }
   }, []);
 
   useEffect(() => {
-    if (apagado) return undefined;
+    if (apagado || cortado) return undefined;
     preguntar();
     const cada = enlazada ? CADA_ENLAZADA_MS : CADA_SIN_ENLAZAR_MS;
     const t = setInterval(preguntar, cada);
     return () => clearInterval(t);
-  }, [preguntar, enlazada, apagado]);
+  }, [preguntar, enlazada, apagado, cortado]);
 
   // Al salir, devolver el titulo: si no, la pestaña se queda con un «(3)»
   // pegado para siempre en el resto del CRM.

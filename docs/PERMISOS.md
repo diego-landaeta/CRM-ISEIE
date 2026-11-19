@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-829 rutas en 64 módulos, y 31 acciones con condición dentro de una ruta.
+873 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -200,10 +200,20 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusSinTutor | `GET /api/consultas/campus-sin-tutor` | (no existía) | (ruta nueva) | `consultas.view` |
 | sincronizarAlumnosAhora | `POST /api/consultas/sincronizar-alumnos` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | verMetricas | `GET /api/consultas/metricas` | (no existía) | (ruta nueva) | `consultas.atender` |
+| estadoDelPlugin | `GET /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| codigoDeConexion | `POST /api/consultas/campus/:projectId/plugin/codigo` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| desactivarPlugin | `DELETE /api/consultas/campus/:projectId/plugin` | (no existía) | (ruta nueva) | `consultas.gestionar` |
+| respuestas | `GET /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| crearRespuesta | `POST /api/consultas/respuestas` | (no existía) | (ruta nueva) | lo de cada uno |
+| importarRespuestas | `POST /api/consultas/respuestas/importar` | (no existía) | (ruta nueva) | lo de cada uno |
+| cambiarRespuesta | `PUT /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
+| borrarRespuesta | `DELETE /api/consultas/respuestas/:rid` | (no existía) | (ruta nueva) | lo de cada uno |
 | panel | `GET /api/consultas/` | (no existía) | (ruta nueva) | `consultas.view` |
 | ver | `GET /api/consultas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| contexto | `GET /api/consultas/:id/contexto` | (no existía) | (ruta nueva) | lo de cada uno |
 | responder | `POST /api/consultas/:id/responder` | (no existía) | (ruta nueva) | lo de cada uno |
 | cerrar | `POST /api/consultas/:id/cerrar` | (no existía) | (ruta nueva) | lo de cada uno |
+| anotar | `POST /api/consultas/:id/notas` | (no existía) | (ruta nueva) | lo de cada uno |
 | tutoresPosibles | `GET /api/consultas/:id/tutores` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | reasignar | `POST /api/consultas/:id/reasignar` | (no existía) | (ruta nueva) | `consultas.gestionar` |
 | adjuntoPublico | `GET /api/adjunto-consulta/:token` | (no existía) | (ruta nueva) | — |
@@ -218,6 +228,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | listProductos | `GET /api/conversions/productos` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | cuotas | `GET /api/conversions/cuotas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | filas | `GET /api/conversions/filas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
+| posiblesRepetidas | `GET /api/conversions/posibles-repetidas` | (no existía) | (ruta nueva) | `conversions.edit` |
 | listByLead | `GET /api/conversions/by-lead/:leadId` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | getById | `GET /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.create` |
@@ -274,6 +285,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | resumen | `GET /api/cursos-pendientes/resumen` | (no existía) | (ruta nueva) | lo de cada uno |
+| controlSubidas | `GET /api/cursos-pendientes/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | crear | `POST /api/cursos-pendientes/` | (no existía) | (ruta nueva) | lo de cada uno |
 | detalle | `GET /api/cursos-pendientes/:id` | (no existía) | (ruta nueva) | lo de cada uno |
@@ -281,6 +293,19 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | publicar | `POST /api/cursos-pendientes/:id/publicar` | (no existía) | (ruta nueva) | lo de cada uno |
 | sumarAlumna | `POST /api/cursos-pendientes/:id/alumnas` | (no existía) | (ruta nueva) | lo de cada uno |
 | marcarAlumna | `PATCH /api/cursos-pendientes/:id/alumnas/:alumnaId` | (no existía) | (ruta nueva) | lo de cada uno |
+| abrirSubidas | `POST /api/cursos-pendientes/:id/subidas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| marcarSubida | `PATCH /api/cursos-pendientes/:id/subidas/:punto` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+
+## diploma-confirmacion
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| estados | `GET /api/diploma-confirmacion/` | (no existía) | (ruta nueva) | `diplomas.view` o `diplomas.emit` |
+| pedir | `POST /api/diploma-confirmacion/pedir` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reenviar | `POST /api/diploma-confirmacion/:matriculaId/reenviar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| reaplicar | `POST /api/diploma-confirmacion/:matriculaId/aplicar` | (no existía) | (ruta nueva) | `diplomas.emit` |
+| formulario | `GET /api/cd/:token` | (no existía) | (ruta nueva) | — |
+| responder | `POST /api/cd/:token` | (no existía) | (ruta nueva) | — |
 
 ## documents
 
@@ -449,6 +474,19 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | preguntarCtrl | `POST /api/ia-analisis/preguntar` | (no existía) | (ruta nueva) | `reports_ia.generar` |
 
+## incidencias
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.view` |
+| metricas | `GET /api/incidencias/metricas` | (no existía) | (ruta nueva) | `incidencias.view` |
+| descargarAdjunto | `GET /api/incidencias/adjuntos/:adjuntoId` | (no existía) | (ruta nueva) | `incidencias.view` |
+| personas | `GET /api/incidencias/personas` | (no existía) | (ruta nueva) | `incidencias.create` o `incidencias.edit` |
+| crear | `POST /api/incidencias/` | (no existía) | (ruta nueva) | `incidencias.create` |
+| porId | `GET /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.view` |
+| editar | `PATCH /api/incidencias/:id` | (no existía) | (ruta nueva) | `incidencias.edit` |
+| subirAdjunto | `POST /api/incidencias/:id/adjuntos` | (no existía) | (ruta nueva) | `incidencias.create` o `incidencias.edit` |
+
 ## informe-mensual
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -524,6 +562,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | markPaid | `POST /api/invoices/:id/mark-paid` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.cobrar` |
 | cobrarProforma | `POST /api/invoices/:id/cobrar-proforma` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte con «factura_manager» | `facturas.cola` |
 | cancel | `POST /api/invoices/:id/cancel` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.anular` |
+| anular | `POST /api/invoices/:id/anular` | (no existía) | (ruta nueva) | `facturas.gestionar` |
 | destroy | `DELETE /api/invoices/:id` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
 | rectificar | `POST /api/invoices/:id/rectificar` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
 | emitir | `POST /api/invoices/:id/emitir` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.emitir_borrador` |
@@ -539,6 +578,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/leads/` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | exportWasapi | `GET /api/leads/export/wasapi` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.exportar_wasapi` |
 | stats | `GET /api/leads/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
+| quickCounts | `GET /api/leads/quick-counts` | (no existía) | (ruta nueva) | `leads.view` |
 | today | `GET /api/leads/today` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | dashboardSummary | `GET /api/leads/dashboard-summary` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | lookupByEmail | `GET /api/leads/lookup-by-email` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
@@ -574,6 +614,19 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | restore | `PATCH /api/leads/:id/restore` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `leads.restaurar` |
 | reassignPending | `POST /api/leads/reassign-pending` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `leads.assign` |
 | softDelete · borrar por cualquier motivo, aunque no sea suyo o tenga ventas | `DELETE /api/leads/:id` | cuando borrar por cualquier motivo, aunque no sea suyo o tenga ventas: a mano, lead.controller.js · softDelete | superadmin, admin, soporte | `leads.delete_cualquiera` |
+
+## links-pago
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| verConfig | `GET /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
+| guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+| detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
+| crear | `POST /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| anular | `POST /api/links-pago/:id/anular` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 
 ## make
 
@@ -747,6 +800,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarRolAMedida | `PATCH /api/permissions/roles/a-medida/:id` | (no existía) | (ruta nueva) | `roles.edit` |
 | registro | `GET /api/permissions/registro` | (no existía) | (ruta nueva) | `roles.edit` |
 | ficha | `GET /api/permissions/personas/:id` | (no existía) | (ruta nueva) | lo de cada uno |
+| vistaPreviaDeAlta | `POST /api/permissions/vista-previa-alta` | (no existía) | (ruta nueva) | `users.create` |
 | guardarExcepciones | `PUT /api/permissions/personas/:id/excepciones` | (no existía) | (ruta nueva) | `users.excepciones` |
 | cambiarRolAMedida | `PUT /api/permissions/personas/:id/rol-a-medida` | (no existía) | (ruta nueva) | `users.excepciones` |
 | listCustomRoles | `GET /api/permissions/custom-roles` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `roles.view` |
@@ -944,6 +998,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | sync | `POST /api/stripe-payments/sync` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | listar | `GET /api/stripe-payments/disputas` | (no existía) | (ruta nueva) | `stripe.edit` |
 | sincronizar | `POST /api/stripe-payments/disputas/sincronizar` | (no existía) | (ruta nueva) | `stripe.edit` |
+| deLaVenta | `GET /api/stripe-payments/de-la-venta/:conversionId` | (no existía) | (ruta nueva) | `stripe.edit` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
@@ -1044,6 +1099,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | campusDelTutor | `GET /api/tutores/:id/campus` | (no existía) | (ruta nueva) | lo de cada uno |
 | asignarCampus | `POST /api/tutores/:id/campus` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | comprobarCampus | `POST /api/tutores/:id/campus/comprobar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| desvincularCuenta | `POST /api/tutores/:id/campus/:projectId/desvincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| buscarCuentaMoodle | `GET /api/tutores/:id/campus/:projectId/buscar-cuenta` | (no existía) | (ruta nueva) | `tutores.gestionar` |
+| vincularCuentaMoodle | `POST /api/tutores/:id/campus/:projectId/vincular` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | asignarEmpresa | `POST /api/tutores/:id/empresas` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | quitarEmpresa | `DELETE /api/tutores/:id/empresas/:issuerId` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | cambiarDisponible | `PATCH /api/tutores/:id/disponible` | (no existía) | (ruta nueva) | `tutores.gestionar` |
@@ -1426,10 +1484,10 @@ lo que pide para tener sentido (editar pide ver).
 | Completar datos y marcar entregada | `facturas.completar` | Rellenar los datos fiscales del cliente y marcarla entregada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Enviar facturas | `facturas.enviar` | Mandar la factura al cliente. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Marcar cobrada | `facturas.cobrar` | Marcar una factura como cobrada. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
-| Anular facturas | `facturas.anular` | Anular una factura sin emitir. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
+| Cancelar borradores y proformas | `facturas.anular` | Cancelar, con su motivo, una factura sin emitir o una proforma. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Emitir un borrador | `facturas.emitir_borrador` | Darle número a un borrador. | Admin, Gestora, Soporte, Project manager | `facturas.view` |
 | Poner número al cobrar | `facturas.emitir` | Que el cobro salga facturado y la proforma sin esperar visto bueno. | Admin | `facturas.view` |
-| Corregir y abonar | `facturas.gestionar` | Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas). | Admin | `facturas.view` |
+| Anular y abonar | `facturas.gestionar` | Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar proformas y borradores (una gestora, las suyas). | Admin | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
 | Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin | `facturas.view` |
@@ -1485,6 +1543,14 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver cobros de PayPal y del banco | `cobros_externos.view` | Los cobros que entran por PayPal y los abonos de los extractos del banco. | Admin, Soporte, Project manager |  |
 | Registrar cobros de PayPal y del banco | `cobros_externos.edit` | Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso. | Admin, Soporte | `cobros_externos.view` |
+
+### Links de pago
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
+| Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno). | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe. | Admin |  |
 
 ### Facturas de colaboradores
 
@@ -1587,7 +1653,7 @@ lo que pide para tener sentido (editar pide ver).
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
-| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor · nunca si su rol principal es: Tutor, Tutor redactor | Admin |  |
+| Usar el MCP | `mcp.usar` | Conectar su Claude al CRM con su URL personal. · nunca: Tutor, Tutor redactor, Colaborador · nunca si su rol principal es: Tutor, Tutor redactor, Colaborador | Admin |  |
 | Administrar el MCP | `mcp.administrar` | Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado. | Admin |  |
 | Apagar el MCP | `mcp.supervisar` | El interruptor de emergencia y rechazar conexiones ajenas. | solo superadmin |  |
 
@@ -1652,6 +1718,14 @@ lo que pide para tener sentido (editar pide ver).
 | Aprobar solicitudes | `change_requests.approve` | Firmar la aprobación. | Admin, Gestora, Soporte, Project manager | `change_requests.view` |
 | Borrar solicitudes | `change_requests.delete` | Quitar una solicitud. | Admin, Soporte, Project manager | `change_requests.view` |
 | Reabrir solicitudes | `change_requests.reopen` | Volver a abrir una cerrada. | Admin, Soporte, Project manager | `change_requests.view` |
+
+### Incidencias
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver incidencias | `incidencias.view` | Las incidencias y sus cifras (una gestora, solo las suyas). | Admin, Gestora, Soporte |  |
+| Registrar incidencias | `incidencias.create` | Registrar una incidencia nueva con sus adjuntos. | Admin, Soporte | `incidencias.view` |
+| Editar incidencias | `incidencias.edit` | Cambiar una incidencia, cerrarla o reabrirla. | Admin, Soporte | `incidencias.view` |
 
 ### Registro
 

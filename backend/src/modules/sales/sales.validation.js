@@ -33,6 +33,9 @@ export const createSaleSchema = z.object({
   // lead: si manana reasignan el prospecto, la venta seguiria contando para la
   // persona equivocada.
   vendedora_id: z.number().int().positive().optional().nullable(),
+  // CREAR OTRA IGUALMENTE (CRM#898): el alumno ya tiene una venta de este
+  // programa y quien registra dice que es otra compra. Queda apuntado quién.
+  forzar: z.boolean().optional(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),

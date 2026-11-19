@@ -210,7 +210,9 @@ describe('al borrar la ultima de la serie', () => {
     db.getClient.mockResolvedValueOnce({
       query: vi.fn(async (sql, params) => {
         sqls.push({ sql, params });
-        if (/FOR UPDATE/.test(sql)) return { rows: [{ id: 388, ano: 2026, serie: 'CEDIA', numero: 188, issuer_id: 8 }] };
+        // Una proforma: comparte el correlativo con las facturas y, a diferencia
+        // de una emitida (CRM#793), se sigue pudiendo borrar.
+        if (/FOR UPDATE/.test(sql)) return { rows: [{ id: 388, ano: 2026, serie: 'CEDIA', numero: 188, issuer_id: 8, tipo: 'proforma', estado: 'emitida' }] };
         if (/MAX\(numero\)/.test(sql)) return { rows: [{ m: 185 }] };
         return { rows: [] };
       }),

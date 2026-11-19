@@ -29,6 +29,10 @@ export const TECNICOS = new Set([
   'conAdjuntos', 'conArchivos',
   // El projectId de Integraciones, que sea un número (QA del 22/10, punto 5).
   'projectIdConFormato',
+  // El :id de una consulta, que sea un número: si no, 404 en vez del 500 de Postgres (#188).
+  'idDeConsulta',
+  // Lo mismo con el :rid de una respuesta guardada (#679).
+  'idDeRespuesta',
   // Guardas de ALCANCE POR CAMPUS (IDOR): no deciden quien tiene el permiso (eso lo dice el `puede(...)`
   // de la misma ruta), solo recortan a SUS campus lo que ya tenia permiso para tocar.
   'puedeCrearEn', 'deSuCampus',

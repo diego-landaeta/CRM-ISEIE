@@ -31,6 +31,8 @@ router.get('/registro', puede('roles.edit'), pantalla.registro);
 // mira). Cambiarlo: «Permisos de cada persona», y el servicio acota a sus
 // campus, a quien no es admin y a lo que él mismo tiene.
 router.get('/personas/:id', pantalla.ficha);
+// #694: lo que traería un alta, antes de crearla. Quien da de alta usuarios.
+router.post('/vista-previa-alta', puede('users.create'), pantalla.vistaPreviaDeAlta);
 router.put('/personas/:id/excepciones', puede('users.excepciones'), pantalla.guardarExcepciones);
 router.put('/personas/:id/rol-a-medida', puede('users.excepciones'), pantalla.cambiarRolAMedida);
 

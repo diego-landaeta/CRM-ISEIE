@@ -59,6 +59,9 @@ async function fetchWithRetry(fullUrl, fetchOpts, maxRetries = 2) {
       }
       return res;
     } catch (err) {
+      // Cancelada a propósito (AbortController: se cambió de pantalla o de
+      // ámbito): no es un fallo de red y repetirla es pedir lo que ya no se quiere.
+      if (err?.name === 'AbortError' || fetchOpts?.signal?.aborted) throw err;
       // network error (fetch rejected) → también reintentar
       lastError = err;
       if (attempt < maxRetries) {
@@ -69,6 +72,20 @@ async function fetchWithRetry(fullUrl, fetchOpts, maxRetries = 2) {
     }
   }
   throw lastError || new Error('fetch failed after retries');
+}
+
+/**
+ * Si es la lista de prospectos (`GET /leads`) sin ningún campus válido: ni un
+ * `projectId` positivo ni una lista `projectIds` con algún número (gemela de
+ * CRM#913). El servidor no devuelve nada sin campus: la petición no sirve.
+ */
+export function pideLeadsSinCampus(url) {
+  const [camino, consulta = ''] = String(url).split('?');
+  if (camino !== '/leads' && camino !== '/leads/') return false;
+  const q = new URLSearchParams(consulta);
+  const id = Number(q.get('projectId'));
+  if (Number.isInteger(id) && id > 0) return false;
+  return !/^\d+(,\d+)*$/.test(q.get('projectIds') || '');
 }
 
 async function request(url, options = {}) {
@@ -89,6 +106,14 @@ async function request(url, options = {}) {
     if (qs) finalUrl += (finalUrl.includes('?') ? '&' : '?') + qs;
   }
   const { params: _omit, ...fetchOptions } = options;
+
+  // La lista de prospectos sin campus no sale del navegador (gemela de CRM#913).
+  if ((options.method || 'GET') === 'GET' && pideLeadsSinCampus(finalUrl)) {
+    if (import.meta.env?.DEV) {
+      console.warn(`[#859] ${finalUrl}: la lista de prospectos sin campus no se pide.`);
+    }
+    return { success: false, data: [], error: 'Falta el campus', code: 'SIN_CAMPUS' };
+  }
 
   const res = await fetchWithRetry(`${API_BASE_URL}${finalUrl}`, {
     credentials: 'include',

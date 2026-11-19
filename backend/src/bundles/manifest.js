@@ -13,7 +13,7 @@ export const BUNDLES = {
   core: {
     label: 'Core (obligatorio)',
     description: 'Auth, users, projects. Siempre activo.',
-    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks', 'soporte', 'moodle'],
+    modules: ['auth', 'users', 'projects', 'credentials', 'field-definitions', 'project-channels', 'permissions', 'connectors', 'webhooks-salientes', 'asignacion', 'messages', 'notifications', 'registro', 'correos', 'novedades', 'mcp', 'certifex', 'tasks', 'soporte', 'incidencias', 'moodle', 'diploma-confirmacion'],
     requires: [],
   },
   leads: {
@@ -31,7 +31,7 @@ export const BUNDLES = {
   accounting: {
     label: 'Contabilidad',
     description: 'Ingresos + egresos + cuentas por cobrar/pagar + integraciones (Stripe/Brevo)',
-    modules: ['accounting', 'expenses', 'accounts-payable', 'integrations', 'stripe-payments', 'invoices', 'facturacion-auditoria', 'facturas-colaborador', 'cobros-externos', 'factura-automatica', 'monitask'],
+    modules: ['accounting', 'expenses', 'accounts-payable', 'integrations', 'stripe-payments', 'invoices', 'facturacion-auditoria', 'facturas-colaborador', 'cobros-externos', 'factura-automatica', 'monitask', 'links-pago'],
     requires: ['core'],
   },
   payroll: {

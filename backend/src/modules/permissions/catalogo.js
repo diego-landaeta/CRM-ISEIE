@@ -31,6 +31,10 @@
  *   independiente no pide el `view` de su recurso: es otra pantalla (cuentas por
  *                cobrar no es «editar» el dashboard de finanzas)
  *
+ * Y cada recurso puede llevar `nota`: lo que decide el acceso a esa pantalla y
+ * no es una casilla (en el tablero, quien cierra una tarea con supervisor). La
+ * ficha de cada persona la enseña junto a sus permisos (#694).
+ *
  * Los valores de `roles` no se han inventado: son quién entra HOY a las rutas
  * de cada clave (`inventario/asignacion.js`), y la prueba
  * `catalogoPermisos.test.js` lo comprueba rol por rol.
@@ -142,7 +146,10 @@ export const SECCIONES = [
     clave: 'tareas', nombre: 'Tareas',
     recursos: [
       {
-        clave: 'tasks', nombre: 'Tablero de tareas', acciones: [
+        clave: 'tasks', nombre: 'Tablero de tareas',
+        // Diego, 11/11/2026 (#694): no es una casilla, y la ficha lo explica.
+        nota: 'Quién cierra una tarea no es una casilla: lo decide la propia tarea. Sin supervisor, la cierra quien la lleva; con supervisor, solo su supervisor (ni quien la lleva ni el superadmin), tenga o no estos permisos. «Devolver tareas» es otra cosa: devolver a «En curso», con un comentario, las ya hechas o en revisión.',
+        acciones: [
           // El tutor, el suyo (Diego, 04/11): sus tareas y las de su equipo de TUTORES. Lo
           // de desarrollo no lo ve: no es de ese equipo (tasks.equipos.model.js).
           // El tutor redactor (CRM#708), como un colaborador: ver, crearse y mover las suyas.
@@ -308,10 +315,10 @@ export const SECCIONES = [
           a('completar', 'Completar datos y marcar entregada', 'Rellenar los datos fiscales del cliente y marcarla entregada.', TODOS),
           a('enviar', 'Enviar facturas', 'Mandar la factura al cliente.', TODOS),
           a('cobrar', 'Marcar cobrada', 'Marcar una factura como cobrada.', TODOS),
-          a('anular', 'Anular facturas', 'Anular una factura sin emitir.', TODOS),
+          a('anular', 'Cancelar borradores y proformas', 'Cancelar, con su motivo, una factura sin emitir o una proforma.', TODOS),
           a('emitir_borrador', 'Emitir un borrador', 'Darle número a un borrador.', TODOS),
           a('emitir', 'Poner número al cobrar', 'Que el cobro salga facturado y la proforma sin esperar visto bueno.', ADMIN),
-          a('gestionar', 'Corregir y abonar', 'Corregir, abonar (rectificativa), asociar a una venta y borrar facturas (una gestora, las suyas).', ADMIN),
+          a('gestionar', 'Anular y abonar', 'Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar proformas y borradores (una gestora, las suyas).', ADMIN),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
           a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', ADMIN),
@@ -362,6 +369,15 @@ export const SECCIONES = [
         clave: 'cobros_externos', nombre: 'Cobros de PayPal y del banco', acciones: [
           a('view', 'Ver cobros de PayPal y del banco', 'Los cobros que entran por PayPal y los abonos de los extractos del banco.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Registrar cobros de PayPal y del banco', 'Sincronizar PayPal, subir extractos y decidir a qué venta va cada abono dudoso.', ADMIN_SOPORTE),
+        ],
+      },
+      {
+        // Links de pago (#407, gemela de CRM#680). Sin `view`: cada una ve los que creó con `crear`,
+        // y los de las demás de sus campus con `ver_todos`. Siempre en SUS campus.
+        clave: 'links_pago', nombre: 'Links de pago', acciones: [
+          a('crear', 'Crear links de pago', 'Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos.', COMERCIAL),
+          a('ver_todos', 'Ver los links de todos', 'Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno).', ADMIN),
+          a('configurar', 'Configurar los links de pago', 'Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe.', ADMIN),
         ],
       },
       {
@@ -477,7 +493,9 @@ export const SECCIONES = [
         clave: 'mcp', nombre: 'MCP (Claude)', acciones: [
           // Antes lo decidía el rol principal (mcp.acceso.js · puedeUsarMcp): admin de serie, el
           // resto con la casilla, y un tutor nunca, aunque tuviera otro rol de más (QA, punto 6).
-          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor'], nuncaPrincipal: ['tutor', 'tutor_redactor'], soloPrincipal: true }),
+          // Diego, 12/11/2026 (#752): el colaborador, como el tutor y el tutor redactor, nunca;
+          // el que lo tenía con la casilla lo pierde (`colaborador-sin-mcp` en cambios-aprobados).
+          a('usar', 'Usar el MCP', 'Conectar su Claude al CRM con su URL personal.', ADMIN, { nunca: ['tutor', 'tutor_redactor', 'colaborador'], nuncaPrincipal: ['tutor', 'tutor_redactor', 'colaborador'], soloPrincipal: true }),
           a('administrar', 'Administrar el MCP', 'Dar o quitar el MCP a personas de sus campus y ver qué se ha consultado.', ADMIN),
           a('supervisar', 'Apagar el MCP', 'El interruptor de emergencia y rechazar conexiones ajenas.', NADIE),
         ],
@@ -546,6 +564,18 @@ export const SECCIONES = [
           a('approve', 'Aprobar solicitudes', 'Firmar la aprobación.', TODOS),
           a('delete', 'Borrar solicitudes', 'Quitar una solicitud.', ['admin', 'soporte', 'project_manager']),
           a('reopen', 'Reabrir solicitudes', 'Volver a abrir una cerrada.', ['admin', 'soporte', 'project_manager']),
+        ],
+      },
+      {
+        // Incidencias (#253). Diego: «la crean y la ven super admin y admin; una
+        // gestora ve solo las suyas». Lo de «solo las suyas» es alcance y lo
+        // recorta el servidor (`incidencias.service.js`), no una clave aparte.
+        // Soporte la trae porque el menú se lo enseña todo (Sidebar).
+        clave: 'incidencias', nombre: 'Incidencias', acciones: [
+          a('view', 'Ver incidencias', 'Las incidencias y sus cifras (una gestora, solo las suyas).', ['admin', 'gestor', 'soporte']),
+          // No «Apuntar incidencias»: así se llama ya `status.edit` (las del estado del sistema).
+          a('create', 'Registrar incidencias', 'Registrar una incidencia nueva con sus adjuntos.', ADMIN_SOPORTE),
+          a('edit', 'Editar incidencias', 'Cambiar una incidencia, cerrarla o reabrirla.', ADMIN_SOPORTE),
         ],
       },
       {
@@ -742,13 +772,15 @@ export function catalogoParaPantalla() {
     secciones: SECCIONES.map((s) => ({
       clave: s.clave, nombre: s.nombre,
       recursos: s.recursos.map((r) => ({
-        clave: r.clave, nombre: r.nombre,
+        clave: r.clave, nombre: r.nombre, ...(r.nota ? { nota: r.nota } : {}),
         acciones: r.acciones.map((x) => {
           const clave = `${r.clave}.${x.accion}`;
           return {
             clave, accion: x.accion, nombre: x.nombre, descripcion: x.descripcion,
             roles: x.roles, requiere: dependencias(clave), nunca: x.nunca || [], nuncaPrincipal: x.nuncaPrincipal || [],
             soloPantalla: x.soloPantalla === true,
+            // #694: la ficha enseña cada forma de tenerlo.
+            propia: x.propia === true, independiente: x.independiente === true, soloPrincipal: x.soloPrincipal === true,
           };
         }),
       })),

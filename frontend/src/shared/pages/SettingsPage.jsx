@@ -16,6 +16,7 @@ import MarcaSection from './MarcaSection';
 import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
@@ -39,7 +40,7 @@ const NAV = [
   { label: 'Árbol de categorías',  icon: TreeStructure,  to: '/configuracion/categorias-arbol' },
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
-  { label: 'Webhooks',             icon: PlugsConnected, to: '/make-webhooks' },
+  { label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
   { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
@@ -69,13 +70,34 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880). Sin él, el
+// servidor contesta 403: Usuarios y Disponibilidad leen `/users*` (users.view)
+// y APIs globales lee `/credentials` (credentials.view). Antes se pintaban
+// igual, y una gestora abría Configuración en Usuarios con tres peticiones
+// fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
+// veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
+// Las que no salen aquí no piden permiso para leerse.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+};
+
+// Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
+const PESTANA_SIN_PERMISO = 'security';
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la pestaña elegida (la de entrada es Usuarios), Seguridad.
+  // Se calcula en cada pintado: si el mapa de permisos llega un instante
+  // después, se pasa sola a Usuarios.
+  const tab = permitida(elegida) ? elegida : PESTANA_SIN_PERMISO;
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-
-  const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
   return (
     <div className="space-y-6">
@@ -103,7 +125,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 
@@ -391,9 +413,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
   // Facturación y fechas de facturas ya no son casillas de aquí (#230, gemela de
-  // CRM#423): son permisos del catálogo y se dan en «Ver permisos», con su
+  // CRM#423): son permisos del catálogo y se dan en el apartado «Permisos» de la ficha, con su
   // registro de quién y cuándo.
-  const [verPermisos, setVerPermisos] = useState(false);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -605,19 +626,13 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
         </div>
 
-        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423): su
-            rol, su rol a medida o una excepción suya. Ahí mismo se le cambian. */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <span className="text-sm">
-            Permisos
-            <span className="block text-xs text-muted-foreground">Lo que puede hacer, de dónde le viene y sus excepciones.</span>
-          </span>
-          <button type="button" onClick={() => setVerPermisos(true)}
-            className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">
-            Ver permisos
-          </button>
+        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423),
+            siempre a la vista en su ficha (gemela de CRM#698/#752): su rol, su rol
+            a medida o una excepción suya, y ahí mismo se le cambian (cada cambio
+            se guarda al momento). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDePersona userId={user.id} enLinea />
         </div>
-        {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
         <EquipoComercial userId={user.id} />
 
         <div className="flex justify-end gap-2">
@@ -660,6 +675,9 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Las excepciones de permisos que van con el alta (gemela de CRM#698): se
+  // crean en la misma operación que el usuario.
+  const [excepciones, setExcepciones] = useState({});
   // Escape cierra, como los demás formularios (#106).
   useEscapeKey(onClose);
   // Qué roles puede dar quien invita (gemela de CRM#644: Tony, cinco altas
@@ -726,6 +744,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
       await client.post('/users', {
         nombre: nombre.trim(), email: email.trim().toLowerCase(), role, projects: projList,
         ...(conEmpresa ? { empresaIds: empresasEnteras } : {}),
+        ...(Object.keys(excepciones).length ? { excepciones } : {}),
       });
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
@@ -798,6 +817,12 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
               esColaborador={role === 'colaborador'}
             />
           </div>
+        </div>
+        {/* Lo que trae el rol, con sus excepciones antes de crearla (gemela de CRM#698). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDelAlta role={role} rolesExtra={[]}
+            projectIds={Object.keys(assigned).map(Number)}
+            excepciones={excepciones} onCambiar={setExcepciones} />
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>
