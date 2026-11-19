@@ -1,7 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { campusDeLaPersona, veTodoElCrm } from '../../shared/utils/ambito.js';
-import { alcanceComercial } from '../../shared/utils/roles.js';
+import { alcanceDeFacturas } from './invoices.alcance.js';
 import { esProformaDe as esFacturaDe } from './invoices.model.js';
 
 /**
@@ -36,7 +36,8 @@ export async function facturaDeSuCampus(req, res, next) {
     // Y de su alcance (QA del 09/11/2026): una gestora, las suyas; quien lleva un
     // equipo comercial, las de su equipo. La lista ya se recortaba así, pero con
     // el id en la URL se abría (y se descargaba) cualquiera del campus.
-    const alcance = await alcanceComercial(req.user);
+    // Con acceso a facturación (Diego, 19/11/2026), cualquiera de sus campus.
+    const alcance = await alcanceDeFacturas(req.user);
     if (alcance) {
       // `esProformaDe` es el criterio de la lista (`FACTURA_DE`), valga para la clase que valga.
       if (!(await esFacturaDe(alcance, id))) throw PROHIBIDO();

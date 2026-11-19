@@ -13,6 +13,41 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.7.5",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.5",
+    "intro": "Quien lleva la facturación ve todas las facturas, y administración corrige también las emitidas.",
+    "grupos": [
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Quien tiene acceso a Facturación ve todas las facturas",
+            "texto": "Si tienes acceso a Facturación, ves todas las facturas de tus campus, no solo las de tus ventas: la lista, las tarjetas de arriba, cada factura y su PDF. Las tarjetas suman lo mismo que ves en la lista.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "Administración corrige las facturas emitidas y sus fechas",
+            "texto": "Admin y superadmin tienen «Editar» y «Cambiar fechas» también en las facturas ya emitidas, para poner la fecha en que se registró cada una. El número de la factura no cambia.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "2.7.3",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.7.3",

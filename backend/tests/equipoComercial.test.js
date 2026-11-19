@@ -281,11 +281,24 @@ describe('Claude (MCP) respeta el equipo', () => {
 
 describe('corregir y abonar facturas: solo la administradora sin equipo (Diego 09/11)', () => {
   it('Raquel (con equipo) no gestiona ninguna factura; Daniela (sin equipo) sí', async () => {
+    // Diego, 19/11/2026: con acceso a la facturación («Poner número al cobrar», de
+    // serie en una admin) se ven y se corrigen TODAS las facturas del campus. Para
+    // probar el recorte del equipo, se le quita.
     const { esFacturaQueGestiona } = await import('../src/modules/invoices/invoices.model.js');
-    // El id de factura da igual: el corte es por quién pide, antes de mirar la factura.
-    expect(await esFacturaQueGestiona(RAQUEL.id, 'admin', 0)).toBe(false);
-    expect(await esFacturaQueGestiona(DANIELA.id, 'admin', 0)).toBe(true);
-    expect(await esFacturaQueGestiona(SUPER.id, 'superadmin', 0)).toBe(true);
+    const { olvidarPermisos: olvidar } = await import('../src/modules/permissions/permissions.service.js');
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false)
+             ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [RAQUEL.id]);
+    olvidar();
+    try {
+      // El id de factura da igual: el corte es por quién pide, antes de mirar la factura.
+      expect(await esFacturaQueGestiona(RAQUEL.id, 'admin', 0)).toBe(false);
+      expect(await esFacturaQueGestiona(DANIELA.id, 'admin', 0)).toBe(true);
+      expect(await esFacturaQueGestiona(SUPER.id, 'superadmin', 0)).toBe(true);
+    } finally {
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action = 'emitir'`, [RAQUEL.id]);
+      olvidar();
+    }
+    expect(await esFacturaQueGestiona(RAQUEL.id, 'admin', 0)).toBe(true);
   });
 });
 

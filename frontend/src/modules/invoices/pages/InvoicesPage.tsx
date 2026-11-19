@@ -57,7 +57,10 @@ export default function InvoicesPage() {
   // Corregir, abonar, asociar a una venta y borrar: quien lleva un equipo
   // comercial no gestiona ninguna factura (Diego, 09/11: «solo Daniela»; el
   // servidor le da 403). No se le enseña lo que no puede hacer (QA 09/11).
-  const gestionaFacturas = canManage && !llevaEquipo;
+  // Diego, 19/11/2026: con acceso a facturación («Poner número al cobrar») se ven
+  // todas las facturas del campus y se corrigen, lleve o no un equipo.
+  const accesoFacturacion = can('facturas.emitir');
+  const gestionaFacturas = canManage && (!llevaEquipo || accesoFacturacion);
   const puedeFacturar = can('facturas.cola');
   const pid = activeProject?.id;
   // «Todos los proyectos» (#218): sin campus, las de todos los suyos. El servidor

@@ -4,6 +4,7 @@ import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
+import { tieneAccesoFacturacion } from './invoices.alcance.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
 import { frenarSiPosibleDuplicada, vieneConfirmada, normalizarNif } from './posible-duplicada.js';
@@ -873,6 +874,8 @@ export async function puedeEmitirFactura(userId) {
 // solo las de sus prospectos.
 export async function esFacturaQueGestiona(userId, role, invoiceId) {
   if (role === 'superadmin') return true;
+  // Con acceso a facturación (Diego, 19/11/2026), todas las de sus campus.
+  if (await tieneAccesoFacturacion({ userId })) return true;
   if (role === 'admin') return (await gestorasACargo(userId)).length === 0;
   const { rows } = await query(
     `SELECT 1 FROM invoices i
