@@ -179,7 +179,7 @@ export async function webhook(req, res, next) {
     const rawBody = req.rawBody || (typeof req.body === 'string' ? req.body : null);
     if (!rawBody) {
       logger.warn('Webhook recibido sin rawBody');
-      return res.status(400).send('rawBody requerido');
+      return res.status(400).send('cuerpo vacío');
     }
     const secret = await service.getWebhookSecret(pid);
     // Sin secreto NO se acepta. Antes se dejaba pasar «en modo permisivo», y eso
