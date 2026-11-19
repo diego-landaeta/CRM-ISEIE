@@ -10,7 +10,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
 import { formatDateNumeric } from '@/shared/lib/format';
 import { fmtMoneda } from '../currencies';
-import { invoicesApi, invoiceFaltantes, esFacturaEmitida, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
+import { invoicesApi, invoiceFaltantes, esFacturaEmitida } from '../api/invoices.api';
 import type { Invoice, Issuer, VentaSinFactura } from '../api/invoices.api';
 import InvoiceButton from '../components/InvoiceButton';
 import EmitirBorradorDialog from '../components/EmitirBorradorDialog';
@@ -726,9 +726,9 @@ export default function InvoicesPage() {
                         className="h-7 px-2 rounded border border-border text-[11px] hover:bg-muted inline-flex items-center gap-1">
                         <DownloadSimple size={11} />
                       </button>
-                      {inv.estado === 'borrador' && isAdmin && can('facturas.edit') && (
+                      {inv.estado === 'borrador' && can('facturas.edit') && (
                         <Link to={`nueva?editId=${inv.id}`}
-                          title="Editar esta factura abierta (solo admin/superadmin)"
+                          title="Editar esta factura abierta"
                           className="h-7 px-2 rounded border border-sky-300 text-sky-700 dark:text-sky-300 text-[11px] font-semibold hover:bg-sky-50 dark:hover:bg-sky-950/30 inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
@@ -743,8 +743,8 @@ export default function InvoicesPage() {
                       {/* Corregir una factura YA emitida/pagada (IVA, datos, concepto) — admin.
                           Usa el MISMO panel completo que crear/editar (?editId). */}
                       {inv.estado !== 'borrador' && inv.estado !== 'cancelada' && gestionaFacturas && (
-                        <Link to={`nueva?editId=${inv.id}`}
-                          title="Editar IVA, datos del cliente o concepto"
+                        <Link to={`nueva?editId=${inv.id}`} data-recorrido="factura-editar"
+                          title="Editar IVA, datos del cliente, concepto o fechas"
                           className="h-7 px-2 rounded border border-info/30 text-info-soft-foreground text-[11px] font-semibold hover:bg-info-soft inline-flex items-center gap-1">
                           <Gear size={11} weight="bold" /> Editar
                         </Link>
@@ -805,20 +805,14 @@ export default function InvoicesPage() {
                           <X size={11} weight="bold" /> Anular
                         </button>
                       )}
-                      {gestionaFacturas && inv.estado !== 'cancelada' && !esFacturaEmitida(inv) && (
-                        <button onClick={() => setDeletingInv(inv)}
-                          title={inv.tipo === 'proforma' ? 'Eliminar la proforma' : 'Eliminar el borrador'}
+                      {/* Eliminar: borradores y proformas, y también una emitida POR ERROR (Diego,
+                          19/11/2026); lo normal con una emitida es anularla (sale su abono). */}
+                      {gestionaFacturas && inv.estado !== 'cancelada' && (
+                        <button onClick={() => setDeletingInv(inv)} data-recorrido="factura-eliminar"
+                          title={esFacturaEmitida(inv) ? 'Eliminar: solo si se emitió por error (si no, «Anular»)' : inv.tipo === 'proforma' ? 'Eliminar la proforma' : 'Eliminar el borrador'}
                           className="h-7 px-2 rounded border border-destructive/40 text-[11px] text-destructive hover:bg-destructive-soft inline-flex items-center gap-1">
                           <Trash size={11} weight="bold" />
                         </button>
-                      )}
-                      {gestionaFacturas && esFacturaEmitida(inv) && (
-                        <span title={NO_SE_CAMBIA_EMITIDA} className="inline-flex">
-                          <button type="button" disabled aria-label={`Eliminar: ${NO_SE_CAMBIA_EMITIDA}`}
-                            className="h-7 px-2 rounded border border-border text-[11px] text-muted-foreground inline-flex items-center gap-1 opacity-50 cursor-not-allowed pointer-events-none">
-                            <Trash size={11} weight="bold" />
-                          </button>
-                        </span>
                       )}
                     </div>
                   </td>
@@ -923,7 +917,9 @@ export default function InvoicesPage() {
             <h3 className="font-semibold text-base mb-1 flex items-center gap-2 text-red-600"><Trash size={18} weight="bold" /> Eliminar factura</h3>
             <p className="text-sm text-muted-foreground mb-4">
               Vas a eliminar <b>{deletingInv.tipo === 'proforma' ? 'la proforma' : 'la factura'} {deletingInv.codigo}</b> ({fmt(Number(deletingInv.total))}).
-              Es {deletingInv.tipo === 'proforma' ? 'una proforma' : 'un borrador'}: no es una factura emitida, así que se puede borrar.
+              {esFacturaEmitida(deletingInv)
+                ? <>Es una factura <b>emitida</b>: bórrala solo si se emitió por error. Si la factura era buena, no la borres: anúlala (sale su abono). Si no es la última de su serie, su número queda libre y sale el aviso de huecos. </>
+                : <>Es {deletingInv.tipo === 'proforma' ? 'una proforma' : 'un borrador'}: no es una factura emitida, así que se puede borrar. </>}
               La venta se mantiene y podrás volver a facturarla. Esta acción no se puede deshacer.
             </p>
             <div className="flex justify-end gap-2">

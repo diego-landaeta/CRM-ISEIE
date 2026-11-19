@@ -13,6 +13,33 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.7.7",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.7",
+    "intro": "Las gestoras corrigen, anulan y borran cualquier factura de su campus.",
+    "grupos": [
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Las gestoras corrigen cualquier factura",
+            "texto": "Las gestoras ven todas las facturas de su campus y pueden editarlas (datos del cliente, concepto, IVA y fechas), anularlas con su abono y borrarlas. Borra una factura emitida solo si se emitió por error; si era buena, anúlala. El número de la factura no cambia.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El recorrido «Anular una factura» ya enseña «Editar» y la papelera, en vez de decir que una factura emitida no se toca."
+    ]
+  },
+  {
     "version": "2.7.5",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.7.5",

@@ -222,14 +222,14 @@ describe('3. Cola de facturación (GET /api/invoices/facturacion-al-dia) y total
     // probar el recorte del equipo, se le quita.
     const s = async (u) => ok(await request.get(`/api/invoices/stats?projectId=${P}`).set(como(u)));
     const { olvidarPermisos: olvidar } = await import('../src/modules/permissions/permissions.service.js');
-    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false)
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false), ($1, 'facturas', 'gestionar', false)
              ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [RAQUEL.id]);
     olvidar();
     try {
       expect(Number((await s(RAQUEL)).total_facturado)).toBe(120);
       expect(Number((await s(DANIELA)).total_facturado)).toBe(420);
     } finally {
-      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action = 'emitir'`, [RAQUEL.id]);
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action IN ('emitir', 'gestionar')`, [RAQUEL.id]);
       olvidar();
     }
     expect(Number((await s(RAQUEL)).total_facturado)).toBe(420);

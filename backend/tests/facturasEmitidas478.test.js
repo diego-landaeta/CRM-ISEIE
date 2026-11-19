@@ -18,6 +18,7 @@ import jwt from 'jsonwebtoken';
 const { default: pool } = await import('../src/shared/config/db.js');
 const { default: modulo } = await import('../src/modules/invoices/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
+const { olvidarPermisos } = await import('../src/modules/permissions/permissions.service.js');
 
 const app = express();
 app.use(express.json());
@@ -93,19 +94,25 @@ afterAll(async () => {
 }, 60000);
 
 describe('#793 · una emitida no se borra ni se cambia', () => {
-  it('borrarla: 409 FACTURA_EMITIDA y sigue ahí, con su número', async () => {
-    const r = await request.delete(`/api/invoices/${EMITIDA_4}`).set(como(ADMIN));
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe('FACTURA_EMITIDA');
+  it('borrarla desde el modelo sin más: 409 FACTURA_EMITIDA y sigue ahí, con su número', async () => {
+    const { deleteInvoice } = await import('../src/modules/invoices/invoices.model.js');
+    await expect(deleteInvoice(EMITIDA_4)).rejects.toMatchObject({ code: 'FACTURA_EMITIDA' });
     expect((await factura(EMITIDA_4))?.numero).toBe(4);
   });
 
-  it('corregirla: el admin sí (Diego 19/11); la gestora sin permiso, no', async () => {
+  it('borrarla desde la pantalla, emitida por error: la gestora y el admin sí (Diego, 19/11)', async () => {
+    const id = await nueva({ numero: 9, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
+    const r = await request.delete(`/api/invoices/${id}`).set(como(GESTORA));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(await factura(id)).toBeFalsy();
+  });
+
+  it('corregirla: el admin y la gestora sí (Diego, 19/11)', async () => {
     const id = await nueva({ numero: 7, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
     const g = await request.patch(`/api/invoices/${id}/corregir`).set(como(GESTORA)).send({
       clienteNombre: 'Otro cliente', items: [{ descripcion: 'Curso', cantidad: 1, precio_unitario: 1 }], ivaPct: 0,
     });
-    expect(g.status).toBe(403);
+    expect(g.status, JSON.stringify(g.body)).toBe(200);
     const r = await request.patch(`/api/invoices/${id}/corregir`).set(como(ADMIN)).send({
       clienteNombre: 'Otro cliente', items: [{ descripcion: 'Curso', cantidad: 1, precio_unitario: 1 }], ivaPct: 0,
     });
@@ -170,10 +177,18 @@ describe('#793 · anular una emitida', () => {
     expect(await abonosDe(EMITIDA)).toHaveLength(0);
   });
 
-  it('una gestora sin el permiso: 403', async () => {
-    const r = await request.post(`/api/invoices/${EMITIDA}/anular`).set(como(GESTORA)).send({ motivo: 'Cliente equivocado' });
-    expect(r.status).toBe(403);
-    expect((await factura(EMITIDA)).anulada_at).toBeNull();
+  it('una gestora a la que se le quita «Anular y abonar»: 403 (de serie lo tiene desde el 19/11)', async () => {
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'gestionar', false)
+             ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [GESTORA.id]);
+    olvidarPermisos();
+    try {
+      const r = await request.post(`/api/invoices/${EMITIDA}/anular`).set(como(GESTORA)).send({ motivo: 'Cliente equivocado' });
+      expect(r.status).toBe(403);
+      expect((await factura(EMITIDA)).anulada_at).toBeNull();
+    } finally {
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action = 'gestionar'`, [GESTORA.id]);
+      olvidarPermisos();
+    }
   });
 
   it('con motivo: queda quién y por qué, y sale su rectificativa por el total', async () => {

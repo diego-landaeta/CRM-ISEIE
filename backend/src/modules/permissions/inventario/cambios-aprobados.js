@@ -156,6 +156,19 @@ export const CAMBIOS = [
     sentido: 'gana',
     aprobadoPor: 'Diego, 04/11',
   },
+  {
+    id: 'gestoras-corrigen-facturas',
+    que: 'Las gestoras corrigen, cambian las fechas, asocian a una venta, abonan, anulan y borran (si se emitió por error) cualquier factura de su campus, y las ven todas.',
+    motivo: 'Diego (19/11): «las gestoras deben de PODER EDITAR, BORRAR Y ESO CADA FACTURA». Ganan «Anular y abonar», «Cambiar fechas» y «Editar facturas» de serie. Gemela de CRM#943.',
+    filas: [
+      'PATCH /api/invoices/:id', 'PATCH /api/invoices/:id/corregir', 'PATCH /api/invoices/:id/fechas',
+      'PATCH /api/invoices/:id/asociar', 'DELETE /api/invoices/:id', 'POST /api/invoices/:id/rectificar',
+      'POST /api/invoices/ · invoices.rectificativa',
+    ],
+    roles: ['gestor'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 19/11',
+  },
 ];
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */

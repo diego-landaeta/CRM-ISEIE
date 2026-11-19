@@ -218,13 +218,18 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     ],
     pasos: [
       {
-        titulo: 'Una factura emitida no se toca',
-        texto: 'Cuando una factura ya tiene número, no se borra ni se cambia: la serie tiene que quedar completa, sin saltos, como pide Hacienda. Si hay un error, se anula. Son {pasos} pasos.',
+        titulo: 'Corregir, anular o borrar una factura',
+        texto: 'Una factura con número se puede corregir (datos, concepto o fechas), anular o, si se emitió por error, borrar. Su número no cambia: la serie tiene que quedar completa, como pide Hacienda. Son {pasos} pasos.',
       },
       {
-        donde: anclaje('factura-bloqueada'),
-        titulo: 'Editar y borrar, apagados',
-        texto: 'Por eso en una factura emitida «Editar» y la papelera salen apagados. Pon el ratón encima y te dice por qué.',
+        donde: anclaje('factura-editar'),
+        titulo: 'Editar',
+        texto: '«Editar» abre la factura para corregir los datos del cliente, el concepto, el IVA o las fechas de emisión y de pago. El número se queda igual.',
+      },
+      {
+        donde: anclaje('factura-eliminar'),
+        titulo: 'Borrar, solo si se emitió por error',
+        texto: 'La papelera borra la factura. Úsala solo si se emitió por error (duplicada, a quien no era). Si la factura era buena y hay que deshacerla, anúlala: así queda su abono.',
       },
       {
         donde: anclaje('factura-anular'),
