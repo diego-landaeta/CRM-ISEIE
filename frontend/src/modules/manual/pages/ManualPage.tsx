@@ -11,6 +11,7 @@ import {
   MagnifyingGlass as Search, Command, Lightning,
   PlugsConnected, CalendarBlank,
 } from '@phosphor-icons/react';
+import { Link as RouterLink } from 'react-router-dom';
 import { MARCA } from '@/shared/config/marca';
 
 /* ─── Navigation ──────────────────────────────────────────── */
@@ -311,6 +312,12 @@ export default function ManualPage() {
           captación de prospectos, conversión, cobro y análisis de campañas. Cada usuario pertenece
           a uno o más proyectos que se seleccionan en el desplegable del menú lateral.
         </P>
+        {/* Ayuda › Tutoriales (gemela de CRM#919): los paso a paso, con capturas. */}
+        <Callout type="tip">
+          ¿Buscas cómo hacer algo concreto, paso a paso y con capturas (links de pago, cuotas,
+          anular una factura, conectar Stripe…)? Está en{' '}
+          <RouterLink to="/manual/tutoriales" className="font-semibold text-primary underline underline-offset-2">Tutoriales</RouterLink>.
+        </Callout>
 
         <SubHeader id="roles">Roles de acceso</SubHeader>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3">
