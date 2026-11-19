@@ -265,7 +265,8 @@ export const CAMBIOS_DE_MENU = [
       superadmin: ['- Equipo de Desarrollo › Mi factura'],
     },
     rutas: { 'Equipo de Desarrollo › Mi factura': 'GET /api/facturas-colaborador/mias' },
-    aprobadoPor: 'Pendiente de Diego (CRM-ISEIE#422)',
+    // Diego lo aprobó el 19/11 en la sesión de trabajo: «sube todo y aprueba».
+    aprobadoPor: 'Diego, 19/11',
   },
   {
     id: 'menu-sin-403',
