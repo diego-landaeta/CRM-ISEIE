@@ -17,14 +17,23 @@ import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
  *  · Lo que no está en pantalla en ese momento (no hay cargos sueltos, no hay
  *    huecos en la serie) se salta solo, como en el tablero.
  *
+ * Desde el #619 (19/11, gemela de CRM#941) también los de las demás pantallas,
+ * empezando por Ventas: el mismo modelo, el mismo botón y la misma prueba a 375 px.
+ *
  * IGUAL EN LOS DOS CRM (paridad): mismos pasos y mismo texto. Solo cambia lo de
  * `EN_ESTE_CRM`, justo debajo: lo que una pantalla tiene en un CRM y no en el otro.
  */
 
-/** Lo único que cambia entre los dos CRM (ISEIE no tiene «Todos» ni empresas en Pagos Stripe). */
+/**
+ * Lo único que cambia entre los dos CRM (ISEIE no tiene «Todos» ni empresas en Pagos Stripe).
+ * En Ventas (ISEIE: Finanzas › Ingresos), la barra de filtros no lleva empresa, proyecto
+ * ni «solo compartidas», y «Nueva venta» es un botón, no un desplegable con tres modos.
+ */
 const EN_ESTE_CRM = {
   pagosDeTodos: '',
   sincronizarConCampus: '',
+  ventasFiltros: 'Elige el curso y, si llevas equipo, de quién ver las ventas. El campus se elige arriba, en el menú. Abre con este mes: cambia las fechas o usa «Rápido». «Quitar filtros» lo deja como al entrar.',
+  ventasNueva: 'Para registrar una venta a mano: buscas al cliente, eliges el producto y pones el importe, cómo paga y, si es a plazos, sus cuotas. Al guardarla sale en la lista.',
 };
 
 export type Permiso = string | string[];
@@ -41,7 +50,8 @@ export type IdRecorridoCobros =
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
-  | 'disputas-stripe';
+  | 'disputas-stripe'
+  | 'ventas';
 
 export interface RecorridoCobros {
   id: IdRecorridoCobros;
@@ -378,6 +388,88 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('disputas-responder'),
         titulo: 'Qué hacer con una disputa',
         texto: 'Se responde en Stripe: pulsa «Stripe» en su fila y sube las pruebas (la factura, los correos o mensajes con el alumno, su acceso al campus) antes de la fecha de «Responder antes de». Al lado tienes su venta y su ficha.',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
+  // ─── 6 · Finanzas › Ventas (Diego, 19/11, #619 / CRM#941: sustituye a «Tutoriales») ──
+  // En ISEIE es la pantalla de Finanzas › Ingresos (/accounting/income). Aquí todavía
+  // no se elige empresa, así que «Por proyecto» se salta; el paso se queda por paridad.
+  // Lo que no está en ese momento (el reparto por proyecto sin empresa elegida,
+  // los avisos cuando no hay nada que avisar, la meta de quien no la tiene) se
+  // salta solo.
+  ventas: {
+    id: 'ventas',
+    titulo: 'Ventas',
+    permiso: 'ventas.view',
+    pantalla: [
+      'modules/accounting/pages/IncomePage.tsx',
+      'modules/sales/components/MyGoalCard.tsx',
+      'modules/sales/components/TopProductsCard.tsx',
+    ],
+    pasos: [
+      {
+        titulo: 'Las ventas del periodo',
+        texto: 'Aquí ves lo que se vendió y lo que se facturó en unas fechas, y registras ventas nuevas. Se cuentan ventas, no facturas: por eso Facturación puede enseñar más filas en las mismas fechas. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('ventas-filtros'),
+        titulo: 'Los filtros',
+        texto: EN_ESTE_CRM.ventasFiltros,
+      },
+      {
+        donde: anclaje('ventas-tarjetas'),
+        titulo: 'Las tarjetas',
+        texto: '«Ventas»: las ventas nuevas de esas fechas. «Importe vendido»: lo que suman. «Cobrado de esas ventas»: lo que han pagado hasta hoy, aunque sea fuera de las fechas. No tienen por qué coincidir: una venta a plazos se cobra durante meses.',
+      },
+      {
+        donde: anclaje('ventas-cuotas-facturadas'),
+        titulo: 'Cuotas facturadas',
+        texto: 'Las facturas de cuotas emitidas en estas fechas, de ventas que pueden ser de meses atrás. Es dinero de algo ya vendido: no es una venta nueva y no se suma con ellas. Son las mismas que ves en Facturación con estas fechas.',
+      },
+      {
+        donde: anclaje('ventas-por-facturar'),
+        titulo: 'Ventas por facturar',
+        texto: 'Cuántas de estas ventas tienen factura. Si alguna la espera, sale «X por facturar». Pon el ratón encima: te dice cuántas están facturadas, cuántas no necesitan factura y cuántas faltan.',
+      },
+      {
+        donde: anclaje('ventas-por-proyecto'),
+        titulo: 'Por proyecto',
+        texto: 'Con una empresa elegida, cada campus con sus ventas y sus cuotas facturadas. La fila «Total» es lo de las tarjetas. Pulsa un proyecto para ver solo ese.',
+      },
+      {
+        donde: anclaje('ventas-esperan-factura'),
+        titulo: 'Ventas que esperan factura',
+        texto: 'Lo único que hay que hacer: ventas con importe que piden factura y no la tienen. Las demás sin factura están marcadas «no requiere factura». «Ir a facturarlas» te lleva a Facturación.',
+      },
+      {
+        donde: anclaje('ventas-facturas-de-antes'),
+        titulo: 'Facturas que no son ventas de ahora',
+        texto: 'Son cuotas de ventas anteriores: una venta a plazos emite una factura por cada cobro, y cae en el mes en que se cobra. Las dos cifras son correctas. «Ver las cuotas» te dice cuáles son y de qué venta.',
+      },
+      {
+        donde: anclaje('mi-meta'),
+        titulo: 'Mi meta del mes',
+        texto: 'Tus ventas y lo que has cobrado este mes, frente a tu meta. La barra se pone verde al llegar. La meta la pones tú o tu admin; si no hay, dice «Sin meta configurada».',
+      },
+      {
+        donde: anclaje('programas-mas-vendidos'),
+        titulo: 'Programas más vendidos',
+        texto: 'Los cinco programas con más ventas en estas fechas. Si arriba eliges una gestora, son los suyos.',
+      },
+      {
+        donde: anclaje('ventas-lista'),
+        titulo: 'La lista',
+        texto: 'Ventas y cuotas de estas fechas, cada una con su etiqueta: VENTA es nueva; CUOTA, un cobro de una venta anterior; COMPARTIDO, atendida entre dos gestoras. Pulsa una fila para abrir la ficha del prospecto.',
+      },
+      {
+        donde: anclaje('ventas-nueva'),
+        titulo: 'Nueva venta',
+        texto: EN_ESTE_CRM.ventasNueva,
       },
       {
         titulo: 'Y listo',
