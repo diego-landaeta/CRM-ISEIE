@@ -443,13 +443,13 @@ export async function sincronizar(conversionId, { ahora = new Date() } = {}) {
       if (firma === ca.fases_firma && (ca.stripe_schedule_id || !fases.length)) return { fases, problemas, sinCambios: true };
 
       const v = await model.ventaParaCobrar(conversionId);
-      const { filtroDeMetadata } = await import('../stripe-payments/stripe-payments.service.js');
-      const filtro = await filtroDeMetadata(ca.project_id);
+      // ISEIE: una cuenta de Stripe por campus, sin la marca de plataforma de las cuentas
+      // compartidas del 360 (conMarcaDePlataforma / filtroDeMetadata no existen aquí).
       const ent = linksService.entorno();
-      const marca = (extra) => linksService.conMarcaDePlataforma({
+      const marca = (extra) => ({
         crm_cobro_auto: '1', crm_project_id: String(ca.project_id), crm_conversion_id: String(conversionId),
         crm_entorno: ent, ...extra,
-      }, filtro);
+      });
 
       // Un precio por cuota (importe y duración de su fase). La misma clave devuelve el mismo.
       const conPrecio = [];
