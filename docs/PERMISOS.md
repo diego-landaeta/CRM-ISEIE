@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-879 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+880 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -624,6 +624,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verPlan | `GET /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | generarPlan | `POST /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |

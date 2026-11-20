@@ -107,7 +107,12 @@ export function crearPrecio(apiKey, { importe, moneda, nombre, metadata, idempot
  * CRM en el link y en el cargo, para atar el cobro sin depender del correo
  * (fase 3).
  */
-export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarjeta = null }) {
+/*
+ * `pedirTelefono` (link sin prospecto, 20/11): Checkout pide también el teléfono.
+ * Con el correo y el nombre, es lo que usa el CRM para encontrar o crear el
+ * prospecto al pagarse.
+ */
+export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarjeta = null, pedirTelefono = false }) {
   return llamar(apiKey, 'POST', '/v1/payment_links', {
     idempotencia,
     cuerpo: {
@@ -120,10 +125,12 @@ export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarje
         // delante. Stripe pide el consentimiento: va en el texto del botón de pagar.
         ...(guardaTarjeta ? { setup_future_usage: 'off_session' } : {}),
       },
+      ...(pedirTelefono ? { phone_number_collection: { enabled: true } } : {}),
       ...(guardaTarjeta ? {
         customer_creation: 'always',
         custom_text: { submit: { message: String(guardaTarjeta.consentimiento).slice(0, 1200) } },
       } : {}),
+      ...(pedirTelefono ? { phone_number_collection: { enabled: true } } : {}),
       restrictions: { completed_sessions: { limit: 1 } },
       inactive_message: MENSAJE_INACTIVO,
     },

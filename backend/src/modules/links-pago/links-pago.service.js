@@ -108,11 +108,32 @@ export function importeMinimo(precioCatalogo, maxPct) {
  * cuenta. `pendiente` (en euros, como guarda el CRM) solo llega desde una venta;
  * sin nada pendiente, o en otra moneda, no hay con qué comparar: solo el admin.
  */
-export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, esAdmin, pendiente }) {
+/*
+ * EN CUOTAS (Carlos y Diego, 20/11): el importe es el TOTAL del curso y se mide
+ * contra el catálogo igual que un pago único. Las cuotas van en euros (es como
+ * guarda el CRM el plan de la venta), y no hay cuotas desde una venta: la venta
+ * ya tiene su plan («Generar plan de pago»).
+ */
+export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, numCuotas, esAdmin, pendiente }) {
   if (modalidad === 'cuotas') {
-    throw new AppError('Los links en cuotas todavía no se pueden crear: de momento, pago único.', 400, 'CUOTAS_AUN_NO');
+    if (pendiente !== undefined && pendiente !== null) {
+      throw new AppError('Una venta ya tiene su plan: para cobrarla a plazos, usa «Generar plan de pago» en la venta.', 400, 'CUOTAS_DESDE_VENTA');
+    }
+    if ((moneda || 'EUR') !== 'EUR') {
+      throw new AppError('Los links en cuotas van en euros.', 400, 'MONEDA_NO_ADMITIDA');
+    }
+    if (!cfg.cuotas_admitidas) {
+      throw new AppError('Este campus no admite pagos en cuotas (Integraciones › Links de pago).', 400, 'CUOTAS_NO_ADMITIDAS');
+    }
+    if (!(numCuotas >= 2) || numCuotas > cfg.cuotas_max) {
+      throw new AppError(`En este campus, de 2 a ${cfg.cuotas_max} cuotas.`, 400, 'CUOTAS_MAXIMAS');
+    }
+    const [primera] = repartirEnCuotas(importe, numCuotas);
+    if (!(primera >= 0.5)) {
+      throw new AppError('Cada cuota tiene que ser de al menos 0,50 €: Stripe no cobra menos.', 400, 'CUOTA_MINIMA');
+    }
   }
-  const mon = moneda || cfg.moneda_defecto;
+  const mon = modalidad === 'cuotas' ? 'EUR' : (moneda || cfg.moneda_defecto);
   if (!cfg.monedas.includes(mon)) {
     throw new AppError(`Este campus no cobra en ${mon}. Monedas admitidas: ${cfg.monedas.join(', ')}.`, 400, 'MONEDA_NO_ADMITIDA');
   }
@@ -181,6 +202,36 @@ export function noPasaDelPendiente({ importe, moneda, pendiente }) {
 }
 
 /**
+ * El total en `n` cuotas iguales, con los céntimos que sobran en la última:
+ * 1000 en 3 → [333.33, 333.33, 333.34]. En céntimos, sin coma flotante.
+ */
+export function repartirEnCuotas(total, n) {
+  const c = Math.round(Number(total) * 100);
+  const num = Math.max(1, Math.floor(Number(n) || 1));
+  const base = Math.floor(c / num);
+  return Array.from({ length: num }, (_, i) => (i === num - 1 ? c - base * (num - 1) : base) / 100);
+}
+
+/**
+ * Las fechas de `n` cuotas mensuales desde `desde` (AAAA-MM-DD): la primera ese
+ * día y cada una el mismo día de los meses siguientes. Un 31 en un mes más corto
+ * cae en su último día (31/01 → 28/02 → 31/03).
+ */
+export function fechasMensuales(desde, n) {
+  const [a, m, d] = String(desde).slice(0, 10).split('-').map(Number);
+  return Array.from({ length: n }, (_, i) => {
+    const ultimo = new Date(Date.UTC(a, m + i, 0)).getUTCDate();
+    return new Date(Date.UTC(a, m - 1 + i, Math.min(d, ultimo))).toISOString().slice(0, 10);
+  });
+}
+
+/** El plan de un link en cuotas, desde el día en que se paga la primera. */
+export function planDeCuotas({ total, n, desde }) {
+  const fechas = fechasMensuales(desde, n);
+  return repartirEnCuotas(total, n).map((importe, i) => ({ numero: i + 1, importe, vence: fechas[i] }));
+}
+
+/**
  * Cuántos días dura el link de una cuota: hasta su vencimiento más la caducidad
  * de serie del campus, sin bajar de esa caducidad ni pasar de la máxima. Una
  * cuota que vence más allá de la máxima tiene un link que caduca antes: se
@@ -239,26 +290,36 @@ export function marca({ linkId, projectId, leadId, conversionId, userId }) {
   el texto que el alumno ve junto al botón de pagar. El link guarda su tarjeta para
   cobrar solas las cuotas siguientes. Lo decide quien llama, nunca el navegador.
 */
-export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null }) {
+/*
+  `enCuotas` (link sencillo en cuotas, 20/11): `{ num, importeCuota }`. El link
+  guarda el TOTAL en `importe` (será el total de la venta) y Stripe cobra con él
+  solo la primera cuota (`importe_cuota`); va siempre con `guardaTarjeta`.
+  Sin prospecto ni venta, Checkout pide también el teléfono.
+*/
+export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null, enCuotas = null }) {
   const clave = await claveObligatoria(projectId);
   const fila = await model.insertar({
     projectId, leadId, conversionId, productId: prod.id, createdBy: userId,
     precioCatalogo: reglas.precioCatalogo, importe, descuentoPct: reglas.descuentoPct,
     moneda: reglas.moneda, caducidadDias: reglas.caducidadDias, installmentId: cuota?.id ?? null,
     guardaTarjeta: !!guardaTarjeta,
+    ...(enCuotas ? { numCuotas: enCuotas.num, importeCuota: enCuotas.importeCuota } : {}),
   });
+  const sinPersona = !leadId && !conversionId;
   const meta = marca({ linkId: fila.id, projectId, leadId, conversionId, userId });
   // Única por link y por entorno: /staging y local pueden compartir cuenta de test.
   const base = `crm-${meta.crm_entorno}-link-${fila.id}-${new Date(fila.created_at).getTime()}`;
   let precio; let link;
   try {
     precio = await stripe.crearPrecio(clave, {
-      importe, moneda: reglas.moneda, metadata: meta,
+      importe: enCuotas ? enCuotas.importeCuota : importe, moneda: reglas.moneda, metadata: meta,
       // El alumno ve en Stripe qué cuota paga.
-      nombre: `${prod.nombre || `Curso ${prod.id}`}${cuota ? ` · cuota ${cuota.numero}` : ''}`,
+      nombre: `${prod.nombre || `Curso ${prod.id}`}${cuota ? ` · cuota ${cuota.numero}` : ''}${enCuotas ? ` · cuota 1 de ${enCuotas.num}` : ''}`,
       idempotencia: `${base}-precio`,
     });
-    link = await stripe.crearLink(clave, { priceId: precio.id, metadata: meta, idempotencia: `${base}-link`, guardaTarjeta });
+    link = await stripe.crearLink(clave, {
+      priceId: precio.id, metadata: meta, idempotencia: `${base}-link`, guardaTarjeta, pedirTelefono: sinPersona,
+    });
   } catch (err) {
     await model.borrar(fila.id).catch((e) => logger.error({ err: e.message, linkId: fila.id }, 'Links de pago: no se pudo borrar la fila de un link fallido'));
     logger.warn({ err: err.message, projectId, userId }, 'Links de pago: Stripe no creó el link');
@@ -281,6 +342,8 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     descuento_sobre: cuota ? 'cuota' : (reglas.referencia || 'catalogo'),
     ...(cuota ? { cuota_id: cuota.id, cuota_numero: cuota.numero, cuota_vence: cuota.vence } : {}),
     ...(guardaTarjeta ? { guarda_tarjeta: true } : {}),
+    ...(enCuotas ? { num_cuotas: enCuotas.num, importe_cuota: enCuotas.importeCuota } : {}),
+    ...(sinPersona ? { sin_prospecto: true } : {}),
     ...(reglas.pendiente !== undefined ? { pendiente: reglas.pendiente } : {}),
   });
   logger.info({ linkId: fila.id, projectId, userId, importe, moneda: reglas.moneda }, 'Links de pago: link creado');
