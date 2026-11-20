@@ -634,7 +634,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                 {linksCreados && (
                   <div className="mt-3">
                     <LinksRecienCreados resultado={linksCreados} alumno={lead?.nombre} curso={form.producto_contratado}
-                      onVerVenta={() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}C:/Program Files/Git/ventas/${created.id}`); }} />
+                      onVerVenta={() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/ventas/${created.id}`); }} />
                   </div>
                 )}
                 <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>

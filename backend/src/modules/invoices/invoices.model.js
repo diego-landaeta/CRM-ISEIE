@@ -1323,7 +1323,16 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     `SELECT id, numero, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
        AND total >= (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 ORDER BY id DESC LIMIT 1`,
     [conversionId]);
-  if (facTot[0]) {
+  // Salvo que la venta ya se facture COBRO A COBRO (Diego, 20/11/2026): si alguna
+  // cuota ya tiene su factura propia (ligada a su cobro y por menos que la venta),
+  // cada cobro lleva la suya aunque otra factura diga el total. Pasó con Laura
+  // (Psiko): la 0136 por los 950 € al entrar la inicial, la 0224 de la cuota 1, y la
+  // cuota 2, cobrada por Stripe, se quedaba sin factura y fuera de la cola.
+  const { rows: porCobro } = facTot[0] ? await query(
+    `SELECT 1 FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+       AND payment_id IS NOT NULL AND total < (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 LIMIT 1`,
+    [conversionId]) : { rows: [] };
+  if (facTot[0] && !porCobro.length) {
     // Pero solo si lo ya facturado cubre lo realmente cobrado.
     //
     // Si el total apuntado en la venta se quedo corto, esa primera factura pasa
@@ -2244,8 +2253,16 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
 
   La misma condicion que alli, para que la cola y el boton digan lo mismo.
 */
+// Salvo que la venta ya se facture cobro a cobro (20/11/2026): la misma excepción
+// que en `emitirFacturaDePago`, para que la cola y el botón digan lo mismo.
 const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
-        EXISTS (SELECT 1 FROM invoices t
+        NOT EXISTS (SELECT 1 FROM invoices pc
+                     WHERE pc.conversion_id = cp.conversion_id
+                       AND pc.tipo = 'normal' AND pc.estado <> 'cancelada'
+                       AND pc.payment_id IS NOT NULL
+                       AND pc.total < (SELECT v2.importe_total FROM conversions v2
+                                        WHERE v2.id = cp.conversion_id) - 0.01)
+        AND EXISTS (SELECT 1 FROM invoices t
                  WHERE t.conversion_id = cp.conversion_id
                    AND t.tipo = 'normal' AND t.estado <> 'cancelada'
                    AND t.total >= (SELECT v.importe_total FROM conversions v
