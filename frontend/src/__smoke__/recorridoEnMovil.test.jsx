@@ -147,7 +147,7 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
     expect(ventas[1]).toHaveLength(RECORRIDOS_COBROS.ventas.pasos.length);
   });
 
-  it('entre ellos, los cuatro del bloque Finanzas (#619, segunda tanda), con todos sus pasos', () => {
+  it('entre ellos, los ocho del bloque Finanzas (#619, las dos tandas), con todos sus pasos', () => {
     for (const r of Object.values(RECORRIDOS_FINANZAS)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();

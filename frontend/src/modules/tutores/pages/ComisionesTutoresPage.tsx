@@ -11,6 +11,8 @@ import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import usePermission from '@/shared/hooks/usePermission';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   tutoresApi,
   type ComisionReal, type ResumenComision, type AjustesTutores, type PagoSinFormacion,
@@ -194,7 +196,9 @@ export default function ComisionesTutoresPage() {
   }
 
   return (
-    <div className="space-y-3">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-3 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Comisiones de tutores"
         subtitle={projectId
@@ -204,19 +208,24 @@ export default function ComisionesTutoresPage() {
           : `${mesLegible(periodo)} · todos los proyectos`}
         actions={(
           <>
-            {activeIssuer && !elegido && campus.length > 1 && (
-              <select
-                value={soloCampus ?? ''}
-                onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
-                aria-label="Filtrar por campus"
-                className="h-9 px-2 rounded-md border border-border bg-card text-sm">
-                <option value="">Todos los campus</option>
-                {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-              </select>
-            )}
-            <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
-              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-            <Button variant="outline" size="sm" onClick={calcular} disabled={trabajando}>
+            <VerRecorrido id="comisiones-tutores" listo={!cargando} />
+            {/* El campus y el mes juntos: lo que señala el paso «El mes» (igual que el 360). */}
+            <div data-recorrido="comtutores-periodo" className="flex items-center gap-2">
+              {activeIssuer && !elegido && campus.length > 1 && (
+                <select
+                  value={soloCampus ?? ''}
+                  onChange={(e) => setSoloCampus(e.target.value ? Number(e.target.value) : null)}
+                  aria-label="Filtrar por campus"
+                  className="h-9 px-2 rounded-md border border-border bg-card text-sm">
+                  <option value="">Todos los campus</option>
+                  {campus.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                </select>
+              )}
+              <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
+                aria-label="Mes"
+                className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+            </div>
+            <Button variant="outline" size="sm" onClick={calcular} disabled={trabajando} data-recorrido="comtutores-calcular">
               <ArrowsClockwise size={14} weight="bold" className="mr-1.5" />
               {trabajando ? 'Calculando…' : 'Calcular'}
             </Button>
@@ -224,7 +233,7 @@ export default function ComisionesTutoresPage() {
         )}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div data-recorrido="comtutores-tarjetas" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard icon={Coins} iconBg="bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
           label="Por pagar" value={euros(total.pendiente)} />
         <KpiCard icon={CheckCircle} iconBg="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -248,7 +257,7 @@ export default function ComisionesTutoresPage() {
       {/* El dinero que no se puede atribuir. Se enseña a proposito: esconderlo
           haria parecer cuadrado un mes que no lo esta. */}
       {sinFormacion.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3">
+        <div data-recorrido="comtutores-sin-formacion" className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3">
           <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 text-sm">
             <Warning size={16} weight="fill" />
             {euros(total.sinAtribuir)} cobrados sin saber de qué formación son
@@ -262,7 +271,7 @@ export default function ComisionesTutoresPage() {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="comtutores-lista" className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
           <span className="text-sm font-semibold">
             {cargando ? 'cargando…' : `${resumen.length} ${resumen.length === 1 ? 'tutor' : 'tutores'} en ${mesLegible(periodo)}`}
@@ -275,12 +284,13 @@ export default function ComisionesTutoresPage() {
             description="Pulsa Calcular para crearlas a partir de los cobros. Si sigue vacío: o no hay tutores con formaciones, o sus fechas de inicio son posteriores, o los cobros no están atados al catálogo." />
         ) : (
           <div className="divide-y divide-border">
-            {resumen.map((r) => {
+            {resumen.map((r, i) => {
               const suyas = lineas.filter((l) => l.tutor_id === r.tutor_id);
               const desplegado = abierto === r.tutor_id;
               return (
                 <div key={`${r.periodo}-${r.tutor_id}`}>
-                  <div className="px-4 py-3 flex flex-wrap items-center gap-3">
+                  {/* La primera fila: el paso «Marcar pagado» del recorrido (#619). */}
+                  <div data-recorrido={i === 0 ? 'comtutores-fila' : undefined} className="px-4 py-3 flex flex-wrap items-center gap-3">
                     <button type="button" onClick={() => setAbierto(desplegado ? null : r.tutor_id)}
                       className="flex items-center gap-2 min-w-0 flex-1 text-left">
                       <CaretRight size={14} weight="bold"
