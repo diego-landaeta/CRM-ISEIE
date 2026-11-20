@@ -155,6 +155,9 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   const linksEncendidos = useLinksPagoEncendidos();
   const puedeLinks = linksEncendidos && puedePermiso('links_pago.crear');
   const [generarLinkStripe, setGenerarLinkStripe] = useState(true);
+  // Cobro automático (309): Stripe cobra cada cuota en su fecha con la tarjeta del primer pago.
+  const puedeCobroAuto = puedeLinks && puedePermiso('links_pago.cobro_automatico');
+  const [cobroAutoStripe, setCobroAutoStripe] = useState(false);
   const [linksCreados, setLinksCreados] = useState<ResultadoLinks | null>(null);
   const [aplicaDescuento, setAplicaDescuento] = useState(false);
   // Estado del pago: 'total' SIEMPRE manda calc.total al registrar (no se queda
@@ -569,8 +572,19 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       if (puedeLinks && generarLinkStripe && pendienteFrac > 0) {
         try {
           if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
-            const r = await generarPlan(res.data.id);
-            setLinksCreados({ cuotas: r.data?.cuotas || [] });
+            if (puedeCobroAuto && cobroAutoStripe) {
+              try {
+                const r = await generarPlan(res.data.id, undefined, { cobroAutomatico: true });
+                setLinksCreados({ cuotas: r.data?.cuotas || [], cobroAuto: true });
+              } catch (autoErr) {
+                // Sin cobro automático (campus apagado, clave sin permisos…): los links de cada cuota, y se dice por qué.
+                const r = await generarPlan(res.data.id);
+                setLinksCreados({ cuotas: r.data?.cuotas || [], aviso: `No se ha activado el cobro automático: ${errorDe(autoErr)} Se ha creado un link por cuota.` });
+              }
+            } else {
+              const r = await generarPlan(res.data.id);
+              setLinksCreados({ cuotas: r.data?.cuotas || [] });
+            }
           } else {
             const productoId = Number((res.data as { producto_contratado_id?: number | null }).producto_contratado_id || 0);
             if (!productoId) throw new Error('La venta no tiene un curso del catálogo: crea el link desde la ficha de la venta eligiendo el curso.');
@@ -1039,6 +1053,15 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                       : `Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
                     {' '}Te los damos al registrar, listos para copiar, y quedan en la ficha de la venta.
                   </span>
+                </span>
+              </label>
+            )}
+            {puedeCobroAuto && generarLinkStripe && pagoMode !== 'total' && form.metodo_pago === 'fraccionado' && installments.length >= 1 && (
+              <label className="flex items-start gap-2.5 -mt-1 p-3 rounded-lg bg-info-soft/60 border border-info/30 cursor-pointer" data-recorrido="venta-cobro-automatico">
+                <input type="checkbox" checked={cobroAutoStripe} onChange={(e) => setCobroAutoStripe(e.target.checked)} className="mt-0.5 h-4 w-4" />
+                <span className="min-w-0 text-[12px] text-info-soft-foreground">
+                  <span className="block text-sm font-semibold">Cobrar automáticamente con Stripe en las fechas de las cuotas</span>
+                  Solo se manda el link de la primera cuota: al pagarlo, Stripe guarda la tarjeta y cobra las demás solas en sus fechas. Si una falla, te avisamos y al alumno le llega el link de esa cuota.
                 </span>
               </label>
             )}

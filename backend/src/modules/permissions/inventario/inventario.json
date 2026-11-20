@@ -8822,6 +8822,51 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/cobro-automatico",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/cobro-automatico",
+  "relativa": "GET /cobro-automatico",
+  "controlador": "verCobroAutomatico",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/links-pago/cobro-automatico",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "PUT",
+  "ruta": "/api/links-pago/cobro-automatico",
+  "relativa": "PUT /cobro-automatico",
+  "controlador": "cambiarCobroAutomatico",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.cobro_automatico"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/",
   "tipo": "ruta",
   "modulo": "links-pago",
