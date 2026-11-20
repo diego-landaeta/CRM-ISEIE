@@ -286,7 +286,9 @@ describe('al pagarse un link sin prospecto', { timeout: 60_000 }, () => {
     const email = `cuotas${Math.random().toString(36).slice(2, 8)}@${m}.test`;
     const cus = `cus_${MARCA}_cuotas`;
     llamadas = [];
-    const cargo = await pagar(link, { email, importe: 300, cus, pm: `pm_${MARCA}_cuotas` });
+    // Otra persona (otro nombre y teléfono): con los de la prueba anterior, el «dedupe rápido»
+    // de createManualLead (mismo nombre y teléfono en 10 s) devolvería aquella ficha.
+    const cargo = await pagar(link, { email, importe: 300, cus, pm: `pm_${MARCA}_cuotas`, nombre: `${MARCA} Alumna Cuotas`, telefono: '+34611999888' });
     const fecha = new Date(cargo.created * 1000).toISOString().slice(0, 10);
     const fechas = fechasMensuales(fecha, 3);
 
