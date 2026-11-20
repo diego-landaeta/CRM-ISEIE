@@ -13,6 +13,16 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.1",
+    "fecha": "2026-11-20",
+    "titulo": "Versión 2.9.1",
+    "intro": "Arreglo de facturación de cuotas.",
+    "grupos": [],
+    "arreglos": [
+      "Una cuota cobrada por Stripe en una venta a plazos sale otra vez en la cola de facturación aunque la venta tuviera una factura por el total: si las cuotas ya llevan su factura, cada cobro lleva la suya."
+    ]
+  },
+  {
     "version": "2.9.0",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.9.0",
