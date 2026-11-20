@@ -2,8 +2,10 @@ import * as model from './links-pago.model.js';
 import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
-  ventasProspectoSchema, planQuerySchema, planBodySchema,
+  ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema,
 } from './links-pago.validation.js';
+import * as cobroAuto from './links-pago.cobro-auto.js';
+import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
@@ -133,6 +135,8 @@ export async function guardarConfig(req, res, next) {
     // Quién cambió qué y de cuánto a cuánto: son reglas de dinero.
     const cambiado = Object.keys(cambios).filter((k) => JSON.stringify(antes[k]) !== JSON.stringify(ahora[k]));
     logger.info({ userId: req.user.userId, projectId, cambiado }, 'Links de pago: configuración cambiada');
+    // Apagar el cobro automático del campus cancela los calendarios de Stripe de sus ventas.
+    if (cambiado.includes('cobro_auto')) cobroAuto.alCambiarElCampus(projectId);
     if (cambiado.length) {
       await anotar(req, cambiado.length === 1 && cambiado[0] === 'descuento_max_pct' ? 'links_pago.descuento_max' : 'links_pago.config', {
         project_id: projectId,
@@ -244,8 +248,10 @@ export async function verPlan(req, res, next) {
   try {
     const parsed = planQuerySchema.safeParse(req.query);
     if (!parsed.success) throw fallo(parsed);
-    const { venta, cuotas } = await planDe(req, parsed.data.conversionId);
-    res.json({ success: true, data: { venta, cuotas } });
+    const { destino, venta, cuotas } = await planDe(req, parsed.data.conversionId);
+    // El cobro automático (309): si se puede, si está activo y cómo va cada cuota.
+    const cobro_automatico = await cobroAuto.estadoDeLaVenta(destino.conversionId, destino.projectId);
+    res.json({ success: true, data: { venta, cuotas, cobro_automatico } });
   } catch (err) { next(err); }
 }
 
@@ -262,8 +268,6 @@ export async function generarPlan(req, res, next) {
     if (pedidas && [...pedidas].some((cid) => !cuotas.some((c) => Number(c.id) === cid))) {
       throw new AppError('Alguna de esas cuotas no es de esta venta o ya está cobrada.', 400, 'VALIDATION_ERROR');
     }
-    const elegidas = cuotas.filter((c) => !pedidas || pedidas.has(Number(c.id)));
-    const nuevas = elegidas.filter((c) => !c.link_id);
     if (!venta.producto_contratado_id) {
       throw new AppError('La venta no tiene curso: ponle el curso antes de generar el plan de pago.', 400, 'VENTA_SIN_CURSO');
     }
@@ -272,28 +276,83 @@ export async function generarPlan(req, res, next) {
       throw new AppError('El curso de la venta no es del catálogo de este campus.', 400, 'VALIDATION_ERROR');
     }
     // Entre todas, nunca más de lo que queda por cobrar de la venta (CRM#909).
-    const suma = nuevas.reduce((t, c) => t + Number(c.importe || 0), 0);
+    const suma = cuotas.filter((c) => (!pedidas || pedidas.has(Number(c.id))) && !c.link_id).reduce((t, c) => t + Number(c.importe || 0), 0);
     if (Math.round(suma * 100) > Math.round(Number(venta.pendiente || 0) * 100)) {
       throw new AppError(`Las cuotas suman ${suma.toFixed(2)} € y a la venta le quedan ${Number(venta.pendiente || 0).toFixed(2)} € por cobrar. Revisa el plan de cuotas de la venta.`, 400, 'PASA_DEL_PENDIENTE');
     }
     const cfg = await model.config(destino.projectId);
     const userId = Number(req.user.userId);
-    const creados = [];
+
+    /*
+      «Cobrar automáticamente con Stripe en las fechas de las cuotas» (309). Se
+      activa ANTES de crear los links: el de la primera cuota guarda la tarjeta y
+      las demás no llevan link (las cobra Stripe en su fecha; si una falla, al
+      alumno le llega el link de esa factura).
+    */
+    let creados = [];
+    let soloLaPrimera = false;
+    if (parsed.data.cobroAutomatico) {
+      if (!(await tienePermiso(req, 'links_pago.cobro_automatico'))) {
+        throw new AppError('No tienes permiso para activar el cobro automático de las cuotas.', 403, 'FORBIDDEN');
+      }
+      const r = await cobroAuto.activar({ venta: await cobroAutoModel.ventaParaCobrar(destino.conversionId), userId });
+      if (r.linkPrimera?.id && !cuotas.some((c) => Number(c.link_id) === Number(r.linkPrimera.id))) creados.push(Number(r.linkPrimera.id));
+      soloLaPrimera = true;
+      await anotar(req, 'links_pago.cobro_automatico', { conversion_id: destino.conversionId, activo: true });
+    }
+    const conLinkAhora = soloLaPrimera ? [] : await model.cuotasPendientes(destino.conversionId);
+    const elegidas = conLinkAhora.filter((c) => !pedidas || pedidas.has(Number(c.id)));
+    const nuevas = elegidas.filter((c) => !c.link_id);
+    // Con el cobro automático activo (de antes), los links que se creen guardan la tarjeta.
+    const guardaTarjeta = await cobroAuto.guardaTarjetaPara(destino.conversionId);
     for (const c of nuevas) {
       const reglas = service.reglasDeCuota({ cfg, prod, vence: c.vence });
       const link = await service.crear({
         projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-        prod, reglas, importe: Number(c.importe), userId, cuota: { id: c.id, numero: c.numero, vence: c.vence },
+        prod, reglas, importe: Number(c.importe), userId, cuota: { id: c.id, numero: c.numero, vence: c.vence }, guardaTarjeta,
       });
       creados.push(Number(link.id));
     }
+    creados = [...new Set(creados)];
     // El plan tal como queda: cada cuota con su link (el nuevo o el que ya tenía).
     const ahora = await model.cuotasPendientes(destino.conversionId);
     res.status(creados.length ? 201 : 200).json({
       success: true,
-      data: { venta, cuotas: ahora.filter((c) => !pedidas || pedidas.has(Number(c.id))), creados: creados.length,
-        ya_tenian: elegidas.length - nuevas.length },
+      data: {
+        venta, cuotas: ahora.filter((c) => !pedidas || pedidas.has(Number(c.id))), creados: creados.length,
+        ya_tenian: elegidas.length - nuevas.length,
+        cobro_automatico: await cobroAuto.estadoDeLaVenta(destino.conversionId, destino.projectId),
+      },
     });
+  } catch (err) { next(err); }
+}
+
+// ─── Cobro automático de las cuotas (309) ───────────────────────────────────
+
+// GET /api/links-pago/cobro-automatico?conversionId=N — cómo va (también en la ficha de la venta).
+export async function verCobroAutomatico(req, res, next) {
+  try {
+    const parsed = cobroAutoQuerySchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const destino = await destinoSuyo(req, { conversionId: parsed.data.conversionId });
+    res.json({ success: true, data: await cobroAuto.estadoDeLaVenta(destino.conversionId, destino.projectId) });
+  } catch (err) { next(err); }
+}
+
+// PUT /api/links-pago/cobro-automatico { conversionId, activo }
+export async function cambiarCobroAutomatico(req, res, next) {
+  try {
+    const parsed = cobroAutoBodySchema.safeParse(req.body || {});
+    if (!parsed.success) throw fallo(parsed);
+    const destino = await destinoSuyo(req, { conversionId: parsed.data.conversionId });
+    const venta = await cobroAutoModel.ventaParaCobrar(destino.conversionId);
+    const userId = Number(req.user.userId);
+    let linkPrimera = null;
+    if (parsed.data.activo) linkPrimera = (await cobroAuto.activar({ venta, userId })).linkPrimera;
+    else await cobroAuto.desactivar({ venta, userId });
+    await anotar(req, 'links_pago.cobro_automatico', { conversion_id: destino.conversionId, activo: parsed.data.activo });
+    const estado = await cobroAuto.estadoDeLaVenta(destino.conversionId, destino.projectId);
+    res.json({ success: true, data: { ...estado, link_primera: linkPrimera ? { id: linkPrimera.id, url: linkPrimera.url } : null } });
   } catch (err) { next(err); }
 }
 

@@ -15,6 +15,10 @@ export interface ResultadoLinks {
   link?: LinkDePago | null;
   cuotas?: CuotaDelPlan[];
   error?: string | null;
+  /** El cobro automático quedó activo: las demás cuotas las cobra Stripe. */
+  cobroAuto?: boolean;
+  /** Algo que no salió como se pidió (p. ej. el cobro automático), pero hay links. */
+  aviso?: string | null;
 }
 
 function dinero(n: unknown) {
@@ -90,6 +94,10 @@ export default function LinksRecienCreados({ resultado, alumno, curso, onVerVent
           </button>
         )}
       </div>
+      {resultado.cobroAuto && (
+        <p className="text-[12px] font-medium text-success-soft-foreground">Cobro automático activo: cuando pague este link, Stripe cobrará las demás cuotas solas en sus fechas.</p>
+      )}
+      {resultado.aviso && <p className="text-[12px] text-warning-soft-foreground" role="status">{resultado.aviso}</p>}
       <p className="text-[11px] text-muted-foreground">Quedan guardados en la ficha de la venta y en la del prospecto («Links de pago»).</p>
     </div>
   );

@@ -41,7 +41,7 @@ export async function claveDeEscritura(projectId) {
   }
 }
 
-async function claveObligatoria(projectId) {
+export async function claveObligatoria(projectId) {
   const clave = await claveDeEscritura(projectId);
   if (!clave) {
     throw new AppError('Este campus no tiene la clave de links de pago. La pone un admin en Integraciones › Links de pago.',
@@ -234,12 +234,18 @@ export function marca({ linkId, projectId, leadId, conversionId, userId }) {
  * Crear el link: se apunta, se crea en Stripe y se completa. Si Stripe falla,
  * la fila se borra: no queda un link sin URL que la gestora pueda mandar.
  */
-export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null }) {
+/*
+  `guardaTarjeta` (cobro automático de las cuotas, gemela de CRM 309): `{ consentimiento }`,
+  el texto que el alumno ve junto al botón de pagar. El link guarda su tarjeta para
+  cobrar solas las cuotas siguientes. Lo decide quien llama, nunca el navegador.
+*/
+export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null }) {
   const clave = await claveObligatoria(projectId);
   const fila = await model.insertar({
     projectId, leadId, conversionId, productId: prod.id, createdBy: userId,
     precioCatalogo: reglas.precioCatalogo, importe, descuentoPct: reglas.descuentoPct,
     moneda: reglas.moneda, caducidadDias: reglas.caducidadDias, installmentId: cuota?.id ?? null,
+    guardaTarjeta: !!guardaTarjeta,
   });
   const meta = marca({ linkId: fila.id, projectId, leadId, conversionId, userId });
   // Única por link y por entorno: /staging y local pueden compartir cuenta de test.
@@ -252,7 +258,7 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
       nombre: `${prod.nombre || `Curso ${prod.id}`}${cuota ? ` · cuota ${cuota.numero}` : ''}`,
       idempotencia: `${base}-precio`,
     });
-    link = await stripe.crearLink(clave, { priceId: precio.id, metadata: meta, idempotencia: `${base}-link` });
+    link = await stripe.crearLink(clave, { priceId: precio.id, metadata: meta, idempotencia: `${base}-link`, guardaTarjeta });
   } catch (err) {
     await model.borrar(fila.id).catch((e) => logger.error({ err: e.message, linkId: fila.id }, 'Links de pago: no se pudo borrar la fila de un link fallido'));
     logger.warn({ err: err.message, projectId, userId }, 'Links de pago: Stripe no creó el link');
@@ -274,6 +280,7 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     // Contra qué se midió el descuento (fase 3): el catálogo, o lo pendiente de la venta.
     descuento_sobre: cuota ? 'cuota' : (reglas.referencia || 'catalogo'),
     ...(cuota ? { cuota_id: cuota.id, cuota_numero: cuota.numero, cuota_vence: cuota.vence } : {}),
+    ...(guardaTarjeta ? { guarda_tarjeta: true } : {}),
     ...(reglas.pendiente !== undefined ? { pendiente: reglas.pendiente } : {}),
   });
   logger.info({ linkId: fila.id, projectId, userId, importe, moneda: reglas.moneda }, 'Links de pago: link creado');

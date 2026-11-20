@@ -65,6 +65,9 @@ const EVENTOS_DEL_WEBHOOK = [
   // ellos el CRM no hace nada con un checkout (sin la marca del CRM, se descarta).
   'checkout.session.completed', 'checkout.session.async_payment_succeeded',
   'checkout.session.async_payment_failed', 'checkout.session.expired',
+  // El cobro automático de las cuotas (gemela de CRM 309): Stripe cobra cada cuota con una
+  // factura de su calendario; pagada, salda su cuota; fallida, se avisa y se manda su link.
+  'invoice.paid', 'invoice.payment_failed',
 ] as const;
 
 const EMPTY = (provider: Provider): Integration => ({

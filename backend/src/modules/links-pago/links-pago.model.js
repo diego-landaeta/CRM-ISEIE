@@ -24,7 +24,7 @@ const COLUMNAS = `
   pl.created_by, cr.nombre AS creado_por_nombre,
   pl.precio_catalogo, pl.importe, pl.descuento_pct, pl.moneda,
   pl.modalidad, pl.num_cuotas, pl.importe_cuota,
-  pl.estado, pl.url, pl.caduca_el, pl.pagado_el,
+  pl.estado, pl.url, pl.caduca_el, pl.pagado_el, pl.guarda_tarjeta,
   pl.anulado_por, an.nombre AS anulado_por_nombre, pl.anulado_el, pl.motivo_anulacion,
   pl.created_at, pl.updated_at`;
 
@@ -110,7 +110,9 @@ const COLUMNAS_CONFIG = `
   links_pago_cuotas_admitidas AS cuotas_admitidas,
   links_pago_cuotas_max AS cuotas_max,
   links_pago_monedas::text[] AS monedas,
-  links_pago_moneda_defecto AS moneda_defecto`;
+  links_pago_moneda_defecto AS moneda_defecto,
+  links_pago_cobro_auto AS cobro_auto,
+  links_pago_cobro_auto_reintento_dias AS cobro_auto_reintento_dias`;
 
 function configDeFila(r) {
   if (!r) return null;
@@ -122,6 +124,9 @@ function configDeFila(r) {
     cuotas_max: Number(r.cuotas_max),
     monedas: r.monedas || [],
     moneda_defecto: r.moneda_defecto,
+    // Cobro automático de las cuotas (309).
+    cobro_auto: r.cobro_auto === true,
+    cobro_auto_reintento_dias: Number(r.cobro_auto_reintento_dias),
   };
 }
 
@@ -139,6 +144,8 @@ const COLUMNA_DE = {
   cuotas_max: 'links_pago_cuotas_max',
   monedas: 'links_pago_monedas',
   moneda_defecto: 'links_pago_moneda_defecto',
+  cobro_auto: 'links_pago_cobro_auto',
+  cobro_auto_reintento_dias: 'links_pago_cobro_auto_reintento_dias',
 };
 
 /** Guarda solo lo que venga. Las columnas salen de una lista fija, nunca del cuerpo. */
@@ -209,11 +216,11 @@ export async function producto(productId) {
 export async function insertar(l) {
   const { rows } = await query(
     `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
-        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10), $11)
+        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10), $11, $12)
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
-      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null]);
+      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true]);
   return rows[0];
 }
 
@@ -290,7 +297,7 @@ export async function campusDelWebhook(endpointId, projectIds) {
 export async function paraCobro(id) {
   const { rows } = await query(
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
-            estado, stripe_payment_link_id, installment_id
+            estado, stripe_payment_link_id, installment_id, guarda_tarjeta
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;
@@ -304,10 +311,11 @@ export async function paraCobro(id) {
 export async function cuotasPendientes(conversionId) {
   const { rows } = await query(
     `SELECT ci.id, ci.numero, ci.importe_previsto::float8 AS importe, ci.fecha_vencimiento::text AS vence, ci.concepto,
-            l.id AS link_id, l.estado AS link_estado, l.url AS link_url, l.caduca_el AS link_caduca_el
+            l.id AS link_id, l.estado AS link_estado, l.url AS link_url, l.caduca_el AS link_caduca_el,
+            COALESCE(l.guarda_tarjeta, false) AS link_guarda_tarjeta
        FROM conversion_installments ci
        LEFT JOIN LATERAL (
-         SELECT id, estado, url, caduca_el FROM payment_links
+         SELECT id, estado, url, caduca_el, guarda_tarjeta FROM payment_links
           WHERE installment_id = ci.id AND estado IN ('creado', 'abierto')
           ORDER BY id DESC LIMIT 1
        ) l ON true

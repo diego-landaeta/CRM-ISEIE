@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { CalendarCheck, CheckCircle, Copy, ArrowSquareOut, WarningCircle, LinkSimple } from '@phosphor-icons/react';
+import { CalendarCheck, CheckCircle, Copy, ArrowSquareOut, WarningCircle, LinkSimple, Lightning } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
-import { generarPlan, verPlan, type PlanDePago } from '../api/linksPago.api';
+import usePermission from '@/shared/hooks/usePermission';
+import { generarPlan, verPlan, cambiarCobroAutomatico, type PlanDePago } from '../api/linksPago.api';
 import { copiarLink, errorDe } from './CrearLinkAsistente';
+import { CobroAutomaticoDetalle } from './CobroAutomaticoCuotas';
 
 /*
   «GENERAR PLAN DE PAGO» (Diego, 19/11/2026).
@@ -18,6 +20,12 @@ import { copiarLink, errorDe } from './CrearLinkAsistente';
       y su link, listo para mandarlo por WhatsApp o por correo;
     · sin plan de cuotas, lo dice y explica dónde se crea.
   El servidor lo vuelve a comprobar todo (campus, alcance, lo pendiente).
+
+  COBRO AUTOMÁTICO CON STRIPE (309; Diego, 19/11): con «Cobrar automáticamente
+  con Stripe en las fechas de las cuotas», solo se crea el link de la PRIMERA
+  cuota, que guarda la tarjeta del alumno; las demás las cobra Stripe sola en la
+  fecha que tienen en el plan de la venta (la que pactó la gestora). Si la
+  gestora cambia una fecha o un importe en la venta, se cambia en Stripe.
 */
 
 function dinero(n: unknown) {
@@ -35,6 +43,9 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
   const [generando, setGenerando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
+  const { can } = usePermission();
+  const [cobroAuto, setCobroAuto] = useState(false);
+  const [quitando, setQuitando] = useState(false);
 
   useEffect(() => {
     let vigente = true;
@@ -47,19 +58,37 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
   }, [conversionId]);
 
   const cuotas = plan?.cuotas || [];
-  const sinLink = cuotas.filter((c) => !c.link_id);
+  const auto = plan?.cobro_automatico;
+  const autoActivo = !!auto?.activo;
+  // Lo que Stripe no puede cobrar de una cuota (fecha pasada, más de un año, menos de 0,50 €): se dice en la cuota.
+  const problemaDe = (id: number) => auto?.cuotas?.find((q) => Number(q.installment_id) === Number(id))?.problema || null;
+  const puedeAuto = can('links_pago.cobro_automatico');
+  // Con el cobro automático, solo la primera cuota lleva link (las demás las cobra Stripe).
+  const sinLink = autoActivo ? [] : cuotas.filter((c) => !c.link_id);
   const conLink = cuotas.filter((c) => c.link_url);
+  const activarAhora = cobroAuto && !autoActivo;
 
   async function generar() {
     setGenerando(true);
     setError(null);
     setAviso(null);
     try {
-      const r = await generarPlan(conversionId);
+      if (activarAhora && !cuotas.some((c) => !c.link_id)) {
+        // Todas tenían link: solo se activa (la primera se rehace para guardar la tarjeta).
+        await cambiarCobroAutomatico(conversionId, true);
+        const r = await verPlan(conversionId);
+        setPlan(r.data || null);
+        setAviso('Cobro automático activado. Manda al alumno el link de la primera cuota: al pagarla guarda su tarjeta.');
+        window.dispatchEvent(new CustomEvent('links-pago:creado', { detail: { conversion_id: conversionId } }));
+        return;
+      }
+      const r = await generarPlan(conversionId, undefined, { cobroAutomatico: activarAhora });
       if (r.data) {
         setPlan(r.data);
         const n = r.data.creados || 0;
-        setAviso(n ? `${n} link${n === 1 ? '' : 's'} creado${n === 1 ? '' : 's'}. Copia el mensaje y mándaselo al alumno.` : 'Todas las cuotas ya tenían su link.');
+        setAviso(activarAhora
+          ? 'Cobro automático activado. Manda al alumno el link de la primera cuota: al pagarla guarda su tarjeta y Stripe cobrará las demás en sus fechas.'
+          : n ? `${n} link${n === 1 ? '' : 's'} creado${n === 1 ? '' : 's'}. Copia el mensaje y mándaselo al alumno.` : 'Todas las cuotas ya tenían su link.');
         window.dispatchEvent(new CustomEvent('links-pago:creado', { detail: { conversion_id: conversionId } }));
       }
     } catch (e) {
@@ -69,8 +98,32 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
     }
   }
 
+  async function quitarAuto() {
+    if (!confirm('¿Quitar el cobro automático? Stripe dejará de cobrar solas las cuotas de esta venta.')) return;
+    setQuitando(true);
+    setError(null);
+    try {
+      await cambiarCobroAutomatico(conversionId, false);
+      const r = await verPlan(conversionId);
+      setPlan(r.data || null);
+      window.dispatchEvent(new CustomEvent('links-pago:creado', { detail: { conversion_id: conversionId } }));
+    } catch (e) {
+      setError(errorDe(e));
+    } finally { setQuitando(false); }
+  }
+
   function copiarTodos() {
     const v = plan?.venta;
+    if (autoActivo) {
+      const primera = conLink[0];
+      const resto = cuotas.filter((c) => c.id !== primera?.id).map((c) => `· Cuota ${c.numero}: ${dinero(c.importe)} el ${fecha(c.vence)}`);
+      copiarLink([
+        `Hola${v?.lead_nombre ? `, ${v.lead_nombre}` : ''}. Este es el link para pagar la cuota ${primera?.numero ?? 1} de tu ${v?.producto_nombre || 'programa'} (${dinero(primera?.importe)}): ${primera?.link_url || ''}`,
+        'Al pagarla se guarda tu tarjeta y las siguientes cuotas se cobrarán solas en sus fechas:',
+        ...resto,
+      ].join('\n'));
+      return;
+    }
     const lineas = conLink.map((c) => `· Cuota ${c.numero} (${dinero(c.importe)}, vence el ${fecha(c.vence)}): ${c.link_url}`);
     const texto = [`Hola${v?.lead_nombre ? `, ${v.lead_nombre}` : ''}. Estos son los links de pago de tu ${v?.producto_nombre || 'programa'}, uno por cuota:`, ...lineas].join('\n');
     copiarLink(texto);
@@ -122,7 +175,8 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
                       <p className="text-sm font-semibold">Cuota {c.numero} · {dinero(c.importe)}</p>
                       <p className="text-xs text-muted-foreground">
                         Vence el {fecha(c.vence)}
-                        {c.link_id ? ` · link n.º ${c.link_id} (${c.link_estado === 'abierto' ? 'abierto por el alumno' : 'sin pagar'})` : ' · sin link todavía'}
+                        {c.link_id ? ` · link n.º ${c.link_id} (${c.link_estado === 'abierto' ? 'abierto por el alumno' : 'sin pagar'})${c.link_guarda_tarjeta ? ' · guarda la tarjeta' : ''}`
+                          : autoActivo ? (problemaDe(c.id) ? ` · Stripe no la cobrará: ${problemaDe(c.id)}` : ' · la cobra Stripe sola') : ' · sin link todavía'}
                       </p>
                     </div>
                     {c.link_url ? (
@@ -137,12 +191,37 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
                         </a>
                       </div>
                     ) : (
-                      <span className="text-[11px] text-muted-foreground">se crea al generar</span>
+                      <span className="text-[11px] text-muted-foreground">{autoActivo ? 'sin link' : activarAhora ? (c.id === cuotas[0]?.id ? 'link que guarda la tarjeta' : 'la cobra Stripe') : 'se crea al generar'}</span>
                     )}
                   </li>
                 ))}
               </ul>
             )}
+
+            {autoActivo && auto && (
+              <CobroAutomaticoDetalle estado={auto} onQuitar={puedeAuto ? quitarAuto : undefined} quitando={quitando} />
+            )}
+
+            {!autoActivo && cuotas.length > 0 && auto && puedeAuto && (auto.disponible ? (
+              <label className="flex items-start gap-2.5 p-3 rounded-lg bg-info-soft border border-info/30 cursor-pointer" data-recorrido="links-plan-cobro-auto">
+                <input type="checkbox" checked={cobroAuto} onChange={(e) => setCobroAuto(e.target.checked)} className="mt-0.5 h-4 w-4" />
+                <span className="min-w-0 text-info-soft-foreground">
+                  <span className="flex items-center gap-1.5 text-sm font-semibold">
+                    <Lightning size={13} weight="fill" aria-hidden="true" /> Cobrar automáticamente con Stripe en las fechas de las cuotas
+                  </span>
+                  <span className="block text-[12px]">
+                    El alumno paga la cuota {cuotas[0]?.numero} con su link y, al pagar, guarda su tarjeta y acepta los cobros siguientes.
+                    Stripe cobra cada una de las demás en la fecha que tiene en el plan de la venta (la que pactaste con él).
+                    Si cambias una fecha o un importe en la venta, se cambia en Stripe.
+                  </span>
+                </span>
+              </label>
+            ) : (
+              <p className="text-[11px] text-muted-foreground flex items-start gap-1.5" data-recorrido="links-plan-cobro-auto-no">
+                <Lightning size={12} aria-hidden="true" className="mt-0.5 flex-shrink-0" />
+                <span>Cobro automático con Stripe: {auto.motivo_no_disponible}</span>
+              </p>
+            ))}
 
             {aviso && (
               <p className="text-sm flex items-center gap-1.5 font-semibold text-success-soft-foreground" role="status">
@@ -167,11 +246,13 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
                 <Copy size={14} weight="bold" aria-hidden="true" /> Copiar todos
               </button>
             )}
-            {sinLink.length > 0 && (
+            {(sinLink.length > 0 || activarAhora) && (
               <button type="button" onClick={generar} disabled={generando} data-recorrido="links-plan-generar"
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-60">
-                <LinkSimple size={14} weight="bold" aria-hidden="true" />
-                {generando ? 'Generando…' : `Generar ${sinLink.length === 1 ? 'el link' : `los ${sinLink.length} links`}`}
+                {activarAhora ? <Lightning size={14} weight="fill" aria-hidden="true" /> : <LinkSimple size={14} weight="bold" aria-hidden="true" />}
+                {generando ? 'Generando…'
+                  : activarAhora ? `Activar y generar el link de la cuota ${cuotas[0]?.numero}`
+                    : `Generar ${sinLink.length === 1 ? 'el link' : `los ${sinLink.length} links`}`}
               </button>
             )}
           </div>

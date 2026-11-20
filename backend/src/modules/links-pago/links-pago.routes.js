@@ -41,6 +41,12 @@ router.get('/ventas-del-prospecto', puede('links_pago.crear'), ctrl.ventasDelPro
 router.get('/plan', puede('links_pago.crear'), ctrl.verPlan);
 router.post('/plan', puede('links_pago.crear'), ctrl.generarPlan);
 
+// Cobro automático de las cuotas con Stripe (309). Verlo, quien crea links (la
+// ficha de la venta); activarlo o quitarlo, su permiso. Campus y alcance de la
+// venta, en el controlador.
+router.get('/cobro-automatico', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.verCobroAutomatico);
+router.put('/cobro-automatico', puede('links_pago.cobro_automatico'), ctrl.cambiarCobroAutomatico);
+
 // Quien crea links ve los suyos; con «ver todos», los de su alcance. El
 // recorte lo hace el controlador con la sesión.
 router.get('/', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.listar);
