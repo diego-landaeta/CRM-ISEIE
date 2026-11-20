@@ -8284,6 +8284,32 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/cuotas-disponibles",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/cuotas-disponibles",
+  "relativa": "GET /cuotas-disponibles",
+  "controlador": "cuotasDisponibles",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/ventas-del-prospecto",
   "tipo": "ruta",
   "modulo": "links-pago",

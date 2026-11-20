@@ -13,6 +13,42 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.2",
+    "fecha": "2026-11-20",
+    "titulo": "Versión 2.9.2",
+    "intro": "El link de pago, en tres pasos: curso, pago único o cuotas, y crear.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Crear un link de pago sin buscar a nadie",
+            "texto": "«Crear link de pago»: eliges el curso, «Pago único» o «En cuotas» (cuántas) y pulsas «Crear link». No hace falta poner el nombre: cuando el alumno paga, el CRM busca su ficha por el correo (o la crea, a tu nombre) y le apunta la venta.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "En cuotas, Stripe cobra solo cada mes",
+            "texto": "Con «En cuotas», el link cobra la primera y guarda la tarjeta del alumno; las demás las cobra Stripe sola una vez al mes, y cada cobro salda su cuota en la venta. Si el campus aún no puede cobrar cuotas solas, el asistente te dice por qué.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "2.9.1",
     "fecha": "2026-11-20",
     "titulo": "Versión 2.9.1",

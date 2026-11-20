@@ -27,7 +27,7 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: yo.current })
 vi.mock('@/shared/hooks/usePermission', () => ({
   default: () => ({ can: (k) => permisos.has(k), llevaEquipo: false }),
 }));
-vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
+vi.mock('@/shared/api/client', () => ({ APP_BASE_URL: '', default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
 vi.mock('@/shared/lib/linksPago', () => ({ useLinksPagoEncendidos: () => true }));
 vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
   listarLinks: vi.fn(async () => ({ success: true, data: [] })),
