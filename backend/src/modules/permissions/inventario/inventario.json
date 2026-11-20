@@ -8756,6 +8756,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/ventas-del-prospecto",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/ventas-del-prospecto",
+  "relativa": "GET /ventas-del-prospecto",
+  "controlador": "ventasDelProspecto",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/plan",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/plan",
+  "relativa": "GET /plan",
+  "controlador": "verPlan",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/plan",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/plan",
+  "relativa": "POST /plan",
+  "controlador": "generarPlan",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/",
   "tipo": "ruta",
   "modulo": "links-pago",

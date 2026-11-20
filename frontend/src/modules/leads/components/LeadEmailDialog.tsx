@@ -19,12 +19,17 @@ interface LeadEmailDialogProps {
    * buscando cual de las tres de la lista era la del dia 3.
    */
   plantillaId?: number | null;
+  /** Asunto y cuerpo con que se abre sin plantilla (el link de pago recién creado, #680). */
+  asuntoInicial?: string;
+  cuerpoInicial?: string;
+  /** Por encima de otra ventana (el asistente de links va en z-[80]). */
+  encima?: boolean;
   onClose: () => void;
   onSent?: () => void;
 }
 
 export default function LeadEmailDialog({
-  open, leadId, leadName, leadEmail, plantillaId = null, onClose, onSent,
+  open, leadId, leadName, leadEmail, plantillaId = null, asuntoInicial = '', cuerpoInicial = '', encima = false, onClose, onSent,
 }: LeadEmailDialogProps) {
   const { activeProject } = useProjectContext();
   const [subject, setSubject] = useState('');
@@ -38,8 +43,8 @@ export default function LeadEmailDialog({
 
   useEffect(() => {
     if (open) {
-      setSubject('');
-      setBody('');
+      setSubject(asuntoInicial);
+      setBody(cuerpoInicial);
       setSending(false);
       // Si se abre desde un paso del proceso, con la suya; si no, en blanco.
       setSelectedTemplateId(plantillaId ?? '');
@@ -113,7 +118,7 @@ export default function LeadEmailDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={onClose}>
+    <div className={`fixed inset-0 ${encima ? 'z-[90]' : 'z-50'} flex items-center justify-center bg-black/60 backdrop-blur-sm p-4`} onClick={onClose}>
       <div
         role="dialog"
         aria-modal="true"

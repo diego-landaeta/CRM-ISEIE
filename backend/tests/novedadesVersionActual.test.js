@@ -28,8 +28,8 @@ describe('Novedades: cada versión con sus listas', () => {
   // El menú ya no lleva la versión escrita a mano (11/11): se quedaba atrás
   // («Beta 2.6.0» con producción en la 2.6.2). La pone Vite al compilar, de la
   // etiqueta de Git más alta, que nunca es menor que la de Novedades.
-  it('la actual es la 2.6.0, y el menú la saca de la etiqueta, no escrita a mano', async () => {
-    expect(ACTUAL.version).toBe('2.6.0');
+  it('la actual es la 2.8.4, y el menú la saca de la etiqueta, no escrita a mano', async () => {
+    expect(ACTUAL.version).toBe('2.8.4');
     const beta = fs.readFileSync(path.resolve(AQUI, '../../frontend/src/shared/config/betaConfig.ts'), 'utf8');
     expect(beta).not.toMatch(/BETA_VERSION\s*=\s*'\d/);
     expect(beta).toMatch(/__APP_VERSION__/);

@@ -348,7 +348,9 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   const res = await convModel.addPayment(conv.id, {
     importe: payment.amount, fecha, metodo: 'tarjeta',
     notas: destino.link ? `Auto-Stripe ${payment.stripe_id} (link de pago n.º ${destino.link.id})` : `Auto-Stripe ${payment.stripe_id}`,
-  }, { allowOverpay: true, allowDuplicate: true });
+  }, { allowOverpay: true, allowDuplicate: true,
+    // El link de una cuota (plan de pago): el cobro salda esa cuota.
+    cuotaId: destino.link?.installment_id || null });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: metodoAuto });
