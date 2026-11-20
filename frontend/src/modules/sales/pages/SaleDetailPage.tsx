@@ -16,6 +16,7 @@ import EnlazarStripeCard from '../components/EnlazarStripeCard';
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
 import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
+import CobroAutomaticoVenta from '@/modules/links-pago/components/CobroAutomaticoCuotas';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -268,6 +269,9 @@ export default function SaleDetailPage() {
           )}
         </div>
       </div>
+
+      {/* Cobro automático de las cuotas con Stripe (309): tarjeta guardada y cuota a cuota. */}
+      <CobroAutomaticoVenta conversionId={venta.id} />
 
       <EnlazarStripeCard conversionId={venta.id} onEnlazado={() => setRecarga((n) => n + 1)} />
 

@@ -13,6 +13,52 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.0",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.9.0",
+    "intro": "Cobro automático de las cuotas con Stripe: el alumno paga la primera y Stripe cobra las demás en las fechas que pactaste.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Cobro automático de las cuotas",
+            "texto": "Al registrar una venta a plazos o en «Generar plan de pago», marca «Cobrar automáticamente con Stripe en las fechas de las cuotas». Solo se manda el link de la primera cuota: al pagarlo, Stripe guarda la tarjeta y cobra las demás solas en las fechas que hayas puesto con el alumno. Cada cobro salda su cuota en el CRM. Si cambias una fecha o un importe, se cambia también en Stripe.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Si un cobro falla",
+            "texto": "Te avisa el CRM y al alumno le llega por correo el link de esa cuota. Si fue por falta de fondos, se reintenta una vez a los pocos días. En la ficha de la venta ves la tarjeta (las últimas cifras), qué cuotas cobrará Stripe y cuáles fallaron.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Se enciende por campus",
+            "texto": "Un admin lo activa en Integraciones › Links de pago, «Cobro automático de las cuotas con Stripe», y elige a los cuántos días se reintenta un cobro fallido.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/integrations",
+            "boton": "Ir a Integraciones"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "2.8.4",
     "fecha": "2026-11-19",
     "titulo": "Versión 2.8.4",

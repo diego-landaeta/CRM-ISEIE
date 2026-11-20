@@ -65,7 +65,7 @@ const moneda = z.string({ invalid_type_error: 'La moneda va en código ISO de tr
   vuelve a mirar con sus CHECK (migración 315).
 */
 const CAMPOS_DE_CONFIG = ['descuento_max_pct', 'caducidad_dias', 'caducidad_max_dias', 'cuotas_admitidas',
-  'cuotas_max', 'monedas', 'moneda_defecto'];
+  'cuotas_max', 'monedas', 'moneda_defecto', 'cobro_auto', 'cobro_auto_reintento_dias'];
 
 export const configBodySchema = z.object({
   projectId: id,
@@ -76,6 +76,10 @@ export const configBodySchema = z.object({
   cuotas_max: entero('Máximo de cuotas', 2, 36).optional(),
   monedas: z.array(moneda).min(1, 'Al menos una moneda').max(20, 'Como mucho 20 monedas').optional(),
   moneda_defecto: moneda.optional(),
+  // Cobro automático de las cuotas (309): si el campus lo permite y a los cuántos
+  // días se reintenta, una vez, una cuota que falló (0 = no se reintenta).
+  cobro_auto: z.boolean({ invalid_type_error: 'Cobro automático: sí o no' }).optional(),
+  cobro_auto_reintento_dias: entero('Reintento', 0, 15).optional(),
 }).refine((b) => CAMPOS_DE_CONFIG.some((k) => b[k] !== undefined), 'Falta el descuento');
 
 /*
@@ -117,4 +121,13 @@ export const planQuerySchema = z.object({ conversionId: id });
 export const planBodySchema = z.object({
   conversionId: id,
   cuotaIds: z.array(id).min(1, 'Elige al menos una cuota').max(60).optional(),
+  // «Cobrar automáticamente con Stripe en las fechas de las cuotas» (309).
+  cobroAutomatico: z.boolean({ invalid_type_error: 'Cobro automático: sí o no' }).optional(),
+});
+
+/** Ver o cambiar el cobro automático de una venta (309). */
+export const cobroAutoQuerySchema = z.object({ conversionId: id });
+export const cobroAutoBodySchema = z.object({
+  conversionId: id,
+  activo: z.boolean({ required_error: 'Falta decir si se activa', invalid_type_error: 'Activo: sí o no' }),
 });

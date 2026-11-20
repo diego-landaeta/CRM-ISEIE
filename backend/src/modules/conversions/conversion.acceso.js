@@ -61,6 +61,23 @@ const numero = (valor) => (/^[1-9]\d{0,14}$/.test(String(valor ?? '')) ? Number(
 
 const IDENTIFICADOR_NO_VALIDO = () => new AppError('Identificador no válido', 400, 'INVALID_ID');
 
+/*
+  COBRO AUTOMÁTICO DE LAS CUOTAS (309): si la gestora cambia la fecha o el importe
+  de una cuota, la borra, rehace el plan, apunta o borra un cobro, o cambia el
+  total, el plan se vuelve a pasar a Stripe al acabar la petición (sin hacerla
+  esperar). Solo en las ventas con cobro automático; en las demás no hace nada.
+*/
+function repasarAlAcabar(req, res, conversionId) {
+  if (req.method === 'GET' || req._repasoCobroAuto) return;
+  req._repasoCobroAuto = true;
+  res.on('finish', () => {
+    if (res.statusCode >= 400) return;
+    import('../links-pago/links-pago.cobro-auto.js')
+      .then((m) => m.alCambiarElPlan(Number(conversionId)))
+      .catch(() => {});
+  });
+}
+
 /** Para `router.param(nombre, guardia(...))`. */
 const guardia = (buscar, noEncontrada, codigo = 'NOT_FOUND') => async (req, res, next, valor) => {
   try {
@@ -69,6 +86,7 @@ const guardia = (buscar, noEncontrada, codigo = 'NOT_FOUND') => async (req, res,
     const conversionId = await buscar(id);
     if (conversionId === null) throw new AppError(noEncontrada, 404, codigo);
     await exigirVenta(req, conversionId);
+    repasarAlAcabar(req, res, conversionId);
     next();
   } catch (err) { next(err); }
 };
