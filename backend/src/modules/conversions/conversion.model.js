@@ -892,6 +892,15 @@ export async function addPayment(conversionId, { importe, fecha, notas, metodo, 
     // se hubiera quedado sin cuota (CRM#888). Antes solo saldaba si llegaba
     // para la cuota entera y empezando por la «más antigua»: un pago inicial
     // suelto hacía que el cobro de septiembre saldara la cuota 1.
+    // Con `cuotaId` (el link de pago de UNA cuota, plan de pago del 19/11/2026),
+    // el cobro salda esa cuota y no la primera pendiente.
+    if (opts.cuotaId) {
+      await client.query(
+        `UPDATE conversion_installments
+            SET fecha_cobro = $1::date, importe_cobrado = $2, payment_id = $3, metodo = $4, updated_at = NOW()
+          WHERE id = $5 AND conversion_id = $6 AND fecha_cobro IS NULL`,
+        [payRows[0].fecha, importe, payRows[0].id, metodo || null, Number(opts.cuotaId), conversionId]);
+    }
     await saldarCuotas(client, conversionId);
 
     await client.query('COMMIT');

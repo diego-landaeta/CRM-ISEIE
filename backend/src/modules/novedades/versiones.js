@@ -13,6 +13,480 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.0",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.9.0",
+    "intro": "Cobro automático de las cuotas con Stripe: el alumno paga la primera y Stripe cobra las demás en las fechas que pactaste.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Cobro automático de las cuotas",
+            "texto": "Al registrar una venta a plazos o en «Generar plan de pago», marca «Cobrar automáticamente con Stripe en las fechas de las cuotas». Solo se manda el link de la primera cuota: al pagarlo, Stripe guarda la tarjeta y cobra las demás solas en las fechas que hayas puesto con el alumno. Cada cobro salda su cuota en el CRM. Si cambias una fecha o un importe, se cambia también en Stripe.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Si un cobro falla",
+            "texto": "Te avisa el CRM y al alumno le llega por correo el link de esa cuota. Si fue por falta de fondos, se reintenta una vez a los pocos días. En la ficha de la venta ves la tarjeta (las últimas cifras), qué cuotas cobrará Stripe y cuáles fallaron.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Se enciende por campus",
+            "texto": "Un admin lo activa en Integraciones › Links de pago, «Cobro automático de las cuotas con Stripe», y elige a los cuántos días se reintenta un cobro fallido.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/integrations",
+            "boton": "Ir a Integraciones"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
+    "version": "2.8.4",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.4",
+    "intro": "Resumen de todo lo nuevo de hoy: links de pago de Stripe con plan de cuotas, facturación más fácil de corregir y recorridos guiados al día.",
+    "grupos": [
+      {
+        "titulo": "Links de pago de Stripe",
+        "items": [
+          {
+            "titulo": "El link sale al registrar la venta",
+            "texto": "Al registrar una venta («Convertir lead»), deja marcado «Generar link de pago de Stripe». Si paga de una vez, sale un link por lo que queda por pagar. Si va a plazos, sale un link por cada cuota, con su importe y la fecha que pongas tú. Al terminar te los da todos listos para copiar y mandar al alumno.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "La inicial también por link",
+            "texto": "Con «Parcial», marca «La inicial se paga con link de pago» si el alumno aún no la ha pagado: la inicial va como cuota 1 de hoy con su link, y cada cuota lleva el suyo. Cuando paga un link, se salda esa cuota.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "«Generar plan de pago» en cada venta",
+            "texto": "En la ficha de la venta y en la lista de Ventas («Link» y «Plan»): un link por cada cuota pendiente, y «Copiar todos» con el mensaje para el alumno. Los links quedan guardados en la ficha de la venta y del prospecto para volver a buscarlos.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "«Links de pago» en el menú",
+            "texto": "Todos tus links con su estado (pendiente, abierto, pagado, caducado o anulado), para copiarlos o anularlos. Todo link va con su venta: si el prospecto no tiene ninguna, primero se registra la venta.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      },
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Las gestoras corrigen cualquier factura de su campus",
+            "texto": "Ves todas las facturas de tus campus y puedes editarlas (datos del cliente, concepto, IVA y fechas), anularlas con su abono y borrarlas. Una factura emitida solo se borra si se emitió por error; si era buena, se anula y sale su abono. El número no cambia.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "La numeración, siempre seguida",
+            "texto": "El número de la factura o proforma al registrar una venta sigue el de las facturas y no se puede saltar ningún número de la serie.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "«Ventas sin factura», sin las que ya tienen proforma",
+            "texto": "Una venta con su proforma ya cuenta como facturada y no sale en la lista de ventas sin factura.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      },
+      {
+        "titulo": "Recorridos guiados",
+        "items": [
+          {
+            "titulo": "Links de pago y facturas, con su recorrido al día",
+            "texto": "En «Links de pago», en la ficha de la venta y en Facturación, «Ver recorrido» enseña paso a paso lo nuevo: el link al registrar la venta, el plan de pago y cómo corregir, anular o borrar una factura.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/links-pago",
+            "boton": "Ver el recorrido"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El aviso de prospecto nuevo trae lo que rellenó en el formulario (programa, mensaje y página).",
+      "«Links de pago» sale activo en el menú (antes, «Próximamente»)."
+    ]
+  },
+  {
+    "version": "2.8.3",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.3",
+    "intro": "La inicial también por link de pago, y cada link con su venta.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "La inicial, con su link, y las cuotas, con el suyo",
+            "texto": "Al registrar una venta a plazos, en «Parcial» deja marcado «La inicial se paga con link de pago»: la inicial va como cuota 1 de hoy con su link y cada cuota con el suyo, en la fecha que pongas (por ejemplo, el 25 de cada mes). Al registrar la venta te los da todos para copiar.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Todo link de pago va con su venta",
+            "texto": "Ya no se crean links «sin venta»: si el prospecto no tiene ninguna, primero se registra la venta (y al registrarla sale el link).",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El número de la factura o proforma al registrar una venta sigue la numeración de las facturas y no se puede saltar: no se puede saltar ningún número de la serie."
+    ]
+  },
+  {
+    "version": "2.8.2",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.2",
+    "intro": "El link de pago sale al registrar la venta.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Genera el link de pago al registrar la venta",
+            "texto": "Al registrar una venta, deja marcado «Generar link de pago de Stripe»: si va fraccionada, sale un link por cada cuota con su importe y su fecha; si no, un link por lo que queda por pagar. Al terminar te los da listos para copiar y mandar al alumno, y quedan en la ficha de la venta y en la del prospecto para volver a buscarlos.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "«Links de pago» sale activo en el menú (antes, «Próximamente»)."
+    ]
+  },
+  {
+    "version": "2.8.0",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.8.0",
+    "intro": "Links de pago de Stripe a mano: en el menú, en cada venta y con plan de pago por cuotas.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "«Links de pago» en el menú",
+            "texto": "Una pantalla con todos tus links (creados, abiertos, pagados, caducados) y el botón «Crear link de pago». El asistente busca al alumno, te deja elegir a cuál de sus ventas va el link y te propone lo que le queda por pagar.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "Generar plan de pago",
+            "texto": "En una venta con cuotas, «Generar plan de pago» crea un link de Stripe por cada cuota pendiente, con su importe y su fecha. «Copiar todos» te deja el mensaje listo para mandárselo al alumno. Cuando paga un link, se salda esa cuota.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Los botones, donde los buscas",
+            "texto": "«Crear link de pago» arriba en la ficha del prospecto y en la de la venta, y «Link» y «Plan» en cada venta por cobrar de la lista de Ventas.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
+    "version": "2.7.7",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.7",
+    "intro": "Las gestoras corrigen, anulan y borran cualquier factura de su campus.",
+    "grupos": [
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Las gestoras corrigen cualquier factura",
+            "texto": "Las gestoras ven todas las facturas de su campus y pueden editarlas (datos del cliente, concepto, IVA y fechas), anularlas con su abono y borrarlas. Borra una factura emitida solo si se emitió por error; si era buena, anúlala. El número de la factura no cambia.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "El recorrido «Anular una factura» ya enseña «Editar» y la papelera, en vez de decir que una factura emitida no se toca."
+    ]
+  },
+  {
+    "version": "2.7.5",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.5",
+    "intro": "Quien lleva la facturación ve todas las facturas, y administración corrige también las emitidas.",
+    "grupos": [
+      {
+        "titulo": "Facturación",
+        "items": [
+          {
+            "titulo": "Quien tiene acceso a Facturación ve todas las facturas",
+            "texto": "Si tienes acceso a Facturación, ves todas las facturas de tus campus, no solo las de tus ventas: la lista, las tarjetas de arriba, cada factura y su PDF. Las tarjetas suman lo mismo que ves en la lista.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "Administración corrige las facturas emitidas y sus fechas",
+            "texto": "Admin y superadmin tienen «Editar» y «Cambiar fechas» también en las facturas ya emitidas, para poner la fecha en que se registró cada una. El número de la factura no cambia.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
+    "version": "2.7.3",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.3",
+    "intro": "El aviso de prospecto nuevo trae lo que rellenó en el formulario.",
+    "grupos": [
+      {
+        "titulo": "Prospectos",
+        "items": [
+          {
+            "titulo": "El aviso de prospecto nuevo trae lo que rellenó en el formulario",
+            "texto": "El correo que te avisa de un prospecto nuevo dice ahora el programa que le interesa, su mensaje, la página desde la que escribió, por dónde entró y el resto de lo que rellenó. Si solo dejó su teléfono por WhatsApp, también lo dice.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/prospectos",
+            "boton": "Ir a Prospectos"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
+    "version": "2.7.2",
+    "fecha": "2026-11-19",
+    "titulo": "Versión 2.7.2",
+    "intro": "Llegan los links de pago de Stripe y las disputas, cada cobro salda su cuota, las facturas emitidas se anulan con su motivo, las vendedoras tienen su factura del mes y hay recorridos guiados en las pantallas de cobros. Desde esta versión, MultiCRM y CRM ISEIE llevan el mismo número.",
+    "grupos": [
+      {
+        "titulo": "Cobros con Stripe",
+        "items": [
+          {
+            "titulo": "Links de pago",
+            "texto": "Desde la ficha del prospecto o de la venta puedes crear un link de pago de Stripe, copiarlo y mandárselo al alumno. Cuando paga, el cobro entra solo en su venta. Si la venta no existe, se crea a tu nombre. Los links caducan solos y se pueden anular. Cada campus ya tiene su clave de Stripe puesta: no hay que configurar nada para empezar.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/prospectos",
+            "boton": "Ir a Prospectos"
+          },
+          {
+            "titulo": "Configurar los links de pago",
+            "texto": "En Integraciones, cada campus tiene su apartado «Links de pago»: la clave de Stripe con la que se crean, sus reglas (caducidad, moneda) y la dirección del aviso de Stripe, con un botón para copiarla.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ir a Integraciones"
+          },
+          {
+            "titulo": "Disputas de Stripe",
+            "texto": "Cuando un alumno reclama un pago a su banco, aparece en Finanzas › Disputas de Stripe, por empresa y campus, con el plazo para responder. Los admins reciben un aviso en la campana al entrar una y cuando quedan pocos días.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/disputas",
+            "boton": "Ir a Disputas"
+          },
+          {
+            "titulo": "Cada cobro salda su cuota",
+            "texto": "Al apuntar un cobro, se salda la primera cuota pendiente, con su fecha y su importe. Si el cobro parece repetido, avisa antes de guardarlo. En la ficha de la venta puedes enlazar un pago de Stripe con su cobro, para que no quede suelto.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Pagos de Stripe, solo de tus campus",
+            "texto": "Pagos Stripe enseña, sincroniza y deja asociar solo los cargos de los campus que llevas.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/pagos-stripe",
+            "boton": "Ir a Pagos Stripe"
+          }
+        ]
+      },
+      {
+        "titulo": "Ventas y facturas",
+        "items": [
+          {
+            "titulo": "Aviso de venta repetida",
+            "texto": "Si vas a crear una venta del mismo alumno y el mismo programa que otra que ya existe, el CRM te avisa antes. Si de verdad es otra venta, puedes seguir, y queda apuntado quién lo decidió.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Una factura emitida ya no se borra ni se cambia",
+            "texto": "Una factura emitida no se puede borrar ni cambiar. Si hay que dejarla sin efecto, se anula indicando el motivo y sale su abono. Queda apuntado quién la anuló y por qué.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturas"
+          },
+          {
+            "titulo": "Tu factura del mes",
+            "texto": "Los colaboradores, y las vendedoras que facturan a la empresa, tienen su factura del mes en «Mi factura»: la revisan y la suben desde ahí.",
+            "roles": [
+              "colaborador",
+              "tutor_redactor"
+            ],
+            "ruta": "/mi-factura",
+            "boton": "Ir a Mi factura"
+          },
+          {
+            "titulo": "Validar antes de pagar",
+            "texto": "Las facturas de colaboradores y vendedoras se validan antes de pagarlas: se ve cuáles están validadas y cuáles esperan.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores"
+          }
+        ]
+      },
+      {
+        "titulo": "Para todos",
+        "items": [
+          {
+            "titulo": "Recorridos guiados",
+            "texto": "En Integraciones, en la ficha de la venta, en Facturas y en Pagos Stripe hay un botón «Ver recorrido» que te enseña la pantalla paso a paso. La primera vez sale solo. También funciona en el móvil.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/finanzas/integraciones",
+            "boton": "Ver en Integraciones"
+          },
+          {
+            "titulo": "El menú, por bloques",
+            "texto": "El menú está ordenado por bloques de uso: Hoy, Comercial, Captación y publicidad, Académico, Finanzas… Cada uno sigue viendo lo mismo que antes, solo que más fácil de encontrar.",
+            "roles": [],
+            "ruta": null,
+            "boton": null
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Las direcciones de los avisos (webhooks) que enseña Integraciones llevan la dirección completa del CRM.",
+      "Reportes, Comisiones y Por cobrar cuentan lo cobrado a partir de los pagos apuntados.",
+      "El CRM ya no pide al servidor lo que cada uno no puede ver: menos errores en segundo plano."
+    ]
+  },
+  {
     "version": "2.6.0",
     "fecha": "2026-11-03",
     "titulo": "Versión 2.6.0",
