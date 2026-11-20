@@ -80,7 +80,7 @@ async function htmlToPdf(html, filename, opts = {}) {
   const filePath = path.join(UPLOAD_DIR, filename);
   // En prod (Linux) puede pasarse CHROME_PATH en env; en local Windows
   // puppeteer (full package) trae Chrome bundleado y lo auto-detecta.
-  const launchOpts = { headless: 'new', args: CHROME_ARGS };
+  const launchOpts = { headless: true, args: CHROME_ARGS };
   if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
   const browser = await puppeteer.launch(launchOpts);
   try {
@@ -518,7 +518,7 @@ export async function generateCertificatePdf(data, filename) {
   const filePath = path.join(UPLOAD_DIR, filename);
   // En prod (Linux) puede pasarse CHROME_PATH en env; en local Windows
   // puppeteer (full package) trae Chrome bundleado y lo auto-detecta.
-  const launchOpts = { headless: 'new', args: CHROME_ARGS };
+  const launchOpts = { headless: true, args: CHROME_ARGS };
   if (process.env.CHROME_PATH) launchOpts.executablePath = process.env.CHROME_PATH;
   const browser = await puppeteer.launch(launchOpts);
   try {
