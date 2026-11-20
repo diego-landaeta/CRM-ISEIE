@@ -1,7 +1,7 @@
 import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
 
 /**
- * LOS RECORRIDOS DEL BLOQUE FINANZAS (CRM-ISEIE#619, segunda tanda; gemela de
+ * LOS RECORRIDOS DEL BLOQUE FINANZAS (CRM-ISEIE#619, tercera tanda; gemela de
  * CRM#941). Diego, 19/11: cada pantalla de Finanzas con su «Ver recorrido», como
  * Ventas (#627).
  *
@@ -15,9 +15,14 @@ import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
  *  · Nunca un anclaje en algo que tiene dos versiones (tabla en el PC y tarjetas
  *    en el móvil): el recorrido coge la primera, y en el móvil esa está escondida.
  *    Se ancla en lo que envuelve a las dos.
- *  · El permiso de cada recorrido es el de la pantalla en el menú lateral.
+ *  · El permiso de cada recorrido es el de la pantalla en el menú lateral. Ventas
+ *    sin formación y Análisis de ventas no están en el menú (se llega desde los
+ *    botones de Ventas): llevan el permiso que pide el servidor para sus datos,
+ *    `ventas.view_equipo`.
  *  · Primera tanda (#635): Dashboard, Conversiones, Egresos y Cuentas por cobrar.
- *    Segunda: Cuentas por pagar, Comisiones, Comisiones de tutores y Nóminas.
+ *    Segunda (#636): Cuentas por pagar, Comisiones, Comisiones de tutores y
+ *    Nóminas. Tercera: Pendientes de facturar, Ventas sin formación y Análisis
+ *    de ventas.
  *    «Ingresos», en ISEIE, es Ventas (#627), que ya tiene el suyo.
  *  · Fuera, a propósito: Facturación, Links de pago, Pagos Stripe, Disputas,
  *    Integraciones y Conciliación.
@@ -33,13 +38,15 @@ import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
  * Lo que en ISEIE es distinto del 360:
  *  · No se elige empresa: las cifras son siempre del campus de arriba (el 360
  *    dice «del campus o la empresa elegidos»).
- *  · «Cuentas por cobrar» aún no está en la tanda del 360: sus ids son de aquí.
+ *  · Cuentas por cobrar y Nóminas: el 360 las copió de aquí (mismos ids, anclajes
+ *    y textos); allí Nóminas lleva un paso más, el de elegir campus.
  *  · Cuentas por pagar no tiene filtro de fechas: solo el estado.
  *  · Comisiones es la pantalla de siempre (periodo en un desplegable, cuatro
  *    cifras, filtro de estado, «Pagar» y las reglas en Roles); el 360 la rehízo
  *    con exportar y cerrar mes. Mismos ids; textos de aquí.
  *  · Comisiones de tutores: sin «Avisar tutor»; solo «Marcar pagado».
- *  · Nóminas no está en la tanda del 360: sus ids son de aquí.
+ *  · Análisis de ventas: sin el filtro de ventas compartidas; las cifras, del
+ *    campus de arriba.
  */
 const EN_ESTE_CRM = {
   dashboard: 'Lo que entra, lo que sale y lo que falta por cobrar, del campus elegido arriba. Son {pasos} pasos.',
@@ -58,6 +65,9 @@ const EN_ESTE_CRM = {
   comtutoresPeriodo: 'Elige el mes del que quieres ver las comisiones (y, si hay varios, el campus).',
   comtutoresFilaTitulo: 'Marcar pagado',
   comtutoresFila: 'Cuando ya se le ha hecho la transferencia, «Marcar pagado» apunta como pagado lo de ese tutor en el mes.',
+  pendientesCuantas: 'Las ventas sin importe del campus elegido arriba. Cada una que completas sale de la lista.',
+  analisis: 'Las ventas del campus elegido arriba, de tres maneras: un resumen, por asesora y por cliente. Son {pasos} pasos.',
+  analisisFiltros: 'Valen para las tres vistas: fechas (con atajos como «Este mes») y una búsqueda por cliente, email o programa. «Quitar filtros» los quita todos.',
 };
 
 export type IdRecorridoFinanzas =
@@ -68,7 +78,10 @@ export type IdRecorridoFinanzas =
   | 'por-pagar'
   | 'comisiones'
   | 'comisiones-tutores'
-  | 'nominas';
+  | 'nominas'
+  | 'pendientes-facturar'
+  | 'ventas-sin-formacion'
+  | 'analisis-ventas';
 
 type RecorridoFinanzas = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoFinanzas };
 
@@ -78,8 +91,9 @@ const FINAL = 'No volverá a salir solo. Para repasarlo, pulsa «Ver recorrido»
 
 /**
  * En el orden del menú: Dashboard, Conversiones, Egresos, Cuentas por cobrar,
- * Cuentas por pagar, Comisiones y Nóminas. Comisiones de tutores, que en el menú
- * está en Tutores, va con las comisiones.
+ * Cuentas por pagar, Comisiones, Nóminas y Pendientes de facturar. Comisiones de
+ * tutores, que en el menú está en Tutores, va con las comisiones; Ventas sin
+ * formación y Análisis de ventas, que se abren desde Ventas, al final.
  */
 export const RECORRIDOS_FINANZAS: Record<IdRecorridoFinanzas, RecorridoFinanzas> = {
   // ─── Finanzas › Dashboard (/accounting) ────────────────────────────────────
@@ -391,6 +405,121 @@ export const RECORRIDOS_FINANZAS: Record<IdRecorridoFinanzas, RecorridoFinanzas>
         titulo: 'Añadir un plan',
         texto: 'Elige a alguien que todavía no tiene plan para ponerle el suyo.',
         permiso: 'payroll.edit',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+
+  // ─── Finanzas › Pendientes de facturar (/accounting/pendiente-facturar) ────
+  'pendientes-facturar': {
+    id: 'pendientes-facturar',
+    titulo: 'Pendientes de facturar',
+    permiso: 'facturas.view',
+    pantalla: ['modules/accounting/pages/PendienteFacturarPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Ventas sin importe',
+        texto: 'Ventas registradas sin precio. Mientras no lo tengan, no llegan a Facturación ni cuentan en las cifras. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('pendientes-aviso'),
+        titulo: 'Por qué están aquí',
+        texto: 'El prospecto se marcó como convertido sin apuntar el importe de la venta. Hay que completarlo a mano.',
+      },
+      {
+        donde: anclaje('pendientes-cuantas'),
+        titulo: 'Cuántas son',
+        texto: EN_ESTE_CRM.pendientesCuantas,
+      },
+      {
+        donde: anclaje('pendientes-lista'),
+        titulo: 'La lista',
+        texto: 'Cada venta con su cliente, programa, fecha e importe actual. «Completar» abre la venta para poner el importe, lo pagado y el método de pago; el nombre abre la ficha.',
+      },
+      {
+        donde: anclaje('pendientes-paginas'),
+        titulo: 'Más páginas',
+        texto: 'Si son muchas, van por páginas: «Anterior» y «Siguiente».',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+
+  // ─── Ventas sin formación (/ventas/sin-formacion; idéntica en los dos CRM) ─
+  'ventas-sin-formacion': {
+    id: 'ventas-sin-formacion',
+    titulo: 'Ventas sin formación',
+    permiso: 'ventas.view_equipo',
+    pantalla: ['modules/sales/pages/VentasSinFormacionPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Ventas sin formación',
+        texto: 'Ventas cobradas que no dicen de qué curso del catálogo son. Sin eso, su profesor no cobra comisión. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('sinformacion-tarjetas'),
+        titulo: 'Las tarjetas',
+        texto: 'Cuántas son y lo cobrado de ellas, cuántas se pueden cruzar (su texto coincide con un curso) y cuántas hay que mirar a mano.',
+      },
+      {
+        donde: anclaje('sinformacion-aviso'),
+        titulo: 'Por qué importa',
+        texto: 'Mientras una venta no tenga formación, en los informes sale como «servicio académico» y nadie cobra comisión por ella.',
+      },
+      {
+        donde: anclaje('sinformacion-lista'),
+        titulo: 'La lista',
+        texto: 'Cada venta con lo que dice y la formación propuesta. «Atar» la une a esa formación, tras confirmarlo; «Abrir» lleva a la venta para elegirla a mano.',
+      },
+      {
+        donde: anclaje('sinformacion-a-mano'),
+        titulo: 'Sin candidato único',
+        texto: 'Las que no dicen nada o encajan con más de un curso: no se puede adivinar cuál es, hay que revisarlas una a una.',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+
+  // ─── Análisis de ventas (/ventas/analisis) ─────────────────────────────────
+  'analisis-ventas': {
+    id: 'analisis-ventas',
+    titulo: 'Análisis de ventas',
+    permiso: 'ventas.view_equipo',
+    pantalla: ['modules/sales/pages/SalesAnalysisPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Análisis de ventas',
+        texto: EN_ESTE_CRM.analisis,
+      },
+      {
+        donde: anclaje('analisis-filtros'),
+        titulo: 'Los filtros',
+        texto: EN_ESTE_CRM.analisisFiltros,
+      },
+      {
+        donde: anclaje('analisis-vistas'),
+        titulo: 'Tres vistas',
+        texto: '«Resumen», «Por asesora» y «Por cliente». Cambia aquí: los filtros se mantienen.',
+      },
+      {
+        donde: anclaje('analisis-tarjetas'),
+        titulo: 'El resumen',
+        texto: 'Ventas y clientes, importe vendido y ticket medio, lo cobrado (y cuántas están liquidadas) y lo que queda por cobrar.',
+      },
+      {
+        donde: anclaje('analisis-cobrado-de-mas'),
+        titulo: 'Cobrado de más',
+        texto: 'Ventas con más cobrado que su importe. Suele ser un cobro repetido o un importe mal puesto: hay que revisarlas una a una.',
+      },
+      {
+        donde: anclaje('analisis-fraccionado'),
+        titulo: 'Cobro fraccionado',
+        texto: 'Las ventas a plazos: cuotas cobradas y pendientes, lo que queda por cobrar y lo vencido.',
+      },
+      {
+        donde: anclaje('analisis-tabla'),
+        titulo: 'Por asesora o por cliente',
+        texto: 'Por asesora: lo vendido, cobrado y pendiente de cada una. Por cliente: lo de cada cliente, con sus cuotas; pulsa uno para abrir su ficha.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],
