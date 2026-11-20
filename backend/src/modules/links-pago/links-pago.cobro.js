@@ -156,6 +156,12 @@ export async function trasCobrar(link, { payment, conversionId, conversionPaymen
   const pagadoEl = new Date(Number(payment.stripe_created_at) * 1000).toISOString();
   const cambio = await model.marcarPagado(link.id, { pagadoEl, conversionId });
   if (!cambio) return;
+  // Cobro automático de las cuotas (309): si el link guardaba la tarjeta, se
+  // apunta en la venta y se programan en Stripe las cuotas siguientes.
+  if (link.guarda_tarjeta) {
+    const { trasPagarseUnLink } = await import('./links-pago.cobro-auto.js');
+    await trasPagarseUnLink(link, payment, conversionId);
+  }
   await model.anotarEventoDelCargo(link.id, 'pagado', {
     stripe_id: payment.stripe_id, importe: payment.amount, metodo: payment.payment_method || null,
     conversion_id: conversionId, conversion_payment_id: conversionPaymentId,

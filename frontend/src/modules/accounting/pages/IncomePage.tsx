@@ -18,6 +18,7 @@ import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
+import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const MyGoalCard = lazy(() => import('@/modules/sales/components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('@/modules/sales/components/GestoresStatsTable'));
@@ -649,7 +650,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                         'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
                       }`}>{r.estado}</span>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {/* «Crear link de pago» y «Generar plan de pago» en cada venta por cobrar (Diego, 19/11). */}
+                      {r.venta_id && r.estado !== 'pagado' && (
+                        <AccionesCobroVenta compacto leadId={r.lead_id} conversionId={r.venta_id} />
+                      )}
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); navigate(`/ventas/${r.venta_id}`); }}

@@ -7,6 +7,8 @@
 
 **Ramas.** `main` = **producción**, con la etiqueta de cada versión (`v2.0.0`, `v2.0.1`). `staging` = **pruebas** (crm.iseie.com/staging), independiente de `main`. Hasta el 29/09 producción y staging salían de la misma rama (`actualizar-main-15sep`); ya no. Lo nuevo entra por `staging`; cuando Diego lo aprueba pasa a `main` con un **pull request** (`gh pr create` + `gh pr merge --admin`). El gancho `pre-push` no deja empujar a `main` ni a `feat/angel|fabian|diego`.
 
+**Versiones.** Los dos CRM llevan el mismo número de versión desde v2.7.0 (Diego, 18/11/2026). Cada salida a producción sube los dos a la vez (v2.7.1, v2.7.2…), aunque uno lleve menos cambios que el otro, con la misma etiqueta `vX.Y.Z` en cada repo. La web enseña ese número: lo saca de la etiqueta o del título de la fusión al compilar (`frontend/scripts/versionDeLaApp.js`).
+
 | | Producción | Pruebas |
 |---|---|---|
 | Web | https://crm.iseie.com | https://crm.iseie.com/staging |
