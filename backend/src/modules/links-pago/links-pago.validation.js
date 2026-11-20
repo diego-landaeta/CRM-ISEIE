@@ -83,13 +83,19 @@ export const configBodySchema = z.object({
 }).refine((b) => CAMPOS_DE_CONFIG.some((k) => b[k] !== undefined), 'Falta el descuento');
 
 /*
-  Crear un link (fase 2: solo pago único). Para un prospecto o para una venta:
-  con la venta, el prospecto y el campus salen de ella. El campus nunca sale de
-  lo que mande el navegador.
+  Crear un link. Para un prospecto, para una venta o, desde el 20/11 (Carlos:
+  «sin nombre de la persona»), para nadie todavía: solo el campus y el curso.
+  Con la venta, el prospecto y el campus salen de ella; sin persona, el campus
+  que se mande tiene que ser uno de los de quien lo crea (lo mira el
+  controlador).
+
+  `modalidad: 'cuotas'` con `num_cuotas` (de 2 al máximo del campus): el link
+  cobra la primera cuota y guarda la tarjeta; Stripe cobra las demás solas.
 */
 export const crearSchema = z.object({
   leadId: id.optional(),
   conversionId: id.optional(),
+  projectId: id.optional(),
   productId: id,
   importe: z.preprocess(comoNumero,
     z.number({ invalid_type_error: 'El importe tiene que ser un número', required_error: 'Falta el importe' })
@@ -101,7 +107,13 @@ export const crearSchema = z.object({
   moneda: moneda.optional(),
   caducidad_dias: entero('Caducidad', 1, 365).optional(),
   modalidad: z.enum(['unico', 'cuotas']).optional().default('unico'),
-}).refine((b) => b.leadId || b.conversionId, 'Falta el prospecto o la venta');
+  num_cuotas: entero('Número de cuotas', 2, 36).optional(),
+}).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
+  .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
+  .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»');
+
+/** ¿Se puede crear un link en cuotas en este campus? (el asistente lo pregunta antes). */
+export const cuotasQuerySchema = z.object({ projectId: id });
 
 export const anularSchema = z.object({
   motivo: z.string({ required_error: 'Falta el motivo', invalid_type_error: 'Falta el motivo' }).trim()

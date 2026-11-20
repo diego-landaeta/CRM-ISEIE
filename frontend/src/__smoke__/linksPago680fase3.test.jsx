@@ -13,6 +13,8 @@ import { MemoryRouter } from 'react-router-dom';
 
 const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
+// El asistente mira el campus activo (link sencillo, 20/11): uno, el 1.
+vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ({ activeProject: { id: 1, nombre: 'Campus 1' }, projects: [{ id: 1, nombre: 'Campus 1' }] }) }));
 vi.mock('@/shared/api/client', () => ({ default: { get, post, put: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
