@@ -230,7 +230,7 @@ export default function FieldDefinitionsPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold text-sm">{f.label}</span>
-                  {f.required && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-950/40 dark:text-red-300 font-bold">Requerido</span>}
+                  {f.required && <span className="text-[10px] px-1.5 py-0.5 rounded bg-destructive-soft text-destructive-soft-foreground font-bold">Requerido</span>}
                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted font-mono">{f.type}</span>
                 </div>
                 <p className="text-xs text-muted-foreground truncate">
@@ -249,8 +249,7 @@ export default function FieldDefinitionsPage() {
               </button>
               <button
                 onClick={() => setDeleteTarget(f)}
-                className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 transition-colors"
-                aria-label="Eliminar campo"
+                className="h-9 w-9 inline-flex items-center justify-center rounded-lg hover:bg-destructive-soft text-destructive transition-colors" aria-label="Eliminar campo"
               >
                 <Trash size={14} />
               </button>

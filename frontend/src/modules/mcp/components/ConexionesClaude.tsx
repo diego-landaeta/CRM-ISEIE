@@ -211,7 +211,7 @@ export default function ConexionesClaude({ onCambio, todasSusUrls, urlsSueltas =
                           <PencilSimple size={15} />
                         </button>
                         <button type="button" title="Borrar" aria-label={`Borrar ${c.label}`} onClick={() => borrar(c)}
-                          className="p-1.5 rounded-md text-muted-foreground hover:text-red-600 hover:bg-muted">
+                        className="p-1.5 rounded-md text-muted-foreground hover:text-destructive hover:bg-muted">
                           <Trash size={15} />
                         </button>
                       </>

@@ -40,11 +40,11 @@ export default function InterruptorMcp({ estado, puedeApagar, onCambio }: {
 
   return (
     <div className={`rounded-lg p-4 flex flex-wrap items-center gap-3 border ${estado.apagado
-      ? 'border-red-300 bg-red-50 dark:border-red-900 dark:bg-red-950/30'
+      ? 'border-destructive/30 bg-destructive-soft'
       : 'border-border bg-card'}`}>
       {estado.apagado
-        ? <WarningOctagon size={22} weight="fill" className="text-red-600 flex-shrink-0" />
-        : <Power size={20} weight="bold" className="text-emerald-600 flex-shrink-0" />}
+        ? <WarningOctagon size={22} weight="fill" className="text-destructive flex-shrink-0" />
+        : <Power size={20} weight="bold" className="text-success flex-shrink-0" />}
       <div className="flex-1 min-w-[240px]">
         <p className="font-semibold text-sm">
           {estado.apagado ? 'El MCP está APAGADO: Claude no puede consultar el CRM' : 'Interruptor de emergencia · el MCP está encendido'}
@@ -62,8 +62,8 @@ export default function InterruptorMcp({ estado, puedeApagar, onCambio }: {
           onClick={() => cambiar(!estado.apagado)}
           disabled={cambiando}
           className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-semibold disabled:opacity-50 ${estado.apagado
-            ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-            : 'bg-red-600 text-white hover:bg-red-700'}`}
+            ? 'bg-success text-success-foreground hover:bg-success/90'
+            : 'bg-destructive text-destructive-foreground hover:bg-destructive/90'}`}
         ><Power size={14} weight="bold" /> {estado.apagado ? 'Encender el MCP' : 'Apagar el MCP'}</button>
       )}
     </div>

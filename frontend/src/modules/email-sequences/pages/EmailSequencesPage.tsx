@@ -134,7 +134,7 @@ export default function EmailSequencesPage() {
                 <button
                   onClick={() => handleDelete(s)}
                   aria-label="Eliminar secuencia"
-                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-destructive-soft text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40"
                 >
                   <Trash size={14} />
                 </button>
@@ -261,7 +261,7 @@ function SequenceEditor({ seq, onSave, onClose }: SequenceEditorProps) {
                     <button
                       onClick={() => removeStep(i)}
                       aria-label={`Quitar paso ${i + 1}`}
-                      className="ml-auto p-1 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/40"
+                      className="ml-auto p-1 rounded hover:bg-destructive-soft text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40"
                     >
                       <Trash size={12} />
                     </button>

@@ -141,10 +141,11 @@ export default function PanelMapeo({ conector, onCerrar, onCambiado }: Props) {
                 Conectando con el origen y trayendo una muestra…
               </p>
             ) : error ? (
-              <div className="rounded-md border border-red-200/60 dark:border-red-800/40 bg-red-50 dark:bg-red-950/30 p-4 space-y-1">
-                <p className="flex items-center gap-2 text-sm font-semibold text-red-700 dark:text-red-300">
+              <div className="rounded-md border border-destructive/30 bg-destructive-soft p-4 space-y-1">
+                <p className="flex items-center gap-2 text-sm font-semibold text-destructive-soft-foreground">
                   <XCircle size={15} weight="fill" /> No se pudo conectar
                 </p>
+
                 <p className="text-xs text-muted-foreground">{error}</p>
                 <p className="text-xs text-muted-foreground">
                   Suele ser la dirección o las credenciales. Ciérralo, edita el conector y vuelve a probar.
@@ -171,8 +172,8 @@ export default function PanelMapeo({ conector, onCerrar, onCambiado }: Props) {
                 </div>
 
                 {sinAsignar.length > 0 && (
-                  <div className="flex items-start gap-2 rounded-md border border-amber-200/60 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-sm">
-                    <WarningCircle size={15} weight="fill" className="text-amber-600 mt-0.5 shrink-0" />
+                  <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm">
+                    <WarningCircle size={15} weight="fill" className="text-warning mt-0.5 shrink-0" />                    
                     <span>
                       Falta asignar <strong>{sinAsignar.map((d) => d.label).join(', ')}</strong>.
                       Sin eso la importación no puede crear nada.
@@ -213,7 +214,7 @@ export default function PanelMapeo({ conector, onCerrar, onCambiado }: Props) {
                             <tr key={d.key} className="border-t border-border align-middle">
                               <td className="px-3 py-2">
                                 <span className="font-medium">{d.label}</span>
-                                {d.required && <span className="text-red-600 ml-0.5">*</span>}
+                                {d.required && <span className="text-destructive ml-0.5">*</span>}
                                 {d.group && (
                                   <span className="block text-[11px] text-muted-foreground">{d.group}</span>
                                 )}
@@ -260,7 +261,7 @@ export default function PanelMapeo({ conector, onCerrar, onCambiado }: Props) {
             <span className="text-xs text-muted-foreground inline-flex items-center gap-1.5">
               {datos && !error && (
                 <>
-                  <CheckCircle size={13} weight="fill" className="text-emerald-600" />
+            <CheckCircle size={13} weight="fill" className="text-success" />
                   Conectado. Nada se importa hasta que lo pidas.
                 </>
               )}

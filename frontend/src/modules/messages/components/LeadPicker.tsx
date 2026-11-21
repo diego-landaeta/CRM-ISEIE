@@ -82,8 +82,8 @@ export default function LeadPicker({ open, onSelect, onClose }: Props) {
             onClick={() => onSelect(l)}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 text-left transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-              <User size={16} weight="fill" className="text-blue-500" />
+          <div className="w-8 h-8 rounded-full bg-info-soft flex items-center justify-center flex-shrink-0">
+              <User size={16} weight="fill" className="text-info" />
             </div>
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">

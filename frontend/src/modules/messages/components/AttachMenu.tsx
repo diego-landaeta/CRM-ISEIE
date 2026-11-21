@@ -12,8 +12,8 @@ interface MenuItem {
 }
 
 const ITEMS: MenuItem[] = [
-  { type: 'lead', label: 'Prospecto', icon: User, color: 'text-blue-500', bg: 'bg-blue-500/10' },
-  { type: 'product', label: 'Producto', icon: Package, color: 'text-amber-500', bg: 'bg-amber-500/10' },
+     { type: 'lead', label: 'Prospecto', icon: User, color: 'text-info', bg: 'bg-info-soft' },
+  { type: 'product', label: 'Producto', icon: Package, color: 'text-warning', bg: 'bg-warning-soft' },
 ];
 
 interface Props {
