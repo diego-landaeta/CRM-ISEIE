@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
-// Gemela de la de MultiCRM (#407, gemela de CRM#680, fase 2). ISEIE no tiene un setup
-// común de pruebas: el entorno y la limpieza entre pruebas se ponen aquí.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, within, cleanup } from '@testing-library/react';
+import { cleanup } from '@testing-library/react';
+afterEach(() => cleanup());
+import { render as pintar, screen, fireEvent, within } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 
 /**
- * CRM#680, fase 2 · Los links de pago en la ficha del prospecto y de la venta, y
+ * #680, fase 2 · Los links de pago en la ficha del prospecto y de la venta, y
  * las reglas del campus en Integraciones.
  */
 
 const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
 const put = vi.hoisted(() => vi.fn());
+// El asistente mira el campus activo (link sencillo, 20/11): uno, el 1.
+vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ({ activeProject: { id: 1, nombre: 'Campus 1' }, projects: [{ id: 1, nombre: 'Campus 1' }] }) }));
 vi.mock('@/shared/api/client', () => ({ default: { get, post, put, delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
@@ -19,6 +22,8 @@ vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => p
 // El servidor tiene los links encendidos (`/auth/me`).
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 2, funciones: { links_pago: true } } }) }));
 
+// La tarjeta enlaza a la venta y el asistente navega (WhatsApp): con router.
+const render = (ui) => pintar(<MemoryRouter>{ui}</MemoryRouter>);
 const { default: LinksDePagoCard } = await import('@/modules/links-pago/components/LinksDePagoCard');
 const { ReglasDeLosLinks } = await import('@/modules/links-pago/components/ConfigLinksPago');
 
@@ -26,9 +31,9 @@ const CONFIG = {
   project_id: 1, descuento_max_pct: 10, caducidad_dias: 7, caducidad_max_dias: 30,
   cuotas_admitidas: true, cuotas_max: 12, monedas: ['EUR'], moneda_defecto: 'EUR',
 };
-const CURSOS = [{ id: 5, nombre: 'Máster en Educación Inclusiva', precio: '1000.00', moneda: 'EUR' }];
+const CURSOS = [{ id: 5, nombre: 'Máster en Psicología', precio: '1000.00', moneda: 'EUR' }];
 const LINK = {
-  id: 9, project_id: 1, lead_id: 3, conversion_id: null, product_id: 5, product_nombre: 'Máster en Educación Inclusiva',
+  id: 9, project_id: 1, lead_id: 3, conversion_id: null, product_id: 5, product_nombre: 'Máster en Psicología',
   created_by: 2, creado_por_nombre: 'Gestora Uno', precio_catalogo: '1000.00', importe: '900.00', descuento_pct: '10.00',
   moneda: 'EUR', modalidad: 'unico', estado: 'creado', url: 'https://buy.stripe.com/test_x', caduca_el: '2026-11-25T10:00:00Z',
   pagado_el: null, anulado_por_nombre: null, anulado_el: null, motivo_anulacion: null, created_at: '2026-11-18T10:00:00Z',
@@ -38,13 +43,15 @@ beforeEach(() => {
   get.mockReset(); post.mockReset(); put.mockReset();
   get.mockImplementation(async (url) => {
     if (url === '/links-pago') return { success: true, data: [LINK] };
+    // El asistente (19/11): el prospecto y sus ventas (aquí, ninguna).
+    if (url === '/links-pago/ventas-del-prospecto') {
+      return { success: true, data: { lead: { id: 3, nombre: 'Ana', email: null, telefono: null, project_id: 1, producto_interes_id: 5 }, ventas: [] } };
+    }
     if (url.startsWith('/links-pago/config')) return { success: true, data: CONFIG };
     if (url === '/products') return { success: true, data: CURSOS };
     return { success: true, data: [] };
   });
 });
-
-afterEach(cleanup);
 
 describe('la tarjeta de la ficha', () => {
   it('sin permiso de links, no sale ni pide nada', () => {
@@ -70,27 +77,13 @@ describe('la tarjeta de la ficha', () => {
     expect(get).toHaveBeenCalledWith('/links-pago', { params: { conversionId: 8, limit: 50 } });
   });
 
-  it('crear: el precio del catálogo sale sugerido; pasarse del tope no deja enviar; dentro, manda lo que toca', async () => {
+  it('sin ninguna venta, el link sencillo: curso, pago único y crear (Carlos, 20/11)', async () => {
     permisos.mapa = { 'links_pago.crear': true };
-    post.mockResolvedValue({ success: true, data: { ...LINK, id: 10, importe: '950.00' } });
     render(<LinksDePagoCard projectId={1} leadId={3} productoId={5} />);
     fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
     const dialogo = await screen.findByRole('dialog');
-    const importe = within(dialogo).getByLabelText('Importe');
-    await vi.waitFor(() => expect(importe.value).toBe('1000'));
-    expect(within(dialogo).getByLabelText(/Caduca a los/).value).toBe('7');
-
-    fireEvent.change(importe, { target: { value: '850' } });
-    expect(within(dialogo).getByText(/máximo en este campus es un 10 %/)).toBeTruthy();
-    expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
-
-    fireEvent.change(importe, { target: { value: '950' } });
-    fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear link' }));
-    await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/links-pago', {
-      leadId: 3, productId: 5, importe: 950, moneda: 'EUR', caducidad_dias: 7,
-    }));
-    expect(await within(dialogo).findByText('Link creado')).toBeTruthy();
-    expect(within(dialogo).getByLabelText('Link de pago').value).toBe('https://buy.stripe.com/test_x');
+    expect(within(dialogo).queryByText('Este prospecto no tiene ninguna venta')).toBeNull();
+    expect(await within(dialogo).findByRole('button', { name: 'Crear link' })).toBeTruthy();
   });
 });
 

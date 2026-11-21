@@ -5,7 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import client from '@/shared/api/client';
 import { CURRENCIES } from '../currencies';
-import { invoicesApi, esFacturaEmitida, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
+import { invoicesApi, NO_SE_CAMBIA_EMITIDA } from '../api/invoices.api';
 import type { Issuer, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { conversionsApi, type Conversion } from '@/modules/conversions/api/conversions.api';
@@ -381,7 +381,8 @@ export default function InvoiceCreatePage() {
       if (!res.success || !res.data) return;
       const f = res.data as import('../api/invoices.api').Invoice;
       setEditEstado(f.estado || null);
-      setEditEmitida(esFacturaEmitida(f));
+      // Diego, 19/11/2026: el admin corrige también una emitida (la ruta exige su permiso).
+      setEditEmitida(false);
         const d10 = (v?: string | null) => (v ? String(v).slice(0, 10) : '');
         setFechaEmision(d10(f.fecha_emision));
         setFechaPago(d10(f.fecha_pago));

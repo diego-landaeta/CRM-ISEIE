@@ -154,10 +154,23 @@ afterAll(async () => {
 
 describe('1 · Facturas: la factura por id, como la lista', () => {
   it('la factura de una gestora de fuera por id: 403 a la líder (ficha y PDF) y a otra gestora', async () => {
-    expect((await pedir(LIDER, `/api/invoices/${F.LF}`)).status).toBe(403);
-    expect((await pedir(LIDER, `/api/invoices/${F.LF}/pdf`)).status).toBe(403);
-    expect((await pedir(G1, `/api/invoices/${F.LF}`)).status).toBe(403);
-    expect((await pedir(G1, `/api/invoices/${F.LF}/pdf`)).status).toBe(403);
+    // Diego, 19/11/2026: con acceso a la facturación («Poner número al cobrar», de
+    // serie en una admin) se ven y se corrigen TODAS las facturas del campus. Para
+    // probar el recorte del equipo, se le quita.
+    const { olvidarPermisos: olvidar } = await import('../src/modules/permissions/permissions.service.js');
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false), ($1, 'facturas', 'gestionar', false)
+             ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [LIDER.id]);
+    olvidar();
+    try {
+      expect((await pedir(LIDER, `/api/invoices/${F.LF}`)).status).toBe(403);
+      expect((await pedir(LIDER, `/api/invoices/${F.LF}/pdf`)).status).toBe(403);
+    } finally {
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action IN ('emitir', 'gestionar')`, [LIDER.id]);
+      olvidar();
+    }
+    expect((await pedir(LIDER, `/api/invoices/${F.LF}`)).status).toBe(200);
+    // La gestora, también desde el 19/11: corrige cualquier factura de su campus.
+    expect((await pedir(G1, `/api/invoices/${F.LF}`)).status).toBe(200);
   });
 
   it('la de su equipo, sí; y la admin y la dueña, la suya', async () => {

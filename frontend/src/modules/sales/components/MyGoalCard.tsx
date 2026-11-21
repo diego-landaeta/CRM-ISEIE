@@ -99,7 +99,8 @@ export default function MyGoalCard({ projectId, className = '', periodo: periodo
   const pctF = stats.progreso_facturacion_pct ?? 0;
 
   return (
-    <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
+    // `data-recorrido`: el paso «Mi meta del mes» del recorrido de Ventas (#619, gemela de CRM#941).
+    <div data-recorrido="mi-meta" className={`bg-card border border-border rounded-lg p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Target size={16} weight="duotone" className="text-emerald-600" />

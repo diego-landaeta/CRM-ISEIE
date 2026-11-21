@@ -10,6 +10,9 @@ import '@testing-library/jest-dom/vitest';
   dice qué falta y dónde.
 */
 
+// El diálogo pregunta si se pueden crear links de pago (19/11): aquí, no.
+vi.mock('@/shared/lib/linksPago', () => ({ useLinksPagoEncendidos: () => false, linksPagoEncendidos: () => false }));
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => false, llevaEquipo: false }) }));
 vi.mock('@/shared/components/ui/portal', () => ({ default: ({ children }) => children }));
 vi.mock('@/shared/hooks/useDialogA11y', () => ({ useEscapeKey: () => {} }));
 const catalogo = vi.hoisted(() => ({ products: [] }));
