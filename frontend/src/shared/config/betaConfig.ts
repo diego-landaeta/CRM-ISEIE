@@ -24,6 +24,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/matriculas',                    // Matriculas
   '/conexion',                      // Conexión: MCP de Claude y Conectores (como MultiCRM)
   '/ventas',                         // Ventas (registro venta historica + listado conversiones)
+  '/links-pago',                     // Links de pago de Stripe (v2.8.0; Diego, 19/11: «actívalo»)
   '/accounting',                    // Finanzas: dashboard, income, conversions, receivable, payable, integrations
   '/expenses',                      // Egresos
   '/commissions',                   // Comisiones

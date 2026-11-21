@@ -1,5 +1,6 @@
 import * as model from './links-pago.model.js';
-import { entorno } from './links-pago.service.js';
+import { entorno, planDeCuotas } from './links-pago.service.js';
+import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { linksPagoActivos } from '../../shared/config/soloEnPruebas.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -90,34 +91,39 @@ export async function linkDelCargo(projectId, payment, dbRow, { env = process.en
  * La venta del link desde un prospecto, creada a nombre de quien creó el link.
  * Devuelve el id de la venta, o null si no se pudo (queda sin asociar y se dice).
  */
-async function crearVentaDelLink(projectId, payment, link) {
+async function crearVentaDelLink(projectId, payment, link, leadId) {
   const fecha = new Date(Number(payment.stripe_created_at) * 1000).toISOString().slice(0, 10);
   // El importe del link es el precio pactado. En otra moneda, lo que entró en euros
   // (el CRM guarda euros).
   const importe = String(link.moneda).toUpperCase() === 'EUR' ? Number(link.importe) : Number(payment.amount);
+  // En cuotas (link sencillo, 20/11): la venta por el total con N cuotas mensuales desde el pago.
+  const cuotas = link.modalidad === 'cuotas' && Number(link.num_cuotas) >= 2
+    ? planDeCuotas({ total: Number(link.importe), n: Number(link.num_cuotas), desde: fecha })
+    : null;
   try {
     const { createSale } = await import('../sales/sales.service.js');
     const venta = await createSale({
       project_id: Number(projectId),
-      lead_id: Number(link.lead_id),
+      lead_id: Number(leadId),
       producto_interes_id: link.product_id ? Number(link.product_id) : undefined,
       importe_total: importe,
       importe_pagado: 0,
       // Lo cobrado por el link ya es el precio final, IVA dentro. En ISEIE, sin esto,
       // el 21 % se sumaría encima (como en la compra directa de la web).
       iva_incluido: true,
-      metodo_pago: 'tarjeta',
+      metodo_pago: cuotas ? 'fraccionado' : 'tarjeta',
+      ...(cuotas ? { installments: cuotas.map((c) => ({ importe_previsto: c.importe, fecha_vencimiento: c.vence })) } : {}),
       fecha_pago: fecha,
       vendedora_id: link.created_by ? Number(link.created_by) : undefined,
-      notas: `Pagada con el link de pago n.º ${link.id} (Stripe ${payment.stripe_id}). Venta creada por el CRM al llegar el cobro.`,
+      notas: model.notasDeLaVenta(link.id, payment.stripe_id),
     }, null, {
       // Sin nadie delante para decidir: no se para por «venta repetida» (CRM#898).
       // La de este curso en la misma ficha ya se buscó arriba; si repite otra,
       // sale en Ventas · «Posibles repetidas».
       comprobarRepetida: false,
     });
-    logger.info({ projectId, linkId: link.id, conversionId: venta.conversion_id, vendedoraId: link.created_by, stripeId: payment.stripe_id },
-      'links de pago: venta creada al pagarse el link');
+    logger.info({ projectId, linkId: link.id, conversionId: venta.conversion_id, vendedoraId: link.created_by, stripeId: payment.stripe_id,
+      cuotas: cuotas?.length || null }, 'links de pago: venta creada al pagarse el link');
     return venta.conversion_id;
   } catch (err) {
     logger.warn({ projectId, linkId: link.id, stripeId: payment.stripe_id, err: err.message, code: err.code },
@@ -126,17 +132,112 @@ async function crearVentaDelLink(projectId, payment, link) {
   }
 }
 
+/** Quién pagó: lo que trae el cargo y, si falta algo, lo que dijo la sesión de Checkout. */
+async function clienteDelPago(payment, link) {
+  const delCheckout = (!payment.customer_email || !payment.customer_name || !payment.customer_phone)
+    ? await model.clienteDelCheckout(link.id) : null;
+  const limpio = (v, max) => (v == null ? null : String(v).trim().slice(0, max) || null);
+  return {
+    email: limpio(payment.customer_email || delCheckout?.email, 255)?.toLowerCase() || null,
+    nombre: limpio(payment.customer_name || delCheckout?.nombre, 200),
+    telefono: limpio(payment.customer_phone || delCheckout?.telefono, 40),
+  };
+}
+
+/*
+  EL PROSPECTO DE UN LINK SIN PROSPECTO (Carlos, 20/11: «sin nombre de la
+  persona»). Con lo que el alumno escribe en Checkout:
+    · si su correo es el de un prospecto del campus, ese (el más reciente, como
+      las reglas de asociación de siempre);
+    · si no, uno nuevo, asignado a quien creó el link, con su curso y con el
+      origen «link de pago» (fuente `link_de_pago` en sus UTM).
+  Un segundo aviso de Stripe no crea otro: va por la misma reserva por cargo y,
+  si el primero llegó a crearlo, lo encuentra por el correo.
+*/
+async function prospectoDelPago(projectId, payment, link) {
+  const cliente = await clienteDelPago(payment, link);
+  if (!cliente.email && !cliente.telefono) {
+    logger.warn({ projectId, linkId: link.id, stripeId: payment.stripe_id },
+      'links de pago: el pago no trae ni correo ni teléfono; no se puede crear el prospecto y el cargo queda sin asociar');
+    return null;
+  }
+  const { findLeadByEmail } = await import('../stripe-payments/stripe-payments.model.js');
+  const existente = cliente.email ? await findLeadByEmail(projectId, cliente.email) : null;
+  if (existente) return Number(existente.id);
+  try {
+    const { createManualLead } = await import('../leads/lead.service.js');
+    const r = await createManualLead({
+      project_id: Number(projectId),
+      nombre: cliente.nombre || cliente.email || cliente.telefono,
+      email: cliente.email,
+      telefono: cliente.telefono,
+      producto_interes_id: link.product_id ? Number(link.product_id) : null,
+      canal: 'directo',
+      notas: `Entró al pagar el link de pago n.º ${link.id} (Stripe ${payment.stripe_id}).`,
+    }, {
+      // Para quien creó el link, sin pasar por el reparto; si ya no está, sin nadie.
+      creatorUser: link.created_by ? { userId: Number(link.created_by), role: 'gestor' } : null,
+      sinResponsable: !link.created_by,
+      utms: { utm_source: 'link_de_pago', utm_medium: 'crm', utm_campaign: `link-${link.id}` },
+    });
+    logger.info({ projectId, linkId: link.id, leadId: r.lead_id, duplicadoDe: r.duplicado_de, stripeId: payment.stripe_id },
+      'links de pago: prospecto creado al pagarse un link sin prospecto');
+    return Number(r.lead_id);
+  } catch (err) {
+    logger.warn({ projectId, linkId: link.id, stripeId: payment.stripe_id, err: err.message },
+      'links de pago: no se pudo crear el prospecto del link; el cargo queda sin asociar');
+    return null;
+  }
+}
+
+/**
+ * La venta de un link que aún no la tiene: la de su prospecto (o la de quien
+ * pagó, si el link no tenía) o una nueva. `{ conversionId, cuotaId }` o null.
+ */
+async function ventaNueva(projectId, payment, link) {
+  // ¿Ya la creó este link en un intento que se cortó antes de apuntarla?
+  const ya = await model.ventaCreadaPorElLink(projectId, link.id);
+  if (ya) {
+    await model.ponerVenta(link.id, ya.id, ya.lead_id);
+    return { conversionId: ya.id, cuotaId: link.modalidad === 'cuotas' ? await model.primeraCuotaPendiente(ya.id) : null };
+  }
+  const sinProspecto = !link.lead_id;
+  const leadId = link.lead_id || await prospectoDelPago(projectId, payment, link);
+  if (!leadId) return null;
+  // Link desde un prospecto, de pago único: la venta de ese curso que ya tenga
+  // la ficha (la asesora pudo registrarla a mano mientras). En cuotas, o sin
+  // prospecto de partida, siempre la suya: lleva su plan y su cobro automático.
+  if (!sinProspecto && link.modalidad !== 'cuotas') {
+    const yaHay = await model.ventaDelCursoEnLaFicha(leadId, link.product_id);
+    if (yaHay) {
+      await model.ponerVenta(link.id, yaHay.id, leadId);
+      return { conversionId: yaHay.id, cuotaId: null };
+    }
+  }
+  const conversionId = await crearVentaDelLink(projectId, payment, link, leadId);
+  if (!conversionId) return null;
+  await model.ponerVenta(link.id, conversionId, leadId);
+  if (link.modalidad !== 'cuotas') return { conversionId, cuotaId: null };
+  // El cobro automático, activo en la venta ANTES de apuntar el cobro: al pagarse
+  // el link (`trasCobrar`) se guarda la tarjeta y Stripe programa las demás cuotas.
+  const cobroAutoModel = await import('./links-pago.cobro-auto.model.js');
+  await cobroAutoModel.poner(conversionId, { projectId: Number(projectId), activo: true, userId: link.created_by ?? null });
+  return { conversionId, cuotaId: await model.primeraCuotaPendiente(conversionId) };
+}
+
 /**
  * A qué venta va el cobro de un link. Devuelve lo mismo que las reglas de
  * `stripe-payments.service.js` ({ conv, ficha, metodoAuto, email }) más a quién
- * se avisa (quien creó el link), o null si no hay venta posible.
+ * se avisa (quien creó el link), o null si no hay venta posible. Si el link
+ * creó la venta en cuotas, `cuotaId`: la cuota 1, que salda este cobro.
  */
 export async function ventaDelLink(projectId, payment, link) {
   let conversionId = link.conversion_id;
-  if (!conversionId && link.lead_id) {
-    const yaHay = await model.ventaDelCursoEnLaFicha(link.lead_id, link.product_id);
-    conversionId = yaHay?.id || await crearVentaDelLink(projectId, payment, link);
-    if (conversionId) await model.ponerVenta(link.id, conversionId);
+  let cuotaId = null;
+  if (!conversionId) {
+    const nueva = await ventaNueva(projectId, payment, link);
+    conversionId = nueva?.conversionId || null;
+    cuotaId = nueva?.cuotaId || null;
   }
   if (!conversionId) return null;
   const v = await model.ventaConFicha(conversionId);
@@ -148,6 +249,7 @@ export async function ventaDelLink(projectId, payment, link) {
     email: payment.customer_email || null,
     avisarA: link.created_by || v.responsable_id || null,
     link,
+    ...(cuotaId ? { cuotaId } : {}),
   };
 }
 
@@ -156,6 +258,12 @@ export async function trasCobrar(link, { payment, conversionId, conversionPaymen
   const pagadoEl = new Date(Number(payment.stripe_created_at) * 1000).toISOString();
   const cambio = await model.marcarPagado(link.id, { pagadoEl, conversionId });
   if (!cambio) return;
+  // Cobro automático de las cuotas (309): si el link guardaba la tarjeta, se
+  // apunta en la venta y se programan en Stripe las cuotas siguientes.
+  if (link.guarda_tarjeta) {
+    const { trasPagarseUnLink } = await import('./links-pago.cobro-auto.js');
+    await trasPagarseUnLink(link, payment, conversionId);
+  }
   await model.anotarEventoDelCargo(link.id, 'pagado', {
     stripe_id: payment.stripe_id, importe: payment.amount, metodo: payment.payment_method || null,
     conversion_id: conversionId, conversion_payment_id: conversionPaymentId,
@@ -205,11 +313,20 @@ export async function desdeLaSesion(projectId, event, { env = process.env } = {}
       customerId: typeof s.customer === 'string' ? s.customer : s.customer?.id || null,
     });
   }
+  // Quién pagó (correo, nombre y teléfono que escribió en Checkout): con eso se
+  // busca o se crea el prospecto de un link sin prospecto, si el cargo no lo trae.
+  const cd = s.customer_details || null;
+  const cliente = cd && (cd.email || cd.name || cd.phone)
+    ? { email: cd.email || null, nombre: cd.name || null, telefono: cd.phone || null }
+    : null;
   await model.anotarEventoDeStripe(link.id, tipo, {
     session_id: s.id || null, payment_status: s.payment_status || null,
     importe: typeof s.amount_total === 'number' ? s.amount_total / 100 : null,
     moneda: s.currency ? String(s.currency).toUpperCase() : null,
+    ...(cliente ? { cliente } : {}),
   }, event.id || null);
+  // Si el cargo llegó antes y creó el prospecto sin teléfono, se completa.
+  if (cliente?.telefono) await model.completarTelefono(link.id, normalizePhone(cliente.telefono) || cliente.telefono);
   if (event.type === 'checkout.session.async_payment_failed' || event.type === 'checkout.session.expired') {
     await model.marcarAbierto(link.id);
   }
