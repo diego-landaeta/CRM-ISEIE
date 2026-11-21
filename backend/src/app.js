@@ -125,6 +125,7 @@ import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
 import { startCobroAutomaticoScheduler } from './jobs/cobroAutomaticoScheduler.js';
+import { startLinksPagoSeguimientoScheduler } from './jobs/linksPagoSeguimientoScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
@@ -137,7 +138,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
 // el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
-import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, cobroAutomaticoActivo } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, cobroAutomaticoActivo, seguimientoLinksActivo } from './shared/config/soloEnPruebas.js';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
@@ -630,6 +631,8 @@ if (process.env.NODE_ENV !== 'test') {
     }
     // Cobro automático de las cuotas (gemela de CRM 309): el reintento y el repaso del plan en Stripe.
     if (cobroAutomaticoActivo()) startCobroAutomaticoScheduler();
+    // Seguimiento de los links sin pagar (gemela de CRM#984): aperturas, aviso a la gestora y recordatorios.
+    if (seguimientoLinksActivo()) startLinksPagoSeguimientoScheduler();
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
       try {
         startMcpVigilanciaScheduler();   // alertas de uso raro

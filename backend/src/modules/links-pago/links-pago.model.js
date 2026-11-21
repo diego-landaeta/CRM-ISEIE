@@ -27,6 +27,8 @@ const COLUMNAS = `
   pl.precio_original, pl.descuento_tipo, pl.descuento_valor, pl.descuento_importe,
   pl.estado, pl.url, pl.caduca_el, pl.pagado_el, pl.guarda_tarjeta,
   pl.anulado_por, an.nombre AS anulado_por_nombre, pl.anulado_el, pl.motivo_anulacion,
+  pl.abierto_el, pl.aviso_gestora_el, pl.recordatorio_24h_el, pl.recordatorio_72h_el,
+  pl.renovado_de, pl.renovado_por,
   pl.created_at, pl.updated_at`;
 
 const UNIONES = `
@@ -113,7 +115,9 @@ const COLUMNAS_CONFIG = `
   links_pago_monedas::text[] AS monedas,
   links_pago_moneda_defecto AS moneda_defecto,
   links_pago_cobro_auto AS cobro_auto,
-  links_pago_cobro_auto_reintento_dias AS cobro_auto_reintento_dias`;
+  links_pago_cobro_auto_reintento_dias AS cobro_auto_reintento_dias,
+  links_pago_aviso_abierto_horas AS aviso_abierto_horas,
+  links_pago_recordatorios AS recordatorios`;
 
 function configDeFila(r) {
   if (!r) return null;
@@ -128,6 +132,9 @@ function configDeFila(r) {
     // Cobro automático de las cuotas (309).
     cobro_auto: r.cobro_auto === true,
     cobro_auto_reintento_dias: Number(r.cobro_auto_reintento_dias),
+    // Seguimiento de los que no se pagan (gemela de CRM#984).
+    aviso_abierto_horas: Number(r.aviso_abierto_horas),
+    recordatorios: r.recordatorios === true,
   };
 }
 
@@ -147,6 +154,8 @@ const COLUMNA_DE = {
   moneda_defecto: 'links_pago_moneda_defecto',
   cobro_auto: 'links_pago_cobro_auto',
   cobro_auto_reintento_dias: 'links_pago_cobro_auto_reintento_dias',
+  aviso_abierto_horas: 'links_pago_aviso_abierto_horas',
+  recordatorios: 'links_pago_recordatorios',
 };
 
 /** Guarda solo lo que venga. Las columnas salen de una lista fija, nunca del cuerpo. */
@@ -502,7 +511,8 @@ export async function marcarPagado(linkId, { pagadoEl, conversionId }) {
 /** Abierto: el cliente llegó a la página de pago (un intento fallido o una sesión que caducó). */
 export async function marcarAbierto(linkId) {
   await query(
-    `UPDATE payment_links SET estado = 'abierto', updated_at = NOW() WHERE id = $1 AND estado = 'creado'`,
+    `UPDATE payment_links SET estado = 'abierto', abierto_el = COALESCE(abierto_el, NOW()), updated_at = NOW()
+      WHERE id = $1 AND estado = 'creado'`,
     [linkId]);
 }
 

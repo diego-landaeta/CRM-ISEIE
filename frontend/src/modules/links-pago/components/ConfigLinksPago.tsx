@@ -31,6 +31,7 @@ type Borrador = {
   descuento_max_pct: string; caducidad_dias: string; caducidad_max_dias: string;
   cuotas_admitidas: boolean; cuotas_max: string; monedas: string; moneda_defecto: string;
   cobro_auto: boolean; cobro_auto_reintento_dias: string;
+  aviso_abierto_horas: string; recordatorios: boolean;
 };
 
 function aBorrador(c: Partial<ConfigLinks>): Borrador {
@@ -45,6 +46,8 @@ function aBorrador(c: Partial<ConfigLinks>): Borrador {
     moneda_defecto: c.moneda_defecto || '',
     cobro_auto: c.cobro_auto === true,
     cobro_auto_reintento_dias: t(c.cobro_auto_reintento_dias),
+    aviso_abierto_horas: t(c.aviso_abierto_horas),
+    recordatorios: c.recordatorios !== false,
   };
 }
 
@@ -66,6 +69,9 @@ function cambiosDe(b: Borrador, g: Partial<ConfigLinks>): Partial<Omit<ConfigLin
   if (b.cobro_auto_reintento_dias.trim() !== '' && num(b.cobro_auto_reintento_dias) !== g.cobro_auto_reintento_dias) {
     c.cobro_auto_reintento_dias = num(b.cobro_auto_reintento_dias);
   }
+  // Seguimiento de los que no se pagan (gemela de CRM#984).
+  if (b.aviso_abierto_horas.trim() !== '' && num(b.aviso_abierto_horas) !== g.aviso_abierto_horas) c.aviso_abierto_horas = num(b.aviso_abierto_horas);
+  if (g.recordatorios !== undefined && b.recordatorios !== g.recordatorios) c.recordatorios = b.recordatorios;
   return c;
 }
 
@@ -189,6 +195,23 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
               disabled={!b.cobro_auto} className={`${campo} w-20 disabled:opacity-50`} />
             <span className="text-xs text-muted-foreground">días (0 = no)</span>
           </div>
+        </div>
+      )}
+
+      {guardado?.aviso_abierto_horas !== undefined && (
+        <div className="rounded-md bg-muted/30 p-2.5 space-y-1.5" data-recorrido="links-seguimiento">
+          <p className="text-xs font-semibold">Seguimiento de los links sin pagar</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <label htmlFor={id('aviso-abierto')} className="text-xs text-muted-foreground">Si el alumno abre el link y no paga, avisar a la gestora a las</label>
+            <input id={id('aviso-abierto')} type="number" min={1} max={72} value={b.aviso_abierto_horas} onChange={poner('aviso_abierto_horas')}
+              className={`${campo} w-20`} />
+            <span className="text-xs text-muted-foreground">horas</span>
+          </div>
+          <label className="text-xs flex items-center gap-2">
+            <input type="checkbox" checked={b.recordatorios}
+              onChange={(e) => setB((x) => ({ ...x, recordatorios: e.target.checked }))} />
+            Recordar el pago al alumno por correo a las 24 h y a las 72 h
+          </label>
         </div>
       )}
 

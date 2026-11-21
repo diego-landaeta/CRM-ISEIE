@@ -11,6 +11,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
+import { DatosDeSeguimiento, BotonRenovar } from '../components/SeguimientoDelLink';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
 import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
 
@@ -194,7 +195,9 @@ export default function LinksDePagoPage() {
                     {l.estado === 'caducado' && l.caduca_el && <> · caducó {cuando(l.caduca_el)}</>}
                     {l.estado === 'anulado' && <> · anulado: {l.motivo_anulacion}</>}
                   </span>
+                  <DatosDeSeguimiento link={l} />
                   <span className="ml-auto flex items-center gap-1.5">
+                    <BotonRenovar link={l} onRenovado={() => cargar()} />
                     {vivo && l.url && (
                       <>
                         <button type="button" onClick={() => copiarLink(l.url!)}

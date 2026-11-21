@@ -65,7 +65,8 @@ const moneda = z.string({ invalid_type_error: 'La moneda va en código ISO de tr
   vuelve a mirar con sus CHECK (migración 315).
 */
 const CAMPOS_DE_CONFIG = ['descuento_max_pct', 'caducidad_dias', 'caducidad_max_dias', 'cuotas_admitidas',
-  'cuotas_max', 'monedas', 'moneda_defecto', 'cobro_auto', 'cobro_auto_reintento_dias'];
+  'cuotas_max', 'monedas', 'moneda_defecto', 'cobro_auto', 'cobro_auto_reintento_dias',
+  'aviso_abierto_horas', 'recordatorios'];
 
 export const configBodySchema = z.object({
   projectId: id,
@@ -80,6 +81,10 @@ export const configBodySchema = z.object({
   // días se reintenta, una vez, una cuota que falló (0 = no se reintenta).
   cobro_auto: z.boolean({ invalid_type_error: 'Cobro automático: sí o no' }).optional(),
   cobro_auto_reintento_dias: entero('Reintento', 0, 15).optional(),
+  // Seguimiento de los que no se pagan (gemela de CRM#984): a las cuántas horas de
+  // abrirlo sin pagar se avisa a la gestora, y si se manda el recordatorio de 24 y 72 h.
+  aviso_abierto_horas: entero('Aviso a la gestora', 1, 72).optional(),
+  recordatorios: z.boolean({ invalid_type_error: 'Recordatorios: sí o no' }).optional(),
 }).refine((b) => CAMPOS_DE_CONFIG.some((k) => b[k] !== undefined), 'Falta el descuento');
 
 /*

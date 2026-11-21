@@ -7,6 +7,7 @@ import {
 } from './links-pago.validation.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
+import * as seguimiento from './links-pago.seguimiento.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
@@ -433,6 +434,19 @@ export async function anular(req, res, next) {
     if (!parsed.success) throw fallo(parsed);
     const hecho = await service.anular(link, { userId: Number(req.user.userId), motivo: parsed.data.motivo });
     res.json({ success: true, data: hecho });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/:id/renovar (gemela de CRM#984)
+// Un caducado de su campus y su alcance (lo ajeno, 404): un link nuevo igual.
+export async function renovar(req, res, next) {
+  try {
+    const link = await linkSuyo(req);
+    const nuevo = await seguimiento.renovar(Number(link.id), {
+      userId: Number(req.user.userId),
+      puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
+    });
+    res.status(201).json({ success: true, data: nuevo });
   } catch (err) { next(err); }
 }
 

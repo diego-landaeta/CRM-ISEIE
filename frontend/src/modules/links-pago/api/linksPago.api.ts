@@ -46,6 +46,14 @@ export interface LinkDePago {
   anulado_por_nombre: string | null;
   anulado_el: string | null;
   motivo_anulacion: string | null;
+  /** Seguimiento (gemela de CRM#984): cuándo lo abrió el alumno y qué avisos han salido. */
+  abierto_el?: string | null;
+  aviso_gestora_el?: string | null;
+  recordatorio_24h_el?: string | null;
+  recordatorio_72h_el?: string | null;
+  /** El caducado al que sustituye este, y el nuevo que sustituye a este caducado. */
+  renovado_de?: number | null;
+  renovado_por?: number | null;
   created_at: string;
 }
 
@@ -66,6 +74,9 @@ export interface ConfigLinks {
   /** Cobro automático de las cuotas (309): si el campus lo permite y a los cuántos días se reintenta. */
   cobro_auto?: boolean;
   cobro_auto_reintento_dias?: number;
+  /** Seguimiento (gemela de CRM#984): a las cuántas horas de abrirlo sin pagar se avisa, y los recordatorios al alumno. */
+  aviso_abierto_horas?: number;
+  recordatorios?: boolean;
 }
 
 export interface WebhookDeLaCuenta {
@@ -138,6 +149,11 @@ export function cuotasDisponibles(projectId: number) {
 
 export function anularLink(id: number, motivo: string) {
   return client.post<LinkDePago>(`/links-pago/${id}/anular`, { motivo });
+}
+
+/** Renovar un caducado (gemela de CRM#984): un link nuevo igual, con la caducidad de serie del campus. */
+export function renovarLink(id: number) {
+  return client.post<LinkDePago>(`/links-pago/${id}/renovar`, {});
 }
 
 export function verConfig(projectId: number) {
