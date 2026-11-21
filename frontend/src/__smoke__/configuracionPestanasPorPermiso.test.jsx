@@ -49,7 +49,9 @@ describe('Configuración · pestañas según los permisos (gemela de CRM#880)', 
     // Lo que no pide permiso para leerse sigue ahí.
     expect(screen.getByRole('button', { name: 'Seguridad' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Marca' })).toBeTruthy();
-    expect(nav().textContent).toContain('Roles y permisos');
+    // Diego, 21/11/2026: tampoco Roles y permisos ni Webhooks.
+    expect(nav().textContent).not.toContain('Roles y permisos');
+    expect(nav().textContent).not.toContain('Webhooks');
     expect(screen.getByRole('heading', { name: 'Seguridad' })).toBeTruthy();
     // Dar tiempo a los efectos: ninguna lectura que el servidor le niega.
     await new Promise((r) => setTimeout(r, 0));
@@ -70,6 +72,13 @@ describe('Configuración · pestañas según los permisos (gemela de CRM#880)', 
     expect(screen.getByRole('button', { name: 'Disponibilidad' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'APIs globales' })).toBeTruthy();
     await waitFor(() => expect(pedidas().some((u) => u.startsWith('/users?'))).toBe(true));
+  });
+
+  it('admin: salen Roles y permisos y Webhooks', () => {
+    como('admin');
+    abrir();
+    expect(nav().textContent).toContain('Roles y permisos');
+    expect(nav().textContent).toContain('Webhooks');
   });
 
   it('con users.view pero sin credentials.view: Usuarios sí y APIs globales no', () => {
