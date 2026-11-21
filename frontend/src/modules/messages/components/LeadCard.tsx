@@ -47,7 +47,7 @@ export default function LeadCard({ leadId, isOwn }: Props) {
     );
   }
 
-  const cardBg = isOwn ? 'bg-emerald-900/40' : 'bg-muted/40 border border-border';
+  const cardBg = isOwn ? 'bg-success/40' : 'bg-muted/40 border border-border';
   const textPrimary = isOwn ? 'text-white' : 'text-foreground';
   const textSecondary = isOwn ? 'text-white/60' : 'text-muted-foreground';
   const tagBg = isOwn ? 'bg-white/15 text-white/80' : 'bg-muted text-muted-foreground';

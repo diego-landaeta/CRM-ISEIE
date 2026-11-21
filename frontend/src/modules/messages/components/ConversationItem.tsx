@@ -42,15 +42,14 @@ export default function ConversationItem({ conversation: c, active, isOnline, on
             : <UserCircle size={28} weight="fill" className="text-muted-foreground/70" />
           }
         </div>
-        {isOnline && (
-          <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-card" />
-        )}
+               {isOnline && (
+          <span className="absolute bottom-0 right-0 w-3 h-3 bg-success rounded-full border-2 border-card" />)}
       </div>
 
       <div className="flex-1 min-w-0">
         <div className="flex items-baseline justify-between gap-2">
           <span className={`text-sm truncate ${hasUnread ? 'font-bold' : 'font-medium'}`}>{name}</span>
-          <span className={`text-[10px] flex-shrink-0 ${hasUnread ? 'text-emerald-500 font-semibold' : 'text-muted-foreground'}`}>
+          <span className={`text-[10px] flex-shrink-0 ${hasUnread ? 'text-success font-semibold' : 'text-muted-foreground'}`}>
             {time}
           </span>
         </div>
@@ -59,7 +58,7 @@ export default function ConversationItem({ conversation: c, active, isOnline, on
             {preview || 'Sin mensajes'}
           </p>
           {hasUnread && (
-            <span className="bg-emerald-500 text-white text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center flex-shrink-0">
+          <span className="bg-success text-success-foreground text-[10px] font-bold min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center flex-shrink-0">
               {c.unread_count}
             </span>
           )}

@@ -62,7 +62,7 @@ export default function ChatPanel({ conversation, messages, loading, currentUser
           <p className="text-sm font-semibold truncate">{name}</p>
           <p className="text-[10px] text-muted-foreground">
             {isOtherTyping ? (
-              <span className="text-emerald-500 font-medium">escribiendo...</span>
+            <span className="text-success font-medium">escribiendo...</span>
             ) : (
               conversation.other_user?.email
             )}

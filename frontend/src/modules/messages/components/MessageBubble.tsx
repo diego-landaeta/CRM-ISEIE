@@ -48,7 +48,7 @@ export default function MessageBubble({ message: m, isOwn, onDelete }: Props) {
 
         <div className={`px-3 py-2 text-[13px] leading-relaxed shadow-sm ${
           isOwn
-            ? 'bg-emerald-700 dark:bg-emerald-800 text-white rounded-xl rounded-tr-sm'
+            ? 'bg-success text-success-foreground rounded-xl rounded-tr-sm'
             : 'bg-card border border-border text-foreground rounded-xl rounded-tl-sm'
         }`}>
           {!isOwn && (

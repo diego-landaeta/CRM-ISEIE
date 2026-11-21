@@ -114,8 +114,8 @@ export default function CascadaDeCategorias({
       />
 
       {faltaDeLaLista && (
-        <div className="flex items-start gap-2 rounded-md border border-amber-200/60 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-950/30 px-2.5 py-2 text-[11px]">
-          <WarningCircle size={14} weight="fill" className="text-amber-600 shrink-0 mt-px" />
+          <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-soft px-2.5 py-2 text-[11px]">
+          <WarningCircle size={14} weight="fill" className="text-warning shrink-0 mt-px" />
           <span className="flex-1">
             Este producto está en <strong>{huerfana || 'una categoría'}</strong>, que ya no sale en
             la lista —normalmente porque se desactivó—. Se mantiene tal cual si no la tocas.

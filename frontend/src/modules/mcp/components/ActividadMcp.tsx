@@ -117,7 +117,7 @@ export default function ActividadMcp() {
                   <td className="px-4 py-2.5 text-xs text-muted-foreground max-w-[280px] break-words">{queConsulto(f.parametros)}</td>
                   <td className="px-4 py-2.5 text-xs">
                     {f.ok
-                      ? <span className="text-emerald-600 font-semibold">Correcta</span>
+                      ? <span className="text-success font-semibold">Correcta</span>
                       : <span className="text-destructive" title={f.error || ''}>{(f.error || 'Error').slice(0, 70)}</span>}
                     {f.duracion_ms != null && <span className="block text-muted-foreground">{f.duracion_ms} ms</span>}
                   </td>

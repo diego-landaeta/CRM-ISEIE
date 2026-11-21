@@ -41,7 +41,7 @@ export default function UrlParaClaude({ token, nombre, onCerrar }: { token: stri
               </li>
               <li>Pregúntale como a una persona: «¿cuántas ventas llevamos este mes por campus?».</li>
             </ol>
-            <p className="rounded-md bg-amber-50 dark:bg-amber-950/30 px-3 py-2 text-xs text-amber-900 dark:text-amber-200">
+            <p className="rounded-md bg-warning-soft px-3 py-2 text-xs text-warning-soft-foreground">
               Solo se enseña ahora. Es tuya: quien la tenga consulta como tú. Si la pierdes o se filtra, pide una nueva
               en la conexión y esta deja de funcionar.
             </p>
