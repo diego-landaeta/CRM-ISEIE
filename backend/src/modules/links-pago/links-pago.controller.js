@@ -2,7 +2,7 @@ import * as model from './links-pago.model.js';
 import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
-  ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema,
+  ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
 } from './links-pago.validation.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
@@ -10,7 +10,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { listaDelAmbito, campusDeTodos, campusParaRecortar } from '../../shared/utils/ambito.js';
+import { listaDelAmbito, campusDeTodos, campusParaRecortar, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { alcanceComercial, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
 
 /*
@@ -177,13 +177,24 @@ async function destinoSuyo(req, { leadId, conversionId }) {
   return destino;
 }
 
+/*
+  Un link SIN PROSPECTO (Carlos, 20/11: «sin nombre de la persona»): solo el
+  campus, que tiene que ser uno de los de quien lo crea. Fuera de sus campus,
+  404, como si no existiera. Al pagarse, el CRM busca o crea el prospecto con lo
+  que el alumno escribe en Checkout (links-pago.cobro.js).
+*/
+async function campusSuyo(req, projectId) {
+  await exigirCampusSuyo(req, projectId, 'Campus no encontrado');
+  return { projectId: Number(projectId), leadId: null, conversionId: null };
+}
+
 // POST /api/links-pago
 export async function crear(req, res, next) {
   try {
     const parsed = crearSchema.safeParse(req.body || {});
     if (!parsed.success) throw fallo(parsed);
     const b = parsed.data;
-    const destino = await destinoSuyo(req, b);
+    const destino = b.leadId || b.conversionId ? await destinoSuyo(req, b) : await campusSuyo(req, b.projectId);
 
     const prod = await model.producto(b.productId);
     // Un curso de otro campus no vale: el precio y el nombre serían de otro sitio.
@@ -191,20 +202,59 @@ export async function crear(req, res, next) {
       throw new AppError('Ese curso no es del catálogo de este campus', 400, 'VALIDATION_ERROR');
     }
     const cfg = await model.config(destino.projectId);
+    if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
     const pendiente = destino.conversionId ? await model.pendienteDeVenta(destino.conversionId) : undefined;
     // CRM#909: desde una venta, nunca por encima de lo que queda por cobrar.
     service.noPasaDelPendiente({ importe: b.importe, moneda: b.moneda || cfg.moneda_defecto, pendiente });
+    const enCuotas = b.modalidad === 'cuotas';
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
-      modalidad: b.modalidad, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
+      modalidad: b.modalidad, numCuotas: b.num_cuotas, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
       pendiente,
     });
+
+    /*
+      EN CUOTAS (20/11): es el cobro automático. Se comprueba ANTES de crear nada
+      (campus, permiso y clave de Stripe); el link cobra la cuota 1 y guarda la
+      tarjeta, con el consentimiento de las demás junto al botón de pagar.
+    */
+    let guardaTarjeta = null;
+    let cuotas = null;
+    if (enCuotas) {
+      const disp = await cobroAuto.paraUnLinkEnCuotas(destino.projectId, {
+        cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
+      });
+      if (!disp.disponible) throw new AppError(disp.motivo, 409, 'CUOTAS_NO_DISPONIBLES');
+      const importes = service.repartirEnCuotas(b.importe, b.num_cuotas);
+      cuotas = { num: b.num_cuotas, importeCuota: importes[0] };
+      guardaTarjeta = {
+        consentimiento: cobroAuto.textoConsentimiento({
+          campus: await model.nombreDelCampus(destino.projectId),
+          cuotas: importes.slice(1).map((importe) => ({ importe })),
+        }),
+      };
+    }
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-      prod, reglas, importe: b.importe, userId: Number(req.user.userId),
+      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas,
     });
     res.status(201).json({ success: true, data: link });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/cuotas-disponibles?projectId=N
+// El asistente lo pregunta al elegir campus: si «Cuotas» se puede y, si no, por qué.
+export async function cuotasDisponibles(req, res, next) {
+  try {
+    const parsed = cuotasQuerySchema.safeParse({ projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const cfg = await model.config(parsed.data.projectId);
+    if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
+    const data = await cobroAuto.paraUnLinkEnCuotas(parsed.data.projectId, {
+      cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
+    });
+    res.json({ success: true, data: { project_id: parsed.data.projectId, ...data } });
   } catch (err) { next(err); }
 }
 

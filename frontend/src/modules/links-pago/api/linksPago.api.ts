@@ -25,6 +25,10 @@ export interface LinkDePago {
   descuento_pct: string | number;
   moneda: string;
   modalidad: 'unico' | 'cuotas';
+  /** En cuotas (20/11): en cuántas, y la que cobra el link (la 1). `importe` es el total. */
+  num_cuotas?: number | null;
+  importe_cuota?: string | number | null;
+  guarda_tarjeta?: boolean;
   estado: EstadoLink;
   url: string | null;
   caduca_el: string | null;
@@ -103,9 +107,19 @@ export function ventasDelProspecto(params: { leadId?: number; conversionId?: num
 
 export function crearLink(cuerpo: {
   // Sin caducidad, la de serie del campus; sin moneda, la del campus.
-  leadId?: number; conversionId?: number; productId: number; importe: number; moneda?: string; caducidad_dias?: number;
+  // Sin prospecto ni venta (20/11), el campus: el CRM crea la ficha y la venta al pagarse.
+  leadId?: number; conversionId?: number; projectId?: number; productId: number; importe: number; moneda?: string; caducidad_dias?: number;
+  // En cuotas: `importe` es el total; el link cobra la primera y Stripe las demás.
+  modalidad?: 'unico' | 'cuotas'; num_cuotas?: number;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
+}
+
+/** Si «Cuotas» se puede en el campus y, si no, por qué (20/11). */
+export interface CuotasDisponibles { disponible: boolean; motivo: string | null; cuotas_max: number | null }
+
+export function cuotasDisponibles(projectId: number) {
+  return client.get<CuotasDisponibles>('/links-pago/cuotas-disponibles', { params: { projectId } });
 }
 
 export function anularLink(id: number, motivo: string) {

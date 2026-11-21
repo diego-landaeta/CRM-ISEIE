@@ -130,7 +130,50 @@ export async function infoDelCampus(conexion, opciones) {
     // Las de leer la mensajería (#188): solo cuentan si el campus lee consultas.
     // y las de los matriculados (#189), que también usa leer consultas.
     faltanConsultas: info?.functions ? [...FUNCIONES_CONSULTAS, ...FUNCIONES_ALUMNOS].filter((f) => !tiene.has(f)) : [],
+    // Las 12 que usa el CRM, por grupo (CRM#925). Sin la lista, null: no se sabe.
+    grupos: info?.functions
+      ? GRUPOS_DE_FUNCIONES.map((g) => ({ clave: g.clave, titulo: g.titulo, total: g.funciones.length, faltan: g.funciones.filter((f) => !tiene.has(f)) }))
+      : null,
+    // «Puede descargar archivos» del servicio: sin él no se abren las entregas de
+    // «Mi campus». Moodle lo dice en `downloadfiles` (0/1); si no viene, null.
+    descargas: info?.downloadfiles === undefined || info?.downloadfiles === null ? null : Number(info.downloadfiles) === 1,
   };
+}
+
+/**
+ * Lo que le falta al servicio del token, por grupo (CRM#925), a partir de lo que
+ * devuelve `infoDelCampus` (o de lo guardado tras «Probar conexión»). Las de
+ * «Consultas» solo cuentan con «Leer las consultas» encendido. Lista vacía: no
+ * falta nada (o no se sabe).
+ */
+export function faltasDeFunciones(funciones, { consultas = false } = {}) {
+  const grupos = Array.isArray(funciones?.grupos) ? funciones.grupos : [];
+  const faltas = grupos
+    .filter((g) => Array.isArray(g.faltan) && g.faltan.length > 0 && (g.clave !== 'consultas' || consultas))
+    .map((g) => ({ clave: g.clave, titulo: g.titulo, faltan: g.faltan }));
+  if (funciones?.descargas === false) faltas.push({ clave: 'descargas', titulo: 'Puede descargar archivos', faltan: [] });
+  return faltas;
+}
+
+/**
+ * Las faltas en una frase que quepa en un motivo (`limpiarMotivo` corta a 300): con
+ * los nombres de cada función y, si no cabe, el grupo más largo pasa a «N funciones».
+ * Con `tope: Infinity`, todas con su nombre (el mensaje de «Probar conexión»).
+ */
+export function textoDeFaltas(faltas, { tope = 290 } = {}) {
+  if (!faltas?.length) return '';
+  const partes = faltas.map((f) => (f.clave === 'descargas'
+    ? { larga: '«Puede descargar archivos» sin marcar', corta: '«Puede descargar archivos» sin marcar' }
+    : { larga: `${f.titulo}: ${f.faltan.join(', ')}`, corta: `${f.titulo}: ${f.faltan.length} ${f.faltan.length === 1 ? 'función' : 'funciones'}` }));
+  const usadas = partes.map((p) => p.larga);
+  const frase = () => `Faltan en el servicio — ${usadas.join(' · ')}.`;
+  // De la más larga a la más corta, hasta que quepa.
+  const orden = partes.map((p, i) => i).sort((a, b) => partes[b].larga.length - partes[a].larga.length);
+  for (const i of orden) {
+    if (frase().length <= tope) break;
+    usadas[i] = partes[i].corta;
+  }
+  return frase();
 }
 
 /**
@@ -376,6 +419,29 @@ export async function cursosDe(conexion, moodleUserId, opciones) {
 
 /** Lo que necesita el servicio del token para las notas de la ficha del alumno (#532, plugin 1.10.9). */
 export const FUNCIONES_NOTAS = ['gradereport_user_get_grade_items'];
+
+/** Lo que usa «Tutores › Mi campus» (#681): cursos, alumnos, tareas, entregas, sus notas y el temario. */
+export const FUNCIONES_MI_CAMPUS = [
+  ...FUNCIONES_ALUMNOS,
+  'mod_assign_get_assignments', 'mod_assign_get_submissions', 'mod_assign_get_grades', 'core_course_get_contents',
+];
+
+/** El aviso de entregas sin corregir de los cursos sin tutora (#769): todos los cursos del campus. */
+export const FUNCIONES_AVISOS = ['core_course_get_courses_by_field'];
+
+/**
+ * LAS 12 FUNCIONES que el CRM pide al Moodle de un campus, por grupo (CRM#925).
+ * «Probar conexión» y «Comprobar ahora» dicen cuáles faltan de cada grupo: antes
+ * solo miraban las dos primeras y un campus salía en verde con «Mi campus» vacío.
+ * El tutorial de Integraciones › Campus (Moodle) repite la lista: si cambia
+ * aquí, cambia allí (`frontend/src/modules/accounting/lib/funcionesMoodle.ts`).
+ */
+export const GRUPOS_DE_FUNCIONES = [
+  { clave: 'base', titulo: 'Conexión', funciones: FUNCIONES_NECESARIAS },
+  { clave: 'mi_campus', titulo: 'Mi campus', funciones: FUNCIONES_MI_CAMPUS },
+  { clave: 'consultas', titulo: 'Consultas', funciones: FUNCIONES_CONSULTAS },
+  { clave: 'notas', titulo: 'Notas y avisos', funciones: [...FUNCIONES_NOTAS, ...FUNCIONES_AVISOS] },
+];
 
 /** Una nota de Moodle: la cifra (null si no hay) y el texto tal como lo enseña el campus. */
 function notaDeMoodle(g) {

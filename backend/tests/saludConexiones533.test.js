@@ -51,6 +51,8 @@ vi.mock('../src/modules/integrations/integrations.model.js', () => ({
     const i = base.integraciones.find((x) => x.project_id === fila.projectId && x.provider === fila.provider);
     if (i) Object.assign(i, { last_test_status: fila.status, last_test_message: fila.message, last_test_at: new Date().toISOString() });
   },
+  // CRM#925: «Comprobar ahora» guarda en la tarjeta de Moodle qué funciones tiene el servicio.
+  fundirConfigPublica: async () => {},
 }));
 
 const { encrypt } = await import('../src/shared/utils/crypto.js');

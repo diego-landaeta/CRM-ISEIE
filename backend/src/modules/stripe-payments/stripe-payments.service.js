@@ -77,6 +77,9 @@ function chargeToPayment(charge, projectId) {
     net_amount: bt && typeof bt.net === 'number' ? bt.net / 100 : null,
     customer_email: charge.billing_details?.email || charge.receipt_email || null,
     customer_name: charge.billing_details?.name || null,
+    // Solo viaja (no se guarda en `stripe_payments`): un link sin prospecto lo usa
+    // para crear la ficha al pagarse (links-pago.cobro.js).
+    customer_phone: charge.billing_details?.phone || null,
     customer_stripe_id: charge.customer || null,
     description: charge.description || null,
     metadata: {
