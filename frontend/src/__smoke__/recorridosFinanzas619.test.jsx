@@ -8,11 +8,12 @@ import path from 'path';
 import { respuestaFinanzas, RUTA_DE } from './recorridosFinanzas619.datos';
 
 /*
-  Los recorridos guiados de Finanzas (CRM-ISEIE#619, segunda tanda; gemela de
+  Los recorridos guiados de Finanzas (CRM-ISEIE#619, tercera tanda; gemela de
   CRM#941). Diego, 19/11: cada pantalla de Finanzas con su «Ver recorrido», como
   Ventas. La primera tanda (#635) trae Dashboard, Conversiones, Egresos y
   Cuentas por cobrar; la segunda, Cuentas por pagar, Comisiones, Comisiones de
-  tutores y Nóminas. Se comprueba, para las ocho:
+  tutores y Nóminas; la tercera, Pendientes de facturar, Ventas sin formación y
+  Análisis de ventas. Se comprueba, para las once:
 
     · que cada recorrido presenta, cuenta sus pasos, acaba diciendo cómo repetirlo,
       con frases de cartel y permisos del catálogo;
@@ -61,9 +62,13 @@ const PANTALLAS = {
   comisiones: () => import('@/modules/commissions/pages/CommissionsPage'),
   'comisiones-tutores': () => import('@/modules/tutores/pages/ComisionesTutoresPage'),
   nominas: () => import('@/modules/payroll/pages/PayrollPage'),
+  'pendientes-facturar': () => import('@/modules/accounting/pages/PendienteFacturarPage'),
+  'ventas-sin-formacion': () => import('@/modules/sales/pages/VentasSinFormacionPage'),
+  'analisis-ventas': () => import('@/modules/sales/pages/SalesAnalysisPage'),
 };
-/** Los de la segunda tanda: entre 5 y 8 pasos (presentación y «Y listo» incluidos). */
+/** Los de la segunda y la tercera tanda: entre 5 y 8 pasos (presentación y «Y listo» incluidos). */
 const SEGUNDA_TANDA = ['por-pagar', 'comisiones', 'comisiones-tutores', 'nominas'];
+const TERCERA_TANDA = ['pendientes-facturar', 'ventas-sin-formacion', 'analisis-ventas'];
 
 const SRC = path.resolve(__dirname, '..');
 const leer = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
@@ -88,14 +93,15 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('los recorridos de Finanzas', () => {
-  it('son las ocho pantallas de las dos tandas, sin Facturación, Links de pago, Stripe, Disputas, Integraciones ni Conciliación', () => {
+  it('son las once pantallas de las tres tandas, sin Facturación, Links de pago, Stripe, Disputas, Integraciones ni Conciliación', () => {
     expect(Object.keys(RECORRIDOS_FINANZAS).sort()).toEqual([
-      'comisiones', 'comisiones-tutores', 'conversiones', 'egresos', 'finanzas-dashboard', 'nominas', 'por-cobrar', 'por-pagar',
+      'analisis-ventas', 'comisiones', 'comisiones-tutores', 'conversiones', 'egresos', 'finanzas-dashboard',
+      'nominas', 'pendientes-facturar', 'por-cobrar', 'por-pagar', 'ventas-sin-formacion',
     ]);
     expect(Object.keys(PANTALLAS).sort()).toEqual(Object.keys(RECORRIDOS_FINANZAS).sort());
   });
 
-  it.each(SEGUNDA_TANDA)('%s (segunda tanda): entre 5 y 8 pasos', (id) => {
+  it.each([...SEGUNDA_TANDA, ...TERCERA_TANDA])('%s (segunda o tercera tanda): entre 5 y 8 pasos', (id) => {
     const n = RECORRIDOS_FINANZAS[id].pasos.length;
     expect(n).toBeGreaterThanOrEqual(5);
     expect(n).toBeLessThanOrEqual(8);
@@ -149,8 +155,9 @@ describe('cada pantalla, con datos', () => {
         <Routes><Route path={ruta} element={<Pantalla />} /></Routes>
       </MemoryRouter>,
     );
-    // Lo que solo sale en la otra vista (el calendario, estando en la lista) se salta solo.
-    const OTRA_VISTA = ['cobrar-calendario'];
+    // Lo que solo sale en la otra vista (el calendario, estando en la lista; las
+    // tablas de «Por asesora» y «Por cliente», estando en el resumen) se salta solo.
+    const OTRA_VISTA = ['cobrar-calendario', 'analisis-tabla'];
     const sitios = r.pasos.filter((p) => p.donde).map((p) => nombreDe(p.donde)).filter((n) => !OTRA_VISTA.includes(n));
     await waitFor(() => {
       const faltan = sitios.filter((n) => !document.querySelector(`[data-recorrido="${n}"]`));
@@ -204,6 +211,62 @@ describe('cada pantalla, con datos', () => {
     expect(document.querySelector('[data-recorrido="comtutores-fila"]').textContent).toContain('Lucía Herrero');
   }, 15000);
 
+  it.each([
+    // Una sola página: no hay paginación que explicar.
+    ['pendientes-facturar', 'Más páginas', '/conversions', { success: true, data: [], pagination: { total: 2 } }, []],
+    // Nada cobrado de más: no hay aviso que explicar (y, en el resumen, tampoco la tabla de las otras vistas).
+    ['analisis-ventas', 'Cobrado de más', '/ventas/resumen', null, ['Por asesora o por cliente']],
+  ])('%s: si no está «%s», el paso se salta y el recorrido sigue', async (id, titulo, ruta, respuesta, otraVista) => {
+    localStorage.setItem(claveRecorrido(id, 7), '1');
+    api.get.mockImplementation(async (url) => {
+      const r = respuestaFinanzas(url);
+      if (!url.startsWith(ruta)) return r ?? { success: true, data: [] };
+      if (respuesta) return { ...respuesta, data: respuestaFinanzas(url).data.slice(0, 2) };
+      return { ...r, data: { ...r.data, cobrado_de_mas: { ventas: 0, importe: 0 } } };
+    });
+    const { default: Pantalla } = await PANTALLAS[id]();
+    const r = RECORRIDOS_FINANZAS[id];
+    render(<MemoryRouter initialEntries={[RUTA_DE[id]]}><Routes><Route path={RUTA_DE[id]} element={<Pantalla />} /></Routes></MemoryRouter>);
+    await waitFor(() => expect(screen.getByRole('button', { name: `Ver recorrido: ${r.titulo}` })).toBeInTheDocument(), { timeout: 4000 });
+    await waitFor(() => expect(document.querySelector(r.pasos[1].donde)).not.toBeNull(), { timeout: 4000 });
+    fireEvent.click(screen.getByRole('button', { name: `Ver recorrido: ${r.titulo}` }));
+    const vistos = [];
+    for (let i = 0; i < r.pasos.length; i++) {
+      vistos.push(document.getElementById('recorrido-titulo')?.textContent);
+      const cartel = document.querySelector('[role="dialog"][aria-labelledby="recorrido-titulo"]');
+      const sig = within(cartel).queryByRole('button', { name: /Siguiente/ });
+      if (!sig) break;
+      fireEvent.click(sig);
+    }
+    expect(vistos).not.toContain(titulo);
+    expect(vistos.at(-1)).toBe('Y listo');
+    expect(vistos).toEqual(r.pasos.map((p) => p.titulo).filter((t) => t !== titulo && !otraVista.includes(t)));
+  }, 15000);
+
+  it.each([
+    ['Por asesora', 'Marta Gestora'],
+    ['Por cliente', 'Carla Gómez Fernández'],
+  ])('Análisis de ventas en «%s»: señala la tabla y se salta lo que es del resumen', async (vista, nombre) => {
+    localStorage.setItem(claveRecorrido('analisis-ventas', 7), '1');
+    const { default: Pantalla } = await PANTALLAS['analisis-ventas']();
+    const r = RECORRIDOS_FINANZAS['analisis-ventas'];
+    render(<MemoryRouter initialEntries={[RUTA_DE['analisis-ventas']]}><Routes><Route path={RUTA_DE['analisis-ventas']} element={<Pantalla />} /></Routes></MemoryRouter>);
+    await waitFor(() => expect(document.querySelector('[data-recorrido="analisis-fraccionado"]')).not.toBeNull(), { timeout: 4000 });
+    fireEvent.click(screen.getByRole('button', { name: new RegExp(vista) }));
+    await screen.findByText(nombre, {}, { timeout: 4000 });
+    expect(document.querySelectorAll('[data-recorrido="analisis-tabla"]')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: `Ver recorrido: ${r.titulo}` }));
+    const vistos = [];
+    for (let i = 0; i < r.pasos.length; i++) {
+      vistos.push(document.getElementById('recorrido-titulo')?.textContent);
+      const cartel = document.querySelector('[role="dialog"][aria-labelledby="recorrido-titulo"]');
+      const sig = within(cartel).queryByRole('button', { name: /Siguiente/ });
+      if (!sig) break;
+      fireEvent.click(sig);
+    }
+    const fuera = ['El resumen', 'Cobrado de más', 'Cobro fraccionado'];
+    expect(vistos).toEqual(r.pasos.map((p) => p.titulo).filter((t) => !fuera.includes(t)));
+  }, 15000);
 });
 
 describe('el cartel, a 375 px', () => {

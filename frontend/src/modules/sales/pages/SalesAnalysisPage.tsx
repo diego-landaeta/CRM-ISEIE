@@ -6,6 +6,8 @@ import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
@@ -112,14 +114,17 @@ export default function SalesAnalysisPage() {
   const totalPages = Math.max(1, Math.ceil(totalClientes / PER_PAGE));
 
   return (
-    <div className="space-y-5 pb-8">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Análisis de ventas"
         subtitle={activeProject?.nombre || 'Todos los proyectos'}
+        actions={<VerRecorrido id="analisis-ventas" listo={!loading} />}
       />
 
       {/* Filtros comunes a las tres vistas */}
-      <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+      <div data-recorrido="analisis-filtros" className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         {/* Los mismos atajos que en Facturacion: un solo componente para que no
             acaben comportandose distinto en cada pantalla. */}
         <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
@@ -157,7 +162,7 @@ export default function SalesAnalysisPage() {
         )}
       </div>
 
-      <div className="flex items-center gap-2 overflow-x-auto">
+      <div data-recorrido="analisis-vistas" className="flex items-center gap-2 overflow-x-auto">
         {TABS.map((t) => (
           <button
             key={t.k}
@@ -179,7 +184,7 @@ export default function SalesAnalysisPage() {
       ) : tab === 'resumen' ? (
         !resumen ? <EmptyState icon={Receipt} title="Sin datos" description="No hay ventas en este filtro." /> : (
           <>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div data-recorrido="analisis-tarjetas" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
               <KpiCard icon={Receipt} iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
                 label="Ventas" value={String(resumen.ventas)}
                 badge={`${resumen.clientes} clientes`} badgeColor="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400" />
@@ -199,7 +204,7 @@ export default function SalesAnalysisPage() {
                 encima de su importe, se dice aquí, con cuántas y cuánto, en vez
                 de restarlo de lo que deben las demás. */}
             {(resumen.cobrado_de_mas?.ventas ?? 0) > 0 && (
-              <p role="note" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
+              <p role="note" data-recorrido="analisis-cobrado-de-mas" className="text-xs rounded-md border border-warning/40 bg-warning-soft text-warning-soft-foreground px-3 py-2">
                 <strong>{resumen.cobrado_de_mas!.ventas}</strong>{' '}
                 {resumen.cobrado_de_mas!.ventas === 1 ? 'venta tiene' : 'ventas tienen'} cobrado más que su importe:{' '}
                 <strong>{fmt(resumen.cobrado_de_mas!.importe)}</strong> de más. Va dentro de «Cobrado», no resta del pendiente.
@@ -207,7 +212,7 @@ export default function SalesAnalysisPage() {
               </p>
             )}
 
-            <div className="bg-card border border-border rounded-lg p-4">
+            <div data-recorrido="analisis-fraccionado" className="bg-card border border-border rounded-lg p-4">
               <h3 className="font-semibold mb-3 flex items-center gap-2"><Calendar size={16} weight="bold" /> Cobro fraccionado</h3>
               {resumen.cuotas.total === 0 ? (
                 <EmptyState icon={Calendar} title="Sin ventas fraccionadas" description="Ninguna venta de este filtro tiene plan de cuotas." />
@@ -232,7 +237,7 @@ export default function SalesAnalysisPage() {
         )
       ) : tab === 'asesora' ? (
         asesoras.length === 0 ? <EmptyState icon={UsersThree} title="Sin ventas" description="No hay ventas en este filtro." /> : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div data-recorrido="analisis-tabla" className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
@@ -270,7 +275,7 @@ export default function SalesAnalysisPage() {
         )
       ) : (
         clientes.length === 0 ? <EmptyState icon={User} title="Sin clientes" description="No hay ventas en este filtro." /> : (
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
+          <div data-recorrido="analisis-tabla" className="bg-card border border-border rounded-lg overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-[11px] text-muted-foreground">
