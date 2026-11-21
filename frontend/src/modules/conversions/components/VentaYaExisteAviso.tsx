@@ -57,9 +57,15 @@ interface Props {
   onCrearIgualmente: () => void | Promise<void>;
   /** Se apuntó el cobro en la venta que existía: el formulario ya no hace falta. */
   onCobroApuntado?: () => void;
+  /**
+   * Apuntar el cobro a su manera, en vez de abrir el formulario de cobro. Lo usa
+   * Conciliación (CRM#906): el cobro es el de un cargo de Stripe, y se apunta
+   * enlazando ese cargo con la venta que existe.
+   */
+  onApuntarCobro?: (venta: VentaExistente) => Promise<void>;
 }
 
-export default function VentaYaExisteAviso({ venta, onCancelar, onCrearIgualmente, onCobroApuntado }: Props) {
+export default function VentaYaExisteAviso({ venta, onCancelar, onCrearIgualmente, onCobroApuntado, onApuntarCobro }: Props) {
   const [conversion, setConversion] = useState<Conversion | null>(null);
   const [cargando, setCargando] = useState(false);
   const [creando, setCreando] = useState(false);
@@ -70,11 +76,16 @@ export default function VentaYaExisteAviso({ venta, onCancelar, onCrearIgualment
   async function apuntarCobro() {
     setCargando(true);
     try {
+      if (onApuntarCobro) {
+        await onApuntarCobro(venta!);
+        onCobroApuntado?.();
+        return;
+      }
       const r = await conversionsApi.getById(venta!.id);
       if (!r?.data) throw new Error('No se encontró la venta');
       setConversion(r.data);
     } catch (err: any) {
-      toast({ title: 'No se pudo abrir esa venta', description: err?.data?.error || err?.message, variant: 'destructive' });
+      toast({ title: onApuntarCobro ? 'No se pudo apuntar el cobro' : 'No se pudo abrir esa venta', description: err?.data?.error || err?.message, variant: 'destructive' });
     } finally {
       setCargando(false);
     }

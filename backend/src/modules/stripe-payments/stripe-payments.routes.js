@@ -3,6 +3,7 @@ import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
 import * as ctrl from './stripe-payments.controller.js';
 import * as disputas from './disputas.controller.js';
+import * as conciliacion from './conciliacion.controller.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 
 // Router autenticado (montado en /api/stripe-payments)
@@ -23,12 +24,21 @@ router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
 // como el cargo con id «disputas».
 router.get('/disputas', puede('stripe.edit'), disputas.listar);
 router.post('/disputas/sincronizar', puede('stripe.edit'), projectAccess, disputas.sincronizar);
+// Finanzas › Conciliación › Cargos de Stripe (CRM#906): los cobrados sin cobro en el
+// CRM, con su cobro candidato. Misma clave que «Asociar», cada uno en sus campus.
+// También antes de `/:id`.
+router.get('/conciliacion', puede('stripe.edit'), conciliacion.listar);
+router.get('/conciliacion/opciones', puede('stripe.edit'), projectAccess, conciliacion.opciones);
+router.post('/conciliacion/enlazar-seguros', puede('stripe.edit'), projectAccess, conciliacion.enlazarSeguros);
 router.get('/:id', puede('stripe.view'), ctrl.getOne);
 
 // Asociar o desasociar a mano y decidir disputas: solo admin y superadmin.
 // Una asociacion manual mueve dinero de sitio y emite factura.
 router.post('/:id/link', puede('stripe.edit'), ctrl.link);
 router.delete('/:id/link', puede('stripe.edit'), ctrl.unlink);
+// Crear la venta desde un cargo sin venta (CRM#906). La misma clave que «Asociar»,
+// que ya apunta cobros en ventas: crear la venta es el mismo paso con una venta nueva.
+router.post('/:id/crear-venta', puede('stripe.edit'), conciliacion.crearVenta);
 router.patch('/:id/dispute', puede('stripe.edit'), ctrl.updateDispute);
 
 // Router publico para webhook (montado en /api/stripe-webhook)

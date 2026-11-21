@@ -213,12 +213,17 @@ export async function findPagoDuplicado(conversionId, importe, fecha, stripeId =
   // poco para confundir dos cobros distintos, que en estas ventas se llevan
   // mensualidades enteras. Y si hubiera varios candidatos, gana el mas parecido,
   // no el de id mas bajo.
+  //
+  // Un cobro que entró por PayPal o por el banco (`origen`, #766) no es nunca el
+  // de un cargo de Stripe (CRM#906): con el mismo importe y fecha, el cargo se
+  // quedaba enganchado a él y el dinero de Stripe no se apuntaba.
   const { rows } = await query(
     `SELECT cp.id
        FROM conversion_payments cp
       WHERE cp.conversion_id = $1
         AND ABS(cp.importe::numeric - $2::numeric) <= 1.00
         AND ABS(cp.fecha - $3::date) <= 3
+        AND cp.origen IS NULL
         AND NOT EXISTS (SELECT 1 FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id)
       ORDER BY ABS(cp.importe::numeric - $2::numeric), cp.id
       LIMIT 1`,

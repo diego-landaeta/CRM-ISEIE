@@ -14139,6 +14139,102 @@
   "puertas": []
  },
  {
+  "id": "GET /api/stripe-payments/conciliacion",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion",
+  "relativa": "GET /conciliacion",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/conciliacion/opciones",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion/opciones",
+  "relativa": "GET /conciliacion/opciones",
+  "controlador": "opciones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/conciliacion/enlazar-seguros",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/conciliacion/enlazar-seguros",
+  "relativa": "POST /conciliacion/enlazar-seguros",
+  "controlador": "enlazarSeguros",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/de-la-venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/de-la-venta/:conversionId",
+  "relativa": "GET /de-la-venta/:conversionId",
+  "controlador": "deLaVenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/stripe-payments/:id",
   "tipo": "ruta",
   "modulo": "stripe-payments",
@@ -14190,6 +14286,28 @@
   "ruta": "/api/stripe-payments/:id/link",
   "relativa": "DELETE /:id/link",
   "controlador": "unlink",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/:id/crear-venta",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/:id/crear-venta",
+  "relativa": "POST /:id/crear-venta",
+  "controlador": "crearVenta",
   "publica": false,
   "guardias": [
    {
