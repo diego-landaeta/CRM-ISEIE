@@ -10,8 +10,9 @@ import { respuestaFinanzas, RUTA_DE } from './recorridosFinanzas619.datos';
 /*
   Los recorridos guiados de Finanzas (CRM-ISEIE#619, segunda tanda; gemela de
   CRM#941). Diego, 19/11: cada pantalla de Finanzas con su «Ver recorrido», como
-  Ventas. Esta tanda trae cuatro (Dashboard, Conversiones, Egresos y Cuentas
-  por cobrar). Se comprueba, para las cuatro:
+  Ventas. La primera tanda (#635) trae Dashboard, Conversiones, Egresos y
+  Cuentas por cobrar; la segunda, Cuentas por pagar, Comisiones, Comisiones de
+  tutores y Nóminas. Se comprueba, para las ocho:
 
     · que cada recorrido presenta, cuenta sus pasos, acaba diciendo cómo repetirlo,
       con frases de cartel y permisos del catálogo;
@@ -56,7 +57,13 @@ const PANTALLAS = {
   conversiones: () => import('@/modules/revenue/pages/RevenuePage'),
   egresos: () => import('@/modules/expenses/pages/ExpensesPage'),
   'por-cobrar': () => import('@/modules/accounting/pages/ReceivablePage'),
+  'por-pagar': () => import('@/modules/accounts-payable/pages/AccountsPayablePage'),
+  comisiones: () => import('@/modules/commissions/pages/CommissionsPage'),
+  'comisiones-tutores': () => import('@/modules/tutores/pages/ComisionesTutoresPage'),
+  nominas: () => import('@/modules/payroll/pages/PayrollPage'),
 };
+/** Los de la segunda tanda: entre 5 y 8 pasos (presentación y «Y listo» incluidos). */
+const SEGUNDA_TANDA = ['por-pagar', 'comisiones', 'comisiones-tutores', 'nominas'];
 
 const SRC = path.resolve(__dirname, '..');
 const leer = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
@@ -81,9 +88,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('los recorridos de Finanzas', () => {
-  it('son las cuatro pantallas de esta tanda, sin Facturación, Links de pago, Stripe, Disputas, Integraciones ni Conciliación', () => {
-    expect(Object.keys(RECORRIDOS_FINANZAS).sort()).toEqual(['conversiones', 'egresos', 'finanzas-dashboard', 'por-cobrar']);
+  it('son las ocho pantallas de las dos tandas, sin Facturación, Links de pago, Stripe, Disputas, Integraciones ni Conciliación', () => {
+    expect(Object.keys(RECORRIDOS_FINANZAS).sort()).toEqual([
+      'comisiones', 'comisiones-tutores', 'conversiones', 'egresos', 'finanzas-dashboard', 'nominas', 'por-cobrar', 'por-pagar',
+    ]);
     expect(Object.keys(PANTALLAS).sort()).toEqual(Object.keys(RECORRIDOS_FINANZAS).sort());
+  });
+
+  it.each(SEGUNDA_TANDA)('%s (segunda tanda): entre 5 y 8 pasos', (id) => {
+    const n = RECORRIDOS_FINANZAS[id].pasos.length;
+    expect(n).toBeGreaterThanOrEqual(5);
+    expect(n).toBeLessThanOrEqual(8);
   });
 
   it('se registran con los de cobros (así «Ver recorrido» los conoce), sin pisar ninguno', () => {
@@ -116,7 +131,9 @@ describe('los recorridos de Finanzas', () => {
     for (const p of r.pasos.filter((x) => x.donde)) {
       const n = nombreDe(p.donde);
       expect(n, `«${p.donde}» no es un data-recorrido`).toBeTruthy();
-      expect(codigo, `falta data-recorrido="${n}" en ${r.pantalla.join(', ')}`).toMatch(new RegExp(`data-recorrido="${n}"`));
+      // Fijo (`="x"`) o solo en la primera fila (`={i === 0 ? 'x' : undefined}`).
+      expect(codigo, `falta data-recorrido="${n}" en ${r.pantalla.join(', ')}`)
+        .toMatch(new RegExp(`data-recorrido=(?:"${n}"|\\{[^}]*'${n}')`));
     }
   });
 });
@@ -166,6 +183,25 @@ describe('cada pantalla, con datos', () => {
     // La pantalla carga igual (es el servidor quien la cierra); solo falta el botón.
     await waitFor(() => expect(document.querySelector('[data-recorrido="egresos-lista"]')).not.toBeNull(), { timeout: 4000 });
     expect(screen.queryByRole('button', { name: /Ver recorrido/ })).toBeNull();
+  }, 15000);
+
+  it.each([
+    ['comisiones-tutores', 'tutores.liquidar', 'Marcar pagado'],
+    ['por-pagar', 'accounts_payable.create', 'Nueva factura'],
+    ['nominas', 'payroll.edit', 'Añadir un plan'],
+  ])('%s: sin «%s», no se explica «%s»', (id, permiso, titulo) => {
+    const r = RECORRIDOS_FINANZAS[id];
+    expect(pasosPara(r, (k) => k !== permiso).map((p) => p.titulo)).not.toContain(titulo);
+    expect(pasosPara(r, TODO).map((p) => p.titulo)).toContain(titulo);
+  });
+
+  it('Comisiones de tutores: «Marcar pagado» señala solo la primera fila', async () => {
+    localStorage.setItem(claveRecorrido('comisiones-tutores', 7), '1');
+    const { default: Pantalla } = await PANTALLAS['comisiones-tutores']();
+    render(<MemoryRouter initialEntries={['/tutores/comisiones']}><Routes><Route path="/tutores/comisiones" element={<Pantalla />} /></Routes></MemoryRouter>);
+    await waitFor(() => expect(document.querySelector('[data-recorrido="comtutores-fila"]')).not.toBeNull(), { timeout: 4000 });
+    expect(document.querySelectorAll('[data-recorrido="comtutores-fila"]')).toHaveLength(1);
+    expect(document.querySelector('[data-recorrido="comtutores-fila"]').textContent).toContain('Lucía Herrero');
   }, 15000);
 
 });

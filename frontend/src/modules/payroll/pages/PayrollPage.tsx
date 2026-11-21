@@ -3,6 +3,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
@@ -75,9 +77,17 @@ export default function PayrollPage() {
   const [tab, setTab] = useState<TabId>('plans');
 
   return (
-    <div className="space-y-5 pb-8">
-      <PageHeader title="Nominas" subtitle={`Plantilla y pagos en ${activeProject?.nombre || 'este proyecto'}`} />
-      <div className="flex border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
+      <PageHeader
+        title="Nominas"
+        subtitle={`Plantilla y pagos en ${activeProject?.nombre || 'este proyecto'}`}
+        actions={<VerRecorrido id="nominas" />}
+      />
+      {/* De borde a borde en el móvil: -mx-3, el relleno del <main> (p-3). Con -mx-4
+          la página desbordaba 4 px a 375 (#619). */}
+      <div data-recorrido="nominas-pestanas" className="flex border-b border-border overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-bold border-b-2 whitespace-nowrap ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>
             {t.label}
@@ -143,6 +153,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
     <div className="space-y-3">
       <div className="flex justify-end gap-2">
         {usersWithoutPlan.length > 0 && (
+          <div data-recorrido="nominas-anadir">
           <Select<string>
             value=""
             onChange={(v) => { if (v) setEditing({ user_id: parseInt(v), modo_fijo: '', modo_horas: '', modo_comisiones: false, active: true }); }}
@@ -153,13 +164,16 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
             ariaLabel="Añadir plan a usuario"
             className="w-56"
           />
+          </div>
         )}
       </div>
 
       {loading ? <SkeletonTable rows={4} columns={5} /> : plans.length === 0 ? (
         <EmptyState icon={Coins} title="Sin planes" description="Configura cuanto cobra cada usuario" />
       ) : (
-        <>
+        // Envuelve la tabla (escritorio) y las tarjetas (móvil): el recorrido
+        // señala los planes en los dos (#619).
+        <div data-recorrido="nominas-planes">
           {/* Desktop table */}
           <div className="hidden md:block bg-card border border-border rounded-2xl overflow-x-auto">
             <table className="w-full text-sm">
@@ -207,7 +221,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {editing && <PlanEditor plan={editing} users={users} onSave={handleSave} onClose={() => setEditing(null)} />}
