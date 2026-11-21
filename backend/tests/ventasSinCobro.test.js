@@ -5,10 +5,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 //
 // Diego, 10/10: «las ventas sin ningún cobro se enseñan aparte, como "ventas
 // sin cobro (en proformas)"; cuando se cobran pasan a contar como venta».
-//   · Las tarjetas siguen contando lo cobrado y llevan al lado las sin cobro:
-//     cobradas + sin cobro = lo que dice Claude.
 //   · «Cursos vendidos» usa la MISMA regla que las tarjetas y su total incluye
-//     las ventas sin programa (la de 200 € que faltaba).
+//     las ventas sin programa (la de 200 € que faltaba) — esto sigue igual.
+//
+// #901, 18/11: las TARJETAS del resumen ya no las dejan aparte — Reportes no
+// las separaba, y con dos pantallas dando números distintos nadie sabía cuál
+// creer. Ahora las tarjetas cuentan igual que Reportes; `sin_cobro` se queda
+// como desglose informativo de cuántas de esas ventas no tienen aún ningún
+// pago.
 
 const consultas = [];
 let filas = {};
@@ -31,9 +35,9 @@ beforeEach(() => {
   consultas.length = 0;
   filas = {
     resumen: {
-      ventas: 54, clientes: 50, asesoras: 6, importe: '37050.00', cobrado: '26825.04',
+      ventas: 56, clientes: 52, asesoras: 6, importe: '40725.00', cobrado: '26825.04',
       cobrado_matricula: '20000.00', cobrado_cuotas: '6825.04', ventas_con_cuotas: 3,
-      pendiente: '10224.96', liquidadas: 40, con_saldo: 14, ticket_medio: '686.11',
+      pendiente: '13899.96', liquidadas: 40, con_saldo: 16, ticket_medio: '727.23',
     },
     cuotas: {
       ventas_con_plan: 3, cuotas: 9, cuotas_cobradas: 3, cuotas_pendientes: 6, cuotas_vencidas: 0,
@@ -54,27 +58,24 @@ beforeEach(() => {
 });
 
 describe('las tarjetas de Ventas y las ventas sin cobro', () => {
-  it('las sin cobro van aparte y, sumadas a las tarjetas, dan lo de Claude', async () => {
+  it('ya cuentan las ventas sin cobro, igual que Reportes (#901)', async () => {
     const r = await getResumenVentas({ projectId: 1, from: '2026-09-01', to: '2026-09-30' });
-    expect(r.ventas).toBe(54);
-    expect(r.importe).toBe(37050);
+    expect(r.ventas).toBe(56);
+    expect(r.importe).toBe(40725);
+    expect(r.pendiente).toBe(13899.96);
     expect(r.sin_cobro).toEqual({ ventas: 2, importe: 3675, con_proforma: 1 });
-    expect(r.ventas + r.sin_cobro.ventas).toBe(56);
-    expect(r.importe + r.sin_cobro.importe).toBe(40725);
   });
 
-  it('las tarjetas: con algún cobro; las aparte: sin ninguno; las dos sin mensualidades', async () => {
+  it('la consulta de las tarjetas ya no filtra por si hay cobro; el desglose de sin cobro sigue siendo solo esas (#901)', async () => {
     await getResumenVentas({ projectId: 1, from: '2026-09-01', to: '2026-09-30' });
-    const tarjetas = consultas.find((c) => /AS clientes/.test(c.sql)).sql;
+    const tarjetas = consultas.find((c) => /AS clientes/.test(c.sql));
     const sinCobro = consultas.find((c) => /con_proforma/.test(c.sql));
-    expect(tarjetas).toMatch(/AND EXISTS \(SELECT 1 FROM conversion_payments cpx WHERE cpx\.conversion_id = cv\.id\)/);
-    expect(tarjetas).not.toMatch(/NOT EXISTS \(SELECT 1 FROM conversion_payments cpx/);
+    expect(tarjetas.sql).not.toMatch(/EXISTS \(SELECT 1 FROM conversion_payments cpx WHERE cpx\.conversion_id = cv\.id\)/);
+    expect(tarjetas.sql).toMatch(/NOT cv\.es_mensualidad/);
     expect(sinCobro.sql).toMatch(/NOT EXISTS \(SELECT 1 FROM conversion_payments cpx WHERE cpx\.conversion_id = cv\.id\)/);
     expect(sinCobro.sql).toMatch(/NOT cv\.es_mensualidad/);
-    expect(tarjetas).toMatch(/NOT cv\.es_mensualidad/);
     // El mismo periodo y el mismo campus que las tarjetas.
-    const deTarjetas = consultas.find((c) => /AS clientes/.test(c.sql)).params;
-    expect(sinCobro.params.slice(0, deTarjetas.length)).toEqual(deTarjetas);
+    expect(sinCobro.params.slice(0, tarjetas.params.length)).toEqual(tarjetas.params);
     // Cuántas tienen ya su proforma emitida (una anulada no cuenta).
     expect(sinCobro.sql).toMatch(/i\.tipo = 'proforma'/);
     expect(sinCobro.sql).toMatch(/i\.estado <> 'cancelada'/);
