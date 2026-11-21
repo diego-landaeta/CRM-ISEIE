@@ -80,6 +80,8 @@ export interface Subida {
   nota: string | null;
   /** Desde cuándo falta (cuando se abrió la lista). */
   desde: string;
+  /** El día (AAAA-MM-DD, en la zona del CRM) en que se abrió: la fecha límite no puede ser anterior. */
+  abierta_el?: string;
   atrasado: boolean;
   dias_esperando: number;
   /** Días desde la fecha límite; null si está hecho. */

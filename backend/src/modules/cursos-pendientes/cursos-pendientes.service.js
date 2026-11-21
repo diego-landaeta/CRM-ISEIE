@@ -478,7 +478,8 @@ export async function avisarTutora(tipo, curso, tutorId, user, motivo = null) {
   }
   if (tipo !== 'asignado') return;
   // Si ya trae fecha (la del plazo de la venta, #770), se le dice cuál es; si no, que la ponga.
-  const fecha = diaDe(curso.fecha_comprometida);
+  // Con el formato de fechas del CRM («28 nov 2026»), no en ISO (QA de /testeo del 18/11).
+  const fecha = curso.fecha_comprometida ? subidas.diaLegible(diaDe(curso.fecha_comprometida)) : null;
   await notificar({
     clave: `cp-asignado-${curso.id}-${tutorId}`, project_id: curso.project_id,
     targetUserIds: [tutorId], type: 'curso_pendiente_asignado',
@@ -516,7 +517,7 @@ async function avisarFechaMovida(curso, user, motivo) {
   await notifyUsers({
     targetUserIds: admins, type: 'curso_pendiente_fecha_movida',
     title: `Fecha movida por segunda vez: ${curso.nombre}`,
-    message: `${curso.campus}. Nueva fecha: ${String(curso.fecha_comprometida).slice(0, 10)}. Motivo: ${motivo}`,
+    message: `${curso.campus}. Nueva fecha: ${subidas.diaLegible(diaDe(curso.fecha_comprometida))}. Motivo: ${motivo}`,
     link_path: enlace(curso.id), triggered_by_user_id: user?.userId || null,
   }).catch(() => {});
 }
@@ -552,12 +553,12 @@ export async function avisarVencimientos() {
     const dest = async () => [...new Set([...(c.tutor_id ? [c.tutor_id] : []), ...(await admins())])];
     if (['asignado', 'en_desarrollo'].includes(c.estado) && c.fecha && c.dias === 3 && c.tutor_id && await unaVez(c.id, 'vence_3d', c.fecha)) {
       await notificar({ clave: `cp-vence_3d-${c.id}-${c.fecha}`, project_id: c.project_id, targetUserIds: [c.tutor_id], type: 'curso_pendiente_vence', title: `Faltan 3 días: ${c.nombre}`,
-        message: `${c.campus}. Fecha comprometida: ${c.fecha}.`, link_path: enlace(c.id) }).catch(() => {});
+        message: `${c.campus}. Fecha comprometida: ${subidas.diaLegible(c.fecha)}.`, link_path: enlace(c.id) }).catch(() => {});
       enviados += 1;
     }
     if (['pendiente_asignar', 'asignado', 'en_desarrollo'].includes(c.estado) && c.fecha && c.dias < 0 && await unaVez(c.id, 'retrasado', c.fecha)) {
       await notificar({ clave: `cp-retrasado-${c.id}-${c.fecha}`, project_id: c.project_id, targetUserIds: await dest(), type: 'curso_pendiente_retrasado', title: `Retrasado: ${c.nombre}`,
-        message: `${c.campus}. Tenía que estar el ${c.fecha}${c.esperando ? ` y hay ${c.esperando} alumna${c.esperando === 1 ? '' : 's'} esperando` : ''}.`,
+        message: `${c.campus}. Tenía que estar el ${subidas.diaLegible(c.fecha)}${c.esperando ? ` y hay ${c.esperando} alumna${c.esperando === 1 ? '' : 's'} esperando` : ''}.`,
         link_path: enlace(c.id) }).catch(() => {});
       enviados += 1;
     }

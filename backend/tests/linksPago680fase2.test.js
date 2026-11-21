@@ -223,6 +223,29 @@ describe('las reglas del campus (GET/PUT /config)', () => {
     expect((await api.put('/api/links-pago/config').set(como(p.gestora1)).send({ projectId: A, caducidad_dias: 3 })).status).toBe(403);
   });
 
+  // QA de /testeo del 18/11: el diálogo de crear lo dice al abrirse, no al final.
+  it('dice si el campus puede crear links por la clave (`aviso_clave`), sin enseñarla', async () => {
+    const conClave = await api.get(`/api/links-pago/config?projectId=${A}`).set(como(p.gestora1));
+    expect(conClave.body.data.aviso_clave).toBeNull();
+
+    const sinClave = await api.get(`/api/links-pago/config?projectId=${C}`).set(como(p.gestora1));
+    expect(sinClave.status).toBe(200);
+    expect(sinClave.body.data.aviso_clave).toEqual({
+      code: 'SIN_CLAVE_DE_LINKS',
+      error: 'Este campus no tiene la clave de links de pago. La pone un admin en Integraciones › Links de pago.',
+    });
+
+    await ponerClave(C, 'stripe_links', CLAVE_LIVE);
+    try {
+      const live = await api.get(`/api/links-pago/config?projectId=${C}`).set(como(p.gestora1));
+      expect(live.body.data.aviso_clave.code).toBe('CLAVE_LIVE_EN_PRUEBAS');
+      expect(JSON.stringify(live.body)).not.toContain('EscrituraDeMentira');
+    } finally {
+      await q(`DELETE FROM project_integrations WHERE project_id = $1 AND provider = 'stripe_links'`, [C]);
+    }
+    expect(llamadas).toHaveLength(0);
+  });
+
   it('el admin cambia solo lo que manda, y queda anotado', async () => {
     const r = await api.put('/api/links-pago/config').set(como(p.adminA))
       .send({ projectId: C, monedas: ['eur', 'usd', 'EUR'], moneda_defecto: 'usd', caducidad_max_dias: 15, cuotas_admitidas: false });

@@ -152,6 +152,22 @@ describe('la lista de control de cada curso', () => {
     expect((await marcar(RESPONSABLE, ID, 'modulos_moodle', { fecha_limite: '31/12/2026' })).status).toBe(400);
   });
 
+  // QA de /testeo del 18/11: con una fecha anterior a la apertura nacía ya «8 d tarde».
+  it('la fecha límite no puede ser anterior al día en que se abrió la lista; ese mismo día, sí', async () => {
+    const antes = await marcar(RESPONSABLE, ID, 'modulos_moodle', { fecha_limite: dia(-8) });
+    expect(antes.status).toBe(400);
+    expect(antes.body.error).toMatch(/no puede ser anterior al día en que se abrió la lista \(\d{1,2} \S+ \d{4}\)/);
+    const [fila] = await q(`SELECT fecha_limite::text AS f FROM cursos_pendientes_subidas WHERE curso_id = $1 AND punto = 'modulos_moodle'`, [ID]);
+    expect(fila.f).toBe(dia(5));
+
+    const hoy = await marcar(RESPONSABLE, ID, 'modulos_moodle', { fecha_limite: dia(0) });
+    expect(hoy.status).toBe(200);
+    const m = hoy.body.data.find((s) => s.punto === 'modulos_moodle');
+    expect(m).toMatchObject({ fecha_limite: dia(0), abierta_el: dia(0), atrasado: false });
+    // Y se deja como estaba para lo que sigue.
+    expect((await marcar(RESPONSABLE, ID, 'modulos_moodle', { fecha_limite: dia(5) })).status).toBe(200);
+  });
+
   it('marcar un curso sin la lista abierta dice que hay que abrirla', async () => {
     const otro = await curso('Sin lista');
     const r = await marcar(RESPONSABLE, otro, 'modulos_moodle', { hecho: true });

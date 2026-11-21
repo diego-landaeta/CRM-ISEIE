@@ -20,6 +20,12 @@ const fecha = (iso: string | null) => (iso
   ? new Date(iso.length === 10 ? `${iso}T00:00:00` : iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
   : '—');
 
+/** AAAA-MM-DD del día local de una marca de tiempo; '' si no hay. */
+const diaLocal = (iso: string | null) => {
+  const d = iso ? new Date(iso) : null;
+  return d && !Number.isNaN(d.getTime()) ? d.toLocaleDateString('en-CA') : '';
+};
+
 export default function SubidasDelCurso({ cursoId, subidas, puedeMarcar, cancelado, onCambio }: {
   cursoId: number; subidas: Subida[]; puedeMarcar: boolean; cancelado: boolean; onCambio: () => void;
 }) {
@@ -74,6 +80,9 @@ function PuntoDeSubida({ s, puedeMarcar, ocupado, guardar }: {
   const [nota, setNota] = useState(s.nota || '');
   const [limite, setLimite] = useState(s.fecha_limite);
   useEffect(() => { setEnlace(s.enlace || ''); setNota(s.nota || ''); setLimite(s.fecha_limite); }, [s.enlace, s.nota, s.fecha_limite]);
+  // El día en que se abrió la lista: la fecha límite no puede ser anterior (QA de
+  // /testeo del 18/11). Lo da el servidor; si no, el día local de `desde`.
+  const minimo = s.abierta_el || diaLocal(s.desde);
 
   return (
     <li className={`space-y-1.5 px-3 py-2 text-sm ${s.atrasado ? 'bg-destructive/5' : ''}`}>
@@ -112,9 +121,18 @@ function PuntoDeSubida({ s, puedeMarcar, ocupado, guardar }: {
             className={inputClass}
             onBlur={() => { if (nota.trim() !== (s.nota || '')) guardar({ nota: nota.trim() || null }); }} />
           {!s.hecho && (
-            <input type="date" value={limite} aria-label={`Fecha límite: ${s.nombre}`} className={inputClass}
+            <input type="date" value={limite} min={minimo || undefined} aria-label={`Fecha límite: ${s.nombre}`} className={inputClass}
               onChange={(e) => setLimite(e.target.value)}
-              onBlur={() => { if (limite && limite !== s.fecha_limite) guardar({ fecha_limite: limite }, 'Fecha límite cambiada'); }} />
+              onBlur={() => {
+                if (!limite || limite === s.fecha_limite) return;
+                // Antes de abrir la lista no puede vencer: nacería ya atrasada. El servidor también lo rechaza.
+                if (minimo && limite < minimo) {
+                  toast({ title: 'Esa fecha no vale', description: `La fecha límite no puede ser anterior al día en que se abrió la lista (${fecha(minimo)}).`, variant: 'destructive' });
+                  setLimite(s.fecha_limite);
+                  return;
+                }
+                guardar({ fecha_limite: limite }, 'Fecha límite cambiada');
+              }} />
           )}
         </div>
       )}

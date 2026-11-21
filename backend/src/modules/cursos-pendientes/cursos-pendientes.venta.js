@@ -3,6 +3,7 @@ import { logger } from '../../shared/utils/logger.js';
 import * as model from './cursos-pendientes.model.js';
 import { avisarTutora, avisarAlumnaNueva, esResponsableValido, enlace } from './cursos-pendientes.service.js';
 import { notificar } from './cursos-pendientes.correos.js';
+import { diaLegible } from './cursos-pendientes.subidas.js';
 
 /**
  * Cursos vendidos sin desarrollar (#770, fase 2 de #336).
@@ -155,7 +156,7 @@ async function avisarSinResponsable(curso, user) {
     clave: `cp-vendido-sin-responsable-${curso.id}`, project_id: curso.project_id,
     targetUserIds: admins, type: 'curso_pendiente_sin_tutora',
     title: `Vendido sin desarrollar y sin responsable: ${curso.nombre}`,
-    message: `${curso.campus}. Asígnale tutor o redactor${fecha ? `; fecha límite: ${fecha}` : ''}.`,
+    message: `${curso.campus}. Asígnale tutor o redactor${fecha ? `; fecha límite: ${diaLegible(fecha)}` : ''}.`,
     link_path: enlace(curso.id), triggered_by_user_id: user?.userId || null,
   }).catch(() => {});
 }

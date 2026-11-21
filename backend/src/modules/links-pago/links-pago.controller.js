@@ -91,13 +91,17 @@ export async function detalle(req, res, next) {
 // GET /api/links-pago/config?projectId=N
 // El campus ya lo ha comprobado `projectAccess` (req.projectId). Lo lee también
 // quien crea links: la pantalla de crear necesita las monedas y la caducidad.
+// `aviso_clave`: si el campus no puede crear links por la clave (no la tiene, o
+// es live en pruebas), lo que diría «Crear link»; así el diálogo lo dice al
+// abrirse y no al final. Nunca la clave.
 export async function verConfig(req, res, next) {
   try {
     const parsed = configQuerySchema.safeParse({ projectId: req.projectId });
     if (!parsed.success) throw fallo(parsed);
     const cfg = await model.config(parsed.data.projectId);
     if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg } });
+    const aviso_clave = await service.avisoDeClave(parsed.data.projectId);
+    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg, aviso_clave } });
   } catch (err) { next(err); }
 }
 
