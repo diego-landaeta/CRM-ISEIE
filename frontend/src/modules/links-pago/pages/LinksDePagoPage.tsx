@@ -10,7 +10,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
-import CrearLinkAsistente, { copiarLink, errorDe } from '../components/CrearLinkAsistente';
+import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
 import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
 
@@ -48,7 +48,8 @@ export default function LinksDePagoPage() {
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creando, setCreando] = useState(false);
+  // Abierto, y cómo sale elegido el pago (los dos atajos, CRM#982).
+  const [creando, setCreando] = useState<false | 'unico' | 'cuotas'>(false);
   const [anulando, setAnulando] = useState<LinkDePago | null>(null);
   const [anulandoBusy, setAnulandoBusy] = useState(false);
   const [errorAnular, setErrorAnular] = useState<string | null>(null);
@@ -102,7 +103,7 @@ export default function LinksDePagoPage() {
           <span className="flex flex-wrap items-center gap-2">
             <VerRecorrido id="links-pago" listo={!cargando} compacto />
             {puedeCrear && (
-              <button type="button" onClick={() => setCreando(true)} data-recorrido="links-pantalla-crear"
+              <button type="button" onClick={() => setCreando('unico')} data-recorrido="links-pantalla-crear"
                 className="inline-flex items-center gap-1.5 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 <Plus size={16} weight="bold" aria-hidden="true" /> Crear link de pago
               </button>
@@ -110,6 +111,25 @@ export default function LinksDePagoPage() {
           </span>
         )}
       />
+
+      {/*
+        LOS DOS RECORRIDOS (CRM#982, Diego 21/11: «son dos recorridos, hay que
+        hacerlos»): abren el asistente con el pago ya elegido.
+      */}
+      {puedeCrear && (
+        <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Formas de cobrar con un link">
+          <button type="button" onClick={() => setCreando('unico')} data-recorrido="links-pantalla-unico"
+            className="text-left rounded-lg border border-border bg-card p-3 hover:bg-muted">
+            <span className="block text-sm font-semibold">Pago único, con otro importe o descuento</span>
+            <span className="block text-xs text-muted-foreground">Sale el precio del curso: cámbialo o descuenta en € o en %. El link cobra el total.</span>
+          </button>
+          <button type="button" onClick={() => setCreando('cuotas')} data-recorrido="links-pantalla-inicial"
+            className="text-left rounded-lg border border-border bg-card p-3 hover:bg-muted">
+            <span className="block text-sm font-semibold">Inicial + cuotas</span>
+            <span className="block text-xs text-muted-foreground">El link cobra la inicial y Stripe cobra lo que queda en cuotas iguales, una al mes.</span>
+          </button>
+        </div>
+      )}
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado" data-recorrido="links-pantalla-filtros">
         {FILTROS.map((f) => (
@@ -132,7 +152,7 @@ export default function LinksDePagoPage() {
               {estado ? 'No hay links con ese estado.' : 'Todavía no se ha creado ningún link de pago.'}
             </p>
             {puedeCrear && !estado && (
-              <button type="button" onClick={() => setCreando(true)}
+              <button type="button" onClick={() => setCreando('unico')}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 <Plus size={14} weight="bold" aria-hidden="true" /> Crear el primero
               </button>
@@ -149,8 +169,14 @@ export default function LinksDePagoPage() {
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${est.tono}`}>{est.texto}</span>
                   <span className="font-semibold tabular-nums">
                     {dinero(l.importe, l.moneda)}
+                    {/* Con descuento (CRM#982), el precio de antes, tachado. */}
+                    {l.descuento_tipo && Number(l.descuento_importe) > 0 && l.precio_original != null && (
+                      <s className="font-normal text-xs text-muted-foreground ml-1" title="Precio antes del descuento">{dinero(l.precio_original, l.moneda)}</s>
+                    )}
                     {l.modalidad === 'cuotas' && l.num_cuotas
-                      ? <span className="font-normal text-xs text-muted-foreground"> en {l.num_cuotas} cuotas ({dinero(l.importe_cuota, l.moneda)} con el link)</span>
+                      ? <span className="font-normal text-xs text-muted-foreground">
+                        {l.importe_inicial != null ? ` · ${resumenDelPlan(l)}` : ` en ${l.num_cuotas} cuotas (${dinero(l.importe_cuota, l.moneda)} con el link)`}
+                      </span>
                       : null}
                   </span>
                   {/* Un link sin prospecto (20/11): al pagarse, el CRM le pone el prospecto y la venta que crea. */}
@@ -199,7 +225,7 @@ export default function LinksDePagoPage() {
       )}
 
       {creando && (
-        <CrearLinkAsistente onClose={() => setCreando(false)} onCreado={() => cargar()} />
+        <CrearLinkAsistente formaInicial={creando} onClose={() => setCreando(false)} onCreado={() => cargar()} />
       )}
 
       <PromptDialog
