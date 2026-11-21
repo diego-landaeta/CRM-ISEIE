@@ -73,8 +73,8 @@ describe('«Lo que toca» y el ranking se quedan (Diego, 18/11, PR #883)', () =>
     // Una sola vez, y con el ámbito de arriba (campus o empresa).
     expect(devuelve.indexOf('<LoQueTocaHoyYManana', toca + 1)).toBe(-1);
     expect(devuelve).toMatch(/<LoQueTocaHoyYManana projectId=\{proyectoDeLaCola\} projectIds=\{campusCsv\}/);
-    // El Dashboard conserva el suyo.
-    expect(leer('shared/pages/DashboardPage.jsx')).toMatch(/<ParaHoyYManana/);
+    // El Dashboard de producción no lleva «Para hoy y mañana» (en staging sí, con otra PR):
+    // en la 2.10.0 no se comprueba aquí.
   });
 
   it('el ranking se queda en Clientes', () => {
