@@ -27,7 +27,7 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: yo.current })
 vi.mock('@/shared/hooks/usePermission', () => ({
   default: () => ({ can: (k) => permisos.has(k), llevaEquipo: false }),
 }));
-vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
+vi.mock('@/shared/api/client', () => ({ APP_BASE_URL: '', default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
 vi.mock('@/shared/lib/linksPago', () => ({ useLinksPagoEncendidos: () => true }));
 vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
   listarLinks: vi.fn(async () => ({ success: true, data: [] })),
@@ -37,6 +37,7 @@ vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
 }));
 
 const { RECORRIDOS_COBROS, pasosPara, claveRecorrido } = await import('@/shared/lib/recorridosCobros');
+const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 const { default: VerRecorrido } = await import('@/shared/components/ui/VerRecorrido');
 const { CLAVES } = await import('../../../backend/src/modules/permissions/catalogo.js');
 
@@ -67,9 +68,10 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla)', () => {
-    expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
-      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe',
+  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), la de Ventas (#619) y la de «Links de pago» (19/11)', () => {
+    // Los del bloque Finanzas (#619) se cuentan en su propia prueba (recorridosFinanzas619).
+    expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS)).sort()).toEqual([
+      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe', 'ventas',
     ]);
   });
 

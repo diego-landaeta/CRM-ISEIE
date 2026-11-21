@@ -1,4 +1,6 @@
 import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
+// Los del bloque Finanzas (#619, segunda tanda; gemela de CRM#941), en su propio fichero.
+import { RECORRIDOS_FINANZAS, type IdRecorridoFinanzas } from '@/shared/lib/recorridosFinanzas';
 
 /**
  * LOS RECORRIDOS DE STRIPE Y DE LOS COBROS (Diego, 18/11: «deben haber tutorial
@@ -17,14 +19,23 @@ import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
  *  · Lo que no está en pantalla en ese momento (no hay cargos sueltos, no hay
  *    huecos en la serie) se salta solo, como en el tablero.
  *
+ * Desde el #619 (19/11, gemela de CRM#941) también los de las demás pantallas,
+ * empezando por Ventas: el mismo modelo, el mismo botón y la misma prueba a 375 px.
+ *
  * IGUAL EN LOS DOS CRM (paridad): mismos pasos y mismo texto. Solo cambia lo de
  * `EN_ESTE_CRM`, justo debajo: lo que una pantalla tiene en un CRM y no en el otro.
  */
 
-/** Lo único que cambia entre los dos CRM (ISEIE no tiene «Todos» ni empresas en Pagos Stripe). */
+/**
+ * Lo único que cambia entre los dos CRM (ISEIE no tiene «Todos» ni empresas en Pagos Stripe).
+ * En Ventas (ISEIE: Finanzas › Ingresos), la barra de filtros no lleva empresa, proyecto
+ * ni «solo compartidas», y «Nueva venta» es un botón, no un desplegable con tres modos.
+ */
 const EN_ESTE_CRM = {
   pagosDeTodos: '',
   sincronizarConCampus: '',
+  ventasFiltros: 'Elige el curso y, si llevas equipo, de quién ver las ventas. El campus se elige arriba, en el menú. Abre con este mes: cambia las fechas o usa «Rápido». «Quitar filtros» lo deja como al entrar.',
+  ventasNueva: 'Para registrar una venta a mano: buscas al cliente, eliges el producto y pones el importe, cómo paga y, si es a plazos, sus cuotas. Al guardarla sale en la lista.',
 };
 
 export type Permiso = string | string[];
@@ -37,10 +48,13 @@ export interface PasoCobros extends PasoRecorrido {
 export type IdRecorridoCobros =
   | 'integraciones-stripe'
   | 'link-de-pago'
+  | 'links-pago'
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
-  | 'disputas-stripe';
+  | 'disputas-stripe'
+  | 'ventas'
+  | IdRecorridoFinanzas;
 
 export interface RecorridoCobros {
   id: IdRecorridoCobros;
@@ -130,6 +144,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     pantalla: [
       'modules/links-pago/components/LinksDePagoCard.tsx',
       'modules/sales/pages/SaleDetailPage.tsx',
+      'modules/links-pago/components/AccionesCobroVenta.tsx',
     ],
     pasos: [
       {
@@ -146,8 +161,14 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       {
         donde: anclaje('links-crear'),
         permiso: 'links_pago.crear',
-        titulo: 'Pago único o por cuotas',
-        texto: 'Cada link es un pago. Si paga todo de una vez, un solo link con el total. Si paga en cuotas, crea un link por cuota con su importe: cada pago salda la siguiente cuota pendiente.',
+        titulo: 'Pago único',
+        texto: 'Cada link es un pago. Si paga todo de una vez, un solo link con lo que queda por cobrar.',
+      },
+      {
+        donde: anclaje('ventas-plan-pago'),
+        permiso: 'links_pago.crear',
+        titulo: 'Generar plan de pago',
+        texto: 'Si va a plazos, «Generar plan de pago» crea un link por cada cuota pendiente, con su importe y la fecha que pusiste. Cuando paga uno, se salda ESA cuota. «Copiar todos» te deja el mensaje para el alumno con todos los links.',
       },
       {
         donde: anclaje('links-lista'),
@@ -158,6 +179,44 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('venta-cuotas'),
         titulo: 'Cuando el alumno paga',
         texto: 'No tienes que apuntar nada: el cobro entra solo en «Pagos registrados» y la cuota se marca como cobrada, con la etiqueta Stripe. El link pasa a «Pagado».',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
+  // ─── 2 bis · Comercial › Links de pago: la pantalla (Diego, 19/11) ──────────────
+  'links-pago': {
+    id: 'links-pago',
+    titulo: 'Links de pago',
+    permiso: ['links_pago.crear', 'links_pago.ver_todos'],
+    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Links de pago',
+        texto: 'Un link de pago es un enlace de Stripe: el alumno lo abre y paga con tarjeta, y el cobro entra solo en el CRM. Aquí los creas y ves cómo va cada uno. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('links-pantalla-crear'),
+        permiso: 'links_pago.crear',
+        titulo: 'Crear link de pago',
+        texto: 'Pulsa aquí: eliges el curso, «Pago único» o «En cuotas» y «Crear link». No hace falta el nombre: al pagar, el CRM busca la ficha del alumno por su correo o la crea, y le apunta la venta. En cuotas, el link cobra la primera y Stripe cobra las demás solas cada mes.',
+      },
+      {
+        titulo: 'Al registrar la venta, sale solo',
+        texto: 'Lo más rápido: al registrar la venta («Convertir lead») deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cada cuota con su fecha, y si hay inicial, marca «La inicial se paga con link de pago» y lleva el suyo. Al terminar te los da todos para copiar.',
+      },
+      {
+        donde: anclaje('links-pantalla-filtros'),
+        titulo: 'Por estado',
+        texto: 'Pendientes, abiertos, pagados, caducados o anulados. Cada gestora ve los suyos; quien ve los de todos, los de sus campus.',
+      },
+      {
+        donde: anclaje('links-pantalla-lista'),
+        titulo: 'Copiar, abrir o anular',
+        texto: 'Cada link con su alumno, su programa y la venta a la que va. «Copiar» lo deja listo para pegarlo en WhatsApp o en un correo; si te equivocaste, «Anular» y escribe por qué. Cuando lo paga, el cobro entra en su venta y salda su cuota.',
       },
       {
         titulo: 'Y listo',
@@ -218,13 +277,18 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     ],
     pasos: [
       {
-        titulo: 'Una factura emitida no se toca',
-        texto: 'Cuando una factura ya tiene número, no se borra ni se cambia: la serie tiene que quedar completa, sin saltos, como pide Hacienda. Si hay un error, se anula. Son {pasos} pasos.',
+        titulo: 'Corregir, anular o borrar una factura',
+        texto: 'Una factura con número se puede corregir (datos, concepto o fechas), anular o, si se emitió por error, borrar. Su número no cambia: la serie tiene que quedar completa, como pide Hacienda. Son {pasos} pasos.',
       },
       {
-        donde: anclaje('factura-bloqueada'),
-        titulo: 'Editar y borrar, apagados',
-        texto: 'Por eso en una factura emitida «Editar» y la papelera salen apagados. Pon el ratón encima y te dice por qué.',
+        donde: anclaje('factura-editar'),
+        titulo: 'Editar',
+        texto: '«Editar» abre la factura para corregir los datos del cliente, el concepto, el IVA o las fechas de emisión y de pago. El número se queda igual.',
+      },
+      {
+        donde: anclaje('factura-eliminar'),
+        titulo: 'Borrar, solo si se emitió por error',
+        texto: 'La papelera borra la factura. Úsala solo si se emitió por error (duplicada, a quien no era). Si la factura era buena y hay que deshacerla, anúlala: así queda su abono.',
       },
       {
         donde: anclaje('factura-anular'),
@@ -334,4 +398,89 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       },
     ],
   },
+
+  // ─── 6 · Finanzas › Ventas (Diego, 19/11, #619 / CRM#941: sustituye a «Tutoriales») ──
+  // En ISEIE es la pantalla de Finanzas › Ingresos (/accounting/income). Aquí todavía
+  // no se elige empresa, así que «Por proyecto» se salta; el paso se queda por paridad.
+  // Lo que no está en ese momento (el reparto por proyecto sin empresa elegida,
+  // los avisos cuando no hay nada que avisar, la meta de quien no la tiene) se
+  // salta solo.
+  ventas: {
+    id: 'ventas',
+    titulo: 'Ventas',
+    permiso: 'ventas.view',
+    pantalla: [
+      'modules/accounting/pages/IncomePage.tsx',
+      'modules/sales/components/MyGoalCard.tsx',
+      'modules/sales/components/TopProductsCard.tsx',
+    ],
+    pasos: [
+      {
+        titulo: 'Las ventas del periodo',
+        texto: 'Aquí ves lo que se vendió y lo que se facturó en unas fechas, y registras ventas nuevas. Se cuentan ventas, no facturas: por eso Facturación puede enseñar más filas en las mismas fechas. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('ventas-filtros'),
+        titulo: 'Los filtros',
+        texto: EN_ESTE_CRM.ventasFiltros,
+      },
+      {
+        donde: anclaje('ventas-tarjetas'),
+        titulo: 'Las tarjetas',
+        texto: '«Ventas»: las ventas nuevas de esas fechas. «Importe vendido»: lo que suman. «Cobrado de esas ventas»: lo que han pagado hasta hoy, aunque sea fuera de las fechas. No tienen por qué coincidir: una venta a plazos se cobra durante meses.',
+      },
+      {
+        donde: anclaje('ventas-cuotas-facturadas'),
+        titulo: 'Cuotas facturadas',
+        texto: 'Las facturas de cuotas emitidas en estas fechas, de ventas que pueden ser de meses atrás. Es dinero de algo ya vendido: no es una venta nueva y no se suma con ellas. Son las mismas que ves en Facturación con estas fechas.',
+      },
+      {
+        donde: anclaje('ventas-por-facturar'),
+        titulo: 'Ventas por facturar',
+        texto: 'Cuántas de estas ventas tienen factura. Si alguna la espera, sale «X por facturar». Pon el ratón encima: te dice cuántas están facturadas, cuántas no necesitan factura y cuántas faltan.',
+      },
+      {
+        donde: anclaje('ventas-por-proyecto'),
+        titulo: 'Por proyecto',
+        texto: 'Con una empresa elegida, cada campus con sus ventas y sus cuotas facturadas. La fila «Total» es lo de las tarjetas. Pulsa un proyecto para ver solo ese.',
+      },
+      {
+        donde: anclaje('ventas-esperan-factura'),
+        titulo: 'Ventas que esperan factura',
+        texto: 'Lo único que hay que hacer: ventas con importe que piden factura y no la tienen. Las demás sin factura están marcadas «no requiere factura». «Ir a facturarlas» te lleva a Facturación.',
+      },
+      {
+        donde: anclaje('ventas-facturas-de-antes'),
+        titulo: 'Facturas que no son ventas de ahora',
+        texto: 'Son cuotas de ventas anteriores: una venta a plazos emite una factura por cada cobro, y cae en el mes en que se cobra. Las dos cifras son correctas. «Ver las cuotas» te dice cuáles son y de qué venta.',
+      },
+      {
+        donde: anclaje('mi-meta'),
+        titulo: 'Mi meta del mes',
+        texto: 'Tus ventas y lo que has cobrado este mes, frente a tu meta. La barra se pone verde al llegar. La meta la pones tú o tu admin; si no hay, dice «Sin meta configurada».',
+      },
+      {
+        donde: anclaje('programas-mas-vendidos'),
+        titulo: 'Programas más vendidos',
+        texto: 'Los cinco programas con más ventas en estas fechas. Si arriba eliges una gestora, son los suyos.',
+      },
+      {
+        donde: anclaje('ventas-lista'),
+        titulo: 'La lista',
+        texto: 'Ventas y cuotas de estas fechas, cada una con su etiqueta: VENTA es nueva; CUOTA, un cobro de una venta anterior; COMPARTIDO, atendida entre dos gestoras. Pulsa una fila para abrir la ficha del prospecto.',
+      },
+      {
+        donde: anclaje('ventas-nueva'),
+        titulo: 'Nueva venta',
+        texto: EN_ESTE_CRM.ventasNueva,
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
+  // ─── 7 · El bloque Finanzas (#619, segunda tanda): `recorridosFinanzas.ts` ───
+  ...RECORRIDOS_FINANZAS,
 };

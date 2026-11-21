@@ -1,6 +1,7 @@
 import * as model from './salud.model.js';
-import { recordTestResult } from './integrations.model.js';
+import { recordTestResult, fundirConfigPublica } from './integrations.model.js';
 import { PROBAR } from './integrations.controller.js';
+import { faltasDeFunciones, textoDeFaltas } from '../../shared/services/moodle.client.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
 
@@ -235,6 +236,12 @@ function moodleDeIntegraciones({ integ, descifrable, plugin, comprobacion }, aho
   }
   if (!prueba) return casilla('sin_datos', 'Token guardado, sin probar', comun);
   const conPlugin = plugin && plugin.activo !== false ? ` · plugin ${plugin.version_plugin || 'activo'}` : '';
+  // CRM#925: conecta, pero al servicio le faltan funciones (las de «Mi campus», las
+  // de notas…): no es verde, que esas pantallas salen vacías.
+  const faltas = faltasDeFunciones(integ.config_public?.funciones, { consultas: integ.config_public?.consultas === true });
+  if (faltas.length) {
+    return casilla('atencion', `Conecta, pero faltan funciones (${faltas.map((f) => f.titulo).join(', ')})`, { ...comun, motivo: textoDeFaltas(faltas) });
+  }
   return casilla('bien', `Conectado (probado ${hace(prueba.at, ahora)})${conPlugin}`, comun);
 }
 
@@ -582,6 +589,13 @@ async function comprobarCampus(projectId, { ahora, probar, fetchImpl }) {
       if (!clave) resultado = { ok: false, message: 'La clave guardada no se puede descifrar.' };
       else resultado = await probarUna(() => probar[i.provider](clave, i.config_public || {}));
       await apuntar(projectId, i.provider, resultado, { conTarjeta: true });
+      // Moodle (CRM#925): lo que tiene el servicio, como lo guarda «Probar conexión».
+      if (i.provider === 'moodle') {
+        await fundirConfigPublica({
+          projectId, provider: 'moodle',
+          campos: { funciones: resultado.funciones || null, funciones_probadas_el: new Date().toISOString() },
+        });
+      }
       hechas.push(i.provider);
     });
   // Las de Configuración › Claves: el Moodle del MCP y la cuenta de Brevo de la marca.

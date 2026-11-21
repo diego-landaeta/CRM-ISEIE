@@ -30,6 +30,7 @@ const campo = 'w-full h-10 px-3 rounded-md border border-border bg-card text-sm 
 type Borrador = {
   descuento_max_pct: string; caducidad_dias: string; caducidad_max_dias: string;
   cuotas_admitidas: boolean; cuotas_max: string; monedas: string; moneda_defecto: string;
+  cobro_auto: boolean; cobro_auto_reintento_dias: string;
 };
 
 function aBorrador(c: Partial<ConfigLinks>): Borrador {
@@ -42,6 +43,8 @@ function aBorrador(c: Partial<ConfigLinks>): Borrador {
     cuotas_max: t(c.cuotas_max),
     monedas: (c.monedas || []).join(', '),
     moneda_defecto: c.moneda_defecto || '',
+    cobro_auto: c.cobro_auto === true,
+    cobro_auto_reintento_dias: t(c.cobro_auto_reintento_dias),
   };
 }
 
@@ -59,6 +62,10 @@ function cambiosDe(b: Borrador, g: Partial<ConfigLinks>): Partial<Omit<ConfigLin
   const mon = listaDeMonedas(b.monedas);
   if (mon.length && mon.join(',') !== (g.monedas || []).join(',')) c.monedas = mon;
   if (b.moneda_defecto && b.moneda_defecto !== g.moneda_defecto) c.moneda_defecto = b.moneda_defecto;
+  if (g.cobro_auto !== undefined && b.cobro_auto !== g.cobro_auto) c.cobro_auto = b.cobro_auto;
+  if (b.cobro_auto_reintento_dias.trim() !== '' && num(b.cobro_auto_reintento_dias) !== g.cobro_auto_reintento_dias) {
+    c.cobro_auto_reintento_dias = num(b.cobro_auto_reintento_dias);
+  }
   return c;
 }
 
@@ -145,7 +152,7 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
               disabled={!b.cuotas_admitidas} className={`${campo} w-20 disabled:opacity-50`} />
             <span className="text-xs text-muted-foreground">cuotas</span>
           </div>
-          <p className="text-[11px] text-muted-foreground mt-1">Los links en cuotas llegan en la siguiente fase; la regla ya queda puesta.</p>
+          <p className="text-[11px] text-muted-foreground mt-1">Con «Generar plan de pago», un link por cuota de la venta.</p>
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -163,6 +170,27 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
           </div>
         </div>
       </div>
+
+      {guardado?.cobro_auto !== undefined && (
+        <div className="rounded-md bg-muted/30 p-2.5 space-y-1.5" data-recorrido="links-cobro-auto">
+          <label className="text-xs font-semibold flex items-center gap-2">
+            <input type="checkbox" checked={b.cobro_auto}
+              onChange={(e) => setB((x) => ({ ...x, cobro_auto: e.target.checked }))} />
+            Cobro automático de las cuotas con Stripe
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            La gestora puede activar en una venta que Stripe cobre solas sus cuotas, en las fechas del plan, con la tarjeta que
+            guarda el alumno al pagar la primera. Apagarlo aquí cancela en Stripe los cobros programados de todas las ventas del campus.
+            La clave necesita además <em>Subscription Schedules</em>, <em>Subscriptions</em> e <em>Invoices</em> de escritura y <em>Customers</em> de lectura.
+          </p>
+          <div className="flex items-center gap-2">
+            <label htmlFor={id('reintento')} className="text-xs text-muted-foreground">Si un cobro falla, reintentar una vez a los</label>
+            <input id={id('reintento')} type="number" min={0} max={15} value={b.cobro_auto_reintento_dias} onChange={poner('cobro_auto_reintento_dias')}
+              disabled={!b.cobro_auto} className={`${campo} w-20 disabled:opacity-50`} />
+            <span className="text-xs text-muted-foreground">días (0 = no)</span>
+          </div>
+        </div>
+      )}
 
       <button type="button" onClick={guardar} disabled={guardando || !hayCambios}
         className="inline-flex items-center gap-1.5 h-10 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">

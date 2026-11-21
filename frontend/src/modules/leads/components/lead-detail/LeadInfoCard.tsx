@@ -175,7 +175,8 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
           <InfoField label="Email">{lead.email}</InfoField>
           <InfoField label="Teléfono">
             {lead.telefono ? (
-              <span className="inline-flex items-center gap-2">
+              // Gemela de CRM#917: a 320 px «WhatsApp» se salía por la derecha.
+              <span className="inline-flex flex-wrap items-center gap-2">
                 {lead.telefono}
                 {/* Llamar desde la ficha. El CRM prepara, el telefono llama:
                     por WhatsApp no hay canal de audio y por la linea normal el

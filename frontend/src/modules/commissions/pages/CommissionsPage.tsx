@@ -9,6 +9,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type Estado = 'pendiente' | 'pagado' | 'cancelado';
 
@@ -160,7 +162,9 @@ export default function CommissionsPage() {
   const cantidad = Number(stats?.cantidad || 0);
 
   return (
-    <div className="space-y-6">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Comisiones</h1>
@@ -171,8 +175,11 @@ export default function CommissionsPage() {
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <VerRecorrido id="comisiones" listo={!loading} />
           <select
+            data-recorrido="comisiones-periodo"
+            aria-label="Periodo"
             value={period}
             onChange={(e) => setPeriod(e.target.value)}
             className="h-9 px-3 rounded-md bg-card border border-border text-sm focus:outline-none focus:ring-4 focus:ring-primary/10"
@@ -191,7 +198,7 @@ export default function CommissionsPage() {
         </div>
       </header>
 
-      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <section data-recorrido="comisiones-tarjetas" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiSmall label="Total a pagar"     value={fmt(totalPagar)}  hint={PERIODS[period].label} accent="pending" />
         <KpiSmall label="Pagado en periodo" value={fmt(totalPagado)} hint={`${rows.filter(r => r.estado === 'pagado').length} comisiones`} accent="paid" />
         <KpiSmall label="Comisiones"        value={String(cantidad)} hint="Total del periodo" />
@@ -199,13 +206,13 @@ export default function CommissionsPage() {
       </section>
 
       <section className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden">
+        <div data-recorrido="comisiones-lista" className="lg:col-span-2 rounded-2xl border border-border bg-card overflow-hidden">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-5 border-b border-border">
             <div>
               <h3 className="font-semibold tracking-tight">Comisiones del periodo</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Ordenadas por fecha de venta más reciente.</p>
             </div>
-            <div className="flex items-center gap-1.5 text-xs flex-wrap">
+            <div data-recorrido="comisiones-estado" className="flex items-center gap-1.5 text-xs flex-wrap">
               <button
                 onClick={() => setEstadoFilter(null)}
                 className={`px-2 py-1 rounded inline-flex items-center gap-1 transition-colors ${estadoFilter === null ? 'bg-foreground text-background' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}
@@ -285,7 +292,7 @@ export default function CommissionsPage() {
         </div>
 
         <div className="space-y-4">
-          <div className="rounded-2xl border border-border bg-card p-5">
+          <div data-recorrido="comisiones-reglas" className="rounded-2xl border border-border bg-card p-5">
             <h3 className="font-semibold tracking-tight mb-3 flex items-center gap-2">
               <Users size={16} weight="duotone" className="text-primary" />
               Reglas por gestor
