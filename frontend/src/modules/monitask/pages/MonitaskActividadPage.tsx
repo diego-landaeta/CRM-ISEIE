@@ -4,6 +4,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { CaretDown, CaretRight, WarningCircle, ArrowsClockwise } from '@phosphor-icons/react';
 import {
   monitaskApi, errorDe, horasEscritas,
@@ -62,18 +63,22 @@ export default function MonitaskActividadPage() {
       <PageHeader
         title={(<span className="flex items-center gap-2">Actividad del equipo <EtiquetaEnPruebas /></span>) as unknown as string}
         subtitle="Lo que registra Monitask de cada persona —horas, % de actividad, proyectos y tareas— y el cotejo con las horas de sus facturas. Sin capturas de pantalla."
+        actions={estado !== null && (
+          // El recorrido para probarla (CRM-ISEIE#522). Empieza en «Actividad».
+          <VerComoFunciona id="monitask" apagada={estado === 'apagado'} alAbrir={() => cambiarVista('actividad')} />
+        )}
       />
 
       {estado === null && <p className="text-sm text-muted-foreground">Cargando…</p>}
       {estado === 'apagado' && (
-        <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground">
+        <div className="bg-card border border-border rounded-lg p-6 text-sm text-muted-foreground" data-recorrido="monitask-apagado">
           Monitask no está encendido en este servidor (MONITASK_ACTIVO).
         </div>
       )}
       {estado && estado !== 'apagado' && (
         <>
           {!estado.conectada && (
-            <div className="bg-warning-soft border border-warning/30 rounded-lg p-4 text-sm text-warning-soft-foreground flex items-start gap-2">
+            <div className="bg-warning-soft border border-warning/30 rounded-lg p-4 text-sm text-warning-soft-foreground flex items-start gap-2" data-recorrido="monitask-sin-conectar">
               <WarningCircle size={16} weight="bold" className="mt-0.5 flex-shrink-0" />
               <span>
                 Monitask no está conectado: lo que se ve es lo último que se trajo.
@@ -81,14 +86,14 @@ export default function MonitaskActividadPage() {
               </span>
             </div>
           )}
-          <div className="flex flex-wrap items-center gap-2 border-b border-border">
+          <div className="flex flex-wrap items-center gap-2 border-b border-border" data-recorrido="monitask-pestanas">
             {pestanas.map((p) => (
               <button key={p.clave} onClick={() => cambiarVista(p.clave)}
                 className={`px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${vista === p.clave ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
                 {p.texto}
               </button>
             ))}
-            <span className="ml-auto text-xs text-muted-foreground pb-2">
+            <span className="ml-auto text-xs text-muted-foreground pb-2" data-recorrido="monitask-sincronizacion">
               Última sincronización: {estado.ultima_sync_at ? new Date(estado.ultima_sync_at).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'nunca'}
             </span>
           </div>
@@ -148,7 +153,7 @@ function VistaActividad() {
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3" data-recorrido="monitask-filtros">
         <RangoRapido valor={rango} alElegir={setRango} />
         <label className="text-xs text-muted-foreground">Desde
           <input type="date" value={rango.from} onChange={(e) => setRango({ ...rango, from: e.target.value })}
@@ -164,7 +169,7 @@ function VistaActividad() {
           className="h-8 px-2 rounded-md border border-border bg-card text-sm w-44" />
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-x-auto">
+      <div className="bg-card border border-border rounded-lg overflow-x-auto" data-recorrido="monitask-tabla">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
