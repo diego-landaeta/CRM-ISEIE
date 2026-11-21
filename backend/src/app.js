@@ -27,6 +27,8 @@ import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
 // Auditoría de facturación cada 2 horas y pausa de la emisión (#765).
 import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js';
+// Finanzas › Conciliación: facturas sin cobro y cobros sin factura (gemela de CRM#949 / CRM#905).
+import conciliacionModule from './modules/conciliacion/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
@@ -347,6 +349,7 @@ const MODULES = [
   stripePaymentsModule,
   invoicesModule,
   facturacionAuditoriaModule,
+  conciliacionModule,
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),

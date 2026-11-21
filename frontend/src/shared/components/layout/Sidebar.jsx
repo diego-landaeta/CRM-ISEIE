@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond,
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond, ArrowsLeftRight,
   CalendarCheck, ArrowCounterClockwise, LinkSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
@@ -220,6 +220,10 @@ export const SECCIONES_DE_ANTES = [
       { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
       // Disputas de Stripe (#396, gemela de CRM#839): solo admin y super admin, cada uno las de sus campus.
       { to: '/accounting/disputas', label: 'Disputas de Stripe', icon: Warning, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'stripe.edit' },
+      // Conciliación (gemela de CRM#949 / CRM#905): facturas sin cobro y cobros sin
+      // factura, y enlazarlos. Es de administración: admin y super admin, cada uno en
+      // sus campus. Sus pestañas, cada una con su permiso en `SIN_ENTRADA`.
+      { to: '/accounting/conciliacion', label: 'Conciliación', icon: ArrowsLeftRight, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.gestionar' },
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
@@ -442,6 +446,8 @@ const SIN_ENTRADA = {
   '/conexion/webhooks/prospectos': ['webhooks.view'],
   '/conexion/webhooks/make': ['make.view'],
   '/conexion/webhooks/transferencias': ['webhooks_salientes.view'],
+  // Las pestañas de Finanzas › Conciliación (CRM#905): la de facturas y cobros.
+  '/accounting/conciliacion/facturas': 'facturas.gestionar',
 };
 // Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
 // del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
