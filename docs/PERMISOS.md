@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-880 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+881 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -276,6 +276,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | list | `GET /api/credentials/` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.view` |
+| iaEnUso | `GET /api/credentials/ia` | (no existía) | (ruta nueva) | `credentials.view` |
 | upsert | `POST /api/credentials/` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |
 | test | `POST /api/credentials/:id/test` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |
 | remove | `DELETE /api/credentials/:id` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |

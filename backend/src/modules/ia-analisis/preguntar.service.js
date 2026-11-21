@@ -1,7 +1,7 @@
 import * as consultas from './consultas.js';
 import { cifrasSinRespaldo } from './cifras.js';
 import * as gasto from '../../shared/services/gastoIA.service.js';
-import { getDecryptedValue } from '../credentials/credentials.model.js';
+import { soloLaClave } from '../credentials/clave-ia.js';
 import { logger } from '../../shared/utils/logger.js';
 
 /**
@@ -50,20 +50,8 @@ export const SIN_DATO =
   + 'su evolución mes a mes, las ventas por asesora y el rendimiento de las campañas de Meta; '
   + 'con ellas no puedo contestar esa pregunta.';
 
-/** Clave de Anthropic: la del proyecto, luego la general, luego la del servidor. */
-async function claveDeAnthropic(projectId = null) {
-  if (projectId) {
-    try {
-      const v = await getDecryptedValue('anthropic', projectId);
-      if (v) return v;
-    } catch { /* se prueba la general */ }
-  }
-  try {
-    const g = await getDecryptedValue('anthropic', null);
-    if (g) return g;
-  } catch { /* y por ultimo la del servidor */ }
-  return process.env.ANTHROPIC_API_KEY || null;
-}
+/** Clave de Claude: la del proyecto, luego la general, luego la del servidor (CRM#893). */
+const claveDeAnthropic = (projectId = null) => soloLaClave(projectId);
 
 /** La instruccion. Lleva la fecha de hoy: sin ella «julio» o «este mes» no significan nada. */
 export function instruccion(hoy = new Date()) {
