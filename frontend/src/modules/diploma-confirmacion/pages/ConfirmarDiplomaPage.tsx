@@ -20,6 +20,16 @@ import { useParams } from 'react-router-dom';
 
 const API_BASE = (import.meta.env.BASE_URL || '/crm/').replace(/\/$/, '') + '/api';
 
+/** El mismo texto que da el servidor (`ENLACE_NO_VALE`) para un enlace que no vale. */
+const ENLACE_NO_VALIDO = 'Este enlace ya no es válido: o ya se usó, o ha caducado. Si necesitas cambiar tus datos, escribe a tu centro.';
+
+/**
+ * La forma de un enlace nuestro (`tokenBienFirmado` del servidor): 32 + «.» + 22
+ * caracteres base64url. La firma la comprueba el servidor; aquí solo se evita
+ * preguntar por algo que no puede ser un enlace.
+ */
+const tokenConForma = (t?: string | null) => /^[A-Za-z0-9_-]{32}\.[A-Za-z0-9_-]{22}$/.test(t || '');
+
 type Datos = {
   marca: string | null; logo_url: string | null; color: string | null; fondo?: string | null;
   nombre: string | null; documento: string | null; tiene_documento: boolean;
@@ -65,10 +75,23 @@ export default function ConfirmarDiplomaPage() {
   const [hecho, setHecho] = useState<'confirmado' | 'corregido' | null>(null);
 
   useEffect(() => {
-    fetch(`${API_BASE}/cd/${token}`)
-      .then((r) => r.json())
+    // Un enlace que no tiene la forma de los nuestros no se pregunta: es «no
+    // válido», no un fallo de red. Con un `%2F` el router lo descodifica a «/»,
+    // la petición iba a otra ruta, volvía algo que no era JSON y la página decía
+    // «vuelve a intentarlo» (QA de /testeo del 18/11).
+    if (!tokenConForma(token)) { setError(ENLACE_NO_VALIDO); return; }
+    fetch(`${API_BASE}/cd/${encodeURIComponent(token || '')}`)
+      .then(async (r) => {
+        const cuerpo = await r.json().catch(() => null);
+        // Sin JSON: un 4xx es que el enlace no lleva a nada; lo demás, un fallo de verdad.
+        if (!cuerpo) {
+          if (r.status >= 400 && r.status < 500) return { success: false, error: ENLACE_NO_VALIDO };
+          throw new Error('sin respuesta');
+        }
+        return cuerpo;
+      })
       .then((r) => {
-        if (!r?.success) { setError(r?.error || 'Este enlace no es válido.'); return; }
+        if (!r?.success) { setError(r?.error || ENLACE_NO_VALIDO); return; }
         setDatos(r.data);
         setNombre(r.data.nombre || '');
         // Sin nombre o sin documento no hay nada que confirmar: directamente a corregir.
@@ -91,7 +114,7 @@ export default function ConfirmarDiplomaPage() {
       const cuerpo = accion === 'confirmar'
         ? { accion, comentario: comentario.trim() || null }
         : { accion, nombre: nombre.trim() || null, documento: documento.trim() || null, comentario: comentario.trim() || null };
-      const r = await fetch(`${API_BASE}/cd/${token}`, {
+      const r = await fetch(`${API_BASE}/cd/${encodeURIComponent(token || '')}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(cuerpo),
