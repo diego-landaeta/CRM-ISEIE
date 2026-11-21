@@ -667,8 +667,9 @@ function buildOrderBy(sort, dir = 'desc') {
   Asi que un «convertido» sin ninguna venta sigue siendo prospecto: sale en la
   lista, con su estado, para que alguien lo vea y lo arregle.
 */
-const NO_ES_CLIENTE = `(l.status <> 'convertido'
-     OR NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = l.id))`;
+const NO_ES_CLIENTE = (a = 'l') => `(${a}.status <> 'convertido'
+     OR NOT EXISTS (SELECT 1 FROM conversions cx WHERE cx.lead_id = ${a}.id))`;
+
 
 /**
  * La condición de búsqueda de un prospecto por texto (gemela de CRM#591), la
@@ -793,7 +794,7 @@ export async function contarFiltrosRapidos({ projectId, projectIds, responsableI
     cond.push(`l.responsable_id = ANY($${i++}::int[])`);
     params.push([].concat(responsableId).map(Number));
   }
-  if (!includeConverted) cond.push(NO_ES_CLIENTE);
+  if (!includeConverted) cond.push(NO_ES_CLIENTE());
 
   const cuenta = (clave) => `COUNT(*) FILTER (WHERE ${FILTROS_RAPIDOS[clave]})::int`;
   const { rows } = await query(
@@ -879,7 +880,7 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
   } else if (!includeConverted && !conConversion) {
-    conditions.push(NO_ES_CLIENTE);
+    conditions.push(NO_ES_CLIENTE());
   }
   /* EN QUE PASO DEL PROCESO VA.
      El paso «en curso» es el primero pendiente que aun no ha llegado su turno:
@@ -1559,7 +1560,8 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
        COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        -- La misma condición que el filtro «Sin gestora» de Prospectos (gemela de CRM#884).
        COUNT(*) FILTER (WHERE ${SIN_GESTORA('leads')}) as sin_asignar
-     FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL${where}`,
+     FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL AND ${NO_ES_CLIENTE('leads')}${where}`,
+
     params
   );
   return rows[0];
