@@ -266,6 +266,7 @@ export function useLeads(): UseLeadsResult {
       if (filterProducto) p.set('productId', filterProducto);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
+      if (filterEstado) p.set('status', filterEstado);
       const res = await client.get<Record<string, number>>(`/leads/stats?${p.toString()}`);
       if (!res.success) return;
       const merged = res.data || {};
@@ -285,7 +286,7 @@ export function useLeads(): UseLeadsResult {
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid, debouncedSearch, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo]);
+  }, [pid, debouncedSearch, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, filterEstado]);
 
   useEffect(() => {
     fetchLeads();
