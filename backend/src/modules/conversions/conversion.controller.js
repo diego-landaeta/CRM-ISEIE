@@ -8,6 +8,9 @@ import {
   listConversionsSchema,
   payInstallmentSchema,
   editPaidInstallmentSchema,
+  cuotasAMedidaSchema,
+  cuotasIgualesSchema,
+  mensajeDeCuotas,
 } from './conversion.validation.js';
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
@@ -214,17 +217,23 @@ export async function listInstallments(req, res, next) {
 export async function generateInstallments(req, res, next) {
   try {
     const id = parseInt(req.params.id);
-    const { num_cuotas, importe_total, fecha_inicio, installments, concepto } = req.body;
-    // Modo "cuotas custom": cliente manda array completo con importe + fecha por cuota
-    if (Array.isArray(installments) && installments.length > 0) {
+    const body = req.body || {};
+    // Se valida TODO antes de tocar la base (CRM#923): el modelo borra las cuotas
+    // no cobradas antes de crear las nuevas, y un cuerpo mal escrito daba 500 o,
+    // con `num_cuotas: "abc"`, dejaba la venta sin plan.
+    // Modo "cuotas a medida": el cliente manda cada cuota con su importe y su fecha.
+    if (Array.isArray(body.installments) && body.installments.length > 0) {
+      const parsed = cuotasAMedidaSchema.safeParse(body);
+      if (!parsed.success) throw new AppError(mensajeDeCuotas(parsed.error), 400, 'VALIDATION_ERROR');
+      const { installments, concepto } = parsed.data;
       const rows = await installmentsModel.generateInstallments(id, null, null, null, installments, concepto);
       return res.json({ success: true, data: rows });
     }
     // Modo "auto": N cuotas iguales mensuales desde fecha_inicio
-    if (!num_cuotas || num_cuotas < 1) throw new AppError('num_cuotas debe ser >= 1', 400, 'INVALID');
-    if (!importe_total) throw new AppError('importe_total requerido', 400, 'INVALID');
-    if (!fecha_inicio) throw new AppError('fecha_inicio requerida', 400, 'INVALID');
-    const rows = await installmentsModel.generateInstallments(id, Number(num_cuotas), Number(importe_total), fecha_inicio, null, concepto);
+    const parsed = cuotasIgualesSchema.safeParse(body);
+    if (!parsed.success) throw new AppError(mensajeDeCuotas(parsed.error), 400, 'VALIDATION_ERROR');
+    const { num_cuotas, importe_total, fecha_inicio, concepto } = parsed.data;
+    const rows = await installmentsModel.generateInstallments(id, num_cuotas, importe_total, fecha_inicio, null, concepto);
     res.json({ success: true, data: rows });
   } catch (err) { next(err); }
 }

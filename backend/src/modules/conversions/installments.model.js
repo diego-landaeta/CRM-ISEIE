@@ -1,4 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
+import { AppError } from '../../shared/utils/AppError.js';
 import { recalcularCobrado } from './cobrado.js';
 import { saldarCuotas, cargosStripeSueltos, MARGEN } from './saldar-cuotas.js';
 
@@ -39,8 +40,10 @@ export async function generateInstallments(conversionId, numCuotas, importeTotal
         const cuota = customInstallments[i];
         const importe = Number(cuota.importe_previsto);
         const fecha = cuota.fecha_vencimiento;
-        if (!isFinite(importe) || importe <= 0) throw new Error(`Cuota ${i + 1}: importe inválido`);
-        if (!fecha) throw new Error(`Cuota ${i + 1}: fecha de vencimiento requerida`);
+        // El controlador ya lo valida (CRM#923); esto es la red por si otro camino
+        // llama aquí: un dato mal escrito es un 400, no un 500.
+        if (!isFinite(importe) || importe <= 0) throw new AppError(`Cuota ${i + 1}: importe inválido`, 400, 'VALIDATION_ERROR');
+        if (!fecha) throw new AppError(`Cuota ${i + 1}: fecha de vencimiento requerida`, 400, 'VALIDATION_ERROR');
         await c.query(
           `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, concepto)
            VALUES ($1, $2, $3, $4, $5)`,
