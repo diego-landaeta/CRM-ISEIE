@@ -27,7 +27,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const { encrypt } = await import('../src/shared/utils/crypto.js');
 const credenciales = await import('../src/modules/credentials/credentials.model.js');
 const { vaciarCacheCursosProducto } = await import('../src/modules/moodle/moodle.cursosProducto.controller.js');
-const matricula = await import('../src/modules/matricula-moodle/matricula-moodle.model.js');
+// La matrícula automática (#838), que lee esta tabla, no sube en la 2.10.0: su comprobación se queda en staging.
 
 const app = express();
 app.use(express.json());
@@ -174,10 +174,6 @@ describe('#957 · productos y cursos de Moodle', () => {
     expect(u.body.data).toMatchObject({ curso_moodle_id: 41, curso_nombre: 'Máster en Neuropsicología', antes: [] });
     let filas = await q('SELECT curso_moodle_id::int AS id, curso_nombre, creado_por FROM moodle_cursos_producto WHERE product_id = $1', [VENDIDO]);
     expect(filas).toEqual([{ id: 41, curso_nombre: 'Máster en Neuropsicología', creado_por: ADMIN.id }]);
-
-    // La matrícula automática lo ve.
-    const [p] = await matricula.productosConCursos(ids.venta);
-    expect(p.cursos).toEqual([{ project_id: CAMPUS, curso_moodle_id: 41, curso_nombre: 'Máster en Neuropsicología' }]);
 
     const c = await request.put(url).set(como(ADMIN)).send({ curso_moodle_id: 42 });
     expect(c.status).toBe(200);
