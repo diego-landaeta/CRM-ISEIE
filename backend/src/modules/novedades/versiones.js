@@ -13,6 +13,16 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.3",
+    "fecha": "2026-11-20",
+    "titulo": "Versión 2.9.3",
+    "intro": "Arreglo del enlace a la venta al registrarla.",
+    "grupos": [],
+    "arreglos": [
+      "Al registrar una venta con link de pago, «Verlos en la venta» abre la ficha de la venta (antes llevaba a una página que no existía)."
+    ]
+  },
+  {
     "version": "2.9.2",
     "fecha": "2026-11-20",
     "titulo": "Versión 2.9.2",
