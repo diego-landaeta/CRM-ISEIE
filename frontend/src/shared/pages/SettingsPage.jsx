@@ -35,12 +35,12 @@ import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, 
 const NAV = [
   { id: 'users',        label: 'Usuarios',          icon: Users,       embedded: true },
   { id: 'availability', label: 'Disponibilidad',    icon: Calendar,    embedded: true },
-  { label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
+  { id: 'roles',        label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
   { label: 'Campos custom',        icon: TextT,          to: '/configuracion/campos' },
   { label: 'Árbol de categorías',  icon: TreeStructure,  to: '/configuracion/categorias-arbol' },
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
-  { label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
+  { id: 'webhooks',     label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
   { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
@@ -77,10 +77,14 @@ const comoSeLlama = (u) =>
 // fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
 // veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
 // Las que no salen aquí no piden permiso para leerse.
+// Diego, 21/11/2026 (gemela de CRM#979): la gestora tampoco ve «Roles y
+// permisos» ni «Webhooks»; las dos piden su permiso en el servidor.
 export const PERMISO_DE_PESTANA = {
   users: 'users.view',
   availability: 'users.view',
   integrations: 'credentials.view',
+  roles: 'roles.view',
+  webhooks: 'webhooks.view',
 };
 
 // Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
