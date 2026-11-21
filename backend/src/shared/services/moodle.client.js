@@ -318,6 +318,24 @@ export const GRUPOS_DE_FUNCIONES = [
 ];
 
 /**
+ * TODOS los cursos del campus (#457: las entregas de cursos sin tutora vinculada en el
+ * CRM). Sin el curso «sitio» de Moodle. En el 360 la añade al servicio el plugin 1.10.8;
+ * aquí no hay plugin: el servicio del token del campus (Integraciones › Moodle) tiene que
+ * tenerla. Si no la tiene, Moodle la niega y quien llama se salta el campus.
+ * Llega a producción con «Cursos de Moodle» (CRM#957), que es quien la usa allí.
+ */
+export async function cursosDelCampus(conexion, opciones) {
+  const r = await llamar(conexion, 'core_course_get_courses_by_field', {}, opciones);
+  return (Array.isArray(r?.courses) ? r.courses : [])
+    .filter((c) => c && c.format !== 'site' && Number(c.id) > 1)
+    .map((c) => ({
+      id: Number(c.id),
+      nombre: c.displayname || c.fullname || c.shortname || null,
+      visible: c.visible === undefined ? true : Number(c.visible) === 1 || c.visible === true,
+    }));
+}
+
+/**
  * Los matriculados ACTIVOS de un curso, con su rol y su último acceso. Solo
  * activos (decisión 8: fuera bajas): `onlyactive`.
  */
