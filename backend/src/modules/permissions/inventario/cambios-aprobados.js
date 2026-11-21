@@ -493,6 +493,20 @@ export const CAMBIOS_DE_MENU = [
     },
     aprobadoPor: 'Pendiente de Diego (CRM#957)',
   },
+  {
+    id: 'menu-conciliacion-905',
+    que: '«Finanzas › Conciliación»: facturas emitidas sin cobro y cobros sin factura, por campus y por mes, con «Enlazar» y «Enlazar todas las seguras» (CRM#905). La ve quien tiene `facturas.gestionar` («asociar a una venta»), admin y super admin de serie, cada uno en sus campus. Una gestora con el permiso por excepción no la ve ni concilia: es de administración.',
+    motivo: 'Diego (18/11): enlazó a mano en producción 89 facturas sin cobro; quedan unas 56 y unos 400 cobros sin factura, y tiene que poder hacerlo administración desde el CRM. No cambia el acceso: `facturas.gestionar` ya asociaba una factura a una venta. La pestaña de los cargos de Stripe (CRM#906) irá dentro de esta misma entrada.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Conciliación'],
+      admin: ['+ Finanzas › Conciliación'],
+      'gestora+admin': ['+ Finanzas › Conciliación'],
+    },
+    rutas: {
+      'Finanzas › Conciliación': 'GET /api/conciliacion/facturas-cobros',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#905)',
+  },
 ];
 
 /**
