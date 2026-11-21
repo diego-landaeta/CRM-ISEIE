@@ -81,6 +81,20 @@ describe('Configuración · pestañas según los permisos (gemela de CRM#880)', 
     expect(nav().textContent).toContain('Webhooks');
   });
 
+  // QA del 21/11/2026: «Guardar y cifrar» mandaba `service: undefined` → 400 «Required».
+  it('APIs globales: «Guardar y cifrar» manda el servicio de la entrada', async () => {
+    como('superadmin');
+    const post = (await import('@/shared/api/client')).default.post;
+    post.mockResolvedValue({ success: true, data: {} });
+    abrir();
+    fireEvent.click(screen.getByRole('button', { name: 'APIs globales' }));
+    const configurar = await screen.findAllByRole('button', { name: /Configurar|Actualizar/ });
+    fireEvent.click(configurar[configurar.length - 1]);
+    fireEvent.change(screen.getByPlaceholderText('Pega tu credencial aquí…'), { target: { value: 'sk-ant-prueba' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Guardar y cifrar' }));
+    await waitFor(() => expect(post).toHaveBeenCalledWith('/credentials', expect.objectContaining({ service: 'claude', value: 'sk-ant-prueba' })));
+  });
+
   it('con users.view pero sin credentials.view: Usuarios sí y APIs globales no', () => {
     como('gestor', { 'users.view': true });
     abrir();
