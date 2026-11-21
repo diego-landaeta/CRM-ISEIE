@@ -5,6 +5,7 @@ import { render, screen, cleanup, within, fireEvent } from '@testing-library/rea
 import RecorridoGuiado, { colocarCartel, MARGEN_CARTEL } from '@/shared/components/ui/RecorridoGuiado';
 import { PASOS_TABLERO, CLAVE_RECORRIDO_TABLERO } from '@/modules/tasks/lib/recorridoTablero';
 import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
+import { RECORRIDOS_FINANZAS } from '@/shared/lib/recorridosFinanzas';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -144,6 +145,14 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
     const ventas = TODOS.find(([id]) => id === 'ventas');
     expect(ventas).toBeTruthy();
     expect(ventas[1]).toHaveLength(RECORRIDOS_COBROS.ventas.pasos.length);
+  });
+
+  it('entre ellos, los cuatro del bloque Finanzas (#619, segunda tanda), con todos sus pasos', () => {
+    for (const r of Object.values(RECORRIDOS_FINANZAS)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
   });
 
   it.each(TODOS)('%s: el cartel cabe en cada paso y «Siguiente» se puede pulsar', (_id, pasos) => {

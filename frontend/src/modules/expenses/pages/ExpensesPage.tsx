@@ -9,6 +9,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941): señala, paso a paso, cada parte.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Portal from '@/shared/components/ui/portal';
@@ -251,13 +253,17 @@ export default function ExpensesPage() {
     || 'Todos los proyectos';
 
   return (
-    <div className="space-y-5">
+    /* Margen de scroll en lo que señala el recorrido (#619): la barra fija de
+       arriba no tapa el principio al subir hasta ello. */
+    <div className="space-y-5 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Egresos"
         subtitle={`${ambitoNombre} · ${resumen?.num ?? 0} registros · Total: ${fmt(resumen?.total ?? 0)}`}
         actions={
           <div className="flex items-center gap-2">
+            <VerRecorrido id="egresos" listo={!loading} />
             <button
+              data-recorrido="egresos-csv"
               onClick={handleExport}
               aria-label="Exportar a CSV"
               disabled={!resumen?.num}
@@ -266,6 +272,7 @@ export default function ExpensesPage() {
               <DownloadSimple size={14} weight="bold" /> <span className="hidden sm:inline">CSV</span>
             </button>
             <button
+              data-recorrido="egresos-nuevo"
               onClick={() => { setEditing(null); setDialogOpen(true); }}
               aria-label="Nuevo egreso"
               className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -277,7 +284,7 @@ export default function ExpensesPage() {
       />
 
       {/* Cifras del filtro entero, calculadas en el servidor. */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div data-recorrido="egresos-cifras" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-xs text-muted-foreground">Total</p>
           <p className="text-xl font-bold tabular-nums">{fmt(resumen?.total ?? 0)}</p>
@@ -297,7 +304,7 @@ export default function ExpensesPage() {
 
       {/* Reparto por categoría: un clic filtra. */}
       {!!resumen?.por_categoria?.length && (
-        <div className="flex flex-wrap gap-1.5" aria-label="Total por categoría">
+        <div data-recorrido="egresos-categorias" className="flex flex-wrap gap-1.5" aria-label="Total por categoría">
           {resumen.por_categoria.map((c) => (
             <button
               key={c.categoria}
@@ -313,7 +320,7 @@ export default function ExpensesPage() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-recorrido="egresos-filtros" className="flex flex-wrap items-center gap-2">
         <label className="relative">
           <span className="sr-only">Buscar en concepto y notas</span>
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -396,6 +403,8 @@ export default function ExpensesPage() {
         </div>
       ) : (
         <>
+          {/* La tabla (PC) y las tarjetas (móvil) juntas: lo que señala el recorrido. */}
+          <div data-recorrido="egresos-lista">
           {/* Tabla escritorio */}
           <div className="hidden lg:block bg-card border border-border rounded-lg overflow-x-auto">
             <table className="w-full text-sm tabular-nums">
@@ -519,6 +528,7 @@ export default function ExpensesPage() {
                 </div>
               </div>
             ))}
+          </div>
           </div>
 
           {/* Paginación: la página la pide el servidor. */}
