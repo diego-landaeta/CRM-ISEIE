@@ -9072,6 +9072,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/links-pago/:id/renovar",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/:id/renovar",
+  "relativa": "POST /:id/renovar",
+  "controlador": "renovar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/make-webhooks/",
   "tipo": "ruta",
   "modulo": "make",

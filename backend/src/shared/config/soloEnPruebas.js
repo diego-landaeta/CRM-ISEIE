@@ -81,3 +81,29 @@ export function pluginMoodleActivo(env = process.env) {
 export function cobroAutomaticoActivo(env = process.env) {
   return linksPagoActivos(env) && enPruebasOAprobado('COBRO_AUTOMATICO_EN_PRODUCCION', env);
 }
+
+/**
+ * Seguimiento de los links que no se pagan (gemela de CRM#984, #659): cada 15
+ * minutos mira en Stripe qué links ha abierto el alumno, avisa a la gestora si lo
+ * abrió y no pagó, y le manda al alumno el recordatorio de las 24 h y de las 72 h.
+ * Escribe a alumnos sin que nadie pulse nada, así que en producción va APAGADO
+ * hasta que Diego lo apruebe con LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION=1. Fuera de
+ * producción (y en /staging), encendido; los correos pasan igual por el freno de
+ * pruebas de `sendEmail`. Necesita los links de pago encendidos.
+ *
+ * Renovar un caducado y ver el estado en la lista NO dependen de esto.
+ */
+export function seguimientoLinksActivo(env = process.env) {
+  return linksPagoActivos(env) && enPruebasOAprobado('LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION', env);
+}
+
+/**
+ * El recordatorio por WhatsApp (CRM#984), aparte y APAGADO en todos los entornos
+ * salvo LINKS_PAGO_RECORDATORIO_WHATSAPP=1: WhatsApp no tiene freno de pruebas como
+ * el correo, y un mensaje automático desde el número de una gestora es lo que hace
+ * que reporten la línea. Sale por la conversación que esa gestora ya tenga con el
+ * prospecto, con los topes de ritmo de siempre; si no hay conversación, no sale.
+ */
+export function recordatorioWhatsappActivo(env = process.env) {
+  return seguimientoLinksActivo(env) && env.LINKS_PAGO_RECORDATORIO_WHATSAPP === '1';
+}
