@@ -266,6 +266,14 @@ describe('recorrido 1 · pago único con descuento, contra la base', { timeout: 
     expect(pagos).toEqual([{ importe: 900 }]);
   });
 
+  it('un descuento con céntimos (999 − 10 % = 899,10): se guarda tal cual (QA de staging, 21/11: daba un 500)', async () => {
+    const r = await crear({ importe: 899.1, precio_original: 999, descuento_tipo: 'pct', descuento_valor: 10 });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(de('POST', '/v1/prices')[0].cuerpo.unit_amount).toBe('89910');
+    const link = await linkDe(r.body.data.id);
+    expect([link.importe, link.precio_original, link.descuento_importe].map(Number)).toEqual([899.1, 999, 99.9]);
+  });
+
   it('con otro importe y sin descuento: cobra ese importe, sin descuento apuntado', async () => {
     const r = await crear({ importe: 1100 });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
