@@ -491,7 +491,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#957)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
   {
     id: 'menu-conciliacion-905',
@@ -505,7 +505,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Finanzas › Conciliación': 'GET /api/conciliacion/facturas-cobros',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#905)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
   {
     id: 'menu-conciliacion-cargos-stripe-906',
@@ -517,7 +517,7 @@ export const CAMBIOS_DE_MENU = [
     rutas: {
       'Finanzas › Conciliación': 'GET /api/stripe-payments/conciliacion',
     },
-    aprobadoPor: 'Pendiente de Diego (CRM#906)',
+    aprobadoPor: 'Diego, 21/11 (a producción en la 2.10.0)',
   },
 ];
 

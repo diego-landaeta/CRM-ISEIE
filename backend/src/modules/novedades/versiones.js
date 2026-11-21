@@ -13,6 +13,153 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.10.0",
+    "fecha": "2026-11-21",
+    "titulo": "Versión 2.10.0",
+    "intro": "Recorridos guiados en Ventas y en todo Finanzas, Conciliación de facturas, cobros y cargos de Stripe, cada producto con su curso de Moodle, Prospectos que abre con la lista y arreglos.",
+    "grupos": [
+      {
+        "titulo": "Recorridos guiados",
+        "items": [
+          {
+            "titulo": "Ventas con «Ver recorrido»",
+            "texto": "En Ventas, el botón «Ver recorrido» te enseña la pantalla paso a paso: los filtros, el resumen, la tabla y cómo registrar o cobrar una venta. Sustituye a los antiguos «Tutoriales». Solo se abre cuando lo pulsas.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Recorridos en todo Finanzas",
+            "texto": "Dashboard, Ingresos, Conversiones, Egresos, Cuentas por cobrar, Cuentas por pagar, Comisiones, Comisiones de tutores, Nóminas, Pendientes de facturar, Ventas sin formación y Análisis de ventas tienen su «Ver recorrido». Lo puedes repetir cuando quieras.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting",
+            "boton": "Ir a Finanzas"
+          },
+          {
+            "titulo": "«Ver cómo funciona» para probar funciones nuevas",
+            "texto": "En PayPal y banco (los cobros de PayPal y los extractos del banco), en la tarjeta del informe mensual de Informes y en Actividad del equipo (Monitask), «Ver cómo funciona» te guía para probarla con datos de prueba y te dice cómo dejarlo limpio al acabar. Si la función está apagada, el botón te lo avisa.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/cobros-externos",
+            "boton": "Ir a PayPal y banco"
+          }
+        ]
+      },
+      {
+        "titulo": "Conciliación",
+        "items": [
+          {
+            "titulo": "Facturas sin cobro y cobros sin factura",
+            "texto": "En Finanzas › Conciliación › Facturas y cobros ves, por campus y por mes, las facturas emitidas que no tienen cobro y los cobros que no tienen factura. «Enlazar» une cada pareja y «Enlazar todas las seguras» une de una vez las que solo tienen una pareja posible.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/conciliacion",
+            "boton": "Ir a Conciliación"
+          },
+          {
+            "titulo": "Cargos de Stripe sin enlazar",
+            "texto": "La pestaña «Cargos de Stripe» enseña los cargos cobrados en Stripe que no tienen su cobro en el CRM, con el cobro que encaja. Puedes enlazarlo, apuntar el cobro en una venta del alumno o crear la venta si no la tiene. Abre en el mes actual; «Todos los meses» sigue en la lista.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/conciliacion/cargos-stripe",
+            "boton": "Ir a Cargos de Stripe"
+          }
+        ]
+      },
+      {
+        "titulo": "Moodle",
+        "items": [
+          {
+            "titulo": "Cada producto con su curso de Moodle",
+            "texto": "En Productos › Cursos de Moodle unes cada producto del campus con su curso: buscas el curso por su nombre y lo eliges, y con la X lo quitas. Un aviso te dice qué productos vendidos todavía no tienen curso.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/products/cursos-moodle",
+            "boton": "Ir a Cursos de Moodle"
+          },
+          {
+            "titulo": "«Probar conexión» dice qué le falta al Moodle",
+            "texto": "En Integraciones › Campus (Moodle), «Probar conexión» y «Comprobar ahora» dicen qué funciones le faltan al servicio del Moodle, por grupo: Conexión, Mi campus, Consultas, y Notas y avisos. Si falta alguna, el campus sale en «Atención» con el motivo, y no en verde.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/accounting/integrations",
+            "boton": "Ir a Integraciones"
+          }
+        ]
+      },
+      {
+        "titulo": "Prospectos",
+        "items": [
+          {
+            "titulo": "Prospectos abre con la lista",
+            "texto": "Al entrar en Prospectos ves la lista directamente. El último lead de cada gestora, el ranking, las cifras y el resumen del día están en la pestaña «Equipo»; si pulsas una cifra, filtra la lista y te lleva a ella. Al volver a «Lista» conservas la página y los filtros.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/leads",
+            "boton": "Ir a Prospectos"
+          }
+        ]
+      },
+      {
+        "titulo": "Configuración",
+        "items": [
+          {
+            "titulo": "Cada uno ve lo suyo",
+            "texto": "En Configuración, una gestora ve solo sus campus y su configuración: ya no le salen Usuarios, Disponibilidad, APIs globales, Roles y permisos ni Webhooks. Un admin ve los campus de su empresa.",
+            "roles": [
+              "gestor",
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/configuracion",
+            "boton": "Ir a Configuración"
+          },
+          {
+            "titulo": "La clave de Claude de APIs globales se usa",
+            "texto": "La clave de Claude que se pega en Configuración › APIs globales es la que usa el CRM para la IA.",
+            "roles": [
+              "admin",
+              "superadmin"
+            ],
+            "ruta": "/configuracion",
+            "boton": "Ir a Configuración"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Ventas: el resumen cuenta también las ventas que todavía no tienen ningún cobro, igual que Reportes.",
+      "Prospectos: la cifra del resumen ya no cuenta a quien ya es cliente con una venta, igual que la lista.",
+      "En el móvil, la fila de botones de la venta y la de Facturas caben en la pantalla.",
+      "Links de pago: si el campus no tiene la clave de Stripe, el asistente lo dice nada más abrirse y no deja rellenar.",
+      "Un plan de cuotas mal escrito avisa del error y ya no borra el plan que había.",
+      "Un aviso de Stripe que llega vacío ya no se apunta como un rechazo de Stripe.",
+      "Un enlace de confirmación del diploma que no es válido lo dice claro, en vez de «vuelve a intentarlo».",
+      "Productos: una dirección con un número de producto que no vale da un aviso, no un error.",
+      "Configuración › APIs globales: «Guardar y cifrar» guarda la clave (antes daba un error «Required»)."
+    ]
+  },
+  {
     "version": "2.9.3",
     "fecha": "2026-11-20",
     "titulo": "Versión 2.9.3",
