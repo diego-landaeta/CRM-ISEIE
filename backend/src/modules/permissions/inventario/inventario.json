@@ -2009,6 +2009,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conciliacion/facturas-cobros",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "GET",
+  "ruta": "/api/conciliacion/facturas-cobros",
+  "relativa": "GET /facturas-cobros",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar",
+  "relativa": "POST /facturas-cobros/enlazar",
+  "controlador": "enlazar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar-seguras",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar-seguras",
+  "relativa": "POST /facturas-cobros/enlazar-seguras",
+  "controlador": "enlazarSeguras",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/connectors/",
   "tipo": "ruta",
   "modulo": "connectors",

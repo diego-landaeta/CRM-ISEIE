@@ -2269,7 +2269,7 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
 */
 // Salvo que la venta ya se facture cobro a cobro (20/11/2026): la misma excepción
 // que en `emitirFacturaDePago`, para que la cola y el botón digan lo mismo.
-const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
+export const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
         NOT EXISTS (SELECT 1 FROM invoices pc
                      WHERE pc.conversion_id = cp.conversion_id
                        AND pc.tipo = 'normal' AND pc.estado <> 'cancelada'
