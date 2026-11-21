@@ -38,7 +38,17 @@ export async function list({ projectId, service }) {
   }));
 }
 
-export async function getDecryptedValue(service, projectId = null) {
+/**
+ * `marcar: true` sella el «último uso» de la credencial (CRM#893). En ISEIE
+ * leer no sellaba nada: solo lo hacía el Moodle del MCP, a mano. La clave de IA
+ * lo pide cuando se usa de verdad (chat, Preguntar, lectura semanal) y no
+ * cuando solo se mira si la hay (página de estado, «qué clave usa la IA»).
+ *
+ * `soloProduccion` lo manda la clave de IA, como en MultiCRM, pero aquí no
+ * cambia nada: ISEIE no separa las claves por entorno (la #80 de MultiCRM).
+ */
+// eslint-disable-next-line no-unused-vars
+export async function getDecryptedValue(service, projectId = null, { marcar = false, soloProduccion = false } = {}) {
   const { rows } = await query(
     `SELECT encrypted_value, iv, auth_tag FROM api_credentials
      WHERE service = $1 AND (project_id = $2 OR ($2::int IS NULL AND project_id IS NULL))
@@ -46,6 +56,7 @@ export async function getDecryptedValue(service, projectId = null) {
     [service, projectId]
   );
   if (!rows[0]) return null;
+  if (marcar) marcarUso(service, projectId);
   return decrypt(rows[0].encrypted_value, rows[0].iv, rows[0].auth_tag);
 }
 
