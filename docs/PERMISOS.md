@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-881 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
+885 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -757,6 +757,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | alumnos | `GET /api/moodle/cursos/:id/alumnos` | (no existía) | (ruta nueva) | `moodle.view` |
 | estructura | `GET /api/moodle/cursos/:id/estructura` | (no existía) | (ruta nueva) | `moodle.view` |
 | recursos | `GET /api/moodle/cursos/:id/recursos` | (no existía) | (ruta nueva) | `moodle.view` |
+| productos | `GET /api/moodle/campus/:id/productos-cursos` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| cursosMoodle | `GET /api/moodle/campus/:id/cursos-moodle` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| unir | `PUT /api/moodle/campus/:id/productos/:productId/curso` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| quitar | `DELETE /api/moodle/campus/:id/productos/:productId/curso` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
 | conectar | `POST /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
 | desconectar | `DELETE /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
 
@@ -1682,6 +1686,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
+| Unir productos con cursos de Moodle | `moodle.cursos_producto` | Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus. | Admin, Soporte |  |
 
 ### Webhooks de salida
 
