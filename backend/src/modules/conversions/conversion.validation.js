@@ -82,6 +82,56 @@ export const editPaidInstallmentSchema = z.object({
   referencia,
 }).refine((d) => Object.keys(d).length > 0, { message: 'Indica fecha_cobro, importe_cobrado o metodo' });
 
+// ── Generar el plan de cuotas (CRM#923) ──────────────────────────────────────
+// Antes el controlador leía el cuerpo sin validar y el modelo lanzaba un Error
+// suelto dentro de la transacción: una cuota mal escrita daba 500 (y ensuciaba
+// los avisos de 5xx), y `num_cuotas: "abc"` borraba el plan sin crear otro.
+
+/** AAAA-MM-DD y que exista de verdad (ni 2026-02-30 ni «hola»). */
+const fechaReal = (requerida) => z
+  .string({ required_error: requerida, invalid_type_error: requerida })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'la fecha va como AAAA-MM-DD')
+  .refine((v) => {
+    const d = new Date(`${v}T12:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, 'esa fecha no existe');
+
+/** Un número, aunque llegue como texto («50»), pero no «abc» ni vacío. */
+const numero = (falta, noEs) => z.preprocess(
+  (v) => (typeof v === 'string' && v.trim() !== '' ? Number(v) : v),
+  z.number({ required_error: falta, invalid_type_error: noEs }).finite(noEs),
+);
+
+const concepto = z.string().max(500).optional().nullable();
+
+// Modo «cuotas a medida»: cada cuota con su importe y su fecha.
+export const cuotaAMedidaSchema = z.object({
+  importe_previsto: numero('falta el importe (importe_previsto)', 'el importe no es un número').refine((n) => n > 0, 'el importe tiene que ser mayor que 0'),
+  fecha_vencimiento: fechaReal('falta la fecha de vencimiento (fecha_vencimiento)'),
+});
+
+export const cuotasAMedidaSchema = z.object({
+  installments: z.array(cuotaAMedidaSchema).min(1, 'Añade al menos una cuota').max(120, 'Como mucho 120 cuotas'),
+  concepto,
+});
+
+// Modo automático: N cuotas iguales, mensuales, desde fecha_inicio.
+export const cuotasIgualesSchema = z.object({
+  num_cuotas: numero('num_cuotas requerido', 'num_cuotas no es un número')
+    .refine((n) => Number.isInteger(n) && n >= 1, 'num_cuotas tiene que ser un entero mayor o igual que 1')
+    .refine((n) => n <= 120, 'Como mucho 120 cuotas'),
+  importe_total: numero('importe_total requerido', 'importe_total no es un número').refine((n) => n > 0, 'importe_total tiene que ser mayor que 0'),
+  fecha_inicio: fechaReal('fecha_inicio requerida'),
+  concepto,
+});
+
+/** «Cuota 2: falta la fecha…» o el mensaje tal cual, para el primer fallo. */
+export function mensajeDeCuotas(error) {
+  const e = error.errors[0];
+  const [campo, i] = e.path;
+  return campo === 'installments' && Number.isInteger(i) ? `Cuota ${i + 1}: ${e.message}` : e.message;
+}
+
 export const listConversionsSchema = z.object({
   projectId: z.coerce.number().int().positive().optional(),
   leadId: z.coerce.number().int().positive().optional(),
