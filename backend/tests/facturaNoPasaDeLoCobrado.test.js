@@ -23,6 +23,12 @@ vi.mock('../src/shared/config/db.js', () => ({
   getClient: vi.fn(),
 }));
 
+// Los permisos de quien mira: sin «Poner número al cobrar» salvo que la prueba lo diga.
+let mapaPermisos = {};
+vi.mock('../src/modules/permissions/permissions.service.js', () => ({
+  explicarPermisos: vi.fn(async () => ({ mapa: mapaPermisos })),
+}));
+
 const real = await vi.importActual('../src/modules/invoices/invoices.model.js');
 const { motivoParaNoFacturarDeMas } = real;
 
@@ -197,6 +203,16 @@ describe('de quien es una factura, para una gestora', () => {
   it('pero no la de otra', async () => {
     respuestas = [{ rows: [] }];
     expect(await real.esFacturaQueGestiona(6, 'gestor', 392)).toBe(false);
+  });
+
+  it('con acceso a la facturación, cualquiera de sus campus (Diego, 19/11/2026)', async () => {
+    mapaPermisos = { 'facturas.emitir': true };
+    try {
+      consultas.length = 0;
+      respuestas = [];
+      expect(await real.esFacturaQueGestiona(6, 'gestor', 392)).toBe(true);
+      expect(consultas).toEqual([]);
+    } finally { mapaPermisos = {}; }
   });
 });
 

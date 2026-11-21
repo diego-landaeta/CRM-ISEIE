@@ -48,6 +48,8 @@ export const REUBICACIONES = [
   // COMERCIAL: los prospectos, lo que se vende y quién compró.
   ['Principal › Prospectos', 'Comercial › Prospectos'],
   ['Principal › Ventas', 'Comercial › Ventas'],
+  // Links de pago (Diego, 19/11), junto a Ventas (como en MultiCRM).
+  ['Principal › Links de pago', 'Comercial › Links de pago', { despuesDe: 'Ventas' }],
   // Estaba dos veces (Principal y Finanzas): una sola, junto a lo comercial.
   ['Finanzas › Ventas', 'Comercial › Ventas'],
   // Duplicados es de Prospectos, no de Clientes: va junto a Prospectos, fuera

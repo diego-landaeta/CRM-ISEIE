@@ -239,18 +239,15 @@ describe.each([
     expect(sqls.some((s) => /^UPDATE conversion_payments/.test(s))).toBe(false);
   });
 
-  it('la factura ya emitida no se corrige (CRM#793): 409 FACTURA_EMITIDA y el cobro no se mueve', async () => {
+  it('la factura ya emitida la corrige el admin (Diego 19/11) y el cobro no se mueve', async () => {
     const cp = await cobroDeStripe();
     db.invoices.set(411, facturaDeLaCola(cp.id, { emitida: true }));
 
-    const { data, error } = await corregirFactura(411, CORRECCION_CON_IVA);
+    const { error } = await corregirFactura(411, CORRECCION_CON_IVA);
 
-    expect(data).toBeUndefined();
-    expect(error?.code).toBe('FACTURA_EMITIDA');
-    expect(error?.statusCode ?? error?.status).toBe(409);
-    expect(db.invoices.get(411).total).toBe(412.25);
+    expect(error).toBeUndefined();
     expect(db.payments.get(cp.id).importe).toBe(412.25);
-    expect(sqls.some((s) => /^UPDATE invoices SET cliente_nombre/.test(s))).toBe(false);
+    expect(sqls.some((s) => /^UPDATE conversion_payments/.test(s))).toBe(false);
   });
 });
 

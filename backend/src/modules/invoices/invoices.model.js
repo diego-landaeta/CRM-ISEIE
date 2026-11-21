@@ -4,6 +4,7 @@ import { issuerFiscalStatus } from '../../shared/utils/spanishTaxId.js';
 import { resolveRegimenClave } from './fiscal-engine.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 import { gestorasACargo } from '../../shared/utils/roles.js';
+import { tieneAccesoFacturacion } from './invoices.alcance.js';
 import { CLASE_FACTURA, SOSPECHA_DUPLICADA } from './clase.sql.js';
 import { recalcularCobrado } from '../conversions/cobrado.js';
 import { frenarSiPosibleDuplicada, vieneConfirmada, normalizarNif } from './posible-duplicada.js';
@@ -55,6 +56,21 @@ export async function reservarNumero(client, projectId, issuerId, ano, serie, nu
        FROM invoices WHERE ano = $1 AND serie = $2 AND numero = $3 LIMIT 1`,
     [ano, serie, n]
   );
+  // Sin saltos (Diego, 19/11/2026: «tiene que seguir el número de las facturas»).
+  // Un 27500 escrito por error dejó el contador de CEDIA ahí y la siguiente iba a
+  // salir con ese número. Vale el siguiente o un hueco de antes, nunca saltar.
+  const { rows: [tope] } = await client.query(
+    `SELECT GREATEST(
+              COALESCE((SELECT MAX(ultimo_numero) FROM invoice_sequences WHERE ano = $1 AND serie = $2), 0),
+              COALESCE((SELECT MAX(numero) FROM invoices WHERE ano = $1 AND serie = $2 AND numero IS NOT NULL), 0)
+            ) AS usado`,
+    [ano, serie]);
+  const siguiente = Number(tope?.usado || 0) + 1;
+  if (n > siguiente) {
+    throw new AppError(
+      `El siguiente número de la serie ${serie} es el ${ano}/${String(siguiente).padStart(4, '0')}: `
+      + 'una serie fiscal no se salta números.', 400, 'NUMERO_SALTA');
+  }
   if (ocupado) {
     throw new AppError(
       `El número ${ano}/${String(n).padStart(4, '0')} ya lo tiene la factura de `
@@ -725,7 +741,7 @@ export async function cancel(id, { motivo = null, userId = null } = {}) {
 // serie al mayor número restante, de modo que si se borran los últimos (errores) el
 // siguiente vuelve a reutilizarlos sin dejar huecos. Solo admin/superadmin.
 // No toca la conversión ni sus pagos (la venta sigue; se podrá re-facturar).
-export async function deleteInvoice(id) {
+export async function deleteInvoice(id, { permitirEmitida = false } = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -733,7 +749,10 @@ export async function deleteInvoice(id) {
     const inv = sel[0];
     if (!inv) { await client.query('ROLLBACK'); return null; }
     // Una emitida no se borra (CRM#793): su número no puede quedar libre.
-    exigirNoEmitida(inv, 'borrar');
+    // Salvo desde la pantalla (Diego, 19/11/2026), por quien tiene «Anular y abonar»:
+    // una factura emitida por error. Lo normal sigue siendo anularla (su abono).
+    // El abono (rectificativa) emitido, nunca: deshace otra factura.
+    if (!permitirEmitida || inv.tipo === 'rectificativa') exigirNoEmitida(inv, 'borrar');
     await client.query(`DELETE FROM invoices WHERE id = $1`, [id]);
     // Reajusta el correlativo al máximo restante de la SERIE Y AÑO, en todas sus
     // filas: es como numera `nextNumero`, que coge el mayor de todas.
@@ -873,6 +892,8 @@ export async function puedeEmitirFactura(userId) {
 // solo las de sus prospectos.
 export async function esFacturaQueGestiona(userId, role, invoiceId) {
   if (role === 'superadmin') return true;
+  // Con acceso a facturación (Diego, 19/11/2026), todas las de sus campus.
+  if (await tieneAccesoFacturacion({ userId })) return true;
   if (role === 'admin') return (await gestorasACargo(userId)).length === 0;
   const { rows } = await query(
     `SELECT 1 FROM invoices i
@@ -886,8 +907,8 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
 export async function updateFechas(id, { fechaEmision, fechaPago }) {
-  // Las fechas de una emitida no se cambian (CRM#793).
-  exigirNoEmitida(await findById(id), 'cambiar sus fechas');
+  // Diego, 19/11/2026: quien tiene «Cambiar fechas» (admin y superadmin) corrige
+  // las fechas también de una emitida. La ruta ya exige el permiso.
   const { rows } = await query(
     `UPDATE invoices
         SET fecha_emision = COALESCE($2::date, fecha_emision),
@@ -1302,7 +1323,16 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     `SELECT id, numero, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
        AND total >= (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 ORDER BY id DESC LIMIT 1`,
     [conversionId]);
-  if (facTot[0]) {
+  // Salvo que la venta ya se facture COBRO A COBRO (Diego, 20/11/2026): si alguna
+  // cuota ya tiene su factura propia (ligada a su cobro y por menos que la venta),
+  // cada cobro lleva la suya aunque otra factura diga el total. Pasó con Laura
+  // (Psiko): la 0136 por los 950 € al entrar la inicial, la 0224 de la cuota 1, y la
+  // cuota 2, cobrada por Stripe, se quedaba sin factura y fuera de la cola.
+  const { rows: porCobro } = facTot[0] ? await query(
+    `SELECT 1 FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+       AND payment_id IS NOT NULL AND total < (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 LIMIT 1`,
+    [conversionId]) : { rows: [] };
+  if (facTot[0] && !porCobro.length) {
     // Pero solo si lo ya facturado cubre lo realmente cobrado.
     //
     // Si el total apuntado en la venta se quedo corto, esa primera factura pasa
@@ -1641,7 +1671,10 @@ export async function updateBorrador(id, data, { soloBorrador = true } = {}) {
     if (!inv) throw new AppError('Factura no encontrada', 404, 'INVOICE_NOT_FOUND');
     // Ni el importe, ni el número, ni el cliente, ni la fecha de una emitida
     // (CRM#793, Diego 18/11/2026). Borradores y proformas, como siempre.
-    exigirNoEmitida(inv, 'cambiar');
+    // Diego, 19/11/2026: «editar las facturas en general» para admin y superadmin.
+    // La corrección (soloBorrador=false, ruta /corregir con su permiso) vuelve a
+    // dejar corregir una emitida; la edición de borrador sigue sin tocarlas.
+    if (soloBorrador) exigirNoEmitida(inv, 'cambiar');
     // soloBorrador=false → corrección admin de una factura ya emitida/pagada
     // (mantiene su número fiscal; se usa para enmendar datos/IVA/concepto).
     if (soloBorrador && inv.estado !== 'borrador') throw new AppError('Solo se pueden editar facturas en borrador (una factura emitida es inmutable).', 400, 'NOT_DRAFT');
@@ -2015,7 +2048,9 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
             c.producto_contratado, c.importe_total, c.importe_pagado, c.fecha_conversion, c.metodo_pago
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
-       LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada' AND i.tipo <> 'proforma'
+       -- Una proforma ES una factura de la serie (Diego, 19/11/2026): la venta que
+       -- la tiene ya está facturada y no sale aquí.
+       LEFT JOIN invoices i ON i.conversion_id = c.id AND i.estado <> 'cancelada'
       WHERE ($1::int[] IS NULL OR c.project_id = ANY($1::int[]))
         AND COALESCE(c.importe_total, 0) > 0
         AND i.id IS NULL
@@ -2218,8 +2253,16 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
 
   La misma condicion que alli, para que la cola y el boton digan lo mismo.
 */
+// Salvo que la venta ya se facture cobro a cobro (20/11/2026): la misma excepción
+// que en `emitirFacturaDePago`, para que la cola y el botón digan lo mismo.
 const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
-        EXISTS (SELECT 1 FROM invoices t
+        NOT EXISTS (SELECT 1 FROM invoices pc
+                     WHERE pc.conversion_id = cp.conversion_id
+                       AND pc.tipo = 'normal' AND pc.estado <> 'cancelada'
+                       AND pc.payment_id IS NOT NULL
+                       AND pc.total < (SELECT v2.importe_total FROM conversions v2
+                                        WHERE v2.id = cp.conversion_id) - 0.01)
+        AND EXISTS (SELECT 1 FROM invoices t
                  WHERE t.conversion_id = cp.conversion_id
                    AND t.tipo = 'normal' AND t.estado <> 'cancelada'
                    AND t.total >= (SELECT v.importe_total FROM conversions v

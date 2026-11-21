@@ -140,6 +140,12 @@ const TODOS = [
 ];
 
 describe('a 375 px, todos los recorridos, paso a paso', () => {
+  it('entre ellos, el de Ventas (#619, gemela de CRM#941), con todos sus pasos', () => {
+    const ventas = TODOS.find(([id]) => id === 'ventas');
+    expect(ventas).toBeTruthy();
+    expect(ventas[1]).toHaveLength(RECORRIDOS_COBROS.ventas.pasos.length);
+  });
+
   it.each(TODOS)('%s: el cartel cabe en cada paso y «Siguiente» se puede pulsar', (_id, pasos) => {
     comoMovil();
     const sitios = [

@@ -10,6 +10,9 @@ import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-libra
 // ensuciaba la salida de los OTROS ficheros cuando corrian juntos: por eso
 // parecia que ExportDialog y ConversionDialog fallaban por lo mismo, y no era
 // asi. Tarea #70.
+// El diálogo pregunta si se pueden crear links de pago (19/11): aquí, no.
+vi.mock('@/shared/lib/linksPago', () => ({ useLinksPagoEncendidos: () => false, linksPagoEncendidos: () => false }));
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => false, llevaEquipo: false }) }));
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({
     user: { id: 3, nombre: 'Angel M.', email: 'angel@empresa.com', role: 'admin' },
