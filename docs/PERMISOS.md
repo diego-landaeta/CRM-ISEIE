@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-888 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+892 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1018,10 +1018,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | sync | `POST /api/stripe-payments/sync` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | listar | `GET /api/stripe-payments/disputas` | (no existía) | (ruta nueva) | `stripe.edit` |
 | sincronizar | `POST /api/stripe-payments/disputas/sincronizar` | (no existía) | (ruta nueva) | `stripe.edit` |
+| listar | `GET /api/stripe-payments/conciliacion` | (no existía) | (ruta nueva) | `stripe.edit` |
+| opciones | `GET /api/stripe-payments/conciliacion/opciones` | (no existía) | (ruta nueva) | `stripe.edit` |
+| enlazarSeguros | `POST /api/stripe-payments/conciliacion/enlazar-seguros` | (no existía) | (ruta nueva) | `stripe.edit` |
 | deLaVenta | `GET /api/stripe-payments/de-la-venta/:conversionId` | (no existía) | (ruta nueva) | `stripe.edit` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
+| crearVenta | `POST /api/stripe-payments/:id/crear-venta` | (no existía) | (ruta nueva) | `stripe.edit` |
 | updateDispute | `PATCH /api/stripe-payments/:id/dispute` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | webhook | `POST /api/stripe-webhook/:projectId` | nada (pública) | cualquiera, sin sesión | — |
 

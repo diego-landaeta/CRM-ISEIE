@@ -1,4 +1,4 @@
-import { ArrowsLeftRight, type Icon } from '@phosphor-icons/react';
+import { ArrowsLeftRight, CreditCard, type Icon } from '@phosphor-icons/react';
 
 /*
   Las pestañas de Finanzas › Conciliación (CRM#905 y CRM#906). Viven aquí y no
@@ -16,4 +16,6 @@ export type PestanaConciliacion = { label: string; to: string; icon: Icon };
 
 export const PESTANAS_CONCILIACION: PestanaConciliacion[] = [
   { label: 'Facturas y cobros', to: '/accounting/conciliacion/facturas', icon: ArrowsLeftRight },
+  // Cargos de Stripe cobrados que no están en ningún cobro del CRM (CRM#906).
+  { label: 'Cargos de Stripe', to: '/accounting/conciliacion/cargos-stripe', icon: CreditCard },
 ];

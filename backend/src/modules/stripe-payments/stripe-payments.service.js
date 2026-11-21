@@ -165,6 +165,16 @@ const RESERVA_MINUTOS = 2;
  * valores de antes: son los que ve el enlace y los que vuelven a la fila si no se enlaza.
  */
 async function autoLinkIfPossible(projectId, payment, dbRow, opciones = {}) {
+  return conElCargoReservado(dbRow, (reservada) => enlazarSiSePuede(projectId, payment, reservada, opciones), { projectId });
+}
+
+/**
+ * La reserva de arriba, para todo el que enlaza un cargo: el enlace automático y
+ * «Crear la venta» desde Conciliación (CRM#906). `fn` recibe la fila con el
+ * `link_method` y el `linked_at` de antes. Si el cargo ya tiene cobro o lo está
+ * enlazando otro, no se llama a `fn` y se devuelve `ocupado` (por defecto, nada).
+ */
+export async function conElCargoReservado(dbRow, fn, { projectId = dbRow.project_id, ocupado } = {}) {
   const { rows: [reservada] } = await query(
     `UPDATE stripe_payments sp
         SET link_method = $2, linked_at = NOW()
@@ -175,13 +185,13 @@ async function autoLinkIfPossible(projectId, payment, dbRow, opciones = {}) {
       RETURNING sp.*, antes.link_method AS metodo_antes, antes.linked_at AS enlazado_antes`,
     [dbRow.id, ENLAZANDO, RESERVA_MINUTOS]
   );
-  if (!reservada) return; // ya tiene su cobro, o lo está enlazando otro ahora mismo
+  if (!reservada) return ocupado; // ya tiene su cobro, o lo está enlazando otro ahora mismo
 
   // Una reserva caducada no guarda lo de antes: se deja sin método, como un cargo nuevo.
   const metodo = reservada.metodo_antes === ENLAZANDO ? null : reservada.metodo_antes;
   const enlazado = reservada.metodo_antes === ENLAZANDO ? null : reservada.enlazado_antes;
   try {
-    return await enlazarSiSePuede(projectId, payment, { ...reservada, link_method: metodo, linked_at: enlazado }, opciones);
+    return await fn({ ...reservada, link_method: metodo, linked_at: enlazado });
   } finally {
     // Si se enlazó, linkPayment ya cambió link_method y esto no toca nada. Si no (sin lead,
     // otra moneda, un error…), la fila vuelve a como estaba para el siguiente intento.
