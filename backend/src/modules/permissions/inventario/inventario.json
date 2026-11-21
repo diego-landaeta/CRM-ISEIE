@@ -3419,6 +3419,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/credentials/ia",
+  "tipo": "ruta",
+  "modulo": "credentials",
+  "metodo": "GET",
+  "ruta": "/api/credentials/ia",
+  "relativa": "GET /ia",
+  "controlador": "iaEnUso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "credentials.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/credentials/",
   "tipo": "ruta",
   "modulo": "credentials",

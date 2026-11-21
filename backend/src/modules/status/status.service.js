@@ -1,5 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import * as model from './status.model.js';
+import { claveDeIA } from '../credentials/clave-ia.js';
 
 // Verifica el estado real de cada componente del sistema
 async function runHealthChecks() {
@@ -22,8 +23,10 @@ async function runHealthChecks() {
   // Storage (R2)
   checks.storage = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID) ? 'operational' : 'degraded';
 
-  // IA (Claude)
-  checks.ia = process.env.ANTHROPIC_API_KEY ? 'operational' : 'degraded';
+  // IA (Claude): cualquiera de las tres claves vale, no solo la del servidor
+  // (CRM#893: con la clave pegada en la web decía «degradado»).
+  // Solo mirar: comprobar el estado no es usar la clave.
+  checks.ia = (await claveDeIA(null, { soloMirar: true })).clave ? 'operational' : 'degraded';
 
   return checks;
 }

@@ -1006,8 +1006,10 @@ function AvailabilitySection() {
   );
 }
 
-function IntegrationsSection({ isAdmin }) {
+export function IntegrationsSection({ isAdmin }) {
   const [creds, setCreds] = useState([]);
+  // Qué clave usa la IA de verdad: campus, global o servidor (CRM#893).
+  const [iaEnUso, setIaEnUso] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // {id, service, name, label} | null
   const [value, setValue] = useState('');
@@ -1025,6 +1027,9 @@ function IntegrationsSection({ isAdmin }) {
     try {
       const res = await client.get('/credentials');
       setCreds(res?.data || []);
+      client.get('/credentials/ia')
+        .then((r) => { if (r?.success) setIaEnUso(r.data); })
+        .catch(() => setIaEnUso(null));
     } catch (err) {
       // 403 si no eres admin — silencioso
       if (err?.status !== 403) {
@@ -1154,6 +1159,12 @@ function IntegrationsSection({ isAdmin }) {
                     </>
                   )}
                 </div>
+                {i.id === 'claude' && iaEnUso && (
+                  <p role="status" data-ia-en-uso={iaEnUso.origen || 'ninguna'}
+                    className={`text-xs mt-2 ${iaEnUso.origen ? 'text-muted-foreground' : 'text-warning-soft-foreground'}`}>
+                    {iaEnUso.texto}
+                  </p>
+                )}
               </div>
             );
           })}
