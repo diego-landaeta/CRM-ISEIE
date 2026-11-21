@@ -1061,7 +1061,10 @@ export function IntegrationsSection({ isAdmin }) {
     setSaving(true);
     try {
       await client.post('/credentials', {
-        service: editing.service,
+        // QA del 21/11/2026: las entradas de INTEGRATIONS llevan `id` (el
+        // `service` del backend), no `service`; se mandaba `undefined` y
+        // cualquier «Guardar y cifrar» de esta pantalla daba 400 «Required».
+        service: editing.id,
         value: value.trim(),
         project_id: null,
       });

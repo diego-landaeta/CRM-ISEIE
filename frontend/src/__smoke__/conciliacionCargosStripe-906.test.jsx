@@ -46,6 +46,8 @@ const RESPUESTA = {
   },
 };
 
+const MES_ACTUAL = new Date().toISOString().slice(0, 7);
+
 beforeEach(() => {
   permisos.mapa = { 'stripe.edit': true };
   red.get.mockReset().mockImplementation(async (url) => (url.startsWith('/stripe-payments/conciliacion/opciones')
@@ -73,10 +75,18 @@ describe('#906 · la pestaña en el contenedor de Conciliación (#905)', () => {
 });
 
 describe('#906 · cargos de Stripe sin enlazar', () => {
+  it('«Todos los meses» se puede elegir y pide la lista sin mes', async () => {
+    pintar();
+    expect(await screen.findByText('Ana M.')).toBeInTheDocument();
+    await act(async () => { fireEvent.change(screen.getByLabelText('Mes'), { target: { value: '' } }); });
+    await waitFor(() => expect(red.get.mock.calls.some(([u]) => u === '/stripe-payments/conciliacion?projectId=3')).toBe(true));
+  });
+
   it('pide la lista del campus y enseña cada cargo con su salida', async () => {
     pintar();
     expect(await screen.findByText('Ana M.')).toBeInTheDocument();
-    expect(red.get.mock.calls[0][0]).toBe('/stripe-payments/conciliacion?projectId=3');
+    // QA del 21/11/2026: se abre en el mes actual, no en «Todos los meses».
+    expect(red.get.mock.calls[0][0]).toBe(`/stripe-payments/conciliacion?mes=${MES_ACTUAL}&projectId=3`);
     expect(screen.getByText('Seguro')).toBeInTheDocument();
     expect(screen.getByText(/factura F-2026-0005/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Apuntar el cobro en esa venta/ })).toBeInTheDocument();
@@ -107,7 +117,7 @@ describe('#906 · cargos de Stripe sin enlazar', () => {
     const dialogo = screen.getByRole('dialog');
     expect(dialogo).toHaveTextContent(/Se enlazan 1 cargo por 100,00\s€/);
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Enlazarlos' })); });
-    expect(red.post).toHaveBeenCalledWith('/stripe-payments/conciliacion/enlazar-seguros', { projectId: 3, mes: null });
+    expect(red.post).toHaveBeenCalledWith('/stripe-payments/conciliacion/enlazar-seguros', { projectId: 3, mes: MES_ACTUAL });
   });
 
   it('el filtro «Sin venta» deja solo los que no tienen venta', async () => {
