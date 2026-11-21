@@ -105,7 +105,7 @@ describe('«Crear link de pago» en una pantalla, sin prospecto', () => {
     expect(await within(dialogo).findByText('Link creado')).toBeTruthy();
     expect(within(dialogo).getByText(/Sin prospecto: al pagarlo, el CRM busca su ficha/)).toBeTruthy();
     expect(within(dialogo).getByLabelText('Link de pago').value).toBe('https://buy.stripe.com/test_50');
-    expect(within(dialogo).getByRole('button', { name: /Copiar/ })).toBeTruthy();
+    expect(within(dialogo).getByRole('button', { name: /^\s*Copiar\s*$/ })).toBeTruthy();
     expect(within(dialogo).getByRole('link', { name: /Abrir/ })).toBeTruthy();
     // Sin prospecto no hay a quién mandarlo desde el CRM.
     expect(within(dialogo).queryByRole('button', { name: /Enviar por WhatsApp/ })).toBeNull();
