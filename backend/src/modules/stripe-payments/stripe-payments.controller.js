@@ -80,7 +80,7 @@ export async function sync(req, res, next) {
  * nombre del cliente), y con el de editar se movía dinero de otra empresa. Fuera de
  * sus campus es un 404, como si no existiera, igual que en el resto del CRM.
  */
-async function cargoSuyo(req) {
+export async function cargoSuyo(req) {
   const row = await model.getById(Number(req.params.id));
   if (!row) throw new AppError('Pago no encontrado', 404, 'NOT_FOUND');
   await exigirCampusSuyo(req, row.project_id, 'Pago no encontrado');
