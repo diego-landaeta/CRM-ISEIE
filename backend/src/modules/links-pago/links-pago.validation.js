@@ -91,26 +91,81 @@ export const configBodySchema = z.object({
 
   `modalidad: 'cuotas'` con `num_cuotas` (de 2 al máximo del campus): el link
   cobra la primera cuota y guarda la tarjeta; Stripe cobra las demás solas.
+
+  OTRO IMPORTE, DESCUENTO E INICIAL (CRM#982, Diego 21/11):
+    · `precio_original`: el precio antes del descuento (sale del catálogo y se
+      puede cambiar). Con `descuento_tipo` ('monto' en € o 'pct') y
+      `descuento_valor`, el total es el precio menos el descuento, y `importe`
+      tiene que ser ese total al céntimo: el servidor no se fía de la cuenta del
+      navegador, la rehace.
+    · `inicial` (solo en cuotas): lo que cobra el link al pagarlo. Entonces
+      `num_cuotas` son las cuotas de DESPUÉS (de 1 al máximo del campus), sobre lo
+      que queda: total menos inicial, en cuotas iguales.
 */
+const importeEnEuros = (nombre) => z.preprocess(comoNumero,
+  z.number({ invalid_type_error: `${nombre} tiene que ser un número`, required_error: `Falta ${nombre.toLowerCase()}` })
+    .finite()
+    .positive(`${nombre} tiene que ser mayor que 0`)
+    // Stripe no cobra más de 999.999,99 de una vez.
+    .max(999999.99, `${nombre} no puede pasar de 999.999,99`)
+    .refine(dosDecimales, 'Dos decimales como mucho'));
+
+export const TIPOS_DE_DESCUENTO = ['monto', 'pct'];
+
+/**
+ * El total de un precio con su descuento, en céntimos y con enteros (como lo
+ * guarda la venta). `monto`: euros (o la moneda del link); `pct`: porcentaje con
+ * dos decimales. `{ total, descuento }` en unidades, o null si el descuento pasa
+ * del precio. Lo usa también el asistente (la misma cuenta, en el frontal).
+ */
+export function totalConDescuento({ precio, tipo, valor }) {
+  const precioC = Math.round(Number(precio) * 100);
+  let descC = 0;
+  if (tipo === 'monto') descC = Math.round(Number(valor) * 100);
+  else if (tipo === 'pct') descC = Math.round((precioC * Math.round(Number(valor) * 100)) / 10000);
+  if (!(precioC > 0) || descC < 0 || descC > precioC) return null;
+  return { total: (precioC - descC) / 100, descuento: descC / 100 };
+}
+
 export const crearSchema = z.object({
   leadId: id.optional(),
   conversionId: id.optional(),
   projectId: id.optional(),
   productId: id,
-  importe: z.preprocess(comoNumero,
-    z.number({ invalid_type_error: 'El importe tiene que ser un número', required_error: 'Falta el importe' })
-      .finite()
-      .positive('El importe tiene que ser mayor que 0')
-      // Stripe no cobra más de 999.999,99 de una vez.
-      .max(999999.99, 'El importe no puede pasar de 999.999,99')
-      .refine(dosDecimales, 'Dos decimales como mucho')),
+  importe: importeEnEuros('El importe'),
   moneda: moneda.optional(),
   caducidad_dias: entero('Caducidad', 1, 365).optional(),
   modalidad: z.enum(['unico', 'cuotas']).optional().default('unico'),
-  num_cuotas: entero('Número de cuotas', 2, 36).optional(),
+  // Sin inicial (los links de antes del 21/11): de 2 en adelante, la primera la cobra el link.
+  // Con inicial: las de después, de 1 en adelante. El máximo de cada campus lo mira el servicio.
+  num_cuotas: entero('Número de cuotas', 1, 36).optional(),
+  precio_original: importeEnEuros('El precio').optional(),
+  descuento_tipo: z.enum(TIPOS_DE_DESCUENTO, {
+    errorMap: () => ({ message: 'El descuento va en € («monto») o en % («pct»)' }),
+  }).optional(),
+  descuento_valor: z.preprocess(comoNumero,
+    z.number({ invalid_type_error: 'El descuento tiene que ser un número' })
+      .finite()
+      .min(0, 'El descuento no puede ser negativo')
+      .refine(dosDecimales, 'Dos decimales como mucho')).optional(),
+  inicial: importeEnEuros('La inicial').optional(),
 }).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
   .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
-  .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»');
+  .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»')
+  .refine((b) => b.modalidad === 'cuotas' || b.inicial === undefined, 'La inicial solo va con «cuotas»')
+  .refine((b) => b.modalidad !== 'cuotas' || b.inicial !== undefined || !(b.num_cuotas < 2), 'Sin inicial, de 2 cuotas en adelante')
+  .refine((b) => b.inicial === undefined || Math.round(b.inicial * 100) < Math.round(b.importe * 100),
+    'La inicial tiene que ser menor que el total')
+  .refine((b) => (b.descuento_tipo === undefined) === (b.descuento_valor === undefined), 'Di el descuento y si es en € o en %')
+  .refine((b) => b.descuento_tipo === undefined || b.precio_original !== undefined, 'Con descuento, falta el precio del que sale')
+  .refine((b) => b.descuento_tipo !== 'pct' || b.descuento_valor <= 100, 'El descuento no puede pasar del 100 %')
+  .refine((b) => b.descuento_tipo !== 'monto' || Math.round(b.descuento_valor * 100) <= Math.round(b.precio_original * 100),
+    'El descuento no puede superar el precio')
+  .refine((b) => {
+    if (b.precio_original === undefined) return true;
+    const t = totalConDescuento({ precio: b.precio_original, tipo: b.descuento_tipo, valor: b.descuento_valor });
+    return !!t && Math.round(t.total * 100) === Math.round(b.importe * 100);
+  }, 'El total no cuadra con el precio y el descuento: vuelve a calcularlo');
 
 /** ¿Se puede crear un link en cuotas en este campus? (el asistente lo pregunta antes). */
 export const cuotasQuerySchema = z.object({ projectId: id });

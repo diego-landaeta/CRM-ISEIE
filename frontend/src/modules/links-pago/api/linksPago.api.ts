@@ -28,6 +28,16 @@ export interface LinkDePago {
   /** En cuotas (20/11): en cuántas, y la que cobra el link (la 1). `importe` es el total. */
   num_cuotas?: number | null;
   importe_cuota?: string | number | null;
+  /**
+   * Inicial más cuotas (CRM#982): lo que cobra el link. Entonces `num_cuotas`
+   * cuenta la inicial y las cuotas, y estas son iguales sobre lo que queda.
+   */
+  importe_inicial?: string | number | null;
+  /** El precio antes del descuento y el descuento (CRM#982). `importe` es el total. */
+  precio_original?: string | number | null;
+  descuento_tipo?: 'monto' | 'pct' | null;
+  descuento_valor?: string | number | null;
+  descuento_importe?: string | number | null;
   guarda_tarjeta?: boolean;
   estado: EstadoLink;
   url: string | null;
@@ -111,6 +121,10 @@ export function crearLink(cuerpo: {
   leadId?: number; conversionId?: number; projectId?: number; productId: number; importe: number; moneda?: string; caducidad_dias?: number;
   // En cuotas: `importe` es el total; el link cobra la primera y Stripe las demás.
   modalidad?: 'unico' | 'cuotas'; num_cuotas?: number;
+  // CRM#982: con `inicial`, el link cobra la inicial y `num_cuotas` son las de después.
+  inicial?: number;
+  // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
+  precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
 }
