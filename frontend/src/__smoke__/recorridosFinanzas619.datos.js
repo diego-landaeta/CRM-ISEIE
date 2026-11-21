@@ -32,6 +32,13 @@ const DASHBOARD = {
   },
 };
 
+/** Pendientes de facturar: ventas sin importe (una, sin programa). */
+const SIN_IMPORTE = nombres.slice(0, 3).map((n, i) => ({
+  id: 400 + i, lead_id: 110 + i, lead_nombre: n, lead_email: `alumno${i + 1}@ejemplo.invalid`,
+  producto_contratado: i === 2 ? null : cursos[i], importe_total: 0, importe_pagado: 0,
+  metodo_pago: '', fecha_conversion: dia(4 + i),
+}));
+
 const VENDEDORAS = [
   { vendedora: 'Laura Gestora', ventas: 9, clientes: 8, cobrado: 9800, pendiente: 3100 },
   { vendedora: 'Marta Gestora', ventas: 7, clientes: 7, cobrado: 8650, pendiente: 3100 },
@@ -98,6 +105,37 @@ const TUTORES_SIN_FORMACION = [
   { venta: 181, alumno: 'Gloria Pérez', importe: 300 },
 ];
 
+/** Ventas sin formación: una con sugerencia, una sin texto y una que no encaja con nada. */
+const SIN_FORMACION = {
+  filas: [
+    { id: 177, fecha: dia(2), alumno: 'Fran Díaz', alumnoEmail: 'fran@ejemplo.invalid', texto: 'Máster Psicología Clínica', importe: 1800, cobrado: 450, sugerencia: { id: 1, nombre: cursos[0] } },
+    { id: 181, fecha: dia(6), alumno: 'Gloria Pérez', alumnoEmail: 'gloria@ejemplo.invalid', texto: null, importe: 900, cobrado: 300, sugerencia: null },
+    { id: 190, fecha: dia(9), alumno: 'Hugo Romero', alumnoEmail: null, texto: 'servicio académico', importe: 600, cobrado: 600, sugerencia: null },
+  ],
+  total: 3, conSugerencia: 1, sinTexto: 1, importe: 3300, cobrado: 1350,
+};
+
+/** Análisis de ventas, el resumen: con una venta cobrada de más (para que salga su aviso). */
+const ANALISIS = {
+  ventas: 16, clientes: 15, asesoras: 2, importe: 28800, cobrado: 18450, pendiente: 10350,
+  liquidadas: 6, con_saldo: 10, ticket_medio: 1800,
+  cobrado_de_mas: { ventas: 1, importe: 120 },
+  cuotas: { ventas_con_plan: 8, total: 48, cobradas: 21, pendientes: 27, vencidas: 3, importe_pendiente: 6210, importe_vencido: 690 },
+};
+
+/** Análisis de ventas, «Por asesora» y «Por cliente». */
+const POR_ASESORA = [
+  { user_id: 7, nombre: 'Laura Gestora', email: 'laura@ejemplo.invalid', role: 'gestor', ventas: 9, clientes: 8, importe: 16200, cobrado: 10100, pendiente: 6100, ticket_medio: 1800, ultima_venta: dia(18) },
+  { user_id: 8, nombre: 'Marta Gestora', email: 'marta@ejemplo.invalid', role: 'gestor', ventas: 7, clientes: 7, importe: 12600, cobrado: 8350, pendiente: 4250, ticket_medio: 1800, ultima_venta: dia(15) },
+];
+const POR_CLIENTE = nombres.slice(0, 3).map((n, i) => ({
+  lead_id: 100 + i, cliente: n, email: `alumno${i + 1}@ejemplo.invalid`, telefono: null,
+  ventas: 1, importe: 1800, cobrado: 600 + i * 300, pendiente: 1200 - i * 300,
+  primera_venta: dia(3 + i), ultima_venta: dia(3 + i),
+  cuotas_pendientes: 3 - i, cuotas_vencidas: i === 0 ? 1 : 0, cuotas_importe_pendiente: 1200 - i * 300,
+  asesoras: i === 2 ? 'Marta Gestora' : 'Laura Gestora',
+}));
+
 const PLANES = [
   { id: 1, user_id: 7, user_nombre: 'Laura Gestora', user_email: 'laura@ejemplo.invalid', modo_fijo: 1400, modo_horas: '', modo_comisiones: true, active: true, notas: '' },
   { id: 2, user_id: 9, user_nombre: 'Sergio Soporte', user_email: 'sergio@ejemplo.invalid', modo_fijo: '', modo_horas: 14.5, modo_comisiones: false, active: true, notas: '' },
@@ -109,10 +147,14 @@ const USUARIOS = [
 export function respuestaFinanzas(url) {
   const u = new URL(url, 'http://local.invalid');
   const p = u.pathname.replace(/^.*?\/api(?=\/)/, '');
+  const q = u.searchParams;
   switch (p) {
     case '/accounting/dashboard': return { success: true, data: DASHBOARD };
     case '/informes/ventas-vendedora': return { success: true, data: VENDEDORAS };
-    case '/conversions': return { success: true, data: CONVERSIONES, pagination: { total: CONVERSIONES.length } };
+    case '/conversions':
+      return q.get('pendingBilling') === 'true'
+        ? { success: true, data: SIN_IMPORTE, pagination: { total: 57 } } // más de una página: sale la paginación
+        : { success: true, data: CONVERSIONES, pagination: { total: CONVERSIONES.length } };
     case '/expenses': return { success: true, data: EGRESOS, pagination: { total: EGRESOS.length } };
     case '/expenses/resumen': return { success: true, data: EGRESOS_RESUMEN };
     case '/accounting/receivable': return { success: true, data: POR_COBRAR };
@@ -125,6 +167,10 @@ export function respuestaFinanzas(url) {
     case '/tutores/ajustes': return { success: true, data: { aplica_desde: '2026-09-01', pct_defecto: 15 } };
     case '/tutores/pagos-sin-formacion': return { success: true, data: TUTORES_SIN_FORMACION };
     case '/payroll/plans': return { success: true, data: PLANES };
+    case '/ventas/sin-formacion': return { success: true, data: SIN_FORMACION };
+    case '/ventas/resumen': return { success: true, data: ANALISIS };
+    case '/ventas/por-asesora': return { success: true, data: POR_ASESORA };
+    case '/ventas/por-cliente': return { success: true, data: POR_CLIENTE, pagination: { total: POR_CLIENTE.length } };
     case '/users': return { success: true, data: USUARIOS };
     default: return null;
   }
@@ -140,4 +186,7 @@ export const RUTA_DE = {
   comisiones: '/commissions',
   'comisiones-tutores': '/tutores/comisiones',
   nominas: '/payroll',
+  'pendientes-facturar': '/accounting/pendiente-facturar',
+  'ventas-sin-formacion': '/ventas/sin-formacion',
+  'analisis-ventas': '/ventas/analisis',
 };
