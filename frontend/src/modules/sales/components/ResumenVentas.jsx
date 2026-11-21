@@ -57,11 +57,11 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
   }
 
   const cuotas = d.cuotas || {};
-  // Las ventas sin ningún cobro, al lado y sin sumar (#225). Diego, 10/10:
-  // «se enseñan aparte, como "ventas sin cobro (en proformas)": salen de las
-  // proformas sin cobrar, y cuando se cobran pasan a contar como venta».
-  // Con ellas al lado, las cifras de la pantalla se explican: estas tarjetas
-  // más las sin cobro dan lo mismo que Claude.
+  // #901: ya están sumadas arriba (antes iban aparte, #225) para que Ventas
+  // y Reportes den la misma cifra con los mismos filtros. Se deja el detalle
+  // de cuántas son proformas sin cobrar todavía, como nota aparte.
+
+
   const sinCobro = d.sin_cobro && d.sin_cobro.ventas > 0 ? d.sin_cobro : null;
   return (
     <div className="space-y-2">
@@ -80,18 +80,18 @@ export default function ResumenVentas({ projectId, from, to, responsableId = nul
       <Cifra icon={ChartBar} etiqueta="Cuotas" valor={`${num(cuotas.cobradas)} / ${num(cuotas.total)}`}
         pie={cuotas.vencidas ? `${num(cuotas.vencidas)} vencidas` : `${num(cuotas.pendientes)} por cobrar`} />
     </div>
-    {sinCobro && (
+       {sinCobro && (
       <p className="text-xs text-muted-foreground px-1">
+        De esas,{' '}
         <strong className="text-foreground tabular-nums">{num(sinCobro.ventas)}</strong>{' '}
-        {sinCobro.ventas === 1 ? 'venta sin cobro' : 'ventas sin cobro'}
+        {sinCobro.ventas === 1 ? 'venta sigue sin ningún cobro' : 'ventas siguen sin ningún cobro'}
         {' · '}<strong className="text-foreground tabular-nums">{eur(sinCobro.importe)}</strong> (proformas)
         {sinCobro.con_proforma < sinCobro.ventas
           ? ` — ${num(sinCobro.ventas - sinCobro.con_proforma)} aún sin proforma emitida`
-          : ''}
-        . No están en las cifras de arriba: pasan a contar como venta cuando se cobran.
-        Con ellas, {num(d.ventas + sinCobro.ventas)} ventas · {eur(d.importe + sinCobro.importe)}.
+          : ''}.
       </p>
     )}
+
     </div>
   );
 }

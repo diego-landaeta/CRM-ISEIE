@@ -589,7 +589,7 @@ const SIN_TILDES = (expr) =>
 // `sinCobro = true` da lo contrario de la segunda regla: las ventas del mismo
 // filtro que aún NO tienen ningún cobro. Es la cifra que va al lado de las
 // tarjetas como «sin cobro (en proformas)» (#225).
-function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search, paisEntrada = null }, startIdx = 1, { sinCobro = false } = {}) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search, paisEntrada = null }, startIdx = 1, { sinCobro = false, todas = false } = {}) {
   const cond = [];
   const params = [];
   let idx = startIdx;
@@ -625,7 +625,11 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
   // una ficha marcada como mensualidad no es una venta nueva, y una venta sin
   // ningun cobro es una proforma que el cliente no llego a pagar.
   cond.push('NOT cv.es_mensualidad');
-  cond.push(`${sinCobro ? 'NOT ' : ''}EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = cv.id)`);
+        // #901: el resumen de Ventas quiere las mismas cifras que Reportes, que no
+      // filtra por si hay cobro o no. `todas` deja pasar cualquier venta, tenga o
+      // no algún pago; solo lo usa getResumenVentas.
+
+   if (!todas) cond.push(`${sinCobro ? 'NOT ' : ''}EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = cv.id)`);
   return { where: 'WHERE ' + cond.join(' AND '), params, idx };
 }
 
@@ -697,7 +701,7 @@ async function ventasSinCobro(filtros = {}) {
 
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
-  const { where, params, idx } = filtrosVentas(filtros);
+  const { where, params, idx } = filtrosVentas(filtros, 1, { todas: true });
   const { PESO, params: conPeso } = pesoDe(filtros.responsableId, params, idx);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS ventas,
@@ -747,8 +751,9 @@ export async function getResumenVentas(filtros = {}) {
     asesoras: r.asesoras,
     importe: Number(r.importe),
     cobrado: Number(r.cobrado),
-    // Las que aún no tienen ningún cobro, aparte (#225). NO entran en las
-    // cifras de arriba: cuando se cobran, pasan a contar como venta.
+           //#901: ya están sumadas en las cifras de arriba, igual que en Reportes.
+    // Esto es solo el desglose: cuántas de esas ventas (y cuánto) siguen sin
+    // ningún cobro todavía (proformas).
     sin_cobro: sinCobro,
     pendiente: Number(r.pendiente),
     // Lo que se cobró por encima del importe de la venta (#692): duplicados,
