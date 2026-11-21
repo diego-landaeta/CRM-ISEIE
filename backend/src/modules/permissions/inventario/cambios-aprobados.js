@@ -523,6 +523,21 @@ export const CAMBIOS_DE_MENU = [
     // La escribe Claude principal con el sí de Diego.
     aprobadoPor: 'Pendiente de Diego',
   },
+  {
+    id: 'menu-cursos-moodle-957',
+    que: '«Académico › Cursos de Moodle» (y la pestaña del mismo nombre en Productos): cada producto del catálogo de un campus con su curso de Moodle, o «Sin curso», y elegirlo de la lista de cursos de su Moodle, cambiarlo o quitarlo (CRM#957). Avisa de los productos vendidos sin curso. La ve quien tiene `moodle.cursos_producto`, clave nueva: admin y soporte de serie, cada uno en sus campus.',
+    motivo: 'Diego (19/11, CRM#957, a petición de CRM-ISEIE#355): sin esta unión la matrícula automática (#767) no sabe en qué curso matricular a quien compra. Hasta ahora solo se podía con SQL a mano en `moodle_cursos_producto`.',
+    perfiles: {
+      superadmin: ['+ Académico › Cursos de Moodle'],
+      admin: ['+ Académico › Cursos de Moodle'],
+      soporte: ['+ Académico › Cursos de Moodle'],
+      'gestora+admin': ['+ Académico › Cursos de Moodle'],
+    },
+    rutas: {
+      'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#957)',
+  },
 ];
 
 /**
