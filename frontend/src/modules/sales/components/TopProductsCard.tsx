@@ -99,7 +99,8 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
   }, [projectId, responsableId, days, limit, from, to, esFacturado]);
 
   return (
-    <div className={`bg-card border border-border rounded-lg p-4 ${className}`}>
+    // `data-recorrido`: el paso «Programas más vendidos» del recorrido de Ventas (#619, gemela de CRM#941).
+    <div data-recorrido="programas-mas-vendidos" className={`bg-card border border-border rounded-lg p-4 ${className}`}>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2">
           <Trophy size={16} weight="duotone" className="text-amber-500" />

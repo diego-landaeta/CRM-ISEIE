@@ -964,6 +964,13 @@ export async function createManualLead({ project_id, nombre, email, telefono, wh
       utm_term: null,
       landing_url: null,
       canal_detectado: canal || 'directo',
+      // De dónde viene, si lo dice quien llama (p. ej. un link de pago: fuente
+      // `link_de_pago`). Solo fuente, medio y campaña.
+      ...(opts.utms ? {
+        utm_source: opts.utms.utm_source || null,
+        utm_medium: opts.utms.utm_medium || null,
+        utm_campaign: opts.utms.utm_campaign || null,
+      } : {}),
     },
     customFields: custom_fields,
   });

@@ -48,4 +48,12 @@ describe('tarjetas de Facturación con periodo', () => {
     expect(sql).toMatch(/r\.vendedora_id = ANY\(\$4::int\[\]\)/);
     expect(params).toEqual([[4], null, null, [7, 8]]);
   });
+
+  it('«Ventas sin factura»: la venta con su proforma ya está facturada (Diego, 19/11/2026)', async () => {
+    query.mockResolvedValueOnce({ rows: [], rowCount: 0 });
+    await model.listVentasSinFactura({ projectId: 4 });
+    const [sql] = query.mock.calls[0];
+    expect(sql).toMatch(/LEFT JOIN invoices i ON i\.conversion_id = c\.id AND i\.estado <> 'cancelada'\s/);
+    expect(sql).not.toMatch(/tipo <> 'proforma'/);
+  });
 });

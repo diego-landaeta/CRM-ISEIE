@@ -66,3 +66,18 @@ export function linksPagoActivos(env = process.env) {
 export function pluginMoodleActivo(env = process.env) {
   return enPruebasOAprobado('PLUGIN_MOODLE_EN_PRODUCCION', env);
 }
+
+/**
+ * Cobro automático de las cuotas (#680; Diego, 19/11/2026): el CRM cobra solo cada
+ * cuota en su fecha con la tarjeta que el alumno guardó al pagar su link. Mueve
+ * dinero sin que nadie pulse nada, así que en producción va APAGADO hasta que
+ * Diego lo apruebe con COBRO_AUTOMATICO_EN_PRODUCCION=1. Fuera de producción (y en
+ * /testeo), encendido. Necesita además los links de pago: sin ellos no hay ni
+ * link con el que guardar la tarjeta ni link de respaldo si el cobro falla.
+ *
+ * Encendido aquí no basta: cada campus lo permite o no (Integraciones › Links de
+ * pago, apagado de serie) y cada venta lo activa la gestora.
+ */
+export function cobroAutomaticoActivo(env = process.env) {
+  return linksPagoActivos(env) && enPruebasOAprobado('COBRO_AUTOMATICO_EN_PRODUCCION', env);
+}

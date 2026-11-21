@@ -8,7 +8,9 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
-import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus, GraduationCap } from '@phosphor-icons/react';
+import { CurrencyEur, ArrowRight, Receipt, CheckCircle, Plus } from '@phosphor-icons/react';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619): sustituye a «Tutoriales».
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { formatDate } from '@/shared/lib/format';
 // Los nombres de curso guardados antes del #234 llevan «&amp;»: se enseñan con la letra.
 import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
@@ -16,7 +18,7 @@ import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
-const TutorialesVentas = lazy(() => import('@/modules/sales/components/TutorialesVentas'));
+import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
 const TopProductsCard = lazy(() => import('@/modules/sales/components/TopProductsCard'));
 const MyGoalCard = lazy(() => import('@/modules/sales/components/MyGoalCard'));
 const GestoresStatsTable = lazy(() => import('@/modules/sales/components/GestoresStatsTable'));
@@ -83,7 +85,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);
-  const [tutorialesOpen, setTutorialesOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
@@ -221,24 +222,19 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const totalPages = Math.max(1, Math.ceil(totalLista / PER_PAGE));
 
   return (
-    <div className="space-y-5 pb-8">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <PageHeader
           title={title}
           subtitle={`${subtitlePrefix}${activeProject ? ' en ' + activeProject.nombre : ''}`}
         />
-        <div className="flex items-center gap-2 self-start sm:self-auto">
+        <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
         {/* Como leer esta pantalla. Casi todas las dudas salen de comparar
-            cifras que cuentan cosas distintas, asi que se explica aqui mismo. */}
-        <button
-          type="button"
-          onClick={() => setTutorialesOpen(true)}
-          title="Cómo leer esta pantalla"
-          className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold hover:bg-muted"
-        >
-          <GraduationCap size={16} weight="duotone" className="text-violet-600" />
-          Tutoriales
-        </button>
+            cifras que cuentan cosas distintas: el recorrido las señala una a
+            una, encima de la propia pantalla (#619; antes, «Tutoriales»). */}
+        <VerRecorrido id="ventas" listo={!loading} />
         <button
           type="button"
           onClick={() => navigate('/ventas/analisis')}
@@ -258,6 +254,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <button
             type="button"
             onClick={() => setRegisterOpen(true)}
+            data-recorrido="ventas-nueva"
             className="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 self-start sm:self-auto"
           >
             <Plus size={14} weight="bold" />
@@ -266,10 +263,6 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         )}
         </div>
       </div>
-
-      <Suspense fallback={null}>
-        {tutorialesOpen && <TutorialesVentas onCerrar={() => setTutorialesOpen(false)} />}
-      </Suspense>
 
       <Suspense fallback={null}>
         <RegisterSaleDialog
@@ -281,7 +274,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       </Suspense>
 
       {(
-        <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
+        <div data-recorrido="ventas-filtros" className="bg-card border border-border rounded-lg p-3 flex items-center gap-3 flex-wrap">
           {isAdmin && gestores.length > 0 && (
             <>
               <label className="text-xs font-semibold text-muted-foreground">Ver ventas de:</label>
@@ -335,7 +328,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         </div>
       )}
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div data-recorrido="ventas-tarjetas" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <KpiCard
           icon={Receipt}
           iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
@@ -346,7 +339,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             vendido, asi que no es una venta nueva y no puede sumarse con ellas.
             Solo con un periodo elegido: sin fechas no significa nada. */}
         {(rango.from && rango.to) && (
-          <div title={`Facturas con etiqueta CUOTA emitidas en estas fechas: las mismas que se ven en Facturación con este filtro`}>
+          <div data-recorrido="ventas-cuotas-facturadas" title={`Facturas con etiqueta CUOTA emitidas en estas fechas: las mismas que se ven en Facturación con este filtro`}>
             <KpiCard
               icon={Receipt}
               iconBg="bg-sky-50 text-sky-600 dark:bg-sky-950/30 dark:text-sky-400"
@@ -363,7 +356,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         {/* Ventas por facturas: cuantas de estas ventas tienen factura.
             El detalle va en el texto que sale al pasar el raton, que es donde
             lo pidio Diego — la tarjeta enseña la proporcion de un vistazo. */}
-        <div title={`${totales.facturadas} ventas facturadas · ${totales.noRequiereFactura} no necesitan factura · ${totales.pendientesDeFacturar} pendientes de facturar`}>
+        <div data-recorrido="ventas-por-facturar" title={`${totales.facturadas} ventas facturadas · ${totales.noRequiereFactura} no necesitan factura · ${totales.pendientesDeFacturar} pendientes de facturar`}>
           <KpiCard
             icon={Receipt}
             iconBg="bg-teal-50 text-teal-600 dark:bg-teal-950/30 dark:text-teal-400"
@@ -422,7 +415,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       {/* Con una empresa elegida: en que campus hubo ventas y cuotas. La suma
           de cada columna es la tarjeta de arriba; si no, es un fallo. */}
       {activeIssuer && (totales.porProyecto || []).length > 0 && (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div data-recorrido="ventas-por-proyecto" className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-2.5 border-b border-border flex items-center justify-between">
             <span className="text-sm font-semibold">Por proyecto · {activeIssuer.nombre}</span>
             <span className="text-[11px] text-muted-foreground">{totales.porProyecto.length} con movimiento</span>
@@ -466,7 +459,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
       {/* Lo unico que hay que HACER: las ventas que esperan factura. */}
       {totales.pendientesDeFacturar > 0 && (
-        <div className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+        <div data-recorrido="ventas-esperan-factura" className="rounded-lg border border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-3 py-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
           <p className="text-sm text-amber-900 dark:text-amber-200">
             <strong>{totales.pendientesDeFacturar}</strong>{' '}
             {totales.pendientesDeFacturar === 1 ? 'venta de estas fechas espera factura' : 'ventas de estas fechas esperan factura'}.
@@ -493,7 +486,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         Solo sale cuando de verdad hay descuadre que explicar.
       */}
       {totales.facturasDeAntes?.n > 0 && (
-        <div className="rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/30 px-3 py-2.5">
+        <div data-recorrido="ventas-facturas-de-antes" className="rounded-lg border border-sky-200 dark:border-sky-900 bg-sky-50 dark:bg-sky-950/30 px-3 py-2.5">
           <p className="text-sm text-sky-900 dark:text-sky-200">
             <strong>{totales.facturasDeAntes.n}</strong>{' '}
             {totales.facturasDeAntes.n === 1 ? 'factura de este periodo no es de una venta de este periodo' : 'facturas de este periodo no son de ventas de este periodo'}
@@ -610,7 +603,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <EmptyState icon={CurrencyEur} title={conFechas ? 'Sin ventas ni cuotas en estas fechas' : 'Sin ventas'} description={conFechas ? 'Ni se vendió ni se facturó ninguna cuota en el periodo elegido' : 'Las conversiones aparecerán aquí cuando un lead compre'} />
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div data-recorrido="ventas-lista" className="bg-card border border-border rounded-lg overflow-hidden">
           {/* Desktop table */}
           <div className="hidden md:block overflow-x-auto">
             <table className="tabla-cifras w-full text-sm">
@@ -657,7 +650,11 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
                         'bg-orange-100 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400'
                       }`}>{r.estado}</span>
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      {/* «Crear link de pago» y «Generar plan de pago» en cada venta por cobrar (Diego, 19/11). */}
+                      {r.venta_id && r.estado !== 'pagado' && (
+                        <AccionesCobroVenta compacto leadId={r.lead_id} conversionId={r.venta_id} />
+                      )}
                       <button
                         type="button"
                         onClick={(e) => { e.stopPropagation(); navigate(`/ventas/${r.venta_id}`); }}

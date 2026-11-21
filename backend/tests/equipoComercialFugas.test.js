@@ -217,9 +217,22 @@ describe('3. Cola de facturación (GET /api/invoices/facturacion-al-dia) y total
   });
 
   it('totales de Facturas (GET /api/invoices/stats): Raquel, los de su equipo; Daniela, todos', async () => {
+    // Diego, 19/11/2026: con acceso a la facturación («Poner número al cobrar», de
+    // serie en una admin) se ven y se corrigen TODAS las facturas del campus. Para
+    // probar el recorte del equipo, se le quita.
     const s = async (u) => ok(await request.get(`/api/invoices/stats?projectId=${P}`).set(como(u)));
-    expect(Number((await s(RAQUEL)).total_facturado)).toBe(120);
-    expect(Number((await s(DANIELA)).total_facturado)).toBe(420);
+    const { olvidarPermisos: olvidar } = await import('../src/modules/permissions/permissions.service.js');
+    await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'facturas', 'emitir', false), ($1, 'facturas', 'gestionar', false)
+             ON CONFLICT (user_id, resource, action) DO UPDATE SET allowed = false`, [RAQUEL.id]);
+    olvidar();
+    try {
+      expect(Number((await s(RAQUEL)).total_facturado)).toBe(120);
+      expect(Number((await s(DANIELA)).total_facturado)).toBe(420);
+    } finally {
+      await q(`DELETE FROM user_permission_overrides WHERE user_id = $1 AND resource = 'facturas' AND action IN ('emitir', 'gestionar')`, [RAQUEL.id]);
+      olvidar();
+    }
+    expect(Number((await s(RAQUEL)).total_facturado)).toBe(420);
   });
 });
 

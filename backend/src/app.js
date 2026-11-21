@@ -129,6 +129,7 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
+import { startCobroAutomaticoScheduler } from './jobs/cobroAutomaticoScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
@@ -142,7 +143,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
 // el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
-import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMoodleActivo } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMoodleActivo, cobroAutomaticoActivo } from './shared/config/soloEnPruebas.js';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
@@ -655,6 +656,8 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
       }
     }
+    // Cobro automático de las cuotas (gemela de CRM 309): el reintento y el repaso del plan en Stripe.
+    if (cobroAutomaticoActivo()) startCobroAutomaticoScheduler();
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
       try {
         startMcpVigilanciaScheduler();   // alertas de uso raro

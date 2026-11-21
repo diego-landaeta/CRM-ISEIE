@@ -422,6 +422,10 @@ export async function remove(id, { reason, motivo, userId } = {}) {
     }
   }
 
+  // Cobro automático (309): si Stripe tenía cuotas programadas, se cancelan antes:
+  // borrada la venta, el CRM ya no sabría de ellas y Stripe las seguiría cobrando.
+  const { antesDeBorrarLaVenta } = await import('../links-pago/links-pago.cobro-auto.js');
+  await antesDeBorrarLaVenta(id);
   await conversionModel.deleteConversion(id);
   await devolverEstadoSiNoQuedanVentas(existing.lead_id, userId);
   return { message: 'Conversion eliminada', reason, motivo };

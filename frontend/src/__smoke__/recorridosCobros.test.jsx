@@ -27,7 +27,7 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: yo.current })
 vi.mock('@/shared/hooks/usePermission', () => ({
   default: () => ({ can: (k) => permisos.has(k), llevaEquipo: false }),
 }));
-vi.mock('@/shared/api/client', () => ({ default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
+vi.mock('@/shared/api/client', () => ({ APP_BASE_URL: '', default: { get: (...a) => api.get(...a), post: (...a) => api.post(...a) } }));
 vi.mock('@/shared/lib/linksPago', () => ({ useLinksPagoEncendidos: () => true }));
 vi.mock('@/modules/links-pago/api/linksPago.api', () => ({
   listarLinks: vi.fn(async () => ({ success: true, data: [] })),
@@ -67,9 +67,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla)', () => {
+  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), la de Ventas (#619) y la de «Links de pago» (19/11)', () => {
     expect(Object.keys(RECORRIDOS_COBROS).sort()).toEqual([
-      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'pagos-stripe',
+      'anular-factura', 'cargos-sin-enlazar', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe', 'ventas',
     ]);
   });
 

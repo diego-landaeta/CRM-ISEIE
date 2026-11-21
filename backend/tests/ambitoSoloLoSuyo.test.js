@@ -86,7 +86,10 @@ describe('nadie vuelve a decidir el alcance por el rol principal', () => {
     for (const f of ['leads/lead.controller.js', 'leads/lead.service.js', 'conversions/conversion.controller.js',
       'invoices/invoices.controller.js', 'invoices/invoices.service.js', 'accounting/accounting.controller.js',
       'sales/sales.controller.js', 'sales/sales.goals.js', 'whatsapp/whatsapp.controller.js']) {
-      expect(readFileSync(new URL(`../src/modules/${f}`, import.meta.url), 'utf8'), f).toMatch(/soloLoSuyo\(|alcanceComercial\(/);
+      expect(readFileSync(new URL(`../src/modules/${f}`, import.meta.url), 'utf8'), f).toMatch(/soloLoSuyo\(|alcanceComercial\(|alcanceDeFacturas\(/);
     }
+    // Facturas (19/11/2026) pasan por `alcanceDeFacturas`, que sin acceso a la
+    // facturación es `alcanceComercial`.
+    expect(readFileSync(new URL('../src/modules/invoices/invoices.alcance.js', import.meta.url), 'utf8')).toMatch(/alcanceComercial/);
   });
 });

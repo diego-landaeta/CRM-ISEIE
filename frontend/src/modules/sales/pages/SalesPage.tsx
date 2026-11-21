@@ -258,6 +258,13 @@ export default function SalesPage() {
             </Suspense>
           )}
 
+          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898). */}
+          {can('conversions.edit') && (
+            <Suspense fallback={null}>
+              <PosiblesRepetidasCard projectId={projectIdParam} />
+            </Suspense>
+          )}
+
           {isAdmin && (
             <Suspense fallback={null}>
               <GestoresStatsTable projectId={projectIdParam} canEdit={!allProjects} periodo={mes} />
