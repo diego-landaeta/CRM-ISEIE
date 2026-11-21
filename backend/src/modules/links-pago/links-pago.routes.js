@@ -60,5 +60,8 @@ router.get('/:id', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.detal
 // el controlador mira que el link sea de su campus y de su alcance.
 router.post('/', puede('links_pago.crear'), ctrl.crear);
 router.post('/:id/anular', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.anular);
+// Renovar un caducado con un clic (gemela de CRM#984): un link nuevo igual, con la
+// caducidad de serie. Quien crea links, sobre uno de su campus y su alcance.
+router.post('/:id/renovar', puede('links_pago.crear'), ctrl.renovar);
 
 export default router;

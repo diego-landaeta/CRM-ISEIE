@@ -137,6 +137,16 @@ export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarje
   });
 }
 
+/**
+ * Las sesiones de Checkout de un link (CRM#984). Un Payment Link no avisa al
+ * abrirse, pero cada visita del alumno crea una sesión: si hay alguna, lo abrió.
+ * Solo lee (la clave de los links tiene Checkout Sessions de lectura).
+ */
+export function sesionesDelLink(apiKey, paymentLinkId, { limite = 10 } = {}) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?payment_link=${encodeURIComponent(paymentLinkId)}&limit=${Number(limite) || 10}`);
+}
+
 /** Desactivar un link (caducado o anulado). Un link de Stripe no se borra. */
 export function desactivarLink(apiKey, paymentLinkId) {
   return llamar(apiKey, 'POST', `/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {
