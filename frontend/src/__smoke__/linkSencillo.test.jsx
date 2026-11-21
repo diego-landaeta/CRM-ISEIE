@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { cleanup as limpiar } from '@testing-library/react';
 import { afterEach as despues } from 'vitest';
 despues(() => limpiar());
-import { render, screen, fireEvent, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /**
@@ -14,10 +14,11 @@ import { MemoryRouter } from 'react-router-dom';
  *
  *   · una sola pantalla: el campus (si tiene varios), el curso con buscador, su
  *     precio del catálogo, pago único o cuotas;
- *   · en cuotas, cuántas (de 2 al máximo del campus) y cuánto es cada una, con
- *     los céntimos en la última;
- *   · si el campus no puede cobrar cuotas solas, «En cuotas» sale apagado y dice
- *     por qué, antes de crear nada;
+ *   · en cuotas (desde el 21/11, CRM#982: inicial + cuotas), la inicial y
+ *     cuántas cuotas (de 1 al máximo del campus) sobre lo que queda; el resto,
+ *     en linkDescuentoInicial982;
+ *   · si el campus no puede cobrar cuotas solas, «Inicial + cuotas» sale apagado
+ *     y dice por qué, antes de crear nada;
  *   · el link creado sin prospecto: copiar y abrir (sin WhatsApp ni correo, que
  *     no hay a quién).
  */
@@ -118,34 +119,36 @@ describe('«Crear link de pago» en una pantalla, sin prospecto', () => {
     expect(get).toHaveBeenCalledWith('/products', { params: { projectId: 2, limit: 500 } });
   });
 
-  it('en cuotas: cuántas (hasta el máximo del campus) y cuánto cada una; crea con el total y el número', async () => {
+  it('inicial + cuotas: cuántas (de 1 al máximo del campus), la inicial propuesta y lo que queda; crea con la inicial', async () => {
     const dialogo = await abrir();
     await elegirCampusYCurso(dialogo);
     await vi.waitFor(() => expect(within(dialogo).getByLabelText('Importe').value).toBe('1000'));
-    fireEvent.click(within(dialogo).getByRole('radio', { name: /En cuotas/ }));
+    fireEvent.click(within(dialogo).getByRole('radio', { name: /Inicial \+ cuotas/ }));
 
     const num = within(dialogo).getByLabelText('Cuotas');
-    expect([...num.options].map((o) => o.value)).toEqual(['2', '3', '4', '5', '6']);
+    expect([...num.options].map((o) => o.value)).toEqual(['1', '2', '3', '4', '5', '6']);
     expect(num.value).toBe('3');
-    expect(within(dialogo).getByText(/2 × 333,33 € y la última de 333,34 €/)).toBeTruthy();
-    expect(within(dialogo).getByText(/El link cobra la primera cuota \(333,33 €\) y guarda la tarjeta/)).toBeTruthy();
+    // Sin tocarla, la inicial es la parte de un reparto igual: 1000 en 4 pagos.
+    await vi.waitFor(() => expect(within(dialogo).getByLabelText('Inicial').value).toBe('250'));
+    expect(within(dialogo).getByTestId('link-resumen-cuotas').textContent.replace(/\s+/g, ' ')).toMatch(/Quedan 750,00 € en 3 × 250,00 €, una al mes desde el/);
     fireEvent.change(num, { target: { value: '4' } });
-    expect(within(dialogo).getByText(/4 × 250,00 €/)).toBeTruthy();
+    await vi.waitFor(() => expect(within(dialogo).getByLabelText('Inicial').value).toBe('200'));
+    expect(within(dialogo).getByTestId('link-resumen-cuotas').textContent.replace(/\s+/g, ' ')).toMatch(/Quedan 800,00 € en 4 × 200,00 €/);
 
-    post.mockResolvedValue({ success: true, data: { ...LINK, modalidad: 'cuotas', num_cuotas: 4, importe_cuota: '250.00', guarda_tarjeta: true } });
+    post.mockResolvedValue({ success: true, data: { ...LINK, modalidad: 'cuotas', num_cuotas: 5, importe_cuota: '200.00', importe_inicial: '200.00', guarda_tarjeta: true } });
     await vi.waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(false));
     fireEvent.click(within(dialogo).getByRole('button', { name: 'Crear link' }));
     await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/links-pago', {
-      projectId: 1, productId: 5, importe: 1000, modalidad: 'cuotas', num_cuotas: 4,
+      projectId: 1, productId: 5, importe: 1000, modalidad: 'cuotas', num_cuotas: 4, inicial: 200,
     }));
-    expect(await within(dialogo).findByText(/en 4 cuotas: 250,00 € al pagar el link/)).toBeTruthy();
+    expect(await within(dialogo).findByText(/200,00 € de inicial con el link y 4 × 200,00 €, una al mes/)).toBeTruthy();
   });
 
-  it('si el campus no puede cobrar cuotas solas, «En cuotas» sale apagado y dice por qué', async () => {
+  it('si el campus no puede cobrar cuotas solas, «Inicial + cuotas» sale apagado y dice por qué', async () => {
     cuotas = { disponible: false, motivo: 'Este campus no tiene permitido el cobro automático. Lo enciende un admin en Integraciones › Links de pago.', cuotas_max: 6 };
     const dialogo = await abrir();
     await elegirCampusYCurso(dialogo);
-    const enCuotas = await within(dialogo).findByRole('radio', { name: /En cuotas/ });
+    const enCuotas = await within(dialogo).findByRole('radio', { name: /Inicial \+ cuotas/ });
     await vi.waitFor(() => expect(enCuotas.disabled).toBe(true));
     expect(within(dialogo).getByText(/Cuotas no disponibles: Este campus no tiene permitido el cobro automático/)).toBeTruthy();
   });

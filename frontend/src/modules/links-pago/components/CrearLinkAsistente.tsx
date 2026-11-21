@@ -33,6 +33,16 @@ import {
     4. «Crear link», y el link: copiar, abrir y, si va para un prospecto,
        mandarlo por WhatsApp o por correo.
 
+  DOS RECORRIDOS (Diego, 21/11, CRM#982: «un enlace de pago es la inicial y lo
+  otro son las cuotas, no únicamente con el monto del programa»):
+    · Pago único: el precio sale del catálogo y se puede cambiar; con un descuento
+      en € o en % sale el total, con el precio de antes a la vista. El link cobra
+      ese total y la venta se crea por él.
+    · Inicial + cuotas: sobre el total (también con descuento), la inicial que
+      cobra el link y en cuántas cuotas iguales va lo que queda, con lo que es
+      cada una y desde qué fecha. Stripe cobra las cuotas solas (cobro automático).
+  El servidor rehace las cuentas: si no cuadran al céntimo, no crea nada.
+
   No hace falta prospecto ni venta: al pagar, el CRM encuentra (por el correo) o
   crea el prospecto, crea la venta a nombre de quien creó el link y le avisa.
 
@@ -80,6 +90,65 @@ export function repartirEnCuotas(total: number, n: number) {
   return Array.from({ length: n }, (_, i) => (i === n - 1 ? c - base * (n - 1) : base) / 100);
 }
 
+/** `a - b` al céntimo, sin coma flotante (como el servidor). */
+export function restaCentimos(a: number, b: number) {
+  return (Math.round(a * 100) - Math.round(b * 100)) / 100;
+}
+
+export type TipoDescuento = 'monto' | 'pct';
+
+/**
+ * El total de un precio con su descuento (CRM#982), en céntimos y con enteros,
+ * la misma cuenta que hace el servidor (`totalConDescuento` de la validación):
+ * si no coincide al céntimo, el servidor no crea el link. null si el descuento
+ * pasa del precio.
+ */
+export function totalConDescuento(precio: number, tipo: TipoDescuento, valor: number) {
+  const precioC = Math.round(precio * 100);
+  const descC = tipo === 'monto' ? Math.round(valor * 100) : Math.round((precioC * Math.round(valor * 100)) / 10000);
+  if (!(precioC > 0) || descC < 0 || descC > precioC) return null;
+  return { total: (precioC - descC) / 100, descuento: descC / 100 };
+}
+
+/** Las fechas de `n` pagos mensuales desde `desde` (AAAA-MM-DD), como el servidor. */
+export function fechasMensuales(desde: string, n: number) {
+  const [a, m, d] = desde.slice(0, 10).split('-').map(Number);
+  return Array.from({ length: n }, (_, i) => {
+    const ultimo = new Date(Date.UTC(a, m + i, 0)).getUTCDate();
+    return new Date(Date.UTC(a, m - 1 + i, Math.min(d, ultimo))).toISOString().slice(0, 10);
+  });
+}
+
+/** Hoy, en el reloj de quien mira, como AAAA-MM-DD. */
+function hoyLocal(ahora = new Date()) {
+  return `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}-${String(ahora.getDate()).padStart(2, '0')}`;
+}
+
+const fechaCorta = (f: string) => f.split('-').reverse().join('/');
+
+/** «3 × 200,00 €», «2 × 199,99 € y la última de 200,02 €» o «1 cuota de 600,00 €». */
+export function textoDeLasCuotas(importes: number[]) {
+  const n = importes.length;
+  if (!n) return '';
+  if (n === 1) return `1 cuota de ${dinero(importes[0])}`;
+  return importes[0] === importes[n - 1]
+    ? `${n} × ${dinero(importes[0])}`
+    : `${n - 1} × ${dinero(importes[0])} y la última de ${dinero(importes[n - 1])}`;
+}
+
+/**
+ * Cómo se paga un link en cuotas, en una frase. Con inicial (CRM#982), la inicial
+ * con el link y las cuotas de lo que queda; los de antes, el total entre N.
+ */
+export function resumenDelPlan(l: Pick<LinkDePago, 'importe' | 'num_cuotas' | 'importe_cuota' | 'importe_inicial'>) {
+  const n = Number(l.num_cuotas || 0);
+  if (l.importe_inicial != null) {
+    const resto = repartirEnCuotas(restaCentimos(Number(l.importe), Number(l.importe_inicial)), n - 1);
+    return `${dinero(l.importe_inicial)} de inicial con el link y ${textoDeLasCuotas(resto)}, una al mes`;
+  }
+  return `en ${n} cuotas: ${dinero(l.importe_cuota)} al pagar el link y las demás, solas, cada mes`;
+}
+
 interface Curso { id: number; nombre: string; precio: string | number | null; moneda: string | null }
 interface LeadEncontrado { id: number; nombre: string | null; email: string | null; telefono?: string | null; project_nombre?: string | null }
 interface Campus { id: number; nombre: string }
@@ -91,12 +160,14 @@ export interface CrearLinkAsistenteProps {
   conversionId?: number | null;
   onClose: () => void;
   onCreado?: (link: LinkDePago) => void;
+  /** Cómo sale elegido el pago (los atajos de la pantalla «Links de pago», CRM#982). */
+  formaInicial?: 'unico' | 'cuotas';
 }
 
 /** «Nueva venta al pagar»: el link va al prospecto y la venta se crea con el cobro. */
 const NUEVA = 'nueva';
 
-export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado }: CrearLinkAsistenteProps) {
+export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado, formaInicial = 'unico' }: CrearLinkAsistenteProps) {
   const { can } = usePermission();
   const navigate = useNavigate();
   const { activeProject, projects } = useProjectContext();
@@ -136,8 +207,13 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   const [cursoId, setCursoId] = useState('');
   const [importe, setImporte] = useState('');
   const [moneda, setMoneda] = useState('');
-  const [forma, setForma] = useState<'unico' | 'cuotas'>('unico');
+  const [forma, setForma] = useState<'unico' | 'cuotas'>(formaInicial);
   const [numCuotas, setNumCuotas] = useState(3);
+  // CRM#982: descuento en € o en % sobre el precio, y la inicial de «inicial más cuotas».
+  const [descTipo, setDescTipo] = useState<TipoDescuento>('pct');
+  const [descValor, setDescValor] = useState('');
+  const [inicial, setInicial] = useState('');
+  const [inicialTocada, setInicialTocada] = useState(false);
   const [cuotas, setCuotas] = useState<CuotasDisponibles | null>(null);
 
   const [enviando, setEnviando] = useState(false);
@@ -208,7 +284,8 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   );
   // Con venta, el link es por lo pendiente y de pago único (la venta ya tiene su plan).
   const enCuotas = !venta && forma === 'cuotas';
-  const maxCuotas = Math.max(2, cuotas?.cuotas_max || cfg?.cuotas_max || 12);
+  // Con inicial (CRM#982), las cuotas son las de después: de 1 al máximo del campus.
+  const maxCuotas = Math.max(1, cuotas?.cuotas_max || cfg?.cuotas_max || 12);
   useEffect(() => { if (numCuotas > maxCuotas) setNumCuotas(maxCuotas); }, [numCuotas, maxCuotas]);
 
   // El curso que sale elegido: el de la venta; para un prospecto, el que le interesa.
@@ -238,13 +315,37 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     return curso && !lista.includes(curso) ? [curso, ...lista] : lista;
   }, [cursos, filtroCurso, curso]);
 
+  // `n`: el precio (sale del catálogo, o lo pendiente de la venta, y se puede cambiar).
   const n = Number(importe.replace(',', '.'));
   const mon = enCuotas ? 'EUR' : moneda;
   const precio = curso?.precio != null && Number(curso.precio) > 0
     && (!curso.moneda || curso.moneda.toUpperCase() === mon) ? Number(curso.precio) : null;
+
+  /*
+    EL DESCUENTO (CRM-ISEIE#657, gemela de CRM#982): en € o en % sobre ese precio,
+    y el total que paga. Sin descuento, el total es el precio. Lo que se mide
+    contra el tope del campus es el total, como siempre.
+  */
+  const dv = descValor.trim() ? Number(descValor.replace(',', '.')) : 0;
+  const conDescuento = dv > 0;
+  const descuentoMal = descValor.trim() !== '' && !(dv >= 0);
+  const calculo = n > 0 && !descuentoMal ? totalConDescuento(n, descTipo, conDescuento ? dv : 0) : null;
+  const total = calculo ? calculo.total : 0;
   const referencia = venta ? (mon === 'EUR' && venta.pendiente > 0 ? venta.pendiente : null) : precio;
-  const descuento = referencia && n > 0 ? Math.max(0, Math.round(((referencia - n) / referencia) * 10000) / 100) : 0;
-  const reparto = enCuotas && n > 0 ? repartirEnCuotas(n, numCuotas) : [];
+  const descuento = referencia && total > 0 ? Math.max(0, Math.round(((referencia - total) / referencia) * 10000) / 100) : 0;
+
+  /*
+    INICIAL MÁS CUOTAS: el link cobra la inicial y lo que queda va en N cuotas
+    iguales, una al mes desde un mes después del pago (la fecha, si paga hoy).
+  */
+  const ini = Number(inicial.replace(',', '.'));
+  const resto = enCuotas && total > 0 && ini > 0 ? restaCentimos(total, ini) : 0;
+  const reparto = resto > 0 ? repartirEnCuotas(resto, numCuotas) : [];
+  const primeraCuota = fechasMensuales(hoyLocal(), 2)[1];
+  // La inicial que se propone: la parte de un reparto igual, hasta que se toca.
+  useEffect(() => {
+    if (enCuotas && !inicialTocada && total > 0) setInicial(String(repartirEnCuotas(total, numCuotas + 1)[0]));
+  }, [enCuotas, inicialTocada, total, numCuotas]);
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
@@ -256,7 +357,9 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     if (cursosCargados && cursos.length === 0) motivos.push('Este campus no tiene cursos en el catálogo: sin curso no se puede crear el link.');
     if (cursos.length > 0 && !curso) motivos.push('Elige el curso.');
     if (!(n > 0)) motivos.push(venta && venta.pendiente <= 0 ? 'Esta venta ya está cobrada entera: no queda nada que cobrar con un link.' : 'Escribe el importe.');
-    if (venta && mon === 'EUR' && n > 0 && Math.round(n * 100) > Math.round(venta.pendiente * 100)) {
+    if (n > 0 && (descuentoMal || !calculo)) motivos.push('El descuento no puede superar el precio.');
+    else if (n > 0 && calculo && !(total > 0)) motivos.push('Con ese descuento no queda nada que cobrar: el total tiene que ser mayor que 0.');
+    if (venta && mon === 'EUR' && total > 0 && Math.round(total * 100) > Math.round(venta.pendiente * 100)) {
       motivos.push(`El link no puede pasar de lo pendiente de la venta (${dinero(venta.pendiente)}).`);
     }
     if (!esAdmin && cfg && referencia != null && descuento > cfg.descuento_max_pct) {
@@ -264,7 +367,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
         ? `Es un ${descuento} % menos que ${venta ? 'lo pendiente' : 'el catálogo'}; el máximo en este campus es un ${cfg.descuento_max_pct} %.`
         : `En este campus solo un admin puede bajar el importe de ${venta ? 'lo pendiente' : 'el catálogo'} (${dinero(referencia, mon)}).`);
     }
-    if (!esAdmin && curso && referencia == null && n > 0) {
+    if (!esAdmin && curso && referencia == null && total > 0) {
       motivos.push(venta
         ? `Lo pendiente de la venta está en EUR: un link en ${mon} lo tiene que crear un admin.`
         : `Este curso no tiene precio en el catálogo en ${mon}: el link lo tiene que crear un admin.`);
@@ -272,7 +375,12 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     if (enCuotas) {
       if (!cuotas) motivos.push('Comprobando si este campus admite cuotas…');
       else if (!cuotas.disponible) motivos.push(cuotas.motivo || 'Este campus no admite cuotas.');
-      if (reparto.length && reparto[0] < 0.5) motivos.push('Cada cuota tiene que ser de al menos 0,50 €.');
+      if (total > 0) {
+        if (!(ini > 0)) motivos.push('Escribe la inicial: lo que cobra el link al pagarlo.');
+        else if (Math.round(ini * 100) >= Math.round(total * 100)) motivos.push('La inicial tiene que ser menor que el total.');
+        else if (ini < 0.5) motivos.push('La inicial tiene que ser de al menos 0,50 €.');
+        else if (reparto.length && reparto[0] < 0.5) motivos.push('Cada cuota tiene que ser de al menos 0,50 €.');
+      }
     }
   }
 
@@ -284,8 +392,10 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     try {
       const r = await crearLink({
         ...(venta ? { leadId, conversionId: venta.id } : leadId ? { leadId } : { projectId }),
-        productId: curso.id, importe: n,
-        ...(enCuotas ? { modalidad: 'cuotas' as const, num_cuotas: numCuotas } : { moneda }),
+        productId: curso.id, importe: total,
+        // El precio y el descuento, para que el servidor rehaga la cuenta y los guarde.
+        ...(conDescuento ? { precio_original: n, descuento_tipo: descTipo, descuento_valor: dv } : {}),
+        ...(enCuotas ? { modalidad: 'cuotas' as const, num_cuotas: numCuotas, inicial: ini } : { moneda }),
       });
       if (r.data) { setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
     } catch (e) {
@@ -306,6 +416,10 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     setConsulta(null); setProspecto(null); setVentaElegida(NUEVA); setCursoId(''); setImporte('');
   }
 
+  const conDescuentoHecho = hecho && hecho.descuento_tipo && Number(hecho.descuento_importe) > 0 && hecho.precio_original != null
+    ? ` (precio ${dinero(hecho.precio_original, hecho.moneda)} menos ${dinero(hecho.descuento_importe, hecho.moneda)} de descuento)`
+    : '';
+
   const campo = 'w-full h-10 px-3 rounded-md border border-border bg-card text-sm';
   const lead = prospecto?.lead;
   const ventas = prospecto?.ventas || [];
@@ -313,8 +427,8 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   const nombreCampus = campusPosibles.find((c) => c.id === projectId)?.nombre;
 
   const resumenHecho = hecho && (hecho.modalidad === 'cuotas' && hecho.num_cuotas
-    ? `${dinero(hecho.importe)} en ${hecho.num_cuotas} cuotas: ${dinero(hecho.importe_cuota)} al pagar el link y las demás, solas, cada mes`
-    : dinero(hecho.importe, hecho.moneda));
+    ? `${dinero(hecho.importe)}${conDescuentoHecho}: ${resumenDelPlan(hecho)}`
+    : `${dinero(hecho.importe, hecho.moneda)}${conDescuentoHecho}`);
 
   return (
     <Portal>
@@ -428,7 +542,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                 <section className="space-y-3" data-recorrido="links-asistente-pago">
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label htmlFor="link-importe" className="text-xs text-muted-foreground mb-1 block">{enCuotas ? 'Importe (total)' : 'Importe'}</label>
+                      <label htmlFor="link-importe" className="text-xs text-muted-foreground mb-1 block">{enCuotas ? 'Precio del programa' : 'Importe'}</label>
                       <input id="link-importe" type="text" inputMode="decimal" value={importe} aria-label="Importe"
                         onChange={(e) => setImporte(e.target.value)} className={`${campo} tabular-nums`} />
                     </div>
@@ -439,6 +553,32 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                           {(cfg?.monedas || []).map((m) => <option key={m} value={m}>{m}</option>)}
                         </select>
                       </div>
+                    )}
+                  </div>
+
+                  {/* Descuento en € o en % (CRM#982): calcula el total, con el precio a la vista */}
+                  <div className="space-y-1" data-recorrido="links-asistente-descuento">
+                    <label htmlFor="link-descuento" className="text-xs text-muted-foreground block">Descuento (opcional)</label>
+                    <div className="flex gap-2">
+                      <input id="link-descuento" type="text" inputMode="decimal" value={descValor} aria-label="Descuento"
+                        placeholder="0" onChange={(e) => setDescValor(e.target.value)} className={`${campo} tabular-nums`} />
+                      <select value={descTipo} aria-label="Tipo de descuento" onChange={(e) => setDescTipo(e.target.value as TipoDescuento)}
+                        className="h-10 px-2 rounded-md border border-border bg-card text-sm">
+                        <option value="pct">%</option>
+                        <option value="monto">{mon === 'EUR' ? '€' : mon}</option>
+                      </select>
+                    </div>
+                    {conDescuento && calculo && total > 0 && (
+                      <p className="text-sm" aria-live="polite" data-testid="link-total">
+                        Total <strong className="tabular-nums">{dinero(total, mon)}</strong>
+                        <span className="text-xs text-muted-foreground">
+                          {' '}· precio <s className="tabular-nums">{dinero(n, mon)}</s> menos {dinero(calculo.descuento, mon)}
+                          {descTipo === 'pct' ? ` (${String(dv).replace('.', ',')} %)` : ''}
+                        </span>
+                      </p>
+                    )}
+                    {!venta && precio != null && Math.round(n * 100) !== Math.round(precio * 100) && n > 0 && (
+                      <p className="text-xs text-muted-foreground">Precio del catálogo: {dinero(precio, mon)}.</p>
                     )}
                   </div>
 
@@ -455,7 +595,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                       <label className={`flex items-center gap-2 p-2.5 rounded-md border text-sm ${cuotas && !cuotas.disponible ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'} ${forma === 'cuotas' ? 'border-primary bg-primary/5' : 'border-border'}`}>
                         <input type="radio" name="link-forma" checked={forma === 'cuotas'} disabled={!!cuotas && !cuotas.disponible}
                           onChange={() => setForma('cuotas')} />
-                        <span><span className="font-medium block">En cuotas</span><span className="text-xs text-muted-foreground">Una al mes, solas</span></span>
+                        <span><span className="font-medium block">Inicial + cuotas</span><span className="text-xs text-muted-foreground">El link cobra la inicial; las cuotas, solas</span></span>
                       </label>
                     </div>
                   )}
@@ -467,27 +607,33 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
 
                   {enCuotas && (
                     <div className="rounded-md border border-border p-3 space-y-2" data-recorrido="links-asistente-cuotas">
-                      <div className="flex items-center gap-2">
-                        <label htmlFor="link-num-cuotas" className="text-sm">Cuotas</label>
-                        <select id="link-num-cuotas" value={numCuotas} onChange={(e) => setNumCuotas(Number(e.target.value))}
-                          className="h-9 px-2 rounded-md border border-border bg-card text-sm">
-                          {Array.from({ length: maxCuotas - 1 }, (_, i) => i + 2).map((k) => <option key={k} value={k}>{k}</option>)}
-                        </select>
-                        {reparto.length > 0 && (
-                          <span className="text-sm font-semibold tabular-nums" aria-live="polite">
-                            {reparto[0] === reparto[reparto.length - 1]
-                              ? `${numCuotas} × ${dinero(reparto[0])}`
-                              : `${numCuotas - 1} × ${dinero(reparto[0])} y la última de ${dinero(reparto[reparto.length - 1])}`}
-                          </span>
-                        )}
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label htmlFor="link-inicial" className="text-xs text-muted-foreground mb-1 block">Inicial (la cobra el link)</label>
+                          <input id="link-inicial" type="text" inputMode="decimal" value={inicial} aria-label="Inicial"
+                            onChange={(e) => { setInicial(e.target.value); setInicialTocada(true); }} className={`${campo} tabular-nums`} />
+                        </div>
+                        <div>
+                          <label htmlFor="link-num-cuotas" className="text-xs text-muted-foreground mb-1 block">Cuotas</label>
+                          <select id="link-num-cuotas" value={numCuotas} onChange={(e) => setNumCuotas(Number(e.target.value))}
+                            className={campo}>
+                            {Array.from({ length: maxCuotas }, (_, i) => i + 1).map((k) => <option key={k} value={k}>{k}</option>)}
+                          </select>
+                        </div>
                       </div>
+                      {reparto.length > 0 && (
+                        <p className="text-sm" aria-live="polite" data-testid="link-resumen-cuotas">
+                          Quedan <strong className="tabular-nums">{dinero(resto)}</strong> en{' '}
+                          <strong className="tabular-nums">{textoDeLasCuotas(reparto)}</strong>, una al mes desde el {fechaCorta(primeraCuota)} si paga hoy.
+                        </p>
+                      )}
                       <p className="text-xs text-muted-foreground">
-                        El link cobra la primera cuota{reparto.length ? ` (${dinero(reparto[0])})` : ''} y guarda la tarjeta. Las demás las cobra Stripe solas, una al mes desde el día que pague, y cada cobro salda su cuota en la venta.
+                        Al pagar, el link cobra la inicial{ini > 0 ? ` (${dinero(ini)})` : ''} y guarda la tarjeta. Las cuotas las cobra Stripe solas, la primera un mes después del pago, y cada cobro salda su cuota en la venta.
                       </p>
                     </div>
                   )}
 
-                  {referencia != null && descuento > 0 && esAdmin && (
+                  {referencia != null && descuento > 0 && esAdmin && !conDescuento && (
                     <p className="text-xs text-muted-foreground">
                       Un {descuento} % menos que {venta ? 'lo pendiente de la venta' : 'el catálogo'} ({dinero(referencia, mon)}).
                     </p>

@@ -3,6 +3,7 @@ import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
   ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
+  totalConDescuento,
 } from './links-pago.validation.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
@@ -209,7 +210,8 @@ export async function crear(req, res, next) {
     const enCuotas = b.modalidad === 'cuotas';
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
-      modalidad: b.modalidad, numCuotas: b.num_cuotas, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
+      modalidad: b.modalidad, numCuotas: b.num_cuotas, inicial: b.inicial,
+      esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
       pendiente,
     });
@@ -218,6 +220,9 @@ export async function crear(req, res, next) {
       EN CUOTAS (20/11): es el cobro automático. Se comprueba ANTES de crear nada
       (campus, permiso y clave de Stripe); el link cobra la cuota 1 y guarda la
       tarjeta, con el consentimiento de las demás junto al botón de pagar.
+
+      CON INICIAL (CRM#982): el link cobra la inicial y las N cuotas iguales de lo
+      que queda las cobra Stripe. En la venta serán N + 1 pagos (`num`).
     */
     let guardaTarjeta = null;
     let cuotas = null;
@@ -226,8 +231,11 @@ export async function crear(req, res, next) {
         cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
       });
       if (!disp.disponible) throw new AppError(disp.motivo, 409, 'CUOTAS_NO_DISPONIBLES');
-      const importes = service.repartirEnCuotas(b.importe, b.num_cuotas);
-      cuotas = { num: b.num_cuotas, importeCuota: importes[0] };
+      const conInicial = b.inicial !== undefined;
+      const importes = conInicial
+        ? [b.inicial, ...service.repartirEnCuotas(service.restaCentimos(b.importe, b.inicial), b.num_cuotas)]
+        : service.repartirEnCuotas(b.importe, b.num_cuotas);
+      cuotas = { num: importes.length, importeCuota: importes[0], ...(conInicial ? { inicial: b.inicial } : {}) };
       guardaTarjeta = {
         consentimiento: cobroAuto.textoConsentimiento({
           campus: await model.nombreDelCampus(destino.projectId),
@@ -235,9 +243,19 @@ export async function crear(req, res, next) {
         }),
       };
     }
+    // El precio antes del descuento y el descuento (CRM#982): Zod ya ha comprobado
+    // que el total cuadra; aquí se calcula lo que se guarda.
+    let descuento = null;
+    if (b.precio_original !== undefined) {
+      const t = totalConDescuento({ precio: b.precio_original, tipo: b.descuento_tipo, valor: b.descuento_valor });
+      descuento = {
+        precioOriginal: b.precio_original, tipo: b.descuento_tipo ?? null,
+        valor: b.descuento_tipo ? b.descuento_valor : null, importe: b.descuento_tipo ? t.descuento : 0,
+      };
+    }
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas,
+      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento,
     });
     res.status(201).json({ success: true, data: link });
   } catch (err) { next(err); }

@@ -189,7 +189,20 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         donde: anclaje('links-pantalla-crear'),
         permiso: 'links_pago.crear',
         titulo: 'Crear link de pago',
-        texto: 'Pulsa aquí: eliges el curso, «Pago único» o «En cuotas» y «Crear link». No hace falta el nombre: al pagar, el CRM busca la ficha del alumno por su correo o la crea, y le apunta la venta. En cuotas, el link cobra la primera y Stripe cobra las demás solas cada mes.',
+        texto: 'Pulsa aquí: eliges el curso, «Pago único» o «Inicial + cuotas» y «Crear link». No hace falta el nombre: al pagar, el CRM busca la ficha del alumno por su correo o la crea, y le apunta la venta.',
+      },
+      // Los dos recorridos de Diego (21/11, CRM#982): «son dos recorridos, hay que hacerlos».
+      {
+        donde: anclaje('links-pantalla-unico'),
+        permiso: 'links_pago.crear',
+        titulo: 'Pago único con descuento',
+        texto: 'Sale el precio del curso y lo puedes cambiar. Pon un descuento en € o en % y verás el total, con el precio de antes tachado. El link cobra ese total y la venta se crea por él. El tope de descuento del campus sigue mandando.',
+      },
+      {
+        donde: anclaje('links-pantalla-inicial'),
+        permiso: 'links_pago.crear',
+        titulo: 'Inicial más cuotas',
+        texto: 'El total (también con descuento), la inicial que cobra el link y en cuántas cuotas va lo que queda. Ves cuánto es cada una y desde qué fecha. Al pagar, la inicial es la cuota 1 de la venta y Stripe cobra las demás solas, una al mes.',
       },
       {
         titulo: 'Al registrar la venta, sale solo',
