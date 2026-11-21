@@ -3,7 +3,7 @@ import * as model from './integrations.model.js';
 import { encrypt, decrypt, maskSecret } from '../../shared/utils/crypto.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
-import { infoDelCampus, urlDelCampus } from '../../shared/services/moodle.client.js';
+import { infoDelCampus, urlDelCampus, faltasDeFunciones, textoDeFaltas } from '../../shared/services/moodle.client.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import { paypalActivo } from '../cobros-externos/interruptores.js';
 import { probarCredenciales as probarPaypal } from '../cobros-externos/paypal.service.js';
@@ -281,6 +281,14 @@ export async function test(req, res, next) {
     });
     // Lo que contestó cada permiso, para que la tarjeta lo enseñe al volver a
     // entrar y no solo justo después de probar. Sin la clave, claro.
+    // Moodle (CRM#925): qué funciones tiene el servicio, por grupo, para que la
+    // tarjeta y la salud de las conexiones digan cuáles faltan.
+    if (provider === 'moodle') {
+      await model.fundirConfigPublica({
+        projectId: pid, provider,
+        campos: { funciones: testResult.funciones || null, funciones_probadas_el: new Date().toISOString() },
+      });
+    }
     if (provider === 'stripe_links') {
       await model.fundirConfigPublica({
         projectId: pid, provider,
@@ -483,19 +491,28 @@ async function testBrevo(apiKey) {
 // justo lo que impedia conectar los proyectos de IA.
 export { testStripe as testStripeParaPruebas, testStripeLinks as testStripeLinksParaPruebas };
 // Moodle: core_webservice_get_site_info es de solo lectura y es la que valida
-// el token. Además dice qué funciones tiene el servicio: si falta la de buscar
-// usuarios, el token «vale» pero no sirve para comprobar a los tutores.
+// el token. Además dice qué funciones tiene el servicio (CRM#925: las 12 del
+// CRM, por grupo). Sin las de base (o sin las de «Consultas» con «Leer las
+// consultas» encendido) no sirve: falla. Sin las de «Mi campus» o las de notas y
+// avisos conecta, pero esas pantallas salen vacías: `aviso`, y se dice cuáles.
 export async function testMoodle(token, url, opciones, { consultas = false } = {}) {
   try {
     const info = await infoDelCampus({ url, token }, opciones);
     const quien = [info.sitio, info.version && `Moodle ${info.version}`].filter(Boolean).join(' · ');
-    // Con «Leer las consultas» marcado, el token también tiene que poder leer
-    // la mensajería (#188).
+    const funciones = { grupos: info.grupos, descargas: info.descargas };
+    // Las imprescindibles: sin ellas, la conexión no sirve.
     const faltan = [...info.faltan, ...(consultas ? info.faltanConsultas : [])];
+    const faltas = faltasDeFunciones(funciones, { consultas });
     if (faltan.length) {
-      return { ok: false, message: `Conecta con ${quien || 'el campus'}, pero al servicio del token le falta: ${faltan.join(', ')}.` };
+      return { ok: false, message: `Conecta con ${quien || 'el campus'}, pero al servicio del token le falta: ${faltan.join(', ')}.`, funciones };
     }
-    return { ok: true, message: `Conexión OK con ${quien || 'el campus'}.`, sitio: info.sitio, version: info.version };
+    if (faltas.length) {
+      return {
+        ok: true, aviso: true, funciones, sitio: info.sitio, version: info.version,
+        message: `Conecta con ${quien || 'el campus'}, pero lo que use estas funciones saldrá vacío. ${textoDeFaltas(faltas, { tope: Infinity })}`,
+      };
+    }
+    return { ok: true, message: `Conexión OK con ${quien || 'el campus'}.`, sitio: info.sitio, version: info.version, funciones };
   } catch (err) {
     return { ok: false, message: err.message };
   }

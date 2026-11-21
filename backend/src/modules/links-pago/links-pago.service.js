@@ -55,6 +55,22 @@ export async function claveObligatoria(projectId) {
   return clave;
 }
 
+/**
+ * Lo que diría «Crear link» por la clave, dicho ANTES (QA de /testeo del
+ * 18/11): sin clave, el diálogo dejaba rellenarlo todo y avisaba al final.
+ * `null` si con la clave del campus se pueden crear links aquí; si no, el mismo
+ * mensaje y código que daría el POST. La clave no sale de aquí.
+ */
+export async function avisoDeClave(projectId) {
+  try {
+    await claveObligatoria(projectId);
+    return null;
+  } catch (err) {
+    if (err instanceof AppError) return { code: err.code, error: err.message };
+    throw err;
+  }
+}
+
 function errorDeStripe(err, que) {
   if (err instanceof stripe.ErrorDeStripe) {
     const sinPermiso = err.status === 401 || err.status === 403;

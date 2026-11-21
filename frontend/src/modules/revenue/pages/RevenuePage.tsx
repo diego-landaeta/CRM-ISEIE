@@ -7,6 +7,8 @@ import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/reac
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatNumber, formatDate } from '@/shared/lib/format';
 import { soloFecha } from '@/shared/lib/fechas';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type TipoPago = 'pago_completo' | 'abono_parcial' | string;
 
@@ -107,13 +109,16 @@ export default function RevenuePage() {
   const recent = conversions.slice(0, 20);
 
   return (
-    <div className="space-y-6">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Ingresos"
         subtitle={`Conversiones, pagos y evolución${activeProject?.nombre ? ' — ' + activeProject.nombre : ''}`}
+        actions={<VerRecorrido id="conversiones" listo={!loading} />}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div data-recorrido="conversiones-tarjetas" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card p-6 rounded-lg border border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="w-10 h-10 rounded-md bg-emerald-50 flex items-center justify-center text-emerald-600"><CurrencyEur size={20} weight="regular" /></div>
@@ -138,7 +143,7 @@ export default function RevenuePage() {
         </div>
       </div>
 
-      <div className="bg-card p-6 rounded-lg border border-border">
+      <div data-recorrido="conversiones-evolucion" className="bg-card p-6 rounded-lg border border-border">
         <div className="mb-6">
           <h3 className="font-semibold">Evolucion de Ingresos</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 6 meses</p>
@@ -160,7 +165,7 @@ export default function RevenuePage() {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-card rounded-lg border border-border overflow-x-auto">
+      <div data-recorrido="conversiones-lista" className="bg-card rounded-lg border border-border overflow-x-auto">
         <div className="p-5">
           <h3 className="font-semibold">Conversiones Recientes</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">Últimos pagos registrados</p>

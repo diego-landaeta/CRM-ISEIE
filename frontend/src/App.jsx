@@ -40,6 +40,12 @@ const CobrosExternosPage = lazy(() => import('./modules/accounting/pages/CobrosE
 // Equipo › Actividad (#236): lo que registra Monitask y el cotejo con las facturas.
 const MonitaskActividadPage = lazy(() => import('./modules/monitask/pages/MonitaskActividadPage'));
 const DisputasStripePage = lazy(() => import('./modules/accounting/pages/DisputasStripePage'));
+// Finanzas › Conciliación (gemela de CRM#949 / CRM#905): el contenedor con sus pestañas y «Facturas y cobros».
+const ConciliacionLayout = lazy(() => import('./modules/accounting/pages/ConciliacionLayout'));
+const ConciliacionInicio = lazy(() => import('./modules/accounting/pages/ConciliacionLayout').then((m) => ({ default: m.ConciliacionInicio })));
+const ConciliacionFacturasPage = lazy(() => import('./modules/accounting/pages/ConciliacionFacturasPage'));
+// Conciliación › Cargos de Stripe (gemela de CRM#953 / CRM#906): los cobrados en Stripe sin cobro en el CRM.
+const ConciliacionCargosStripePage = lazy(() => import('./modules/accounting/pages/conciliacion/CargosStripePestana'));
 const WhatsappWidgetPage = lazy(() => import('./modules/widget/pages/WhatsappWidgetPage'));
 // Todo WhatsApp pasa por aqui: el chat, con quien enlaza su numero y sus
 // plantillas. La pantalla del equipo y «Mi WhatsApp» eran del metodo viejo —el
@@ -126,6 +132,8 @@ const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
 // Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus, como en MultiCRM.
 const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
 const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
+// Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto (lo lee la matrícula automática).
+const CursosDeProductosPage = lazy(() => import('./modules/moodle/pages/CursosDeProductosPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -180,6 +188,9 @@ const ROUTE_TITLES = {
   '/accounting/pendiente-facturar':   'Pendientes de facturar',
   '/accounting/pagos-stripe':         'Pagos Stripe',
   '/accounting/disputas':             'Disputas de Stripe',
+  '/accounting/conciliacion':         'Conciliación',
+  '/accounting/conciliacion/facturas': 'Conciliación · Facturas y cobros',
+  '/accounting/conciliacion/cargos-stripe': 'Conciliación · Cargos de Stripe',
   '/accounting/facturas':             'Facturas',
   '/accounting/facturas/configuracion':'Configuración de facturación',
   '/accounting/facturas-colaboradores': 'Facturas de colaboradores',
@@ -197,6 +208,7 @@ const ROUTE_TITLES = {
   '/informes/preguntar':              'Pregunta a tus datos',
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
+  '/products/cursos-moodle':          'Cursos de Moodle',
   '/soporte':                         'Soporte',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhooks':                'Webhooks',
@@ -307,6 +319,7 @@ function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
+          <Route path="/products/cursos-moodle" element={<CursosDeProductosPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
           {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}
@@ -328,6 +341,13 @@ function App() {
           <Route path="/accounting/cobros-externos" element={<CobrosExternosPage />} />
           {/* Disputas de Stripe (#396): solo lectura, por empresa y por campus. */}
           <Route path="/accounting/disputas" element={<DisputasStripePage />} />
+          {/* Conciliación (CRM#905): lo cobrado y facturado sin enlazar, una pestaña por
+              pantalla. Sus pestañas, en modules/accounting/lib/pestanasConciliacion.ts. */}
+          <Route path="/accounting/conciliacion" element={<ConciliacionLayout />}>
+            <Route index element={<ConciliacionInicio />} />
+            <Route path="facturas" element={<ConciliacionFacturasPage />} />
+            <Route path="cargos-stripe" element={<ConciliacionCargosStripePage />} />
+          </Route>
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
           <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />

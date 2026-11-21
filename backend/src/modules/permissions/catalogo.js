@@ -507,6 +507,9 @@ export const SECCIONES = [
           a('view', 'Ver el Moodle de los campus', 'Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura.', yPM(ADMIN)),
           // Conectar un Moodle es guardar una credencial: antes soloRoles('superadmin'); NADIE = solo superadmin.
           a('conectar', 'Conectar un Moodle', 'Guardar o quitar el token de un campus.', NADIE),
+          // CRM#957: qué curso de Moodle es cada producto del catálogo, para la matrícula
+          // automática (#767). Otra pantalla (Académico › Cursos de Moodle): no pide `moodle.view`.
+          a('cursos_producto', 'Unir productos con cursos de Moodle', 'Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus.', ADMIN_SOPORTE, { independiente: true }),
         ],
       },
       {

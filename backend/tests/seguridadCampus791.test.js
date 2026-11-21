@@ -116,12 +116,13 @@ describe('formularios: cada /:id solo en su campus', () => {
 });
 
 describe('proyectos: la clave del webhook solo a quien puede configurar ese campus', () => {
-  it('una tutora o una gestora (solo projects.view) no reciben ninguna clave', async () => {
-    for (const quien of [TUTORA, GESTORA]) {
-      const { cuerpo } = await llamar(projectCtrl.list, quien);
-      expect(cuerpo.data).toHaveLength(3);
-      for (const p of cuerpo.data) expect(p).not.toHaveProperty('webhook_api_key');
-    }
+  // Diego, 21/11/2026 (CRM#979): cada uno recibe solo SUS campus. La gestora,
+  // los suyos (1 y 2) y sin clave; la tutora, sin campus en esta base, ninguno.
+  it('una tutora o una gestora (solo projects.view) no reciben ninguna clave, y solo sus campus', async () => {
+    const gestora = (await llamar(projectCtrl.list, GESTORA)).cuerpo.data;
+    expect(gestora.map((p) => p.id)).toEqual([1, 2]);
+    for (const p of gestora) expect(p).not.toHaveProperty('webhook_api_key');
+    expect((await llamar(projectCtrl.list, TUTORA)).cuerpo.data).toEqual([]);
   });
 
   it('la ficha tampoco', async () => {
@@ -133,13 +134,13 @@ describe('proyectos: la clave del webhook solo a quien puede configurar ese camp
   it('el admin (webhooks.edit de serie): la de sus campus y no la de otro', async () => {
     const { cuerpo } = await llamar(projectCtrl.list, ADMIN);
     const clave = Object.fromEntries(cuerpo.data.map((p) => [p.id, p.webhook_api_key]));
-    expect(clave).toEqual({ 1: 'clave-1', 2: undefined, 3: undefined });
+    expect(clave).toEqual({ 1: 'clave-1' });
   });
 
   it('con projects.edit como excepción, igual: solo en sus campus', async () => {
     const { cuerpo } = await llamar(projectCtrl.list, SOPORTE_CAMPUS);
     const clave = Object.fromEntries(cuerpo.data.map((p) => [p.id, p.webhook_api_key]));
-    expect(clave).toEqual({ 1: undefined, 2: 'clave-2', 3: undefined });
+    expect(clave).toEqual({ 2: 'clave-2' });
   });
 
   it('el superadmin las ve todas', async () => {

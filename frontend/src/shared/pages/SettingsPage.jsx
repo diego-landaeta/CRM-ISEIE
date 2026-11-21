@@ -33,12 +33,12 @@ import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, 
 const NAV = [
   { id: 'users',        label: 'Usuarios',          icon: Users,       embedded: true },
   { id: 'availability', label: 'Disponibilidad',    icon: Calendar,    embedded: true },
-  { label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
+  { id: 'roles',        label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
   { label: 'Campos custom',        icon: TextT,          to: '/configuracion/campos' },
   { label: 'Árbol de categorías',  icon: TreeStructure,  to: '/configuracion/categorias-arbol' },
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
-  { label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
+  { id: 'webhooks',     label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
   { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
@@ -66,13 +66,38 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880). Sin él, el
+// servidor contesta 403: Usuarios y Disponibilidad leen `/users*` (users.view)
+// y APIs globales lee `/credentials` (credentials.view). Antes se pintaban
+// igual, y una gestora abría Configuración en Usuarios con tres peticiones
+// fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
+// veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
+// Las que no salen aquí no piden permiso para leerse.
+// Diego, 21/11/2026 (gemela de CRM#979): la gestora tampoco ve «Roles y
+// permisos» ni «Webhooks»; las dos piden su permiso en el servidor.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+  roles: 'roles.view',
+  webhooks: 'webhooks.view',
+};
+
+// Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
+const PESTANA_SIN_PERMISO = 'security';
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la pestaña elegida (la de entrada es Usuarios), Seguridad.
+  // Se calcula en cada pintado: si el mapa de permisos llega un instante
+  // después, se pasa sola a Usuarios.
+  const tab = permitida(elegida) ? elegida : PESTANA_SIN_PERMISO;
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-
-  const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
   return (
     <div className="space-y-6">
@@ -100,7 +125,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 
@@ -985,8 +1010,10 @@ function AvailabilitySection() {
   );
 }
 
-function IntegrationsSection({ isAdmin }) {
+export function IntegrationsSection({ isAdmin }) {
   const [creds, setCreds] = useState([]);
+  // Qué clave usa la IA de verdad: campus, global o servidor (CRM#893).
+  const [iaEnUso, setIaEnUso] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // {id, service, name, label} | null
   const [value, setValue] = useState('');
@@ -1004,6 +1031,9 @@ function IntegrationsSection({ isAdmin }) {
     try {
       const res = await client.get('/credentials');
       setCreds(res?.data || []);
+      client.get('/credentials/ia')
+        .then((r) => { if (r?.success) setIaEnUso(r.data); })
+        .catch(() => setIaEnUso(null));
     } catch (err) {
       // 403 si no eres admin — silencioso
       if (err?.status !== 403) {
@@ -1021,7 +1051,10 @@ function IntegrationsSection({ isAdmin }) {
     setSaving(true);
     try {
       await client.post('/credentials', {
-        service: editing.service,
+        // QA del 21/11/2026: las entradas de INTEGRATIONS llevan `id` (el
+        // `service` del backend), no `service`; se mandaba `undefined` y
+        // cualquier «Guardar y cifrar» de esta pantalla daba 400 «Required».
+        service: editing.id,
         value: value.trim(),
         project_id: null,
       });
@@ -1133,6 +1166,12 @@ function IntegrationsSection({ isAdmin }) {
                     </>
                   )}
                 </div>
+                {i.id === 'claude' && iaEnUso && (
+                  <p role="status" data-ia-en-uso={iaEnUso.origen || 'ninguna'}
+                    className={`text-xs mt-2 ${iaEnUso.origen ? 'text-muted-foreground' : 'text-warning-soft-foreground'}`}>
+                    {iaEnUso.texto}
+                  </p>
+                )}
               </div>
             );
           })}

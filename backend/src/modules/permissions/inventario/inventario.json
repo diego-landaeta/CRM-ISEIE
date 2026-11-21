@@ -2009,6 +2009,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conciliacion/facturas-cobros",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "GET",
+  "ruta": "/api/conciliacion/facturas-cobros",
+  "relativa": "GET /facturas-cobros",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar",
+  "relativa": "POST /facturas-cobros/enlazar",
+  "controlador": "enlazar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar-seguras",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar-seguras",
+  "relativa": "POST /facturas-cobros/enlazar-seguras",
+  "controlador": "enlazarSeguras",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/connectors/",
   "tipo": "ruta",
   "modulo": "connectors",
@@ -3404,6 +3470,28 @@
   "ruta": "/api/credentials/",
   "relativa": "GET /",
   "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "credentials.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/credentials/ia",
+  "tipo": "ruta",
+  "modulo": "credentials",
+  "metodo": "GET",
+  "ruta": "/api/credentials/ia",
+  "relativa": "GET /ia",
+  "controlador": "iaEnUso",
   "publica": false,
   "guardias": [
    {
@@ -10297,6 +10385,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/moodle/campus/:id/productos-cursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/productos-cursos",
+  "relativa": "GET /campus/:id/productos-cursos",
+  "controlador": "productos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/cursos-moodle",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/cursos-moodle",
+  "relativa": "GET /campus/:id/cursos-moodle",
+  "controlador": "cursosMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "PUT",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "PUT /campus/:id/productos/:productId/curso",
+  "controlador": "unir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "DELETE",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "DELETE /campus/:id/productos/:productId/curso",
+  "controlador": "quitar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/moodle/campus/:id/conexion",
   "tipo": "ruta",
   "modulo": "moodle",
@@ -13963,6 +14139,80 @@
   "puertas": []
  },
  {
+  "id": "GET /api/stripe-payments/conciliacion",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion",
+  "relativa": "GET /conciliacion",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/conciliacion/opciones",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion/opciones",
+  "relativa": "GET /conciliacion/opciones",
+  "controlador": "opciones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/conciliacion/enlazar-seguros",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/conciliacion/enlazar-seguros",
+  "relativa": "POST /conciliacion/enlazar-seguros",
+  "controlador": "enlazarSeguros",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/stripe-payments/:id",
   "tipo": "ruta",
   "modulo": "stripe-payments",
@@ -14014,6 +14264,28 @@
   "ruta": "/api/stripe-payments/:id/link",
   "relativa": "DELETE /:id/link",
   "controlador": "unlink",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/:id/crear-venta",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/:id/crear-venta",
+  "relativa": "POST /:id/crear-venta",
+  "controlador": "crearVenta",
   "publica": false,
   "guardias": [
    {

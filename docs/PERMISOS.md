@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-851 rutas en 66 módulos, y 31 acciones con condición dentro de una ruta.
+863 rutas en 67 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -166,6 +166,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | pay | `PATCH /api/commissions/:id/pay` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `commissions.pagar` |
 | recalculate | `POST /api/commissions/recalculate/:conversionId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `commissions.edit` |
 
+## conciliacion
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/conciliacion/facturas-cobros` | (no existía) | (ruta nueva) | `facturas.gestionar` |
+| enlazar | `POST /api/conciliacion/facturas-cobros/enlazar` | (no existía) | (ruta nueva) | `facturas.gestionar` |
+| enlazarSeguras | `POST /api/conciliacion/facturas-cobros/enlazar-seguras` | (no existía) | (ruta nueva) | `facturas.gestionar` |
+
 ## connectors
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
@@ -266,6 +274,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | list | `GET /api/credentials/` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.view` |
+| iaEnUso | `GET /api/credentials/ia` | (no existía) | (ruta nueva) | `credentials.view` |
 | upsert | `POST /api/credentials/` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |
 | test | `POST /api/credentials/:id/test` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |
 | remove | `DELETE /api/credentials/:id` | sesión · roleGuard(superadmin) +superadmin +soporte por el atajo | superadmin, soporte | `credentials.edit` |
@@ -728,6 +737,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | alumnos | `GET /api/moodle/cursos/:id/alumnos` | (no existía) | (ruta nueva) | `moodle.view` |
 | estructura | `GET /api/moodle/cursos/:id/estructura` | (no existía) | (ruta nueva) | `moodle.view` |
 | recursos | `GET /api/moodle/cursos/:id/recursos` | (no existía) | (ruta nueva) | `moodle.view` |
+| productos | `GET /api/moodle/campus/:id/productos-cursos` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| cursosMoodle | `GET /api/moodle/campus/:id/cursos-moodle` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| unir | `PUT /api/moodle/campus/:id/productos/:productId/curso` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
+| quitar | `DELETE /api/moodle/campus/:id/productos/:productId/curso` | (no existía) | (ruta nueva) | `moodle.cursos_producto` |
 | conectar | `POST /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
 | desconectar | `DELETE /api/moodle/campus/:id/conexion` | (no existía) | (ruta nueva) | `moodle.conectar` |
 
@@ -976,9 +989,13 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | deLaVenta | `GET /api/stripe-payments/de-la-venta/:conversionId` | (no existía) | (ruta nueva) | `stripe.edit` |
 | listar | `GET /api/stripe-payments/disputas` | (no existía) | (ruta nueva) | `stripe.edit` |
 | sincronizar | `POST /api/stripe-payments/disputas/sincronizar` | (no existía) | (ruta nueva) | `stripe.edit` |
+| listar | `GET /api/stripe-payments/conciliacion` | (no existía) | (ruta nueva) | `stripe.edit` |
+| opciones | `GET /api/stripe-payments/conciliacion/opciones` | (no existía) | (ruta nueva) | `stripe.edit` |
+| enlazarSeguros | `POST /api/stripe-payments/conciliacion/enlazar-seguros` | (no existía) | (ruta nueva) | `stripe.edit` |
 | getOne | `GET /api/stripe-payments/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `stripe.view` |
 | link | `POST /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | unlink | `DELETE /api/stripe-payments/:id/link` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
+| crearVenta | `POST /api/stripe-payments/:id/crear-venta` | (no existía) | (ruta nueva) | `stripe.edit` |
 | updateDispute | `PATCH /api/stripe-payments/:id/dispute` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `stripe.edit` |
 | webhook | `POST /api/stripe-webhook/:projectId` | nada (pública) | cualquiera, sin sesión | — |
 
@@ -1647,6 +1664,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
+| Unir productos con cursos de Moodle | `moodle.cursos_producto` | Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus. | Admin, Soporte |  |
 
 ### Webhooks de salida
 

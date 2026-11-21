@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { GraduationCap, Check, WarningCircle, ArrowSquareOut } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941): señala, paso a paso, cada parte.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
@@ -90,10 +92,13 @@ export default function VentasSinFormacionPage() {
   const sinSugerencia = (datos?.total || 0) - (datos?.conSugerencia || 0);
 
   return (
-    <div className="space-y-5 pb-8">
+    /* Margen de scroll en lo que señala el recorrido (#619): la barra fija de
+       arriba no tapa el principio al subir hasta ello. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Ventas sin formación"
         subtitle={`Cobradas, pero sin curso del catálogo detrás — ${activeProject?.nombre || ''}`}
+        actions={<VerRecorrido id="ventas-sin-formacion" listo={!cargando} />}
       />
 
       {cargando ? (
@@ -106,7 +111,7 @@ export default function VentasSinFormacionPage() {
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div data-recorrido="sinformacion-tarjetas" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div className="bg-card border border-border rounded-lg p-4">
               <p className="text-xs text-muted-foreground">Sin formación</p>
               <p className="text-2xl font-semibold tabular-nums">{datos.total}</p>
@@ -132,13 +137,13 @@ export default function VentasSinFormacionPage() {
 
           {/* Por qué esto importa, en una línea: sin esto la lista parece
               una tarea administrativa y es dinero que alguien no cobra. */}
-          <div className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs text-warning-soft-foreground">
+          <div data-recorrido="sinformacion-aviso" className="rounded-lg border border-warning/30 bg-warning-soft p-3 text-xs text-warning-soft-foreground">
             Mientras una venta no diga de qué formación es, <strong>su profesor no cobra comisión</strong> por
             ella y en los informes sale como «servicio académico». Las sugerencias se confirman una a una: atar
             un cobro a la formación equivocada se le paga a quien no era.
           </div>
 
-          <div className="bg-card border border-border rounded-lg overflow-x-auto">
+          <div data-recorrido="sinformacion-lista" className="bg-card border border-border rounded-lg overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="text-[11px] text-muted-foreground border-b border-border">
                 <tr>
@@ -192,7 +197,7 @@ export default function VentasSinFormacionPage() {
           </div>
 
           {sinSugerencia > 0 && (
-            <p className="text-[11px] text-muted-foreground flex items-start gap-1.5">
+            <p data-recorrido="sinformacion-a-mano" className="text-[11px] text-muted-foreground flex items-start gap-1.5">
               <WarningCircle size={13} className="mt-0.5 flex-shrink-0" />
               Las {sinSugerencia} de «sin candidato único» son las que hay que mirar con Diego: o no dicen
               nada, o su texto encaja con más de un curso del catálogo y no se puede adivinar cuál.

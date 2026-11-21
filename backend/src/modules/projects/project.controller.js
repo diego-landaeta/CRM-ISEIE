@@ -3,7 +3,7 @@ import * as service from './project.service.js';
 import { createProjectSchema, updateProjectSchema, createSociedadSchema } from './project.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
-import { veTodoElCrm, exigirCampusSuyo, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { veTodoElCrm, exigirCampusSuyo, campusDeLaPersona, campusParaRecortar } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 // `projects.edit` de serie es de soporte. A un admin de empresa se le puede
@@ -43,7 +43,12 @@ async function sinClavesAjenas(req, proyectos) {
 
 export async function list(req, res, next) {
   try {
-    const projects = await model.findAll({ active: req.query.active });
+    // Diego, 21/11/2026 (gemela de CRM#979): «el gestor solo debe ver el
+    // proyecto donde está, sus campus y su configuración». Superadmin y
+    // soporte, todos; los demás, los suyos (`user_projects`), como desde #245.
+    const recorte = await campusParaRecortar(req);
+    const projects = (await model.findAll({ active: req.query.active }))
+      .filter((p) => !recorte || recorte.includes(Number(p.id)));
     res.json({ success: true, data: await sinClavesAjenas(req, projects) });
   } catch (err) { next(err); }
 }
@@ -54,6 +59,8 @@ export async function getById(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const project = await model.findById(id);
     if (!project) throw new AppError('Proyecto no encontrado', 404, 'NOT_FOUND');
+    // Un campus que no es suyo, como si no existiera (igual que la lista).
+    await exigirCampusSuyo(req, id, 'Proyecto no encontrado');
     const [visible] = await sinClavesAjenas(req, [project]);
     res.json({ success: true, data: visible });
   } catch (err) { next(err); }
