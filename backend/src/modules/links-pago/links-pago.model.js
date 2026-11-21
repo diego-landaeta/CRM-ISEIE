@@ -216,11 +216,15 @@ export async function producto(productId) {
 export async function insertar(l) {
   const { rows } = await query(
     `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
-        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'unico', 'creado', NOW() + make_interval(days => $10), $11, $12)
+        precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta,
+        num_cuotas, importe_cuota)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $13::int IS NULL THEN 'unico' ELSE 'cuotas' END, 'creado',
+             NOW() + make_interval(days => $10), $11, $12, $13, $14)
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
-      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true]);
+      l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true,
+      // Link sencillo en cuotas (20/11): `importe` es el total; `importe_cuota`, lo que cobra el link.
+      l.numCuotas ?? null, l.importeCuota ?? null]);
   return rows[0];
 }
 
@@ -297,7 +301,7 @@ export async function campusDelWebhook(endpointId, projectIds) {
 export async function paraCobro(id) {
   const { rows } = await query(
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
-            estado, stripe_payment_link_id, installment_id, guarda_tarjeta
+            estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;
@@ -382,12 +386,72 @@ export async function ventaConFicha(conversionId) {
   return rows[0] || null;
 }
 
-/** El link sale de un prospecto: al crearse la venta, queda apuntada en él. */
-export async function ponerVenta(linkId, conversionId) {
+/**
+ * El link sale de un prospecto (o de nadie): al crearse la venta, queda apuntada
+ * en él, y con ella su prospecto si no lo tenía (link sin prospecto, 20/11).
+ */
+export async function ponerVenta(linkId, conversionId, leadId = null) {
   await query(
-    `UPDATE payment_links SET conversion_id = $2, updated_at = NOW()
+    `UPDATE payment_links SET conversion_id = $2, lead_id = COALESCE(lead_id, $3), updated_at = NOW()
       WHERE id = $1 AND conversion_id IS NULL`,
-    [linkId, conversionId]);
+    [linkId, conversionId, leadId]);
+}
+
+/** Las notas con las que el CRM crea la venta de un link (y por las que la reconoce). */
+export const notasDeLaVenta = (linkId, stripeId) =>
+  `Pagada con el link de pago n.º ${linkId} (Stripe ${stripeId}). Venta creada por el CRM al llegar el cobro.`;
+
+/**
+ * La venta que ya creó este link en un intento que se cortó antes de apuntarla
+ * en él (se cayó el proceso entre crear la venta y `ponerVenta`). Así un segundo
+ * aviso de Stripe no crea otra.
+ */
+export async function ventaCreadaPorElLink(projectId, linkId) {
+  const { rows } = await query(
+    `SELECT id, lead_id FROM conversions
+      WHERE project_id = $1 AND notas_pago LIKE $2
+      ORDER BY id LIMIT 1`,
+    [projectId, `Pagada con el link de pago n.º ${Number(linkId)} (%`]);
+  return rows[0] || null;
+}
+
+/** La primera cuota por cobrar de una venta (la que salda el pago del link en cuotas). */
+export async function primeraCuotaPendiente(conversionId) {
+  const { rows } = await query(
+    `SELECT id FROM conversion_installments
+      WHERE conversion_id = $1 AND fecha_cobro IS NULL
+      ORDER BY numero LIMIT 1`,
+    [conversionId]);
+  return rows[0]?.id ?? null;
+}
+
+/**
+ * Quién pagó, según la sesión de Checkout (correo, nombre y teléfono): lo apunta
+ * `desdeLaSesion` en el historial del link. Por si el cargo no los trae.
+ */
+export async function clienteDelCheckout(linkId) {
+  const { rows } = await query(
+    `SELECT datos->'cliente' AS cliente FROM payment_link_eventos
+      WHERE link_id = $1 AND datos ? 'cliente'
+      ORDER BY id DESC LIMIT 1`,
+    [linkId]);
+  return rows[0]?.cliente || null;
+}
+
+/** El teléfono de Checkout, en el prospecto que creó el link, si no tenía. */
+export async function completarTelefono(linkId, telefono) {
+  if (!telefono) return;
+  await query(
+    `UPDATE leads SET telefono = $2, updated_at = NOW()
+      WHERE id = (SELECT lead_id FROM payment_links WHERE id = $1)
+        AND COALESCE(telefono, '') = ''`,
+    [linkId, telefono]);
+}
+
+/** El nombre del campus (el alumno lo lee en el consentimiento de las cuotas). */
+export async function nombreDelCampus(projectId) {
+  const { rows } = await query('SELECT nombre FROM projects WHERE id = $1', [projectId]);
+  return rows[0]?.nombre || null;
 }
 
 /**
