@@ -220,12 +220,14 @@ export async function insertar(l) {
         precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta,
         num_cuotas, importe_cuota, importe_inicial, precio_original, descuento_tipo, descuento_valor, descuento_importe)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $13::int IS NULL THEN 'unico' ELSE 'cuotas' END, 'creado',
-             NOW() + make_interval(days => $10), $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19, 0))
+             NOW() + make_interval(days => $10), $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19::numeric, 0))
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
       l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true,
       // Link sencillo en cuotas (20/11): `importe` es el total; `importe_cuota`, lo que cobra el link.
       l.numCuotas ?? null, l.importeCuota ?? null,
+      // Sin el ::numeric de arriba, COALESCE($19, 0) tipaba el descuento como entero y
+      // 44,50 € daba un 500 (QA de staging, 21/11).
       // CRM-ISEIE#657 (321): la inicial, y el precio antes del descuento con su descuento.
       l.importeInicial ?? null, l.precioOriginal ?? null, l.descuentoTipo ?? null, l.descuentoValor ?? null,
       l.descuentoImporte ?? null]);
