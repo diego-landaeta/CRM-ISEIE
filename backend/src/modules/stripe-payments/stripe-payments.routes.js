@@ -37,7 +37,7 @@ const publicRouter = Router();
 publicRouter.post(
   '/:projectId',
   raw({ type: 'application/json', limit: '2mb' }),
-  function guardarCuerpoCrudo(req, _res, next) { req.rawBody = req.body?.toString('utf8') || ''; next(); },
+  function guardarCuerpoCrudo(req, _res, next) { req.rawBody = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : ''; next(); },
   ctrl.webhook
 );
 
