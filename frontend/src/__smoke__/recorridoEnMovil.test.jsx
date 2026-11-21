@@ -5,6 +5,7 @@ import { render, screen, cleanup, within, fireEvent } from '@testing-library/rea
 import RecorridoGuiado, { colocarCartel, MARGEN_CARTEL } from '@/shared/components/ui/RecorridoGuiado';
 import { PASOS_TABLERO, CLAVE_RECORRIDO_TABLERO } from '@/modules/tasks/lib/recorridoTablero';
 import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
+import { RECORRIDOS_DE_PRUEBA, pasosDePruebaPara, pasosApagada } from '@/shared/lib/recorridosDePrueba';
 import { RECORRIDOS_FINANZAS } from '@/shared/lib/recorridosFinanzas';
 
 /*
@@ -137,6 +138,9 @@ describe('a 375 px, con la página más ancha que la pantalla', () => {
 */
 const TODOS = [
   ...Object.values(RECORRIDOS_COBROS).map((r) => [r.id, pasosPara(r, () => true)]),
+  // Los de «Ver cómo funciona» para probar staging (#522), encendidos y apagados.
+  ...Object.values(RECORRIDOS_DE_PRUEBA).map((r) => [`prueba ${r.id}`, pasosDePruebaPara(r, () => true)]),
+  ...Object.values(RECORRIDOS_DE_PRUEBA).map((r) => [`prueba ${r.id} (apagada)`, pasosApagada(r)]),
   ['tablero de Tareas', PASOS_TABLERO],
 ];
 

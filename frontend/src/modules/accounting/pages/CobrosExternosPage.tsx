@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { ponerAmbito, TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { formatCurrency, formatDateShort } from '@/shared/lib/format';
 import { ArrowsClockwise, Bank, CheckCircle, PaypalLogo, UploadSimple, XCircle } from '@phosphor-icons/react';
@@ -58,8 +59,15 @@ export default function CobrosExternosPage() {
       <PageHeader
         title="Cobros de PayPal y del banco"
         subtitle="Lo que entra por PayPal se registra solo en su venta. Del banco se sube el extracto y se deciden los abonos dudosos."
+        actions={estado && (
+          // El recorrido para probar la pestaña abierta (CRM-ISEIE#522).
+          <VerComoFunciona
+            id={pestana === 'paypal' ? 'cobros-paypal' : 'extractos-banco'}
+            apagada={pestana === 'paypal' ? !estado.paypal : !estado.santander}
+          />
+        )}
       />
-      <div className="flex gap-2 border-b border-border">
+      <div className="flex gap-2 border-b border-border" data-recorrido="cobros-pestanas">
         {([['paypal', 'PayPal', PaypalLogo], ['banco', 'Banco (extractos)', Bank]] as const).map(([k, label, Icono]) => (
           <button key={k} onClick={() => setPestana(k)}
             className={`inline-flex items-center gap-1.5 px-3 py-2 text-sm font-semibold border-b-2 -mb-px ${pestana === k ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
@@ -91,13 +99,13 @@ function Apagado({ que, variable }: { que: string; variable: string }) {
   );
 }
 
-/** Un número de venta para enlazar a mano. */
-function EnlazarAVenta({ alEnlazar }: { alEnlazar: (conversionId: number) => Promise<void> }) {
+/** Un número de venta para enlazar a mano. `recorrido`: su anclaje para «Ver cómo funciona». */
+function EnlazarAVenta({ alEnlazar, recorrido }: { alEnlazar: (conversionId: number) => Promise<void>; recorrido?: string }) {
   const [venta, setVenta] = useState('');
   const [enviando, setEnviando] = useState(false);
   const id = Number(venta);
   return (
-    <span className="inline-flex items-center gap-1">
+    <span className="inline-flex items-center gap-1" data-recorrido={recorrido}>
       <input value={venta} onChange={(e) => setVenta(e.target.value.replace(/\D/g, ''))} placeholder="Nº venta"
         className="w-20 h-7 px-2 rounded border border-border bg-card text-xs" aria-label="Número de venta" />
       <button disabled={!id || enviando}
@@ -153,20 +161,21 @@ function PestanaPaypal({ qs, campus, puedeEditar }: { qs: (e?: Record<string, st
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <select value={enlazado} onChange={(e) => setEnlazado(e.target.value as '' | 'si' | 'no')}
+          data-recorrido="paypal-filtro" aria-label="Qué cobros ver"
           className="h-9 px-2 rounded-md border border-border bg-card text-sm">
           <option value="no">Sin registrar en una venta</option>
           <option value="si">Registrados en su venta</option>
           <option value="">Todos</option>
         </select>
         {puedeEditar && (
-          <button onClick={sincronizar} disabled={!campus || sincronizando}
+          <button onClick={sincronizar} disabled={!campus || sincronizando} data-recorrido="paypal-sincronizar"
             title={campus ? 'Traer ahora los cobros de PayPal de este campus' : 'Elige un campus arriba para sincronizar'}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted disabled:opacity-50">
             <ArrowsClockwise size={14} weight="bold" /> {sincronizando ? 'Sincronizando…' : 'Sincronizar'}
           </button>
         )}
       </div>
-      <div className="bg-card border border-border rounded-lg overflow-x-auto">
+      <div className="bg-card border border-border rounded-lg overflow-x-auto" data-recorrido="paypal-tabla">
         <table className="w-full text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
@@ -199,7 +208,7 @@ function PestanaPaypal({ qs, campus, puedeEditar }: { qs: (e?: Record<string, st
                       Venta {f.conversion_id}{f.producto_contratado ? ` · ${f.producto_contratado}` : ''}
                     </Link>
                   ) : f.tipo === 'cobro' && f.status === 'completed' && f.currency === 'EUR' && puedeEditar ? (
-                    <EnlazarAVenta alEnlazar={(v) => enlazar(f.id, v)} />
+                    <EnlazarAVenta recorrido="paypal-enlazar" alEnlazar={(v) => enlazar(f.id, v)} />
                   ) : <span className="text-xs text-muted-foreground">—</span>}
                 </td>
               </tr>
@@ -280,7 +289,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
   return (
     <div className="space-y-4">
       {puedeEditar && (
-        <div className="bg-card border border-border rounded-lg p-4 text-sm space-y-2">
+        <div className="bg-card border border-border rounded-lg p-4 text-sm space-y-2" data-recorrido="banco-subir">
           <p className="font-semibold">Subir un extracto</p>
           <p className="text-xs text-muted-foreground">
             Norma 43 (AEB43, el fichero «Cuaderno 43» de la banca online) o el CSV de movimientos. Solo se leen los abonos.
@@ -306,7 +315,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" data-recorrido="banco-estados">
         {ESTADOS.map(([k, label]) => (
           <button key={k} onClick={() => setEstado(k)}
             className={`h-8 px-3 rounded-full text-xs font-semibold border ${estado === k ? 'bg-primary text-primary-foreground border-primary' : 'bg-card border-border hover:bg-muted'}`}>
@@ -342,7 +351,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
               </p>
             )}
             {(m.estado === 'a_revisar' || m.estado === 'sin_candidato') && puedeEditar && (
-              <div className="mt-2 flex flex-wrap items-center gap-2">
+              <div className="mt-2 flex flex-wrap items-center gap-2" data-recorrido="banco-acciones">
                 {m.candidatos.map((c) => (
                   <button key={c.conversion_id} onClick={() => confirmar(m.id, c.conversion_id)}
                     title={`Coincide en: ${c.motivos.join(' e ')}`}
