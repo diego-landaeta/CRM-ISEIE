@@ -167,6 +167,10 @@ export const NAV_SECTIONS = [
       { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
+      // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto; sin él, la
+      // matrícula automática no sabe dónde matricular. Admin y soporte de serie
+      // (`moodle.cursos_producto`). En MultiCRM es /productos/cursos-moodle.
+      { to: '/products/cursos-moodle', label: 'Cursos de Moodle', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.cursos_producto' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
       // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
     ],

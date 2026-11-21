@@ -10319,6 +10319,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/moodle/campus/:id/productos-cursos",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/productos-cursos",
+  "relativa": "GET /campus/:id/productos-cursos",
+  "controlador": "productos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/moodle/campus/:id/cursos-moodle",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "GET",
+  "ruta": "/api/moodle/campus/:id/cursos-moodle",
+  "relativa": "GET /campus/:id/cursos-moodle",
+  "controlador": "cursosMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "PUT",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "PUT /campus/:id/productos/:productId/curso",
+  "controlador": "unir",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/moodle/campus/:id/productos/:productId/curso",
+  "tipo": "ruta",
+  "modulo": "moodle",
+  "metodo": "DELETE",
+  "ruta": "/api/moodle/campus/:id/productos/:productId/curso",
+  "relativa": "DELETE /campus/:id/productos/:productId/curso",
+  "controlador": "quitar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.cursos_producto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/moodle/campus/:id/conexion",
   "tipo": "ruta",
   "modulo": "moodle",

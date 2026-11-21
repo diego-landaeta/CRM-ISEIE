@@ -126,6 +126,8 @@ const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
 // Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus, como en MultiCRM.
 const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
 const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
+// Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto (lo lee la matrícula automática).
+const CursosDeProductosPage = lazy(() => import('./modules/moodle/pages/CursosDeProductosPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -197,6 +199,7 @@ const ROUTE_TITLES = {
   '/informes/preguntar':              'Pregunta a tus datos',
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
+  '/products/cursos-moodle':          'Cursos de Moodle',
   '/soporte':                         'Soporte',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhooks':                'Webhooks',
@@ -307,6 +310,7 @@ function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
+          <Route path="/products/cursos-moodle" element={<CursosDeProductosPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
           {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}
