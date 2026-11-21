@@ -97,7 +97,7 @@ export default function LinksDePagoPage() {
     <div className="space-y-5">
       <PageHeader
         title="Links de pago"
-        subtitle="Crea un link de Stripe para un prospecto o para una venta, mándalo y mira si lo ha pagado."
+        subtitle="Elige el curso y si paga de una vez o en cuotas, y manda el link. Al pagarlo, el CRM crea la ficha y la venta solo."
         actions={(
           <span className="flex flex-wrap items-center gap-2">
             <VerRecorrido id="links-pago" listo={!cargando} compacto />
@@ -147,14 +147,20 @@ export default function LinksDePagoPage() {
               return (
                 <li key={l.id} className="p-3 sm:px-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm" data-link-id={l.id}>
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${est.tono}`}>{est.texto}</span>
-                  <span className="font-semibold tabular-nums">{dinero(l.importe, l.moneda)}</span>
+                  <span className="font-semibold tabular-nums">
+                    {dinero(l.importe, l.moneda)}
+                    {l.modalidad === 'cuotas' && l.num_cuotas
+                      ? <span className="font-normal text-xs text-muted-foreground"> en {l.num_cuotas} cuotas ({dinero(l.importe_cuota, l.moneda)} con el link)</span>
+                      : null}
+                  </span>
+                  {/* Un link sin prospecto (20/11): al pagarse, el CRM le pone el prospecto y la venta que crea. */}
                   {l.lead_id
                     ? <Link to={`/leads/${l.lead_id}`} className="font-medium underline-offset-2 hover:underline truncate max-w-[200px]">{l.lead_nombre || `Prospecto ${l.lead_id}`}</Link>
-                    : <span className="text-muted-foreground">—</span>}
+                    : <span className="text-muted-foreground italic">Sin prospecto todavía</span>}
                   <span className="text-xs text-muted-foreground truncate max-w-[240px]" title={l.product_nombre || ''}>{l.product_nombre || '—'}</span>
                   {l.conversion_id
                     ? <Link to={`/ventas/${l.conversion_id}`} className="text-xs underline" title={l.venta_producto_nombre || ''}>Venta n.º {l.conversion_id}</Link>
-                    : <span className="text-xs text-muted-foreground">sin venta</span>}
+                    : <span className="text-xs text-muted-foreground">{l.estado === 'creado' || l.estado === 'abierto' ? 'la venta se crea al pagar' : 'sin venta'}</span>}
                   <span className="text-xs text-muted-foreground basis-full sm:basis-auto">
                     {l.project_nombre ? `${l.project_nombre} · ` : ''}{l.creado_por_nombre || '—'} · {cuando(l.created_at)}
                     {vivo && l.caduca_el && <> · caduca {cuando(l.caduca_el)}</>}

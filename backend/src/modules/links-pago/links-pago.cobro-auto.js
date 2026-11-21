@@ -173,6 +173,41 @@ export async function disponibilidad(projectId, { env = process.env } = {}) {
   return { disponible: true, motivo: null, campus };
 }
 
+/*
+  ¿SE PUEDE CREAR UN LINK EN CUOTAS EN ESTE CAMPUS? (link sencillo, 20/11)
+
+  «Cuotas» en «Crear link de pago» es el cobro automático: el link cobra la
+  primera y Stripe las demás. Antes de crear el link, no después, se dice si no
+  se puede y por qué: el campus no admite cuotas o no tiene permitido el cobro
+  automático, la persona no tiene su permiso, o la clave de Stripe no puede
+  programar cobros (se pregunta a Stripe, sin cobrar nada).
+  `{ disponible, motivo, cuotas_max }`. Nunca lanza.
+*/
+export async function paraUnLinkEnCuotas(projectId, { cfg, puedeCobroAuto }) {
+  const no = (motivo) => ({ disponible: false, motivo, cuotas_max: cfg?.cuotas_max ?? null });
+  if (!cfg) return no('Campus no encontrado.');
+  if (!cfg.cuotas_admitidas) return no('Este campus no admite pagos en cuotas. Lo cambia un admin en Integraciones › Links de pago.');
+  if (!cfg.monedas.includes('EUR')) return no('Las cuotas van en euros y este campus no cobra en EUR.');
+  if (!puedeCobroAuto) return no('No tienes el permiso «Cobro automático de cuotas»: pídeselo a un admin.');
+  const disp = await disponibilidad(projectId);
+  if (!disp.disponible) return no(disp.motivo);
+  let clave;
+  try {
+    clave = await linksService.claveObligatoria(projectId);
+  } catch (err) {
+    return no(err.message);
+  }
+  try {
+    await stripe.comprobarPermisosDeCobro(clave);
+  } catch (err) {
+    if (err instanceof stripe.ErrorDeStripe && (err.status === 401 || err.status === 403)) {
+      return no(`La clave de links de pago de este campus no puede programar cobros: en Stripe le faltan los permisos ${PERMISOS_QUE_FALTAN}. Los añade Diego en la clave del panel de Stripe.`);
+    }
+    return no(`Stripe no ha contestado al comprobar la clave: ${err.message}`);
+  }
+  return { disponible: true, motivo: null, cuotas_max: cfg.cuotas_max };
+}
+
 function tarjetaDe(ca) {
   if (!ca?.stripe_payment_method_id) return null;
   return {

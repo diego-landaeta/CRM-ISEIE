@@ -14,6 +14,10 @@ import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+import { GRUPOS_DE_FUNCIONES_MOODLE, faltasDeFunciones, type FuncionesProbadas } from '../lib/funcionesMoodle';
+
+/** Cuántas funciones pide el CRM al servicio del Moodle (CRM#925): 12. */
+const TOTAL_FUNCIONES_MOODLE = GRUPOS_DE_FUNCIONES_MOODLE.reduce((n, g) => n + g.funciones.length, 0);
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
@@ -118,7 +122,7 @@ export default function IntegrationsPage() {
           <p><strong>3) Uso real:</strong></p>
           <ul className="list-disc list-inside pl-2 space-y-0.5">
             <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
-            <li><strong>Campus (Moodle):</strong> las consultas de alumnos. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto.</li>
+            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Tutores › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
           </ul>
           <p className="text-amber-700 dark:text-amber-400 pt-1">
@@ -1031,6 +1035,10 @@ function MoodleCard({ projectId }: { projectId: number }) {
   const [consultas, setConsultas] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // CRM#925: lo que dijo la última prueba de las 12 funciones (lo guarda el servidor).
+  const funcionesProbadas = data?.config_public?.funciones as unknown as FuncionesProbadas | null | undefined;
+  const consultasGuardadas = String(data?.config_public?.consultas) === 'true';
+  const faltas = data?.last_test_status === 'success' ? faltasDeFunciones(funcionesProbadas, consultasGuardadas) : [];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1078,8 +1086,11 @@ function MoodleCard({ projectId }: { projectId: number }) {
   async function test() {
     setTesting(true);
     try {
-      const res = await client.post<{ ok: boolean; message: string }>(`/integrations/moodle/test?projectId=${projectId}`);
-      if (res.success) {
+      const res = await client.post<{ ok: boolean; message: string; aviso?: boolean }>(`/integrations/moodle/test?projectId=${projectId}`);
+      if (res.success && res.data?.aviso) {
+        // CRM#925: el token vale, pero al servicio le faltan funciones (la lista, en la tarjeta).
+        toast({ title: 'Conecta, pero faltan funciones', description: res.data?.message });
+      } else if (res.success) {
         toast({ title: '✓ Conexión OK', description: res.data?.message });
       } else {
         toast({ title: 'La prueba ha fallado', description: res.data?.message || (res as { error?: string }).error || 'El campus no ha contestado.', variant: 'destructive' });
@@ -1113,7 +1124,7 @@ function MoodleCard({ projectId }: { projectId: number }) {
           <h3 className="font-semibold text-base">Campus (Moodle)</h3>
           <p className="text-xs text-muted-foreground">Consultas de alumnos: comprobar que cada tutor es usuario del campus de este proyecto.</p>
         </div>
-        <StatusPill data={data} />
+        <StatusPill data={data} aviso={faltas.length > 0} />
       </div>
 
       <div className="p-5 space-y-4">
@@ -1135,7 +1146,20 @@ function MoodleCard({ projectId }: { projectId: number }) {
             <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
               <li><strong>Administración del sitio → Servidor → Servicios web</strong>: que estén habilitados los servicios web y el protocolo <strong>REST</strong>.</li>
               <li><strong>Servicios externos → Agregar</strong>: un servicio para el CRM, habilitado.</li>
-              <li>En ese servicio, <strong>Funciones → Agregar</strong>: <code className="px-1 rounded bg-card">core_webservice_get_site_info</code> y <code className="px-1 rounded bg-card">core_user_get_users_by_field</code>. Solo leen.</li>
+              <li>
+                En ese servicio, <strong>Funciones → Agregar</strong> estas {TOTAL_FUNCIONES_MOODLE}. Todas solo leen:
+                <ul className="mt-1 mb-1 space-y-1.5 pl-4" data-testid="moodle-funciones-tutorial">
+                  {GRUPOS_DE_FUNCIONES_MOODLE.map((g) => (
+                    <li key={g.clave}>
+                      <span className="font-semibold text-foreground">{g.titulo}</span> — {g.para}:
+                      <span className="flex flex-wrap gap-1 mt-0.5">
+                        {g.funciones.map((f) => <code key={f} className="px-1 rounded bg-card break-all">{f}</code>)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+              <li>En el mismo servicio, <strong>Editar → Mostrar más…</strong> y marca <strong>«Puede descargar archivos»</strong>: sin ella, las entregas de los alumnos no se abren en «Mi campus».</li>
               <li><strong>Administrar tokens → Crear token</strong> para ese servicio y cópialo.</li>
               <li>Pega abajo la dirección del campus y el token, guarda y pulsa <strong>«Probar conexión»</strong>.</li>
             </ol>
@@ -1180,14 +1204,17 @@ function MoodleCard({ projectId }: { projectId: number }) {
             Solo lo escrito desde que se marca (no el historial). El token tiene que poder leer los mensajes de todos
             (usuario administrador) y su servicio, tener <code>core_message_get_conversations</code> y <code>core_message_get_conversation_messages</code>,
             y para «Alumnos sin mensajes», <code>core_enrol_get_users_courses</code> y <code>core_enrol_get_enrolled_users</code>.
-            «Probar conexión» dice si falta alguna.
+            «Probar conexión» dice cuáles faltan, de estas y de las demás.
           </p>
           {consultas && data?.config_public?.consultas_desde && (
             <p className="text-xs text-muted-foreground">Leyendo desde el {fmt(String(data.config_public.consultas_desde))}.</p>
           )}
         </div>
 
-        <TestStatus data={data} />
+        <TestStatus data={data} aviso={faltas.length > 0} />
+        {funcionesProbadas?.grupos && (
+          <FuncionesDelServicio funciones={funcionesProbadas} consultas={consultasGuardadas} />
+        )}
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           <button onClick={save} disabled={saving}
@@ -1344,10 +1371,17 @@ function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar
 }
 
 // ─── UI helpers ───────────────────────────────────────────────────────────
-function StatusPill({ data }: { data: Integration | null }) {
+// `aviso` (CRM#925, solo Moodle): la prueba fue bien, pero al servicio del token le
+// faltan funciones. No es verde: «Mi campus» o las notas saldrían vacías.
+function StatusPill({ data, aviso = false }: { data: Integration | null; aviso?: boolean }) {
   if (!data?.has_secret) return (
     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
       Sin configurar
+    </span>
+  );
+  if (data.last_test_status === 'success' && aviso) return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-warning-soft text-warning-soft-foreground whitespace-nowrap">
+      <WarningCircle size={10} weight="fill" /> Faltan funciones
     </span>
   );
   if (data.last_test_status === 'success') return (
@@ -1367,16 +1401,71 @@ function StatusPill({ data }: { data: Integration | null }) {
   );
 }
 
-function TestStatus({ data }: { data: Integration | null }) {
+function TestStatus({ data, aviso = false }: { data: Integration | null; aviso?: boolean }) {
   if (!data?.last_test_at) return null;
   const ok = data.last_test_status === 'success';
+  const color = ok && aviso ? 'bg-warning-soft text-warning-soft-foreground'
+    : ok ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400';
   return (
-    <div className={`text-xs p-2 rounded-md ${ok ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400'}`}>
+    <div className={`text-xs p-2 rounded-md ${color}`}>
       <div className="flex items-center gap-1.5">
-        {ok ? <CheckCircle size={12} weight="fill" /> : <WarningCircle size={12} weight="fill" />}
+        {ok && !aviso ? <CheckCircle size={12} weight="fill" /> : <WarningCircle size={12} weight="fill" />}
         <strong>Último test:</strong> <span>{fmt(data.last_test_at)}</span>
       </div>
       <p className="mt-0.5 ml-5 break-words">{data.last_test_message || '(sin mensaje)'}</p>
+    </div>
+  );
+}
+
+/**
+ * Las 12 funciones del servicio del token, por grupo, como las encontró la última
+ * prueba (CRM#925). Lo que falta, con su nombre: es lo que hay que añadir en el Moodle.
+ */
+function FuncionesDelServicio({ funciones, consultas }: { funciones: FuncionesProbadas; consultas: boolean }) {
+  const grupos = funciones.grupos || [];
+  return (
+    <div className="rounded-md border border-border p-3 space-y-2 text-xs" data-testid="moodle-funciones">
+      <p className="font-semibold">Funciones del servicio del token</p>
+      <ul className="space-y-1.5">
+        {grupos.map((g) => {
+          const noCuenta = g.clave === 'consultas' && !consultas;
+          const completo = g.faltan.length === 0;
+          return (
+            <li key={g.clave} className="flex items-start gap-1.5" data-grupo={g.clave}>
+              {completo
+                ? <CheckCircle size={14} weight="fill" className="text-success flex-shrink-0 mt-px" />
+                : noCuenta
+                  ? <MinusCircle size={14} weight="fill" className="text-muted-foreground flex-shrink-0 mt-px" />
+                  : <WarningCircle size={14} weight="fill" className="text-warning flex-shrink-0 mt-px" />}
+              <div className="min-w-0">
+                <span className="font-semibold">{g.titulo}</span>{' '}
+                <span className="text-muted-foreground">
+                  {completo ? `${g.total} de ${g.total}` : `faltan ${g.faltan.length} de ${g.total}`}
+                  {!completo && noCuenta && ' (no hacen falta con «Leer las consultas» apagado)'}
+                </span>
+                {!completo && (
+                  <span className="flex flex-wrap gap-1 mt-0.5">
+                    {g.faltan.map((f) => <code key={f} className="px-1 rounded bg-muted break-all">{f}</code>)}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+        {funciones.descargas !== null && funciones.descargas !== undefined && (
+          <li className="flex items-start gap-1.5" data-grupo="descargas">
+            {funciones.descargas
+              ? <CheckCircle size={14} weight="fill" className="text-success flex-shrink-0 mt-px" />
+              : <WarningCircle size={14} weight="fill" className="text-warning flex-shrink-0 mt-px" />}
+            <span>
+              <span className="font-semibold">Puede descargar archivos</span>{' '}
+              <span className="text-muted-foreground">
+                {funciones.descargas ? 'marcado' : 'sin marcar: las entregas no se abren en «Mi campus»'}
+              </span>
+            </span>
+          </li>
+        )}
+      </ul>
     </div>
   );
 }

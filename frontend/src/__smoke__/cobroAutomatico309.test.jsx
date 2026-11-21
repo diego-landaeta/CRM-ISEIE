@@ -21,7 +21,7 @@ import { render, screen, fireEvent, within } from '@testing-library/react';
 const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
 const put = vi.hoisted(() => vi.fn());
-vi.mock('@/shared/api/client', () => ({ default: { get, post, put, delete: vi.fn() } }));
+vi.mock('@/shared/api/client', () => ({ default: { get, post, put, delete: vi.fn() }, APP_BASE_URL: '', API_BASE_URL: '/api' }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
