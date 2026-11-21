@@ -82,7 +82,40 @@ export default function ControlDeSubidas({ projectId, issuerId, onAbrirCurso }: 
           />
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <>
+        {/* En el móvil, una tarjeta por curso: con cinco columnas, «Retraso» —lo
+            que más importa— quedaba cortada dentro de la tabla (QA de /testeo del 18/11). */}
+        <ul className="space-y-2 sm:hidden" aria-label="Subidas pendientes">
+          {cursos.map(([id, g]) => (
+            <li key={id}>
+              <button type="button" onClick={() => onAbrirCurso(id)}
+                className="block w-full overflow-hidden rounded-lg border border-border bg-card text-left hover:bg-muted/40">
+                <span className="block px-3 py-2">
+                  <span className="block font-semibold">{g.curso}</span>
+                  <span className="block text-[11px] text-muted-foreground">{g.campus}</span>
+                </span>
+                {g.filas.map((f) => (
+                  <span key={f.id} data-subida={f.punto}
+                    className={`flex items-start gap-3 border-t border-border px-3 py-2 text-sm ${f.atrasado ? 'bg-destructive/5' : ''}`}>
+                    <span className="block min-w-0 flex-1">
+                      <span className="block">{f.nombre}</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Desde {fecha(f.desde)} ({f.dias_esperando} d) · límite{' '}
+                        <span className={f.atrasado ? 'font-semibold text-destructive' : ''}>{fecha(f.fecha_limite)}</span>
+                      </span>
+                    </span>
+                    <span className={`shrink-0 text-right text-xs tabular-nums ${f.atrasado ? 'font-bold text-destructive' : 'text-muted-foreground'}`}>
+                      {f.atrasado
+                        ? <><Warning size={12} weight="fill" className="mr-1 inline" />{f.dias_de_retraso} d tarde</>
+                        : 'En plazo'}
+                    </span>
+                  </span>
+                ))}
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden overflow-x-auto rounded-lg border border-border bg-card sm:block">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
               <tr>
@@ -115,6 +148,7 @@ export default function ControlDeSubidas({ projectId, issuerId, onAbrirCurso }: 
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

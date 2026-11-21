@@ -93,3 +93,37 @@ describe('la vista «Control de subidas» de la página', () => {
     expect(await screen.findByText('No hay subidas atrasadas')).toBeTruthy();
   });
 });
+
+// QA de /testeo del 18/11.
+describe('detalles del QA de /testeo del 18/11', () => {
+  it('la fecha límite no deja una anterior al día en que se abrió la lista', async () => {
+    const { toast } = await import('@/shared/hooks/useToast');
+    const conApertura = TRES.map((s) => ({ ...s, abierta_el: '2026-11-13' }));
+    render(<SubidasDelCurso cursoId={9} subidas={conApertura} puedeMarcar cancelado={false} onCambio={() => {}} />);
+    const fecha = screen.getByLabelText('Fecha límite: Datos de los directores enviados para la web');
+    expect(fecha.getAttribute('min')).toBe('2026-11-13');
+    fireEvent.change(fecha, { target: { value: '2026-11-05' } });
+    fireEvent.blur(fecha);
+    expect(api.marcarSubida).not.toHaveBeenCalled();
+    expect(toast).toHaveBeenCalledWith(expect.objectContaining({ variant: 'destructive', description: expect.stringMatching(/anterior al día en que se abrió/) }));
+    expect(fecha.value).toBe('2026-11-20');
+    // El mismo día de la apertura, sí.
+    fireEvent.change(fecha, { target: { value: '2026-11-13' } });
+    fireEvent.blur(fecha);
+    await waitFor(() => expect(api.marcarSubida).toHaveBeenCalledWith(9, 'datos_directores_web', { fecha_limite: '2026-11-13' }));
+  });
+
+  it('en el móvil cada curso es una tarjeta con el retraso a la vista', async () => {
+    auth.valor = { user: { id: 2, role: 'gestor' }, permissions: { 'tutores.gestionar': true } };
+    api.controlSubidas.mockResolvedValueOnce({
+      puntos: [], plazo_dias: 7, avisos_activos: false,
+      filas: [{ ...TRES[1], curso: 'Máster de prueba', campus: 'Fono Aprende', project_id: 3, estado_curso: 'entregado' }],
+    });
+    render(<MemoryRouter><CursosPendientesPage /></MemoryRouter>);
+    fireEvent.click(await screen.findByText('Control de subidas'));
+    const tarjetas = await screen.findByRole('list', { name: 'Subidas pendientes' });
+    expect(tarjetas.className).toContain('sm:hidden');
+    expect(tarjetas.textContent).toContain('Máster de prueba');
+    expect(tarjetas.textContent).toContain('2 d tarde');
+  });
+});

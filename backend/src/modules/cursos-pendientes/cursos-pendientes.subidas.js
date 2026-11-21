@@ -84,6 +84,7 @@ const COLUMNAS = (zonaSql) => {
   return `
   s.id, s.curso_id, s.punto, s.fecha_limite::text AS fecha_limite, s.hecho, s.hecho_at, uh.nombre AS hecho_por,
   s.enlace, s.nota, s.created_at AS desde,
+  (s.created_at AT TIME ZONE ${zonaSql})::date::text AS abierta_el,
   (NOT s.hecho AND s.fecha_limite < ${hoy}) AS atrasado,
   (${hoy} - (s.created_at AT TIME ZONE ${zonaSql})::date) AS dias_esperando,
   CASE WHEN s.hecho THEN NULL ELSE (${hoy} - s.fecha_limite) END AS dias_de_retraso`;
@@ -130,13 +131,27 @@ export async function listarPendientes({ projectIds = null, soloAtrasadas = fals
 const fechaOk = (v) => /^\d{4}-\d{2}-\d{2}$/.test(String(v)) && !Number.isNaN(Date.parse(v));
 
 /**
+ * Un día AAAA-MM-DD como lo enseña el CRM en «Cursos pendientes»: «28 nov 2026».
+ * Para los textos que salen del servidor (avisos, errores); el mismo día en
+ * cualquier huso. Lo que no es un día, tal cual.
+ */
+export function diaLegible(dia) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dia || ''));
+  if (!m) return dia ? String(dia) : '';
+  return new Date(Date.UTC(+m[1], +m[2] - 1, +m[3]))
+    .toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
+}
+
+/**
  * Marca un punto: `hecho`, `enlace`, `nota` y/o `fecha_limite`. El curso ya
  * viene comprobado (que existe y que quien marca lo ve). Lo deja en el historial.
  */
 export async function marcarPunto(user, curso, punto, cambios) {
   if (!CLAVES.includes(punto)) throw new AppError('Ese punto no existe', 400, 'VALIDATION_ERROR');
+  // `abierta_el`: el día (en la zona de la app) en que se abrió la lista.
   const { rows: [fila] } = await query(
-    `SELECT * FROM cursos_pendientes_subidas WHERE curso_id = $1 AND punto = $2`, [curso.id, punto]);
+    `SELECT *, (created_at AT TIME ZONE $3::text)::date::text AS abierta_el
+       FROM cursos_pendientes_subidas WHERE curso_id = $1 AND punto = $2`, [curso.id, punto, zona()]);
   if (!fila) throw new AppError('Este curso no tiene la lista de subidas abierta', 409, 'SUBIDAS_SIN_ABRIR');
   if (curso.estado === 'cancelado') throw new AppError('Ese curso está cancelado', 409, 'CONFLICT');
 
@@ -163,6 +178,12 @@ export async function marcarPunto(user, curso, punto, cambios) {
   // DATE llega como texto AAAA-MM-DD (shared/config/db.js).
   if ('fecha_limite' in cambios && String(cambios.fecha_limite) !== String(fila.fecha_limite).slice(0, 10)) {
     if (!fechaOk(cambios.fecha_limite)) throw new AppError('La fecha tiene que ser AAAA-MM-DD', 400, 'VALIDATION_ERROR');
+    // Antes de abrir la lista no puede vencer: nacería ya atrasada (QA de /testeo
+    // del 18/11: «8 d tarde» recién abierta). El mismo día sí vale.
+    if (String(cambios.fecha_limite) < fila.abierta_el) {
+      throw new AppError(`La fecha límite no puede ser anterior al día en que se abrió la lista (${diaLegible(fila.abierta_el)})`,
+        400, 'VALIDATION_ERROR');
+    }
     poner('fecha_limite = ?', cambios.fecha_limite);
     detalle.fecha_limite = cambios.fecha_limite;
   }
