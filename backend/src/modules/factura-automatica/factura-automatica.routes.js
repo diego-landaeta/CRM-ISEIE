@@ -11,6 +11,7 @@ const ventaDelParametro = (req, res, next) => ventaPorId(req, res, next, req.par
 // Con sesión: ver en qué está la petición de una venta y mandar un enlace nuevo.
 const router = Router();
 router.use(verifyToken);
+router.get('/interruptor', puede('facturas.view'), ctrl.interruptor);
 router.get('/venta/:conversionId', puede('facturas.view'), ventaDelParametro, ctrl.estado);
 router.post('/venta/:conversionId/reenviar', puede('facturas.cola'), ventaDelParametro, ctrl.reenviar);
 

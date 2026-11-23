@@ -146,10 +146,15 @@ export function crearLink(cuerpo: {
 
 /** Si «Cuotas» se puede en el campus y, si no, por qué (20/11). */
 /*
+  `codigo` (CRM#992): por qué no. `sin_clave` y `clave_sin_permiso` se arreglan en
+  Integraciones › Links de pago (aviso «Conectar Stripe para cobros automáticos»);
+  `apagado_entorno`, en ningún sitio de la pantalla. El resto, solo el texto.
+*/
+/*
   23/11 (Diego: «crear cuotas sí o sí»): `disponible` dice si se pueden crear cuotas
   (solo no si el campus no las admite en euros) y `automatico`, si Stripe las cobra
-  solas. Sin cobro automático, cada cuota tiene su propio link; `motivo` dice por
-  qué no es automático.
+  solas. Sin cobro automático, cada cuota tiene su propio link; `codigo` y `motivo`
+  dicen por qué no es automático.
 */
 export interface CuotasDisponibles {
   disponible: boolean; automatico?: boolean; codigo?: string | null; motivo: string | null; cuotas_max: number | null;
@@ -159,8 +164,38 @@ export function cuotasDisponibles(projectId: number) {
   return client.get<CuotasDisponibles>('/links-pago/cuotas-disponibles', { params: { projectId } });
 }
 
+export interface CampusPorConectar { project_id: number; nombre: string; codigo: string; motivo: string }
+export interface ConectarStripe { activo: boolean; codigo: string | null; motivo: string | null; campus: CampusPorConectar[] }
+
+/** Los campus del ámbito sin clave de Stripe o sin su permiso de suscripciones (CRM#992). */
+export function conectarStripe(ambito?: { projectId?: number; issuerId?: number }) {
+  return client.get<ConectarStripe>('/links-pago/conectar-stripe', { params: { ...(ambito || {}) } });
+}
+
 export function anularLink(id: number, motivo: string) {
   return client.post<LinkDePago>(`/links-pago/${id}/anular`, { motivo });
+}
+
+/** Una fila del embudo (CRM#987): por gestora (`user_id`), por campus (`project_id`) o el total. */
+export interface FilaEmbudo {
+  user_id?: number | null;
+  project_id?: number;
+  nombre?: string;
+  creados: number;
+  abiertos: number;
+  pagados: number;
+  pct_abiertos: number | null;
+  pct_pagados: number | null;
+  cobrado: number;
+  cuotas_cobradas: number;
+  cuotas_fallidas: number;
+  cuotas_pendientes: number;
+}
+export interface Embudo { desde: string; hasta: string; total: FilaEmbudo; por_gestora: FilaEmbudo[]; por_campus: FilaEmbudo[] }
+
+/** El embudo de los links (CRM#987), con el ámbito de quien mira. */
+export function verEmbudo(params: { desde: string; hasta: string; ambito?: { projectId?: number; issuerId?: number } }) {
+  return client.get<Embudo>('/links-pago/embudo', { params: { desde: params.desde, hasta: params.hasta, ...(params.ambito || {}) } });
 }
 
 /** Renovar un caducado (gemela de CRM#984): un link nuevo igual, con la caducidad de serie del campus. */

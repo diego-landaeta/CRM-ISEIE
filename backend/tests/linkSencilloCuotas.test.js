@@ -131,6 +131,8 @@ beforeAll(async () => {
     await ponerClave(c, 'stripe', CLAVE_LECTURA);
   }
   await q('UPDATE projects SET links_pago_cobro_auto = TRUE, links_pago_cobro_auto_reintento_dias = 3 WHERE id = $1', [A]);
+  // Desde la 324 (#667) los campus nacen con el cobro automático encendido: B lo apaga a mano.
+  await q('UPDATE projects SET links_pago_cobro_auto = FALSE WHERE id = $1', [B]);
 }, 60_000);
 
 afterAll(async () => {
@@ -193,7 +195,7 @@ describe('«cuotas»: siempre que el campus las admita; lo que cambia es si se c
   it('campus sin cobro automático: lo dice al elegir campus y, al crear, el link NO guarda la tarjeta', async () => {
     const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: B }).set(como(p.gestora));
     expect(ver.status).toBe(200);
-    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false });
+    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false, codigo: 'campus_no_permitido' });
     expect(ver.body.data.motivo).toMatch(/no tiene permitido el cobro automático/);
     const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 2, inicial: 300 });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
@@ -207,8 +209,7 @@ describe('«cuotas»: siempre que el campus las admita; lo que cambia es si se c
     await q('UPDATE projects SET links_pago_cuotas_admitidas = FALSE WHERE id = $1', [B]);
     try {
       const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: B }).set(como(p.gestora));
-      expect(ver.body.data).toMatchObject({ disponible: false });
-      expect(ver.body.data.motivo).toMatch(/no admite pagos en cuotas/);
+      expect(ver.body.data).toMatchObject({ disponible: false, codigo: 'cuotas_no_admitidas' });
       const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 3 });
       // Lo para la regla del campus antes de mirar el cobro automático.
       expect([r.status, r.body.code]).toEqual([400, 'CUOTAS_NO_ADMITIDAS']);
@@ -221,7 +222,7 @@ describe('«cuotas»: siempre que el campus las admita; lo que cambia es si se c
   it('clave sin permisos de schedules: cuotas sí, no automáticas, con los permisos que faltan', async () => {
     respuestas = [['GET', '/v1/subscription_schedules', 403, { error: { message: 'The provided key does not have the required permissions' } }]];
     const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: A }).set(como(p.gestora));
-    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false });
+    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false, codigo: 'clave_sin_permiso' });
     expect(ver.body.data.motivo).toMatch(/Subscription Schedules/);
   });
 

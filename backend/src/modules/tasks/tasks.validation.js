@@ -141,8 +141,9 @@ export const createTeamSchema = z.object({
   name: nombreEquipo,
   color: colorTablero.optional(),
   sort_order: z.number().int().min(0).max(2147483647).optional(),
-  // De colaboradores (desarrollo, SEO…) o de tutores (04/11/2026). Solo al crearlo.
-  tipo: z.enum(['colaboradores', 'tutores']).optional(),
+  // De colaboradores (desarrollo, SEO…), de tutores (04/11/2026) o de tutoras
+  // redactoras (23/11/2026). Solo al crearlo.
+  tipo: z.enum(['colaboradores', 'tutores', 'redactoras']).optional(),
   // `de_programacion` ya no se pide (11/11/2026): una tarea con supervisor la
   // cierra él, sea del equipo que sea.
 });
@@ -166,10 +167,16 @@ export const updateTeamRoleSchema = z.object({
 export const setTeamMemberSchema = z.object({ team_role_id: id });
 export const listTeamsQuerySchema = z.object({ gestion: booleanoDeQuery.optional() });
 
+// Los tipos de equipo (tasks.equipos.model.js, TIPOS_DE_EQUIPO): desarrollo
+// ('colaboradores'), tutores y tutoras redactoras (23/11/2026, CRM-ISEIE#687).
+const tipoDeEquipo = z.enum(['colaboradores', 'tutores', 'redactoras']);
+
 export const listTasksQuerySchema = z.object({
   ...ambitoQuery,
   // El equipo elegido arriba (26/10/2026): uno, o 0 = «Sin equipo».
   team_id: z.coerce.number().int().min(0).optional(),
+  // «Los dos equipos» (23/11/2026): solo las tareas de los equipos de ese tipo.
+  team_tipo: tipoDeEquipo.optional(),
   // «Mi tablero» (26/10/2026): lo que lleva, supervisa o creó quien mira.
   // Se sigue aceptando; desde el 27/10 manda `ver`.
   mias: booleanoDeQuery.optional(),
@@ -211,6 +218,7 @@ export const historialQuerySchema = z.object({
   ...ambitoQuery,
   ver: z.enum(VISTAS_TABLERO).optional(),
   team_id: z.coerce.number().int().min(0).optional(),
+  team_tipo: tipoDeEquipo.optional(),
   assigned_to: z.coerce.number().int().positive().optional(),
   desde: dia.optional(),
   hasta: dia.optional(),

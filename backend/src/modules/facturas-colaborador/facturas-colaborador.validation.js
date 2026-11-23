@@ -1,9 +1,14 @@
 import { z } from 'zod';
+import { EQUIPOS } from './equipo.js';
 
 // Facturas de colaboradores (#202). Lo que llega de la pantalla de
 // administración, comprobado aquí y no como 500 en la base.
 
-export const AREAS = ['soporte', 'desarrollo', 'wordpress', 'seo', 'contenido', 'otra'];
+// «redaccion» (migración 325, CRM-ISEIE#687): la ficha de una tutora redactora.
+export const AREAS = ['soporte', 'desarrollo', 'wordpress', 'seo', 'contenido', 'redaccion', 'otra'];
+
+// «Los dos equipos» (CRM-ISEIE#687): desarrollo o tutoras redactoras (equipo.js).
+const equipo = z.enum(EQUIPOS, { message: 'Equipo inválido: desarrollo o redactoras' });
 
 // Quién factura (CRM#710): un colaborador externo o una vendedora de la lista
 // (gestoras y comerciales). Las listas y los totales se filtran por esto.
@@ -96,6 +101,7 @@ export const listarColaboradoresSchema = z.object({
   issuerId: z.coerce.number().int().positive().optional(),
   estado: z.enum(['activos', 'de_baja', 'todos']).default('activos'),
   tipo: tipo.optional(),
+  equipo: equipo.optional(),
   q: z.string().trim().max(100, 'La búsqueda es demasiado larga').optional(),
 });
 
@@ -146,6 +152,7 @@ export const delMesSchema = z.object({
   area: z.enum(AREAS).optional(),
   // «Vendedoras / Colaboradores» (CRM#710).
   tipo: tipo.optional(),
+  equipo: equipo.optional(),
 });
 
 // Las pestañas de la segunda parte: «filtrable por colaborador, empresa, mes y estado».
@@ -160,6 +167,7 @@ export const vistaSchema = z.object({
   // El buscador (Ctrl K, #591): número de factura o de recepción, colaborador o su correo.
   q: z.string().trim().min(2, 'Escribe al menos dos letras').max(100).optional(),
   tipo: tipo.optional(),
+  equipo: equipo.optional(),
 });
 
 export const costePorCampusSchema = z.object({ periodo: mes, issuerId: z.coerce.number().int().positive().max(2147483647).optional() });

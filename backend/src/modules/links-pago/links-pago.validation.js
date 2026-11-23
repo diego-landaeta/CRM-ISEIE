@@ -26,6 +26,22 @@ export const listarSchema = z.object({
 
 export const idSchema = z.object({ id });
 
+/*
+  El embudo (CRM#987): el periodo, de un día a otro (AAAA-MM-DD, los dos
+  incluidos). Sin fechas, el mes en curso. El campus, como el listado.
+*/
+const dia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD')
+  // Que exista de verdad: el 30 de febrero no (Date lo pasaría al 2 de marzo).
+  .refine((s) => { const d = new Date(`${s}T00:00:00Z`); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; }, 'Esa fecha no existe');
+export const embudoSchema = z.object({
+  projectId: id.optional(),
+  issuerId: id.optional(),
+  projectIds: z.string().regex(/^\d+(,\d+)*$/, 'projectIds: números separados por comas').optional(),
+  desde: dia.optional(),
+  hasta: dia.optional(),
+}).refine((b) => !b.desde || !b.hasta || b.desde <= b.hasta, 'La fecha de inicio no puede ir después de la del final')
+  .refine((b) => !b.desde || !b.hasta || (Date.parse(b.hasta) - Date.parse(b.desde)) / 86400000 <= 731, 'Como mucho dos años de una vez');
+
 export const configQuerySchema = z.object({ projectId: id });
 
 /** Las ventas de un prospecto (o del de una venta), para el asistente de crear link. */

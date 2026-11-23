@@ -491,6 +491,15 @@ export async function archivoMio(user, id) {
 
 const NO_ESTA = () => new AppError('Factura no encontrada', 404, 'NOT_FOUND');
 
+/**
+ * ¿Es la factura de quien hace la petición? (CRM#710) Una vendedora puede tener
+ * rol admin, que trae «validar» y «pagar» de serie: su propia factura la valida
+ * y la paga otra persona de la empresa, nunca ella. Vale para todos los roles.
+ */
+const esSuya = (user, f) => f.colaborador_user_id != null && Number(f.colaborador_user_id) === Number(user.userId);
+const FACTURA_PROPIA = (accion) => new AppError(
+  `No puedes ${accion} tu propia factura: lo tiene que hacer otra persona de la empresa`, 403, 'FACTURA_PROPIA');
+
 export async function delMes(user, filtros) {
   const ambito = await ambitoDe(user);
   if (filtros.issuerId && ambito && !ambito.includes(filtros.issuerId)) {
@@ -573,7 +582,8 @@ function horaDeMadrid(fecha) {
 }
 
 const AREA_ES = {
-  soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido', otra: 'Otra',
+  soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido',
+  redaccion: 'Redacción de cursos', otra: 'Otra',
 };
 
 /**
@@ -688,6 +698,8 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
     facturas.push(f);
   }
   const nombres = (l) => l.map((f) => `${f.colaborador_nombre} (${nombreDelMes(f.periodo)})`).join(', ');
+  // La suya no (CRM#710): una vendedora con rol admin tiene «pagar» de serie.
+  if (facturas.some((f) => esSuya(user, f))) throw FACTURA_PROPIA('pagar');
   const sinRecibir = facturas.filter((f) => !f.subida_at || f.anulada_at);
   if (sinRecibir.length) {
     throw new AppError(`Solo se pagan facturas recibidas, y ${sinRecibir.length === 1 ? 'esta no lo está' : 'estas no lo están'}: ${nombres(sinRecibir)}`, 409, 'NO_RECIBIDA');
@@ -752,6 +764,8 @@ export async function pagar(user, { ids, fecha, forma, referencia, archivo }, ip
 export async function validar(user, id, ip) {
   const f = await model.porId(id, await ambitoDe(user));
   if (!f) throw NO_ESTA();
+  // «La empresa valida»: no la propia interesada (una vendedora con rol admin tiene «validar» de serie).
+  if (esSuya(user, f)) throw FACTURA_PROPIA('validar');
   const comprobar = (x) => {
     if (x.anulada_at) throw new AppError('Esta factura está anulada', 409, 'CONFLICT');
     if (!x.subida_at) throw new AppError('Solo se valida una factura recibida', 409, 'NO_RECIBIDA');

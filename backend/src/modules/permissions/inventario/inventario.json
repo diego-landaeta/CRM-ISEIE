@@ -4932,6 +4932,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/interruptor",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/interruptor",
+  "relativa": "GET /interruptor",
+  "controlador": "interruptor",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/factura-automatica/venta/:conversionId",
   "tipo": "ruta",
   "modulo": "factura-automatica",
@@ -5325,6 +5347,28 @@
   "metodo": "POST",
   "ruta": "/api/facturas-colaborador/colaboradores",
   "relativa": "POST /colaboradores",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas_colaborador.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturas-colaborador/colaboradores/redactoras-sin-ficha",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "GET",
+  "ruta": "/api/facturas-colaborador/colaboradores/redactoras-sin-ficha",
+  "relativa": "GET /colaboradores/redactoras-sin-ficha",
   "controlador": null,
   "publica": false,
   "guardias": [
@@ -8870,6 +8914,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/conectar-stripe",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/conectar-stripe",
+  "relativa": "GET /conectar-stripe",
+  "controlador": "conectarStripe",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/ventas-del-prospecto",
   "tipo": "ruta",
   "modulo": "links-pago",
@@ -8975,6 +9042,29 @@
     "tipo": "puede",
     "claves": [
      "links_pago.cobro_automatico"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/embudo",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/embudo",
+  "relativa": "GET /embudo",
+  "controlador": "embudo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
     ]
    }
   ],

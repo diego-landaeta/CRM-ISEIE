@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-893 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+895 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -381,6 +381,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
+| interruptor | `GET /api/factura-automatica/interruptor` | (no existía) | (ruta nueva) | `facturas.view` |
 | estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
 | formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
@@ -415,6 +416,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | (anónima) | `GET /api/facturas-colaborador/empresas` | sesión · permiso facturas_colaborador.ver_todas o facturas_colaborador.gestionar | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.ver_todas` o `facturas_colaborador.gestionar` |
 | (anónima) | `GET /api/facturas-colaborador/colaboradores` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `POST /api/facturas-colaborador/colaboradores` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
+| (anónima) | `GET /api/facturas-colaborador/colaboradores/redactoras-sin-ficha` | (no existía) | (ruta nueva) | `facturas_colaborador.gestionar` |
 | (anónima) | `GET /api/facturas-colaborador/colaboradores/:id` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `PATCH /api/facturas-colaborador/colaboradores/:id` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
 | (anónima) | `POST /api/facturas-colaborador/colaboradores/:id/baja` | sesión · checkPermission(facturas_colaborador.gestionar) sin roles de más | superadmin, admin y quien tenga el permiso por rol a medida o excepción | `facturas_colaborador.gestionar` |
@@ -634,11 +636,13 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| conectarStripe | `GET /api/links-pago/conectar-stripe` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verPlan | `GET /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | generarPlan | `POST /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verCobroAutomatico | `GET /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | cambiarCobroAutomatico | `PUT /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.cobro_automatico` |
+| embudo | `GET /api/links-pago/embudo` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | crear | `POST /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` |

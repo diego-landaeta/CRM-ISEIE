@@ -15,7 +15,8 @@ import {
   etiquetaDePeriodo, fechaYHora, hoyEnOficina, moverReferencia, rangoDePeriodo, type TipoPeriodo,
 } from '../lib/periodo';
 import { alternarPersona, ordenarFichas } from '../lib/porIntegrante';
-import type { Assignee, FichaDeIntegrante, HistorialTarea, Team } from '../types';
+import type { Assignee, FichaDeIntegrante, HistorialTarea, Team, TipoEquipo } from '../types';
+import { opcionesDeTipo } from '../lib/tiposDeEquipo';
 
 /*
  * «HISTORIAL DE TAREAS» (CRM-ISEIE#419, Diego y Carlos, 10/11/2026). Sustituye a «Por
@@ -58,6 +59,8 @@ export default function TasksHistoryPage() {
   const [ver, setVer] = useState<VerTablero>(() => vistaInicialDe(user).ver);
   const [personaId, setPersonaId] = useState<number | ''>('');
   const [equipo, setEquipo] = useState<string>(''); // '' = cualquiera, 'sin' = sin equipo, o el id
+  // «Los dos equipos» (CRM-ISEIE#687): desarrollo o tutoras redactoras, de todas las empresas.
+  const [tipoEquipo, setTipoEquipo] = useState<'' | TipoEquipo>('');
   const [busqueda, setBusqueda] = useState('');
   const [search, setSearch] = useState('');
   const [tipoPeriodo, setTipoPeriodo] = useState<TipoPeriodo>('mes');
@@ -81,7 +84,7 @@ export default function TasksHistoryPage() {
   }, [busqueda]);
 
   // Cambiar un filtro vuelve a la primera página.
-  useEffect(() => { setPagina(1); }, [ver, personaId, equipo, search, tipoPeriodo, referencia]);
+  useEffect(() => { setPagina(1); }, [ver, personaId, equipo, tipoEquipo, search, tipoPeriodo, referencia]);
 
   useEffect(() => {
     if (canViewAll || canAssign) tasksApi.getAssignees(ambito).then(setAssignees).catch(() => setAssignees([]));
@@ -97,6 +100,7 @@ export default function TasksHistoryPage() {
         ver,
         assigned_to: personaId || undefined,
         team_id: equipo === '' ? undefined : equipo === 'sin' ? 0 : Number(equipo),
+        team_tipo: tipoEquipo || undefined,
         search: search || undefined,
         desde: rango?.desde,
         hasta: rango?.hasta,
@@ -121,7 +125,7 @@ export default function TasksHistoryPage() {
     } finally {
       setCargando(false);
     }
-  }, [ver, ambito, personaId, equipo, search, rango, pagina]);
+  }, [ver, ambito, personaId, equipo, tipoEquipo, search, rango, pagina]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -136,6 +140,7 @@ export default function TasksHistoryPage() {
       .map((p) => ({ value: p.id as number | '', label: p.id === yo ? `${p.nombre} (yo)` : p.nombre }));
   }, [assignees, personasVistas, yo, user?.nombre]);
   const equiposActivos = equipos.filter((e) => e.is_active);
+  const opcionesTipo = canViewAll ? opcionesDeTipo(equipos) : [];
   const fichas = useMemo(() => ordenarFichas(porPersona, yo, user?.nombre || 'Yo'), [porPersona, yo, user?.nombre]);
 
   if (!canViewOwn && !canViewAll) {
@@ -183,6 +188,10 @@ export default function TasksHistoryPage() {
             options={[{ value: '', label: 'Cualquier persona' }, ...opcionesPersona]}
             ariaLabel="Persona" size="sm" className="w-44"
           />
+          {opcionesTipo.length > 0 && (
+            <Select<'' | TipoEquipo> value={tipoEquipo} onChange={setTipoEquipo} options={opcionesTipo}
+              ariaLabel="Equipo de trabajo" size="sm" className="w-52" />
+          )}
           {equiposActivos.length > 0 && (
             <Select<string>
               value={equipo}

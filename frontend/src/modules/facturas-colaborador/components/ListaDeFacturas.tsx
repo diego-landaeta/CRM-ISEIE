@@ -9,7 +9,8 @@ import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
   ESTADO, FORMA_PAGO_ES, diaDelPago, empresaCorta, enSusMonedas, euros, facturasColaboradorApi, fechaHora, primeraMayuscula, urlDelArchivo,
-  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type SumaPorMoneda, type Tipo, type VistaDeFacturas,
+  type CosteDeCampus, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type QuienFactura, type SumaPorMoneda, type VistaDeFacturas,
+  filtroDeQuien,
 } from '../api/facturasColaborador.api';
 import { DeshacerPagoDialog, PagarDialog, RegistroDialog, errorDe, esMes } from './DialogosFacturas';
 import EtiquetaDelPdf, { EtiquetaVendedora } from './EtiquetaDelPdf';
@@ -44,10 +45,10 @@ const nombreDelMes = (periodo: string) => primeraMayuscula(
   new Date(Number(periodo.slice(0, 4)), Number(periodo.slice(5, 7)) - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' }),
 ).replace(' de ', ' ');
 
-export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }: {
+export default function ListaDeFacturas({ vista, empresas, empresa, quien: quienFactura = '' }: {
   vista: VistaDeFacturas; empresas: EmpresaDelGrupo[];
-  /** «Vendedoras / Colaboradores» (CRM#710): vacío, todos. */
-  tipo?: '' | Tipo;
+  /** «Vendedoras / Colaboradores» (CRM#710) y el equipo (CRM-ISEIE#687): vacío, todos. */
+  quien?: QuienFactura;
   /** La empresa de la cabecera (Diego, 10/10: «son por EMPRESA»), o null con «Todos los proyectos». */
   empresa: number | null;
 }) {
@@ -71,6 +72,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }:
   // «Validar» (CRM#710): primero se valida, después se paga.
   const puedeValidar = can('facturas_colaborador.validar');
   const [validando, setValidando] = useState<number | null>(null);
+  const { tipo, equipo } = filtroDeQuien(quienFactura);
 
   // El filtro por colaborador: la lista la da «Colaboradores» (si no se puede pedir, no sale).
   // Con una empresa en la cabecera, solo quienes le facturan; al cambiarla, se quita el elegido.
@@ -79,10 +81,10 @@ export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }:
   useEffect(() => {
     if (empresaAnterior.current !== empresa) setColaboradorId('');
     empresaAnterior.current = empresa;
-    facturasColaboradorApi.colaboradores({ estado: 'todos', issuerId: empresa ?? undefined, tipo: tipo || undefined })
+    facturasColaboradorApi.colaboradores({ estado: 'todos', issuerId: empresa ?? undefined, tipo, equipo })
       .then((r) => setColaboradores(r.data.map((c) => ({ id: c.id, nombre: c.nombre }))))
       .catch(() => setColaboradores([]));
-  }, [empresa, tipo]);
+  }, [empresa, tipo, equipo]);
 
   // Solo cuenta la última petición: si se cambia de filtro rápido, la respuesta del
   // anterior no puede pisar la tabla (y «Marcar pagadas» pagaría las filas de otro filtro).
@@ -91,7 +93,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }:
     const esta = ++peticion.current;
     setCargando(true);
     try {
-      const r = await facturasColaboradorApi.vista({ vista, issuerId, colaboradorId, periodo, estado, tipo });
+      const r = await facturasColaboradorApi.vista({ vista, issuerId, colaboradorId, periodo, estado, tipo, equipo });
       if (esta !== peticion.current) return;
       setDatos(r.data);
       setMarcadas(new Set());
@@ -99,7 +101,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }:
       if (esta !== peticion.current) return;
       toast({ title: 'No se pudo cargar la lista', description: errorDe(err), variant: 'destructive' });
     } finally { if (esta === peticion.current) setCargando(false); }
-  }, [vista, issuerId, colaboradorId, periodo, estado, tipo]);
+  }, [vista, issuerId, colaboradorId, periodo, estado, tipo, equipo]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -221,7 +223,7 @@ export default function ListaDeFacturas({ vista, empresas, empresa, tipo = '' }:
                         <input type="checkbox" aria-label={`Marcar ${quien(f)}`} checked={marcadas.has(f.id)} onChange={() => alternar(f.id)} />
                       </td>
                     )}
-                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} /></td>
+                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} equipo={f.equipo} /></td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
                     <td className="px-2 py-2 whitespace-nowrap">{nombreDelMes(f.periodo)}</td>
                     <td className="px-2 py-2">

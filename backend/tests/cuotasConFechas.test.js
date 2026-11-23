@@ -31,22 +31,13 @@ const m = vi.hoisted(() => ({
 }));
 const crearLinksDeCuotas = vi.hoisted(() => vi.fn());
 const trasPagarseUnLink = vi.hoisted(() => vi.fn());
-// Lo que mira `paraUnLinkEnCuotas` (en MultiCRM, en conectarStripe992.test.js).
-const delCampus = vi.hoisted(() => vi.fn());
-const claveDeEscritura = vi.hoisted(() => vi.fn());
-const claveObligatoria = vi.hoisted(() => vi.fn());
-const comprobarPermisosDeCobro = vi.hoisted(() => vi.fn());
 vi.mock('../src/modules/links-pago/links-pago.model.js', async (orig) => ({ ...(await orig()), ...m }));
-vi.mock('../src/modules/links-pago/links-pago.service.js', async (orig) => ({ ...(await orig()), crearLinksDeCuotas, claveDeEscritura, claveObligatoria }));
-vi.mock('../src/modules/links-pago/links-pago.cobro-auto.model.js', async (orig) => ({ ...(await orig()), delCampus }));
-vi.mock('../src/modules/links-pago/links-pago.stripe.js', async (orig) => ({ ...(await orig()), comprobarPermisosDeCobro }));
+vi.mock('../src/modules/links-pago/links-pago.service.js', async (orig) => ({ ...(await orig()), crearLinksDeCuotas }));
 vi.mock('../src/modules/links-pago/links-pago.cobro-auto.js', async (orig) => ({ ...(await orig()), trasPagarseUnLink }));
 
 const { crearSchema } = await import('../src/modules/links-pago/links-pago.validation.js');
 const service = await import('../src/modules/links-pago/links-pago.service.js');
 const cobro = await import('../src/modules/links-pago/links-pago.cobro.js');
-const cobroAuto = await import('../src/modules/links-pago/links-pago.cobro-auto.js');
-const { ErrorDeStripe } = await import('../src/modules/links-pago/links-pago.stripe.js');
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const SQL = fs.readFileSync(path.join(AQUI, '..', 'migrations', '326_links_pago_plan_de_cuotas.sql'), 'utf8');
@@ -178,36 +169,6 @@ describe('al pagarse la inicial', () => {
     m.marcarPagado.mockResolvedValue(null);
     await cobro.trasCobrar(LINK, { payment, conversionId: 500, conversionPaymentId: 1 });
     expect(crearLinksDeCuotas).toHaveBeenCalledTimes(1);
-  });
-});
-
-describe('«Inicial + cuotas»: disponibles siempre que el campus las admita', () => {
-  const para = (o = {}) => cobroAuto.paraUnLinkEnCuotas(1, { cfg: CFG, puedeCobroAuto: true, ...o });
-  beforeEach(() => {
-    for (const f of [delCampus, claveDeEscritura, claveObligatoria, comprobarPermisosDeCobro]) f.mockReset();
-    delCampus.mockResolvedValue({ permitido: true, reintento_dias: 3 });
-    claveDeEscritura.mockResolvedValue('rk_test_x');
-    claveObligatoria.mockResolvedValue('rk_test_x');
-    comprobarPermisosDeCobro.mockResolvedValue(undefined);
-  });
-  it('todo en orden: disponibles y automáticas', async () => {
-    expect(await para()).toEqual({ disponible: true, automatico: true, motivo: null, cuotas_max: 12 });
-  });
-  it('sin cobro automático (clave sin permisos, campus que no lo permite, sin el permiso): disponibles, cada una con su link', async () => {
-    comprobarPermisosDeCobro.mockRejectedValueOnce(new ErrorDeStripe(403, 'The provided key does not have the required permissions'));
-    const r = await para();
-    expect(r).toMatchObject({ disponible: true, automatico: false });
-    expect(r.motivo).toMatch(/Subscription Schedules/);
-    delCampus.mockResolvedValueOnce({ permitido: false, reintento_dias: 3 });
-    expect(await para()).toMatchObject({ disponible: true, automatico: false, motivo: expect.stringMatching(/no tiene permitido/) });
-    claveDeEscritura.mockResolvedValueOnce(null);
-    expect(await para()).toMatchObject({ disponible: true, automatico: false });
-    expect(await para({ puedeCobroAuto: false })).toMatchObject({ disponible: true, automatico: false });
-  });
-  it('sin cuotas, solo lo que decide el campus', async () => {
-    expect(await para({ cfg: null })).toMatchObject({ disponible: false, automatico: false });
-    expect(await para({ cfg: { ...CFG, cuotas_admitidas: false } })).toMatchObject({ disponible: false, motivo: expect.stringMatching(/no admite pagos en cuotas/) });
-    expect(await para({ cfg: { ...CFG, monedas: ['USD'] } })).toMatchObject({ disponible: false, motivo: expect.stringMatching(/EUR/) });
   });
 });
 

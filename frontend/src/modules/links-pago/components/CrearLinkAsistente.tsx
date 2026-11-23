@@ -7,6 +7,7 @@ import Portal from '@/shared/components/ui/portal';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import AvisoConectarStripe, { AvisoCobroAutoApagado, tipoDeAviso } from './AvisoConectarStripe';
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
@@ -445,6 +446,13 @@ export default function CrearLinkAsistente({
   // campus: se dice en cuanto se sabe el campus y no se deja rellenar, en vez de
   // avisar después de rellenarlo todo (QA de /testeo del 18/11, gemela de CRM#948).
   const sinClave = (projectId && cfg?.aviso_clave) || null;
+  // Cuotas sin cobro automático por la clave de Stripe (CRM-ISEIE#667, gemela de
+  // CRM#992; desde el 23/11 ya no apaga las cuotas): el aviso que lleva a
+  // Integraciones › Links de pago, con el motivo concreto.
+  const tipoAviso = cuotas && !cuotas.automatico ? tipoDeAviso(cuotas.codigo) : null;
+  const avisoConectar = !venta && tipoAviso === 'conectar' && projectId && cuotas
+    ? <AvisoConectarStripe campus={[{ project_id: projectId, codigo: String(cuotas.codigo), motivo: cuotas.motivo }]} onIr={onClose} />
+    : null;
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
@@ -635,6 +643,7 @@ export default function CrearLinkAsistente({
                   </p>
                 </div>
               )}
+              {sinClave && avisoConectar}
 
               <fieldset disabled={!!sinClave} aria-disabled={!!sinClave} className="space-y-4 min-w-0 disabled:opacity-60">
               {/* Curso, con buscador */}
@@ -744,17 +753,23 @@ export default function CrearLinkAsistente({
                     </p>
                   )}
                   {/* 23/11: sin cobro automático, las cuotas siguen (cada una con su link)
-                      y se dice por qué. */}
+                      y se dice por qué. CRM#992: si es por la clave de Stripe, el aviso
+                      que lleva a ponerla (sin clave de links va arriba); si es el
+                      interruptor del servidor, que no está activo aquí. */}
                   {!venta && enCuotas && cuotas?.disponible && !cuotas.automatico && (
-                    <p role="status" data-testid="aviso-cuotas-sin-auto" data-recorrido="links-asistente-cuotas-sin-auto"
-                      className="flex items-start gap-1.5 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
-                      <WarningCircle size={14} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
-                      <span>
-                        <span className="font-semibold text-foreground">El cobro no será automático: cada cuota tendrá su propio link.</span>{' '}
-                        Al pagar la inicial se crea un link por cuota, con su fecha de vencimiento; los verás en la venta y en «Links de pago» para mandarlos cuando toque.
-                        {cuotas.motivo ? ` (${cuotas.motivo})` : ''}
-                      </span>
-                    </p>
+                    <div className="space-y-2" data-recorrido="links-asistente-cuotas-sin-auto">
+                      <p role="status" data-testid="aviso-cuotas-sin-auto"
+                        className="flex items-start gap-1.5 rounded-md border border-border bg-muted/30 p-2.5 text-xs text-muted-foreground">
+                        <WarningCircle size={14} className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+                        <span>
+                          <span className="font-semibold text-foreground">El cobro no será automático: cada cuota tendrá su propio link.</span>{' '}
+                          Al pagar la inicial se crea un link por cuota, con su fecha de vencimiento; los verás en la venta y en «Links de pago» para mandarlos cuando toque.
+                          {tipoAviso !== 'conectar' && tipoAviso !== 'entorno' && cuotas.motivo ? ` (${cuotas.motivo})` : ''}
+                        </span>
+                      </p>
+                      {tipoAviso === 'conectar' ? (!sinClave && avisoConectar)
+                        : tipoAviso === 'entorno' ? <AvisoCobroAutoApagado motivo={cuotas.motivo} /> : null}
+                    </div>
                   )}
 
                   {enCuotas && (

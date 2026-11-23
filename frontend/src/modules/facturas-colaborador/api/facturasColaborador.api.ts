@@ -8,11 +8,13 @@ export const urlDelArchivo = (url: string) => (url.startsWith('/') ? `${API_BASE
   mes sube su factura por un enlace personal, una por empresa y mes.
 */
 
-export const AREAS = ['soporte', 'desarrollo', 'wordpress', 'seo', 'contenido', 'otra'] as const;
+// «Redacción de cursos» (migración 325, CRM-ISEIE#687): la ficha de una tutora redactora.
+export const AREAS = ['soporte', 'desarrollo', 'wordpress', 'seo', 'contenido', 'redaccion', 'otra'] as const;
 export type Area = typeof AREAS[number];
 
 export const AREA_ES: Record<Area, string> = {
-  soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido', otra: 'Otra',
+  soporte: 'Soporte', desarrollo: 'Desarrollo', wordpress: 'WordPress', seo: 'SEO', contenido: 'Contenido',
+  redaccion: 'Redacción de cursos', otra: 'Otra',
 };
 
 // Quién factura (CRM-ISEIE#422): un colaborador externo o una vendedora de la lista (gestoras y comerciales).
@@ -23,6 +25,37 @@ export const TIPO_ES: Record<Tipo, string> = { colaborador: 'Colaborador', vende
 export const TIPO_FILTRO: { value: '' | Tipo; label: string }[] = [
   { value: '', label: 'Vendedoras y colaboradores' }, { value: 'vendedora', label: 'Vendedoras' }, { value: 'colaborador', label: 'Colaboradores' },
 ];
+
+/*
+  «Los dos equipos» (Diego, 23/11/2026; CRM-ISEIE#687): entre los colaboradores,
+  el equipo de desarrollo y las tutoras redactoras. Lo calcula el servidor
+  (equipo.js): la redactora es quien tiene ese rol o la ficha con el área
+  «Redacción de cursos».
+*/
+export type Equipo = 'desarrollo' | 'redactoras';
+export type EquipoDeLaFicha = Equipo | 'vendedoras';
+
+/** El filtro de arriba, en un solo desplegable: quién factura y, de los colaboradores, de qué equipo. */
+export type QuienFactura = '' | Tipo | Equipo;
+export const QUIEN_FILTRO: { value: QuienFactura; label: string }[] = [
+  ...TIPO_FILTRO,
+  { value: 'desarrollo', label: 'Equipo de desarrollo' },
+  { value: 'redactoras', label: 'Tutoras redactoras' },
+];
+
+/** El desplegable de arriba, a lo que se pide al servidor (`tipo` y `equipo`). */
+export function filtroDeQuien(v: QuienFactura): { tipo?: Tipo; equipo?: Equipo } {
+  if (v === 'desarrollo' || v === 'redactoras') return { tipo: 'colaborador', equipo: v };
+  return v ? { tipo: v } : {};
+}
+
+/** Lo que llega en la dirección (`?tipo=`), a un valor válido o ''. */
+export function quienDeLaDireccion(v: string | null): QuienFactura {
+  return QUIEN_FILTRO.some((o) => o.value === v) ? v as QuienFactura : '';
+}
+
+/** Una tutora redactora que aún no tiene ficha (CRM-ISEIE#687). */
+export interface RedactoraSinFicha { id: number; nombre: string; email: string; active: boolean }
 
 export type EstadoFactura = 'sin_enviar' | 'enviado' | 'abierto' | 'recibida' | 'sin_factura' | 'anulada' | 'no_enviado' | 'caducado';
 
@@ -95,6 +128,8 @@ export interface Colaborador {
   area: Area;
   /** Colaborador o vendedora (CRM#710). */
   tipo?: Tipo;
+  /** Su equipo, calculado por el servidor (CRM-ISEIE#687). */
+  equipo?: EquipoDeLaFicha;
   notas: string | null;
   user_id: number | null;
   usuario_nombre: string | null;
@@ -131,6 +166,8 @@ export interface FacturaDelMes {
   area: Area;
   /** Colaborador o vendedora (CRM#710). */
   tipo?: Tipo;
+  /** Su equipo (CRM-ISEIE#687). */
+  equipo?: EquipoDeLaFicha;
   empresa: string;
   importe_esperado: string | null;
   importe: string | null;
@@ -303,8 +340,10 @@ const subida = (archivo: File, importe: string, numeroFactura: string, desglose:
 export const facturasColaboradorApi = {
   // ── Administración: la lista de colaboradores ──
   empresas: () => client.get(`${BASE}/empresas`) as R<EmpresaDelGrupo[]>,
-  colaboradores: (f: { estado?: 'activos' | 'de_baja' | 'todos'; issuerId?: number; q?: string; tipo?: Tipo } = {}) =>
+  colaboradores: (f: { estado?: 'activos' | 'de_baja' | 'todos'; issuerId?: number; q?: string; tipo?: Tipo; equipo?: Equipo } = {}) =>
     client.get(`${BASE}/colaboradores${query(f)}`) as R<Colaborador[]>,
+  /** Las tutoras redactoras sin ficha, de las empresas que se ven (CRM-ISEIE#687). */
+  redactorasSinFicha: () => client.get(`${BASE}/colaboradores/redactoras-sin-ficha`) as R<RedactoraSinFicha[]>,
   crear: (b: ColaboradorEnvio) => client.post(`${BASE}/colaboradores`, b) as R<Colaborador>,
   editar: (id: number, b: Partial<ColaboradorEnvio>) => client.patch(`${BASE}/colaboradores/${id}`, b) as R<Colaborador>,
   darDeBaja: (id: number, desde: string) => client.post(`${BASE}/colaboradores/${id}/baja`, { desde }) as R<Colaborador>,
@@ -312,7 +351,7 @@ export const facturasColaboradorApi = {
   registroDelColaborador: (id: number) => client.get(`${BASE}/colaboradores/${id}/registro`) as R<LineaRegistro[]>,
 
   // ── Administración: las facturas del mes ──
-  mes: (f: { periodo: string; issuerId?: number; estado?: EstadoFactura; area?: Area; tipo?: Tipo }) =>
+  mes: (f: { periodo: string; issuerId?: number; estado?: EstadoFactura; area?: Area; tipo?: Tipo; equipo?: Equipo }) =>
     client.get(`${BASE}/mes${query(f)}`) as R<Mes>,
   archivo: (id: number) => client.get(`${BASE}/facturas/${id}/archivo`) as R<{ url: string; nombre: string | null }>,
   registroDeLaFactura: (id: number) => client.get(`${BASE}/facturas/${id}/registro`) as R<LineaRegistro[]>,
@@ -337,7 +376,7 @@ export const facturasColaboradorApi = {
   justificante: (id: number) => client.get(`${BASE}/facturas/${id}/justificante`) as R<{ url: string }>,
 
   // ── Enviadas, Por pagar, Pagadas e Historial, y el coste por campus (segunda parte) ──
-  vista: (f: { vista: VistaDeFacturas; issuerId?: string; colaboradorId?: string; periodo?: string; estado?: string; tipo?: string }) =>
+  vista: (f: { vista: VistaDeFacturas; issuerId?: string; colaboradorId?: string; periodo?: string; estado?: string; tipo?: string; equipo?: Equipo }) =>
     client.get(`${BASE}/facturas${query(f)}`) as R<{ vista: VistaDeFacturas; resumen: { total: number; importe: number; pendiente: number; por_moneda?: SumaPorMoneda<'importe' | 'pendiente'>[] }; facturas: FacturaDelMes[] }>,
   /**
    * El ZIP del mes de una empresa, como descarga. Con su propio fetch, como el

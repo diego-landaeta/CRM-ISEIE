@@ -79,6 +79,8 @@ router.get('/mias/:id/archivo', verifyToken, puede('facturas_colaborador.subir')
 router.get('/empresas', verifyToken, puede('facturas_colaborador.ver_todas', 'facturas_colaborador.gestionar'), ctrl.empresas);
 router.get('/colaboradores', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.listar);
 router.post('/colaboradores', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.crear);
+// Las tutoras redactoras que aún no tienen ficha (CRM-ISEIE#687), para hacérsela desde la lista.
+router.get('/colaboradores/redactoras-sin-ficha', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.redactorasSinFicha);
 router.get('/colaboradores/:id', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.ver);
 router.patch('/colaboradores/:id', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.editar);
 router.post('/colaboradores/:id/baja', verifyToken, puede('facturas_colaborador.gestionar'), ctrl.darDeBaja);

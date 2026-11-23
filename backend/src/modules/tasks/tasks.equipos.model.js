@@ -12,7 +12,7 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
   Un tutor tiene tablero SOLO mientras esté en un equipo de tutores activo: así
   no sale en la lista de responsables ni en las cifras de nadie por ser tutor.
 */
-export const TIPOS_DE_EQUIPO = ['colaboradores', 'tutores'];
+export const TIPOS_DE_EQUIPO = ['colaboradores', 'tutores', 'redactoras'];
 
 let hayTipos = false;
 export async function existeTipos() {
@@ -28,6 +28,32 @@ export function olvidarTipos() { hayTipos = false; }
 
 const ES_TUTOR = (u) => `(${u}.role::text = 'tutor' OR 'tutor' = ANY(COALESCE(${u}.roles_extra, '{}')::text[]))`;
 
+/*
+  Tutoras redactoras (migración 325; Diego, 23/11/2026, CRM-ISEIE#687): «su panel de
+  Trello separado». Un equipo de tipo 'redactoras' es solo de ellas y de quien
+  lo dirige (admin o superadmin); y quien SOLO es tutora redactora no entra en
+  uno de desarrollo, para que los dos tableros no se mezclen. El rol aquí decide
+  a qué equipo se puede ir, no quién entra al tablero (eso es `tasks.view_own`).
+*/
+export const ES_REDACTORA = (u) => `(${u}.role::text = 'tutor_redactor' OR 'tutor_redactor' = ANY(COALESCE(${u}.roles_extra, '{}')::text[]))`;
+/** Quien dirige un equipo de redactoras sin serlo: un admin o un superadmin. */
+const DIRIGE = (u) => `(${u}.role::text IN ('superadmin', 'admin') OR COALESCE(${u}.roles_extra, '{}')::text[] && ARRAY['admin'])`;
+/** Tutora redactora y nada que le dé otro tablero (colaboradora, admin…). */
+const SOLO_REDACTORA = (u) => `(${u}.role::text = 'tutor_redactor'
+  AND NOT (COALESCE(${u}.roles_extra, '{}')::text[] && ARRAY['colaborador', 'admin']))`;
+
+/**
+ * ¿Puede estar en un equipo de este tipo? (SQL; `tipo` es una expresión de
+ * texto y `conTablero` la de «tiene tablero»).
+ */
+function sqlCabeEn(u, tipo, conTablero) {
+  return `(CASE ${tipo}
+      WHEN 'redactoras' THEN ${ES_REDACTORA(u)} OR ${DIRIGE(u)}
+      WHEN 'tutores' THEN ${conTablero} OR ${ES_TUTOR(u)}
+      ELSE ${conTablero} AND NOT ${SOLO_REDACTORA(u)}
+    END)`;
+}
+
 /**
  * ¿Tiene tablero? (SQL). `u` es el alias de users e `idx` el número del
  * parámetro con ROLES_TAREAS. Con la migración de tipos, también el tutor que
@@ -39,6 +65,41 @@ export function sqlConTablero(u, idx, tipos) {
   return `(${base} OR (${ES_TUTOR(u)}
       AND EXISTS (SELECT 1 FROM task_team_members m_tut JOIN task_teams t_tut ON t_tut.id = m_tut.team_id
                    WHERE m_tut.user_id = ${u}.id AND t_tut.is_active AND t_tut.tipo = 'tutores')))`;
+}
+
+/**
+ * ¿Ve quien mira (`yo`, parámetro SQL) la tarea `t` por ser de su equipo? (SQL)
+ * En uno de colaboradores o de tutores, sí, sea de quien sea (26/10/2026). En
+ * uno de redactoras, «cada una ve lo suyo» (23/11/2026): solo la de alguien con
+ * un cargo por debajo del suyo —la encargada ve las de su equipo; una miembro,
+ * las suyas, que ya entran por ser suyas—. Sin la migración de tipos, como antes.
+ */
+export function sqlVeLaDelEquipo(t, yo, tipos) {
+  if (!tipos) {
+    return `EXISTS (SELECT 1 FROM task_team_members m_v WHERE m_v.team_id = ${t}.team_id AND m_v.user_id = ${yo})`;
+  }
+  return `EXISTS (SELECT 1 FROM task_team_members m_v
+                   JOIN task_teams tt_v ON tt_v.id = m_v.team_id
+                   JOIN task_team_roles r_v ON r_v.id = m_v.team_role_id
+                  WHERE m_v.team_id = ${t}.team_id AND m_v.user_id = ${yo}
+                    AND (tt_v.tipo <> 'redactoras'
+                         OR r_v.level > COALESCE((SELECT r_a.level FROM task_team_members m_a
+                                                    JOIN task_team_roles r_a ON r_a.id = m_a.team_role_id
+                                                   WHERE m_a.team_id = ${t}.team_id AND m_a.user_id = ${t}.assigned_to), 0)))`;
+}
+
+/** Lo mismo para una tarea suelta (abrirla por su número). */
+export async function veLaDelEquipo(task, userId) {
+  if (!task?.team_id) return false;
+  const tipos = await existeTipos();
+  const { rows } = await query(
+    `SELECT ${sqlVeLaDelEquipo('t', '$2', tipos)} AS ve FROM tasks t WHERE t.id = $1`, [task.id, userId]);
+  return rows[0]?.ve === true;
+}
+
+/** SQL: la tarea `t` es de un equipo del tipo `$n` ('colaboradores', 'tutores' o 'redactoras'). */
+export function sqlDeTipoDeEquipo(t, n) {
+  return `EXISTS (SELECT 1 FROM task_teams tt_f WHERE tt_f.id = ${t}.team_id AND tt_f.tipo = ${n})`;
 }
 
 /** El tipo de un equipo en SQL: sin la migración, todos son de colaboradores. */
@@ -282,12 +343,13 @@ export async function quitarMiembro(teamId, userId) {
  */
 export async function candidatosDe(teamId) {
   const tipos = await existeTipos();
+  // Las redactoras salen aunque estén desactivadas (23/11/2026): se dan de alta
+  // apagadas hasta que tengan el chat de Moodle, y su equipo se prepara antes.
   const { rows } = await query(
-    `SELECT u.id, u.nombre, u.email, u.role::text AS role
+    `SELECT u.id, u.nombre, u.email, u.role::text AS role, u.active
        FROM users u, task_teams tm
-      WHERE tm.id = $1 AND u.active
-        AND ((u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[])
-             OR (${colTipo('tm', tipos)} = 'tutores' AND ${ES_TUTOR('u')}))
+      WHERE tm.id = $1 AND (u.active OR (${colTipo('tm', tipos)} = 'redactoras' AND ${ES_REDACTORA('u')}))
+        AND ${sqlCabeEn('u', colTipo('tm', tipos), '(u.role::text = ANY($2::text[]) OR u.roles_extra::text[] && $2::text[])')}
         AND ${deLaEmpresaDelEquipo('u.id', 'tm')}
         AND NOT EXISTS (SELECT 1 FROM task_team_members m WHERE m.team_id = tm.id AND m.user_id = u.id)
       ORDER BY u.nombre`,
@@ -315,20 +377,22 @@ export async function esDeLaEmpresa(teamId, userId) {
 
 /**
  * ¿Puede estar en este equipo? Con tablero (superadmin, admin, colaborador), en
- * cualquiera; un tutor, solo en uno de tutores (04/11/2026).
+ * uno de colaboradores o de tutores; un tutor, solo en uno de tutores
+ * (04/11/2026). En uno de redactoras, solo las tutoras redactoras y quien lo
+ * dirige; y quien solo es redactora, en ninguno de desarrollo (23/11/2026).
  */
 export async function puedeEstarEn(teamId, userId) {
   const tipos = await existeTipos();
   const { rows: [r] } = await query(
-    `SELECT u.active,
-            (u.role::text = ANY($3::text[]) OR u.roles_extra::text[] && $3::text[]) AS con_tablero,
-            ${ES_TUTOR('u')} AS es_tutor,
+    `SELECT u.active, ${ES_REDACTORA('u')} AS es_redactora,
+            ${sqlCabeEn('u', colTipo('tm', tipos), '(u.role::text = ANY($3::text[]) OR u.roles_extra::text[] && $3::text[])')} AS cabe,
             ${colTipo('tm', tipos)} AS tipo
        FROM users u, task_teams tm WHERE u.id = $2 AND tm.id = $1`,
     [teamId, userId, ROLES_TAREAS]
   );
-  if (!r || !r.active) return { existe: false, puede: false, tipo: null };
-  return { existe: true, puede: r.con_tablero || (r.tipo === 'tutores' && r.es_tutor), tipo: r.tipo };
+  // A una redactora desactivada se la puede meter en el suyo: entra al activarla.
+  if (!r || (!r.active && !(r.tipo === 'redactoras' && r.es_redactora))) return { existe: false, puede: false, tipo: null };
+  return { existe: true, puede: r.cabe === true, tipo: r.tipo };
 }
 
 /** Las empresas de unos campus (para decir qué equipos ve quien mira). */
