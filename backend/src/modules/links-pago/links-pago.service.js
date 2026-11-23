@@ -618,6 +618,9 @@ export const EVENTOS_DE_LOS_LINKS = [
   'invoice.paid',
   'invoice.payment_failed',
   'customer.subscription.deleted',
+  // Los links creados directamente en Stripe (CRM#1019): que salgan en Links de pago al momento.
+  'payment_link.created',
+  'payment_link.updated',
 ];
 
 /**

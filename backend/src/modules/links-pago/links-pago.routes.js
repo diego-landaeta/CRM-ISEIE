@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './links-pago.controller.js';
+import * as externos from './links-pago.externos.controller.js';
 
 /*
   Links de pago (CRM#680). Fase 1: lectura y el tope de descuento del campus.
@@ -61,6 +62,16 @@ router.post('/plan', puede('links_pago.crear'), ctrl.generarPlan);
 // venta, en el controlador.
 router.get('/cobro-automatico', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.verCobroAutomatico);
 router.put('/cobro-automatico', puede('links_pago.cobro_automatico'), ctrl.cambiarCobroAutomatico);
+
+// ─── Links creados directamente en Stripe y sus cobros (CRM#1019) ───────────
+// Verlos, traerlos de Stripe y vincular sus cobros: «ver todos», siempre en sus
+// campus (el controlador). Antes de `/:id`.
+router.get('/externos', puede('links_pago.ver_todos'), externos.listar);
+router.post('/externos/sincronizar', puede('links_pago.ver_todos'), projectAccess, externos.sincronizar);
+router.get('/por-vincular', puede('links_pago.ver_todos'), externos.porVincular);
+router.get('/por-vincular/ventas', puede('links_pago.ver_todos'), externos.buscarVentas);
+router.post('/por-vincular/:id/vincular', puede('links_pago.ver_todos'), externos.vincular);
+// ────────────────────────────────────────────────────────────────────────────
 
 // Quien crea links ve los suyos; con «ver todos», los de su alcance. El
 // recorte lo hace el controlador con la sesión.
