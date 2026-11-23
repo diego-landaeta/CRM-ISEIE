@@ -144,7 +144,9 @@ describe('la pantalla de Ventas, con datos', () => {
     await screen.findAllByText('Ana Pérez', {}, { timeout: 8000 });
     await screen.findByText('Mi meta del mes', {}, { timeout: 8000 });
     await screen.findByText(/Programas más vendidos/, {}, { timeout: 8000 });
-    for (const p of VENTAS.pasos.filter((x) => x.donde)) {
+    // Los pasos con su `permiso` solo salen a quien lo tiene (el de «Link y Plan»
+    // pide `links_pago.crear`, que esta prueba no da).
+    for (const p of VENTAS.pasos.filter((x) => x.donde && (!x.permiso || permisos.has(x.permiso)))) {
       expect(document.querySelector(p.donde), p.donde).not.toBeNull();
     }
     expect(screen.getByRole('button', { name: 'Ver recorrido: Ventas' })).toBeInTheDocument();

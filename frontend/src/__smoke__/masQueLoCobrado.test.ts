@@ -32,7 +32,8 @@ describe('emitirPreguntandoSiPasa', () => {
     const enviar = vi.fn(async () => ({ success: true, data: { id: 1 } }));
     await expect(emitirPreguntandoSiPasa(enviar)).resolves.toEqual({ success: true, data: { id: 1 } });
     expect(enviar).toHaveBeenCalledTimes(1);
-    expect(enviar).toHaveBeenCalledWith(false);
+    // El segundo es «emitir aunque parezca duplicada» (#1001): sin aviso, no.
+    expect(enviar).toHaveBeenCalledWith(false, false);
     expect(confirmar).not.toHaveBeenCalled();
   });
 
@@ -42,7 +43,7 @@ describe('emitirPreguntandoSiPasa', () => {
       .mockRejectedValueOnce(rechazo('MAS_QUE_LO_COBRADO', 'queda 111'))
       .mockResolvedValueOnce({ success: true, data: { id: 2 } });
     await expect(emitirPreguntandoSiPasa(enviar)).resolves.toEqual({ success: true, data: { id: 2 } });
-    expect(enviar.mock.calls).toEqual([[false], [true]]);
+    expect(enviar.mock.calls).toEqual([[false, false], [true, false]]);
     expect(confirmar.mock.calls[0][0]).toContain('queda 111');
   });
 

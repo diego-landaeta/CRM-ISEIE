@@ -17,6 +17,8 @@ import { MemoryRouter, Routes, Route } from 'react-router-dom';
 const venta = vi.hoisted(() => ({ actual: null }));
 vi.mock('@/shared/api/client', () => ({
   default: { get: vi.fn(async () => ({ success: true, data: venta.actual })) },
+  // ProjectContext arma el icono con él al cargarse (lo trae el asistente de links).
+  APP_BASE_URL: '',
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/modules/sales/components/RepartoVentaCard', () => ({ default: () => null }));

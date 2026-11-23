@@ -51,6 +51,8 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
     pantalla: [
       'modules/links-pago/pages/LinksDePagoPage.tsx',
       'modules/links-pago/components/SeguimientoDelLink.tsx',
+      // El embudo (#987) es una pieza aparte que pinta la pantalla.
+      'modules/links-pago/components/EmbudoLinks.tsx',
     ],
     pasos: [
       {

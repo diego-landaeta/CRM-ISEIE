@@ -173,14 +173,16 @@ describe('el botón «Recorrido» de arriba', () => {
 });
 
 describe('el recorrido general, según el rol', () => {
-  it('una gestora solo ve los bloques que tiene: ni Finanzas ni Configuración', () => {
+  // De Configuración solo le llega Status, que no pide permiso y está en el menú de
+  // todos (Sistema › Status pasó a Configuración); el general enseña lo mismo que el menú.
+  it('una gestora solo ve los bloques que tiene: ni Finanzas, y de Configuración solo Status', () => {
     yo.current = { id: 50, role: 'gestor', nombre: 'Ana' };
     for (const k of ['leads.view', 'ventas.view', 'proceso.view']) permisos.add(k);
     const bloques = bloquesQueVe(yo.current, (k) => permisos.has(k));
     const nombres = bloques.map((b) => b.label);
     expect(nombres).toContain('Comercial');
     expect(nombres).not.toContain('Finanzas');
-    expect(nombres).not.toContain('Configuración');
+    expect(bloques.find((b) => b.label === 'Configuración')?.entradas ?? []).toEqual(['Status']);
     const pasos = pasosDelRecorridoGeneral({ roles: ['gestor'], bloques, nombre: 'Ana' });
     expect(pasos[0].titulo).toBe('Tu CRM, como Gestora');
     expect(pasos.map((p) => p.titulo)).not.toContain('Finanzas');
@@ -204,7 +206,8 @@ describe('el recorrido general, según el rol', () => {
     // (En ISEIE no hay selector de campus arriba: el general no lo señala.)
     for (const n of ['menu-buscar', 'cabecera-recorrido']) {
       const todo = codigoDe().map(([, c]) => c).join('\n');
-      expect(todo, n).toContain(`data-recorrido="${n}"`);
+      // Fijo o condicional (el buscador solo lo lleva en el menú que se ve: PC o móvil).
+      expect(todo, n).toMatch(new RegExp(`data-recorrido=(?:"${n}"|\\{[^}]*'${n}')`));
     }
   });
 });

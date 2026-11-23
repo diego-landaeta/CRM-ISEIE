@@ -179,7 +179,7 @@ async function avisarALaGestora(venta, fila) {
       type: 'venta_automatica',
       title: `Cobro de ${euros} € de ${l.nombre || fila.customer_email || 'un cliente'}`,
       message: 'Entró por PayPal y se registró solo en su venta. Queda en la cola de facturación.',
-      link_path: `/prospectos/${l.id}`,
+      link_path: `/leads/${l.id}`,
       metadata: { lead_id: l.id, conversion_id: venta.id, paypal_id: fila.paypal_id },
     });
   } catch { /* el aviso no puede tumbar el cobro */ }
