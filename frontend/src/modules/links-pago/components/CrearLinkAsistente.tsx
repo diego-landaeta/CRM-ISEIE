@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
 import {
   LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle, CaretDown, CaretRight, ChatText,
+  Ticket,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
@@ -11,8 +12,8 @@ import AvisoConectarStripe, { AvisoCobroAutoApagado, tipoDeAviso } from './Aviso
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
-  crearLink, verConfig, ventasDelProspecto, cuotasDisponibles,
-  type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto,
+  crearLink, verConfig, ventasDelProspecto, cuotasDisponibles, listarCodigos, textoDelCodigo,
+  type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto, type CodigoPromocional,
 } from '../api/linksPago.api';
 import { useWhatsappConectado, enviarPorWhatsapp, copiarMensaje } from './EnviarLink';
 
@@ -219,6 +220,25 @@ export function resumenDelPlan(l: Pick<LinkDePago, 'importe' | 'num_cuotas' | 'i
 }
 
 interface Curso { id: number; nombre: string; precio: string | number | null; moneda: string | null }
+
+/*
+  LA MONEDA DEL CAMPUS (CRM#986). Monedas sin decimales en Stripe: el importe va
+  entero (1.500 CLP, no 1.500,50).
+*/
+const SIN_DECIMALES = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG', 'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
+
+/**
+ * La moneda que sale elegida (la misma regla que el servidor): desde una venta,
+ * euros (lo pendiente está en euros); si el curso tiene precio en una moneda que
+ * el campus admite, esa (el link sale con su precio); si no, la del campus.
+ */
+export function monedaPropuesta(cfg: Pick<ConfigLinks, 'monedas' | 'moneda_defecto'> | null, curso: Pick<Curso, 'precio' | 'moneda'> | null, desdeVenta = false) {
+  const monedas = cfg?.monedas || [];
+  if (desdeVenta && monedas.includes('EUR')) return 'EUR';
+  const delCurso = curso?.moneda ? curso.moneda.trim().toUpperCase() : null;
+  if (delCurso && curso?.precio != null && Number(curso.precio) > 0 && monedas.includes(delCurso)) return delCurso;
+  return cfg?.moneda_defecto || 'EUR';
+}
 interface LeadEncontrado { id: number; nombre: string | null; email: string | null; telefono?: string | null; project_nombre?: string | null }
 interface Campus { id: number; nombre: string }
 
@@ -286,6 +306,11 @@ export default function CrearLinkAsistente({
   const [cursoId, setCursoId] = useState('');
   const [importe, setImporte] = useState('');
   const [moneda, setMoneda] = useState('');
+  // CRM#986: la moneda sigue al curso hasta que la gestora la cambia a mano.
+  const [monedaTocada, setMonedaTocada] = useState(false);
+  // CRM#986: si el link admite códigos promocionales, y los vigentes del campus.
+  const [codigosPromo, setCodigosPromo] = useState(false);
+  const [vigentes, setVigentes] = useState<CodigoPromocional[]>([]);
   const [forma, setForma] = useState<'unico' | 'cuotas'>(formaInicial);
   const [numCuotas, setNumCuotas] = useState(3);
   // CRM#982: descuento en € o en % sobre el precio, y la inicial de «inicial más cuotas».
@@ -348,10 +373,17 @@ export default function CrearLinkAsistente({
     setCursos([]);
     setCursosCargados(false);
     setCuotas(null);
+    setVigentes([]);
+    setMonedaTocada(false);
     verConfig(projectId).then((r) => {
       if (!vigente || !r.data) return;
       setCfg(r.data);
       setMoneda(r.data.moneda_defecto);
+      // Códigos promocionales (CRM#986): si el campus los admite, el link también, y los vigentes a la vista.
+      setCodigosPromo(r.data.codigos_promo === true);
+      if (r.data.codigos_promo) {
+        listarCodigos(projectId).then((c) => { if (vigente) setVigentes(Array.isArray(c?.data) ? c.data : []); }).catch(() => {});
+      }
     }).catch((e) => { if (vigente) setError(`No se han podido leer las reglas de links de este campus: ${errorDe(e)}`); });
     client.get<Curso[]>('/products', { params: { projectId, limit: 500 } })
       .then((r) => { if (vigente) setCursos(Array.isArray(r?.data) ? r.data : []); })
@@ -390,8 +422,11 @@ export default function CrearLinkAsistente({
   useEffect(() => {
     if (!venta && curso?.precio != null && Number(curso.precio) > 0) setImporte(String(Number(curso.precio)));
   }, [venta, curso]);
-  // En cuotas, siempre en euros.
-  useEffect(() => { if (enCuotas) setMoneda('EUR'); }, [enCuotas]);
+  // La moneda del campus (CRM#986): la del curso si tiene precio en ella; desde una
+  // venta, euros. Hasta que la gestora la cambie. En cuotas, siempre euros (`mon`).
+  useEffect(() => {
+    if (cfg && !monedaTocada) setMoneda(monedaPropuesta(cfg, curso, !!venta));
+  }, [cfg, curso, venta, monedaTocada]);
 
   const cursosFiltrados = useMemo(() => {
     const q = filtroCurso.trim().toLowerCase();
@@ -466,6 +501,9 @@ export default function CrearLinkAsistente({
     if (cursos.length > 0 && !curso) motivos.push('Elige el curso.');
     if (!(n > 0)) motivos.push(venta && venta.pendiente <= 0 ? 'Esta venta ya está cobrada entera: no queda nada que cobrar con un link.' : 'Escribe el importe.');
     if (n > 0 && (descuentoMal || !calculo)) motivos.push('El descuento no puede superar el precio.');
+    if (SIN_DECIMALES.has(mon) && total > 0 && !Number.isInteger(Math.round(total * 100) / 100)) {
+      motivos.push(`En ${mon} el importe va sin decimales.`);
+    }
     else if (n > 0 && calculo && !(total > 0)) motivos.push('Con ese descuento no queda nada que cobrar: el total tiene que ser mayor que 0.');
     if (venta && mon === 'EUR' && total > 0 && Math.round(total * 100) > Math.round(venta.pendiente * 100)) {
       motivos.push(`El link no puede pasar de lo pendiente de la venta (${dinero(venta.pendiente)}).`);
@@ -507,6 +545,8 @@ export default function CrearLinkAsistente({
           modalidad: 'cuotas' as const, num_cuotas: numCuotas, inicial: ini,
           cuotas: filasCuotas.map((f, i) => ({ importe: importesPlan[i], vence: f.vence })),
         } : { moneda }),
+        // CRM#986: solo donde caben (pago único, sin venta y el campus los admite).
+        ...(cfg?.codigos_promo && !enCuotas && !venta ? { codigos_promo: codigosPromo } : {}),
       });
       if (r.data) { setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
     } catch (e) {
@@ -552,7 +592,7 @@ export default function CrearLinkAsistente({
 
   const resumenHecho = hecho && (hecho.modalidad === 'cuotas' && hecho.num_cuotas
     ? `${dinero(hecho.importe)}${conDescuentoHecho}: ${resumenDelPlan(hecho)}`
-    : `${dinero(hecho.importe, hecho.moneda)}${conDescuentoHecho}`);
+    : `${dinero(hecho.importe, hecho.moneda)}${conDescuentoHecho}${hecho.codigos_promo ? ' · admite códigos promocionales' : ''}`);
 
   return (
     <Portal>
@@ -694,7 +734,7 @@ export default function CrearLinkAsistente({
                     {!enCuotas && (cfg?.monedas.length || 0) > 1 && (
                       <div>
                         <label htmlFor="link-moneda" className="text-xs text-muted-foreground mb-1 block">Moneda</label>
-                        <select id="link-moneda" value={moneda} onChange={(e) => setMoneda(e.target.value)} className={campo}>
+                        <select id="link-moneda" value={moneda} onChange={(e) => { setMoneda(e.target.value); setMonedaTocada(true); }} className={campo}>
                           {(cfg?.monedas || []).map((m) => <option key={m} value={m}>{m}</option>)}
                         </select>
                       </div>
@@ -745,6 +785,28 @@ export default function CrearLinkAsistente({
                         </span></span>
                       </label>
                     </div>
+                  )}
+                  {/* Códigos promocionales de campaña (CRM#986): solo en pago único y sin venta. */}
+                  {!venta && !enCuotas && cfg?.codigos_promo && (
+                    <div className="space-y-1" data-recorrido="links-asistente-codigos">
+                      <label className="flex items-center gap-2 text-sm">
+                        <input type="checkbox" checked={codigosPromo} onChange={(e) => setCodigosPromo(e.target.checked)} />
+                        <Ticket size={14} aria-hidden="true" /> Admite códigos promocionales
+                      </label>
+                      {codigosPromo && (
+                        <p className="text-xs text-muted-foreground" data-testid="link-codigos-vigentes">
+                          {vigentes.length
+                            ? <>El alumno puede escribir al pagar: {vigentes.map((c) => `${c.codigo} (−${textoDelCodigo(c)}, hasta el ${fechaCorta(c.caduca_el)})`).join(' · ')}. Lo que descuente queda en la venta.</>
+                            : <>El alumno puede escribir un código de campaña al pagar; ahora no hay ninguno vigente en este campus.</>}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {/* Cuotas en otra moneda (CRM#986): van en euros, y se dice. */}
+                  {!venta && enCuotas && cfg && cfg.moneda_defecto !== 'EUR' && (
+                    <p className="text-xs text-muted-foreground" data-testid="link-cuotas-en-euros">
+                      Las cuotas van en euros: el CRM lleva en euros el plan de cada venta. Para cobrar en {cfg.moneda_defecto}, pago único.
+                    </p>
                   )}
                   {/* Sin cuotas solo si el campus no las admite (en euros): el texto. */}
                   {!venta && cuotas && !cuotas.disponible && (
