@@ -13,6 +13,95 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.8",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.8",
+    "intro": "Links de pago completos: cuotas con sus fechas, moneda y códigos, links de Stripe, embudo y seguimiento.",
+    "grupos": [
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "Cuotas con las fechas que elijas",
+            "texto": "Al crear un link «En cuotas» eliges la fecha de cada cuota, y puedes poner otro importe, un descuento o una inicial más las cuotas. Con Stripe conectado para cobros automáticos, Stripe cobra cada cuota en su fecha; si no, el asistente te dice por qué.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "La moneda de cada campus y códigos promocionales",
+            "texto": "Cada link sale en la moneda de su campus. Los códigos de campaña, con su fecha límite, se encienden campus a campus en Integraciones › Links de pago.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "Links creados directamente en Stripe",
+            "texto": "Los links hechos en Stripe también entran al CRM, en «Creados en Stripe». Sus cobros que no se sabe de qué venta son esperan en «Cobros de Stripe por vincular» hasta que eliges la venta.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "Embudo y seguimiento de los links sin pagar",
+            "texto": "El embudo cuenta los links creados, abiertos y pagados, y las cuotas cobradas, por gestora y por campus. Un link que no se paga avisa a su gestora y se puede renovar; cada link enseña su estado. Se manda también desde el chat de WhatsApp o en una secuencia de correo.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          },
+          {
+            "titulo": "«FALTA CONECTAR STRIPE»",
+            "texto": "En un campus sin la clave de Stripe, el asistente lo dice nada más abrirlo y lleva a Integraciones para conectarla.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago"
+          }
+        ]
+      },
+      {
+        "titulo": "Facturas y Conciliación",
+        "items": [
+          {
+            "titulo": "«Emitir ya la factura de este cobro»",
+            "texto": "Al registrar una venta o un cobro puedes emitir su factura en el momento, sin esperar a la cola.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "Conciliación de facturas, cobros y cargos de Stripe",
+            "texto": "Facturas sin cobro, cobros sin factura y cargos de Stripe sin enlazar, por campus y mes, para enlazarlos o crear la venta.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/accounting/conciliacion",
+            "boton": "Ir a Conciliación"
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Un webhook de Stripe sin cuerpo ya no se anota como rechazo de Stripe."
+    ]
+  },
+  {
+    "version": "2.9.7",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.7",
+    "intro": "El menú, por permiso.",
+    "grupos": [],
+    "arreglos": [
+      "El menú enseña cada pantalla a quien tiene su permiso, sea cual sea su rol.",
+      "Productos: se ven los de todos los campus, para registrar la venta o el link de pago de un alumno de otro campus. Crear y editar productos sigue siendo solo en los campus de cada uno."
+    ]
+  },
+  {
+    "version": "2.9.6",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.6",
+    "intro": "Los links de pago, a la vista.",
+    "grupos": [],
+    "arreglos": ["«Links de pago» vuelve a salir en el menú, y sus botones en la ficha de la venta, para quien tiene permiso: el CRM no le pasaba a la pantalla que los links están encendidos."]
+  },
+  {
     "version": "2.9.5",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.5",
