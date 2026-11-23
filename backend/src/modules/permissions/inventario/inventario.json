@@ -6897,6 +6897,28 @@
   ]
  },
  {
+  "id": "GET /api/invoices/cola/venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "GET",
+  "ruta": "/api/invoices/cola/venta/:conversionId",
+  "relativa": "GET /cola/venta/:conversionId",
+  "controlador": "cobrosDeVentaEnCola",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/invoices/cola/emitir-hasta",
   "tipo": "ruta",
   "modulo": "invoices",

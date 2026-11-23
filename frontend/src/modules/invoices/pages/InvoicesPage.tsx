@@ -93,6 +93,12 @@ export default function InvoicesPage() {
     return t === 'proformas' ? 'proformas' : t === 'abonos' ? 'abonos' : 'facturas';
   });
   const esProformas = tab === 'proformas';
+  // «Factúrala desde la cola» (CRM#1043): `?cobro=` lleva a ese cobro en la cola.
+  const cobroBuscado = (() => {
+    const q = new URLSearchParams(loc.search);
+    const paymentId = Number(q.get('cobro'));
+    return paymentId > 0 ? { paymentId, projectId: Number(q.get('campus')) || null } : null;
+  })();
   const esAbonos = tab === 'abonos';
   const tipoTab = tab === 'proformas' ? 'proforma' : tab === 'abonos' ? 'rectificativa' : 'normal';
   const [invoices, setInvoices] = useState<Invoice[]>([]);
@@ -369,10 +375,10 @@ export default function InvoicesPage() {
             <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
           )}
           {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
-            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} />
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} resaltar={cobroBuscado} />
           ))}
         </>
-      ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} />)}
+      ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} resaltar={cobroBuscado} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos). Gemela de
           CRM#917: a 320 px no caben las tres; la tira se desplaza ella sola en
@@ -536,9 +542,20 @@ export default function InvoicesPage() {
                       {Number(v.importe_pagado) > 0 ? (
                         // Ya cobrada: su factura sale de la cola (por pago y en orden de fecha), no de
                         // una proforma. Diego, 21/10: «todas las que salen en proforma ya están pagadas».
-                        <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400" title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha.">
-                          Cobrada · factúrala desde la cola
-                        </span>
+                        // «Factúrala desde la cola» lleva a SU cobro en la cola (CRM#1043).
+                        v.primer_cobro_id ? (
+                          <Link
+                            to={`?cobro=${v.primer_cobro_id}${v.project_id ? `&campus=${v.project_id}` : ''}`}
+                            onClick={() => setTab('facturas')}
+                            className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:underline"
+                            title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha. Te lleva a ese cobro en la cola.">
+                            Cobrada · factúrala desde la cola →
+                          </Link>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400" title="Ya tiene cobros: su factura sale de la cola de facturación, por orden de fecha.">
+                            Cobrada · factúrala desde la cola
+                          </span>
+                        )
                       ) : (
                       <InvoiceButton
                         // El campus de la VENTA: con una empresa elegida arriba no hay un

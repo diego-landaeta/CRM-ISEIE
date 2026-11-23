@@ -18,6 +18,7 @@ import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { crearLink, generarPlan } from '@/modules/links-pago/api/linksPago.api';
 import { errorDe } from '@/modules/links-pago/components/CrearLinkAsistente';
 import LinksRecienCreados, { type ResultadoLinks } from '@/modules/links-pago/components/LinksRecienCreados';
+import EmitirFacturaCobro, { AvisoCobroEnCola, QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
@@ -176,6 +177,17 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   const [fechaPrimeraCuota, setFechaPrimeraCuota] = useState<string>(hoyEnMadrid());
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
+  /*
+    CON COBRO, LA FACTURA DE ESE COBRO (CRM#1043, gemela del CRM#1043).
+
+    Ticket de soporte del 23/11 (360): con la primera cuota cobrada, la gestora
+    solo vio «¿proforma?»; dijo que no y la venta se quedó sin la factura de su
+    cobro. Quien emite desde la cola («Emitir desde la cola») la emite aquí
+    mismo, con la misma llamada que el botón de la cola; quien no, ve que el
+    cobro queda en la cola y que la factura la emite administración.
+  */
+  const puedeCola = puedePermiso('facturas.cola');
+  const conCobroVenta = !!created && Number(created.importe_pagado) > 0;
   const copiedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => () => {
@@ -596,8 +608,9 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
         }
       }
       toast({ title: 'Conversion registrada', description: `${form.producto_contratado} - ${form.importe_total}EUR` });
-      if (!FACT_V2) {
+      if (!FACT_V2 && !(Number(res.data.importe_pagado) > 0)) {
         // Producción (flujo clásico): registrar y cerrar, sin ventana de documento.
+        // Con algo cobrado, sí: el paso de la factura de ese cobro (CRM#1043).
         onCreated?.(res.data);
         onClose();
       } else {
@@ -637,8 +650,28 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                       onVerVenta={() => { window.location.assign(`${import.meta.env.BASE_URL.replace(/\/$/, '')}/ventas/${created.id}`); }} />
                   </div>
                 )}
-                <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+                {!conCobroVenta && (
+                  <p className="text-sm text-muted-foreground mt-1">¿Generar un documento para el cliente y descargar el PDF?</p>
+                )}
               </div>
+              {conCobroVenta ? (
+                /* Con cobro, la FACTURA DE ESE COBRO, que sale de la cola
+                   (CRM#1043). Ya no se ofrece la proforma: el servidor la rechaza
+                   después del primer cobro (PROFORMA_WITH_PAYMENT). */
+                <div className="space-y-3 text-left">
+                  <p className="text-xs text-muted-foreground">
+                    {Number(created.importe_pagado) >= Number(created.importe_total) - 0.01
+                      ? <>Esta venta se registró <b>pagada entera</b>: lo que toca es la <b>factura del pago completo</b>.</>
+                      : <>Esta venta se registró con un <b>pago parcial</b>: lo que toca es <b>la factura del pago 1</b>. Cada cuota llevará la suya cuando se cobre.</>}
+                  </p>
+                  {puedeCola ? <EmitirFacturaCobro conversionId={created.id} /> : <AvisoCobroEnCola />}
+                  <QueEsCadaUna />
+                  <button type="button" onClick={finishAndClose}
+                    className="w-full h-10 px-3 rounded-md border border-border bg-card text-xs font-semibold hover:border-primary hover:bg-muted/50 transition-colors">
+                    Cerrar
+                  </button>
+                </div>
+              ) : (<>
               <div className="grid grid-cols-2 gap-3">
                 <button type="button" onClick={() => setDocPhase('proforma')}
                   className="flex flex-col items-center gap-2 p-4 rounded-lg border border-border bg-card hover:border-primary hover:bg-muted/50 transition">
@@ -654,6 +687,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                 </button>
               </div>
               <button type="button" onClick={finishAndClose} className="text-xs text-muted-foreground hover:underline">Ahora no</button>
+              </>)}
             </div>
           ) : (
           // noValidate: los avisos los da el CRM (handleSubmit), que dicen qué

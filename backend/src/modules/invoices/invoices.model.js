@@ -2059,7 +2059,13 @@ export async function listVentasSinFactura({ projectId = null, projectIds = null
   const lista = comoLista(projectId, projectIds);
   const { rows } = await query(
     `SELECT c.id AS conversion_id, c.lead_id, l.nombre AS cliente_nombre, c.project_id,
-            c.producto_contratado, c.importe_total, c.importe_pagado, c.fecha_conversion, c.metodo_pago
+            c.producto_contratado, c.importe_total, c.importe_pagado, c.fecha_conversion, c.metodo_pago,
+            -- Su primer cobro: el que espera en la cola. «Factúrala desde la cola»
+            -- lleva a esa fila (CRM#1043). La venta no tiene ninguna factura, así
+            -- que ninguno de sus cobros la tiene.
+            (SELECT cp.id FROM conversion_payments cp
+              WHERE cp.conversion_id = c.id
+              ORDER BY cp.fecha ASC, cp.id ASC LIMIT 1) AS primer_cobro_id
        FROM conversions c
        JOIN leads l ON l.id = c.lead_id
        -- Una proforma ES una factura de la serie (Diego, 19/11/2026): la venta que
