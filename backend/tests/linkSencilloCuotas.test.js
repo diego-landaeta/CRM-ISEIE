@@ -14,7 +14,7 @@ import jwt from 'jsonwebtoken';
  *     cuotas y elegir las fechas sí o sí»): sin cobro automático (campus que no
  *     lo permite, clave sin permisos) el link no guarda la tarjeta y, al pagarse
  *     la inicial, se crea un link por cuota con su fecha; solo un campus que no
- *     admite cuotas da 409 sin tocar Stripe;
+ *     admite cuotas las para (400 CUOTAS_NO_ADMITIDAS) sin tocar Stripe;
  *   · las fechas que elige la gestora: la venta nace con ellas;
  *   · pago único sin persona: al pagarse se crea el prospecto (para quien creó
  *     el link, con origen «link de pago») y la venta; Stripe avisa dos veces y
@@ -203,15 +203,15 @@ describe('«cuotas»: siempre que el campus las admita; lo que cambia es si se c
     expect(pl['custom_text[submit][message]']).toBeUndefined();
   });
 
-  it('campus que no admite cuotas: 409 sin tocar Stripe (lo de antes, ahora solo por el campus)', async () => {
+  it('campus que no admite cuotas: no se crea, sin tocar Stripe (lo único que apaga las cuotas)', async () => {
     await q('UPDATE projects SET links_pago_cuotas_admitidas = FALSE WHERE id = $1', [B]);
     try {
       const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: B }).set(como(p.gestora));
       expect(ver.body.data).toMatchObject({ disponible: false });
       expect(ver.body.data.motivo).toMatch(/no admite pagos en cuotas/);
       const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 3 });
-      expect(r.status).toBe(409);
-      expect(r.body.code).toBe('CUOTAS_NO_DISPONIBLES');
+      // Lo para la regla del campus antes de mirar el cobro automático.
+      expect([r.status, r.body.code]).toEqual([400, 'CUOTAS_NO_ADMITIDAS']);
       expect(de('POST', '/v1/payment_links')).toHaveLength(0);
     } finally {
       await q('UPDATE projects SET links_pago_cuotas_admitidas = TRUE WHERE id = $1', [B]);
