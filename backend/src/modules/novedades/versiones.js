@@ -13,6 +13,95 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "3.0.0",
+    "fecha": "2026-11-24",
+    "titulo": "Versión 3.0.0",
+    "intro": "Moodle dentro del CRM, tutoras redactoras, recorridos que solo se abren al pulsar y facturación más clara.",
+    "grupos": [
+      {
+        "titulo": "Moodle",
+        "items": [
+          {
+            "titulo": "«Mi campus» para las tutoras",
+            "texto": "Tus alumnos con su % hecho, las dudas por contestar, las entregas por corregir y los cursos por desarrollar, en una sola pantalla.",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus"
+          },
+          {
+            "titulo": "El chat del campus, en Consultas",
+            "texto": "Las dudas que el alumno escribe en el chat de Moodle llegan a Consultas y se contestan desde el CRM; la respuesta sale en Moodle a nombre de la tutora. Se enciende campus a campus, al conectar el plugin.",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas"
+          },
+          {
+            "titulo": "Cada producto con su curso de Moodle",
+            "texto": "En «Cursos de Moodle» eliges el curso de cada producto, y avisa de los vendidos sin curso. «Probar conexión» dice qué le falta al Moodle de cada campus.",
+            "roles": ["admin", "superadmin", "soporte"],
+            "ruta": "/products/cursos-moodle",
+            "boton": "Ir a Cursos de Moodle"
+          },
+          {
+            "titulo": "Matrícula automática",
+            "texto": "Con el primer pago, el CRM programa la matrícula del alumno en su curso para el día antes del inicio. Por eso la fecha de inicio del curso es obligatoria al cerrar la venta. Llega campus a campus: hasta entonces, la matrícula sigue a mano.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "El avance del alumno en su ficha",
+            "texto": "En la pestaña «Campus» de la ficha del cliente: último acceso, % hecho, notas y estado de cada curso.",
+            "roles": ["gestor", "admin", "superadmin"]
+          }
+        ]
+      },
+      {
+        "titulo": "Equipo",
+        "items": [
+          {
+            "titulo": "Tutoras redactoras",
+            "texto": "Las tutoras redactoras tienen su tablero aparte y su ficha; el tablero se filtra por equipo.",
+            "roles": ["admin", "superadmin", "tutor_redactor"],
+            "ruta": "/tareas",
+            "boton": "Ir a Tareas"
+          },
+          {
+            "titulo": "Recorridos, solo cuando los pides",
+            "texto": "Ningún recorrido se abre solo. «Recorrido», arriba, abre el de la pantalla en la que estás o el general de tu rol, y «Ver recorrido» está en Ventas, Finanzas, Clientes, la ficha del prospecto y La cola del día.",
+            "roles": ["gestor", "admin", "superadmin"]
+          },
+          {
+            "titulo": "Lo completado, en «Qué ha pasado hoy»",
+            "texto": "Los recordatorios que se completan salen en la actividad del día.",
+            "roles": ["gestor", "admin", "superadmin"]
+          }
+        ]
+      },
+      {
+        "titulo": "Facturas",
+        "items": [
+          {
+            "titulo": "Aviso de posible duplicada más claro",
+            "texto": "Dice de quién es la otra factura y en qué se parece: la misma venta, el mismo NIF o el mismo nombre. Si es otra, «Es otra, emitir igualmente».",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturación"
+          },
+          {
+            "titulo": "Nadie valida ni paga su propia factura",
+            "texto": "En las facturas del mes de vendedoras y colaboradores, quien la emite no puede validarla ni marcarla como pagada: lo hace otra persona.",
+            "roles": ["admin", "superadmin"]
+          }
+        ]
+      }
+    ],
+    "arreglos": [
+      "Por cobrar y Conversiones suman solo los campus de la empresa elegida.",
+      "La paginación de Prospectos cabe en el móvil."
+    ]
+  },
+  {
     "version": "2.9.8",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.8",
