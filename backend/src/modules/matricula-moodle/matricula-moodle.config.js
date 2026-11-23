@@ -46,3 +46,19 @@ export const horaDelDiaAnterior = () => entero(process.env.MATRICULA_MOODLE_HORA
 /** Zona de la oficina, como en Ventas (#693). Validada: va dentro del SQL. */
 export const ZONA = /^[A-Za-z_+\-/]+$/.test(process.env.APP_TIMEZONE || '')
   ? process.env.APP_TIMEZONE : 'Europe/Madrid';
+
+/*
+  FASE 2 (#455): el trabajo SÍ llama a Moodle (`local_crm_matricular`, plugin
+  1.12.0) cuando el campus tiene el plugin conectado, y el CRM manda al alumno
+  su correo de bienvenida (decisión de Diego, 23/11). Sin plugin conectado,
+  como en la fase 1: «lista» y aviso para hacerla a mano.
+
+    MATRICULA_MOODLE_CORREO_EXISTENTES  1/true para mandar también el correo a
+                                        quien YA tenía cuenta en el campus (sus
+                                        cursos nuevos y «¿Has olvidado tu
+                                        contraseña?»). APAGADO de serie: está
+                                        por decidir (pregunta 3 de la #455). Al
+                                        alumno nuevo se le manda siempre: sin
+                                        ese correo no puede entrar.
+*/
+export const correoExistentes = () => si(process.env.MATRICULA_MOODLE_CORREO_EXISTENTES);
