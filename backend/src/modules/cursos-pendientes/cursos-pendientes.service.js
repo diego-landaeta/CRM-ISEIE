@@ -529,9 +529,15 @@ async function avisarFechaMovida(curso, user, motivo) {
  *   · la fecha ha pasado y no está publicado → la tutora y el admin del campus;
  *   · más de 48 h sin tutora → el admin del campus;
  *   · publicado con alumnas sin habilitar más de 48 h → la tutora y el admin.
+ *
+ * `projectIds` recorta la vuelta a esos campus. El job no lo pasa (todos); las
+ * pruebas, sí: dos ficheros que la daban a la vez sobre la misma base se
+ * quitaban los cursos el uno al otro (el primero se quedaba el «una vez» y el
+ * segundo no encontraba su aviso: CI del 23/11, cursosVendidosSinDesarrollar770).
  */
-export async function avisarVencimientos() {
+export async function avisarVencimientos({ projectIds = null } = {}) {
   const zona = process.env.APP_TIMEZONE || 'Europe/Madrid';
+  const campus = Array.isArray(projectIds) ? projectIds.map(Number).filter(Number.isInteger) : null;
   const { rows } = await query(
     `SELECT c.id, c.nombre, c.project_id, p.nombre AS campus, c.tutor_id, c.estado, c.fecha_comprometida::text AS fecha,
             c.fecha_solicitud::text AS solicitada, c.fecha_publicacion::text AS publicada,
@@ -539,8 +545,9 @@ export async function avisarVencimientos() {
             (c.fecha_comprometida - (now() AT TIME ZONE $1::text)::date) AS dias,
             (SELECT count(*)::int FROM cursos_pendientes_alumnas a WHERE a.curso_id = c.id AND a.estado = 'en_espera') AS esperando
        FROM cursos_pendientes c JOIN projects p ON p.id = c.project_id
-      WHERE c.estado IN ('pendiente_asignar', 'asignado', 'en_desarrollo', 'publicado')`,
-    [zona]
+      WHERE c.estado IN ('pendiente_asignar', 'asignado', 'en_desarrollo', 'publicado')
+        AND ($2::int[] IS NULL OR c.project_id = ANY($2::int[]))`,
+    [zona, campus]
   );
   let enviados = 0;
   const unaVez = async (cursoId, tipo, dia) => {

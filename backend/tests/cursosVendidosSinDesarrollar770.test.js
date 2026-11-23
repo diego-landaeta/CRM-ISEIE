@@ -296,7 +296,11 @@ describe('una fecha límite vencida', () => {
     await vender(await alumna('Fani'), { producto_contratado_id: prod });
     const [c] = await pendientesDe(prod);
     await q(`UPDATE cursos_pendientes SET fecha_comprometida = $2 WHERE id = $1`, [c.id, dia(-1)]);
-    await avisarVencimientos();
+    // Solo sobre el campus de esta prueba. Recorriendo la base entera, la vuelta de
+    // cursosPendientes.test.js (que corre a la vez) se quedaba a veces con este
+    // curso: apuntaba el «una vez» y esta no encontraba su aviso (CI del 23/11,
+    // «expected [] to include 'Retrasado: …'»).
+    await avisarVencimientos({ projectIds: [P] });
     const titulo = `Retrasado: ${nombre('Curso que se pasa de fecha')}`;
     for (const u of [TUTORA, ADMIN]) expect((await avisos('curso_pendiente_retrasado', u.id)).map((n) => n.title)).toContain(titulo);
   });
