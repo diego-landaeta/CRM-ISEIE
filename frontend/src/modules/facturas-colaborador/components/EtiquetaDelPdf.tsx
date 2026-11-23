@@ -1,11 +1,15 @@
-import { euros, pdfFrenteAEscrito, type FacturaDelMes, type Tipo } from '../api/facturasColaborador.api';
+import { euros, pdfFrenteAEscrito, type EquipoDeLaFicha, type FacturaDelMes, type Tipo } from '../api/facturasColaborador.api';
 
-/** «Vendedora» junto al nombre (CRM#710): sus facturas se distinguen de las de los colaboradores. */
-export function EtiquetaVendedora({ tipo }: { tipo?: Tipo }) {
-  if (tipo !== 'vendedora') return null;
+/**
+ * «Vendedora» junto al nombre (CRM#710): sus facturas se distinguen de las de los
+ * colaboradores. Y «Redactora» (CRM-ISEIE#687): la tutora redactora, del otro equipo.
+ */
+export function EtiquetaVendedora({ tipo, equipo }: { tipo?: Tipo; equipo?: EquipoDeLaFicha }) {
+  const texto = tipo === 'vendedora' ? 'Vendedora' : equipo === 'redactoras' ? 'Redactora' : null;
+  if (!texto) return null;
   return (
     <span className="ml-1.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide align-middle bg-info-soft text-info-soft-foreground">
-      Vendedora
+      {texto}
     </span>
   );
 }

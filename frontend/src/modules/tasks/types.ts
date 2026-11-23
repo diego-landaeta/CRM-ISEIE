@@ -204,7 +204,8 @@ export interface TeamMember {
 }
 
 /** Un equipo de quien mira, con su cargo. */
-export type TipoEquipo = 'colaboradores' | 'tutores';
+/** De colaboradores (desarrollo, SEO…), de tutores (04/11/2026) o de tutoras redactoras (23/11/2026). */
+export type TipoEquipo = 'colaboradores' | 'tutores' | 'redactoras';
 
 export interface MyTeam {
   team_id: number;

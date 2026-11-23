@@ -13,7 +13,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 const { api } = vi.hoisted(() => ({
   api: {
-    empresas: vi.fn(), mes: vi.fn(), colaboradores: vi.fn(), vista: vi.fn(), costePorCampus: vi.fn(), validar: vi.fn(),
+    empresas: vi.fn(), mes: vi.fn(), colaboradores: vi.fn(), vista: vi.fn(), costePorCampus: vi.fn(), validar: vi.fn(), redactorasSinFicha: vi.fn(),
   },
 }));
 
@@ -43,6 +43,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   api.empresas.mockResolvedValue({ data: [{ id: 7, razon_social: 'CEDIA Investigación y Desarrollo SL' }] });
   api.colaboradores.mockResolvedValue({ data: [] });
+  api.redactorasSinFicha.mockResolvedValue({ data: [] });
   api.costePorCampus.mockResolvedValue({ data: { campus: [] } });
   api.mes.mockResolvedValue({ data: { periodo: '2026-10', mes: 'octubre de 2026', facturas: [fila()], resumen: { total: 1, recibidas: 1, importe_recibido: 412.5, importe_acordado: 0 } } });
   api.vista.mockResolvedValue({ data: { vista: 'por_validar', resumen: { total: 1, importe: 412.5, pendiente: 412.5 }, facturas: [fila()] } });
@@ -54,7 +55,7 @@ describe('«Vendedoras / Colaboradores» (CRM-ISEIE#422)', () => {
     abrir('/finanzas/facturas-colaboradores?tipo=vendedora');
     await waitFor(() => expect(api.mes).toHaveBeenCalled());
     expect(api.mes.mock.calls.at(-1)[0].tipo).toBe('vendedora');
-    expect(screen.getByLabelText('Vendedoras o colaboradores')).toBeTruthy();
+    expect(screen.getByLabelText('Quién factura')).toBeTruthy();
 
     fireEvent.click(screen.getByRole('button', { name: 'Por validar' }));
     await waitFor(() => expect(api.vista).toHaveBeenCalled());

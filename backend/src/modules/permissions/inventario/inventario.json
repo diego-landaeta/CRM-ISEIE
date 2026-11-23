@@ -5341,6 +5341,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/facturas-colaborador/colaboradores/redactoras-sin-ficha",
+  "tipo": "ruta",
+  "modulo": "facturas-colaborador",
+  "metodo": "GET",
+  "ruta": "/api/facturas-colaborador/colaboradores/redactoras-sin-ficha",
+  "relativa": "GET /colaboradores/redactoras-sin-ficha",
+  "controlador": null,
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas_colaborador.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/facturas-colaborador/colaboradores/:id",
   "tipo": "ruta",
   "modulo": "facturas-colaborador",

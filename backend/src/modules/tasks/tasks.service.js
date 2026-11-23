@@ -360,7 +360,8 @@ async function tareaVisible(id, user, permisos) {
     return task;
   }
   // Las de sus equipos se ven (26/10/2026: «cada persona ve en el tablero sus equipos»).
-  if (task.team_id && (p.viewOwn || p.viewAll) && (await reglas.nivelEn(task.team_id, user.userId)) != null) return task;
+  // En uno de redactoras, cada una lo suyo y la encargada lo de su equipo (23/11/2026).
+  if (task.team_id && (p.viewOwn || p.viewAll) && (await eqModel.veLaDelEquipo(task, user.userId))) return task;
   exigir(p.viewAll, 'No tienes permiso para esta tarea');
   await exigirEnAmbito(task.assigned_to, user);
   return task;
@@ -522,6 +523,7 @@ export async function listTasks(user, q) {
     ...alcance,
     assigned_to: q.assigned_to,
     team_id: q.team_id,
+    team_tipo: q.team_tipo,
     project_id: q.project_id,
     external_project_id: q.external_project_id,
     area_id: q.area_id,
@@ -939,6 +941,7 @@ export async function getHistorial(user, q = {}) {
     ...(await alcanceDeLaVista(user, p, q)),
     status: HECHA,
     team_id: q.team_id,
+    team_tipo: q.team_tipo,
     search: q.search,
     cerradas_desde: q.desde,
     cerradas_hasta: q.hasta,

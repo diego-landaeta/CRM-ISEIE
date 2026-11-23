@@ -13,8 +13,9 @@ import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  AREAS, AREA_ES, ESTADO, FORMA_PAGO_ES, TIPO_FILTRO, euros, diaDelPago, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, mesEscrito, primeraMayuscula,
-  type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes, type Tipo,
+  AREAS, AREA_ES, ESTADO, FORMA_PAGO_ES, QUIEN_FILTRO, euros, filtroDeQuien, quienDeLaDireccion, diaDelPago, diaMes, empresaCorta, facturasColaboradorApi, fechaHora, mesEscrito, primeraMayuscula,
+  type Area, type Colaborador, type EmpresaDelGrupo, type EstadoFactura, type FacturaDelMes, type Mes, type QuienFactura,
+  type RedactoraSinFicha,
   urlDelArchivo,
 } from '../api/facturasColaborador.api';
 import {
@@ -74,17 +75,20 @@ const mesPorDefecto = () => {
 
 const errorDe = (err: any) => err?.data?.error || err?.message || 'Inténtalo de nuevo';
 
-/** El filtro «Vendedoras / Colaboradores» (CRM#710), en la dirección: vale para todas las pestañas. */
-function useTipoDeLaDireccion(): ['' | Tipo, (v: '' | Tipo) => void] {
+/**
+ * El filtro «Vendedoras / Colaboradores» (CRM#710) y, de los colaboradores, su
+ * equipo: desarrollo o tutoras redactoras (CRM-ISEIE#687). En la dirección (`?tipo=`):
+ * vale para todas las pestañas.
+ */
+function useQuienDeLaDireccion(): [QuienFactura, (v: QuienFactura) => void] {
   const [params, setParams] = useSearchParams();
-  const v = params.get('tipo');
-  const tipo: '' | Tipo = v === 'vendedora' || v === 'colaborador' ? v : '';
-  const poner = (t: '' | Tipo) => {
+  const quien = quienDeLaDireccion(params.get('tipo'));
+  const poner = (t: QuienFactura) => {
     const n = new URLSearchParams(params);
     if (t) n.set('tipo', t); else n.delete('tipo');
     setParams(n, { replace: true });
   };
-  return [tipo, poner];
+  return [quien, poner];
 }
 
 function Pildora({ estado }: { estado: EstadoFactura }) {
@@ -107,7 +111,7 @@ export default function FacturasColaboradoresPage() {
     ? enLaDireccion as Vista : 'mes';
   const vista: Vista = pedida !== 'colaboradores' && !veElMes ? 'colaboradores' : pedida === 'colaboradores' && !gestiona ? 'mes' : pedida;
   const empresa = useEmpresaDeLaCabecera();
-  const [tipo, setTipo] = useTipoDeLaDireccion();
+  const [quien, setQuien] = useQuienDeLaDireccion();
 
   useEffect(() => {
     if (!veElMes && !gestiona) return;
@@ -151,19 +155,19 @@ export default function FacturasColaboradoresPage() {
           </button>
         ))}
         <div className="ml-auto w-56 flex-none">
-          <Select<'' | Tipo> value={tipo} onChange={setTipo} ariaLabel="Vendedoras o colaboradores" options={TIPO_FILTRO} />
+          <Select<QuienFactura> value={quien} onChange={setQuien} ariaLabel="Quién factura" options={QUIEN_FILTRO} />
         </div>
       </div>
-      {vista === 'mes' ? <DelMes empresas={empresas} empresa={empresa} tipo={tipo} />
-        : vista === 'colaboradores' ? <Colaboradores empresas={empresas} empresa={empresa} tipo={tipo} />
-          : <ListaDeFacturas key={vista} vista={vista} empresas={empresas} empresa={empresa} tipo={tipo} />}
+      {vista === 'mes' ? <DelMes empresas={empresas} empresa={empresa} quien={quien} />
+        : vista === 'colaboradores' ? <Colaboradores empresas={empresas} empresa={empresa} quien={quien} />
+          : <ListaDeFacturas key={vista} vista={vista} empresas={empresas} empresa={empresa} quien={quien} />}
     </div>
   );
 }
 
 /* ─────────────────────────── Del mes ─────────────────────────── */
 
-function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empresa: number | null; tipo: '' | Tipo }) {
+function DelMes({ empresas, empresa, quien }: { empresas: EmpresaDelGrupo[]; empresa: number | null; quien: QuienFactura }) {
   const [params, setParams] = useSearchParams();
   const periodo = params.get('periodo') || mesPorDefecto();
   // Con una empresa en la cabecera, esa: el desplegable no le lleva la contraria.
@@ -195,14 +199,14 @@ function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empr
     setCargando(true);
     try {
       const r = await facturasColaboradorApi.mes({
-        periodo, issuerId: issuerId ? Number(issuerId) : undefined, estado: estado || undefined, area: area || undefined, tipo: tipo || undefined,
+        periodo, issuerId: issuerId ? Number(issuerId) : undefined, estado: estado || undefined, area: area || undefined, ...filtroDeQuien(quien),
       });
       setDatos(r.data);
       setVueltas((v) => v + 1);
     } catch (err) {
       toast({ title: 'No se pudo cargar el mes', description: errorDe(err), variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [periodo, issuerId, estado, area, tipo]);
+  }, [periodo, issuerId, estado, area, quien]);
 
   useEffect(() => { void cargar(); }, [cargar]);
 
@@ -344,7 +348,7 @@ function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empr
               <tbody className="divide-y divide-border">
                 {datos.facturas.map((f) => (
                   <tr key={f.id} className={f.estado === 'anulada' ? 'opacity-60' : ''}>
-                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} /></td>
+                    <td className="px-2 py-2 font-medium">{f.colaborador_nombre}<EtiquetaVendedora tipo={f.tipo} equipo={f.equipo} /></td>
                     <td className="px-2 py-2">{AREA_ES[f.area]}</td>
                     <td className="px-2 py-2 whitespace-nowrap" title={f.empresa}>{empresaCorta(f.empresa)}</td>
                     <td className="px-2 py-2 text-right tabular-nums">{euros(f.importe_esperado, f.moneda)}</td>
@@ -446,12 +450,17 @@ function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empr
 
 /* ─────────────────────────── Colaboradores ─────────────────────────── */
 
-function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empresa: number | null; tipo: '' | Tipo }) {
+function Colaboradores({ empresas, empresa, quien }: { empresas: EmpresaDelGrupo[]; empresa: number | null; quien: QuienFactura }) {
+  const { tipo, equipo } = filtroDeQuien(quien);
   const [estado, setEstado] = useState<'activos' | 'de_baja' | 'todos'>('activos');
   const [q, setQ] = useState('');
   const [lista, setLista] = useState<Colaborador[]>([]);
   const [cargando, setCargando] = useState(true);
   const [editando, setEditando] = useState<Colaborador | 'nuevo' | null>(null);
+  // Las tutoras redactoras sin ficha (CRM-ISEIE#687): se les hace desde aquí, con sus datos puestos.
+  const [sinFicha, setSinFicha] = useState<RedactoraSinFicha[]>([]);
+  const [paraRedactora, setParaRedactora] = useState<RedactoraSinFicha | null>(null);
+  const conSinFicha = quien === '' || quien === 'colaborador' || quien === 'redactoras';
   const [baja, setBaja] = useState<Colaborador | null>(null);
   const [vuelve, setVuelve] = useState<Colaborador | null>(null);
   const [historial, setHistorial] = useState<Colaborador | null>(null);
@@ -463,12 +472,18 @@ function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[
     setCargando(true);
     try {
       // Con una empresa (la de la cabecera o la elegida), solo quienes le facturan.
-      const r = await facturasColaboradorApi.colaboradores({ estado, q: q.trim() || undefined, issuerId: issuerId ?? undefined, tipo: tipo || undefined });
+      const r = await facturasColaboradorApi.colaboradores({ estado, q: q.trim() || undefined, issuerId: issuerId ?? undefined, tipo, equipo });
       setLista(r.data);
     } catch (err) {
       toast({ title: 'No se pudo cargar la lista', description: errorDe(err), variant: 'destructive' });
     } finally { setCargando(false); }
-  }, [estado, q, issuerId, tipo]);
+  }, [estado, q, issuerId, tipo, equipo]);
+
+  const cargarSinFicha = useCallback(() => {
+    if (!conSinFicha) { setSinFicha([]); return; }
+    facturasColaboradorApi.redactorasSinFicha().then((r) => setSinFicha(r.data || [])).catch(() => setSinFicha([]));
+  }, [conSinFicha]);
+  useEffect(() => { cargarSinFicha(); }, [cargarSinFicha]);
 
   useEffect(() => {
     const t = setTimeout(() => { void cargar(); }, 250);
@@ -502,9 +517,33 @@ function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[
             options={[{ value: 'activos', label: 'Activos' }, { value: 'de_baja', label: 'De baja' }, { value: 'todos', label: 'Todos' }]} />
         </div>
         <Button size="sm" className="ml-auto" onClick={() => setEditando('nuevo')}>
-          <Plus size={13} weight="bold" className="mr-1.5" /> {tipo === 'vendedora' ? 'Añadir vendedora' : 'Añadir colaborador'}
+          <Plus size={13} weight="bold" className="mr-1.5" /> {tipo === 'vendedora' ? 'Añadir vendedora' : equipo === 'redactoras' ? 'Añadir redactora' : 'Añadir colaborador'}
         </Button>
       </div>
+
+      {sinFicha.length > 0 && (
+        // «Sus fichas» (CRM-ISEIE#687): las tutoras redactoras que aún no facturan por aquí.
+        <section aria-label="Tutoras redactoras sin ficha" className="rounded-lg border border-border bg-card p-3 space-y-2">
+          <div>
+            <h3 className="text-sm font-semibold">Tutoras redactoras sin ficha ({sinFicha.length})</h3>
+            <p className="text-xs text-muted-foreground">
+              Sin ficha no les llega el enlace del mes ni ven «Mi factura». Las desactivadas también salen: su ficha se prepara antes de activarlas.
+            </p>
+          </div>
+          <ul className="divide-y divide-border">
+            {sinFicha.map((r) => (
+              <li key={r.id} className="flex flex-wrap items-center gap-2 py-1.5">
+                <span className="font-medium">{r.nombre}</span>
+                <span className="text-xs text-muted-foreground truncate max-w-[16rem]" title={r.email}>{r.email}</span>
+                {!r.active && <span className="rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-warning-soft text-warning-soft-foreground">Desactivada</span>}
+                <Button size="sm" variant="outline" className="ml-auto" onClick={() => setParaRedactora(r)}>
+                  <Plus size={13} weight="bold" className="mr-1.5" /> Crear su ficha
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
         {lista.length === 0 ? (
@@ -530,7 +569,7 @@ function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[
                 {lista.map((c) => (
                   <tr key={c.id}>
                     <td className="px-3 py-2 font-medium">
-                      {c.nombre}<EtiquetaVendedora tipo={c.tipo} />
+                      {c.nombre}<EtiquetaVendedora tipo={c.tipo} equipo={c.equipo} />
                       {c.usuario_nombre && <div className="text-xs font-normal text-muted-foreground">Usuario: {c.usuario_nombre}</div>}
                       {c.compartido && <div className="text-xs font-normal text-muted-foreground">También factura a otras empresas</div>}
                     </td>
@@ -566,7 +605,13 @@ function Colaboradores({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[
 
       {editando && (
         <ColaboradorDialog colaborador={editando === 'nuevo' ? null : editando} empresas={empresas} tipoNuevo={tipo || 'colaborador'}
-          alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); void cargar(); }} />
+          semilla={editando === 'nuevo' && equipo === 'redactoras' ? { area: 'redaccion' } : undefined}
+          alCerrar={() => setEditando(null)} alGuardar={() => { setEditando(null); void cargar(); cargarSinFicha(); }} />
+      )}
+      {paraRedactora && (
+        <ColaboradorDialog colaborador={null} empresas={empresas} tipoNuevo="colaborador"
+          semilla={{ nombre: paraRedactora.nombre, email: paraRedactora.email, area: 'redaccion', usuario: paraRedactora }}
+          alCerrar={() => setParaRedactora(null)} alGuardar={() => { setParaRedactora(null); void cargar(); cargarSinFicha(); }} />
       )}
       {baja && <BajaDialog colaborador={baja} alCerrar={() => setBaja(null)} alGuardar={() => { setBaja(null); void cargar(); }} />}
       {vuelve && <AltaDialog colaborador={vuelve} alCerrar={() => setVuelve(null)} alGuardar={() => { setVuelve(null); void cargar(); }} />}
