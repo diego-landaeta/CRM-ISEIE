@@ -4,6 +4,7 @@ import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import Select from '@/shared/components/ui/Select';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
+import EmitirFacturaCobro from '@/modules/invoices/components/EmitirFacturaCobro';
 
 interface Installment {
   id?: number;
@@ -50,6 +51,8 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   // Mini-form de cobro/edición de cuota: pide importe + fecha (no asume hoy).
   // mode='new' marca pagada por primera vez; mode='edit' modifica un pago hecho.
   const [payingInst, setPayingInst] = useState<Installment | null>(null);
+  // La cuota que se acaba de cobrar: su factura, aquí mismo (CRM#1043).
+  const [cuotaCobrada, setCuotaCobrada] = useState<{ paymentId: number; numero?: number } | null>(null);
   const [payMode, setPayMode] = useState<'new' | 'edit'>('new');
   const [payImporte, setPayImporte] = useState<string>('');
   const [payFecha, setPayFecha] = useState<string>('');
@@ -288,8 +291,9 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         toast({ title: 'Pago actualizado', description: `${importe}€ el ${payFecha}` });
       } else {
         const datos = { importe_cobrado: importe, fecha_cobro: payFecha, metodo: payMetodo, referencia };
+        let r: Awaited<ReturnType<typeof conversionsApi.payInstallment>> | undefined;
         try {
-          await conversionsApi.payInstallment(payingInst.id, datos);
+          r = await conversionsApi.payInstallment(payingInst.id, datos);
         } catch (err: any) {
           // Ya estaba pagada: se dice con qué cobro y se recarga el plan (CRM#888).
           if (err?.data?.code === 'CUOTA_YA_PAGADA') {
@@ -303,9 +307,11 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           // cobrada): se pregunta antes de apuntarlo.
           if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
           if (!window.confirm(`${err.data.error}\n\n¿Apuntarlo igualmente?`)) return;
-          await conversionsApi.payInstallment(payingInst.id, { ...datos, confirmar: true });
+          r = await conversionsApi.payInstallment(payingInst.id, { ...datos, confirmar: true });
         }
         toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
+        const pagoId = Number(r?.data?.payment_id) || null;
+        setCuotaCobrada(pagoId ? { paymentId: pagoId, numero: payingInst.numero } : null);
       }
       setPayingInst(null);
       onSaved?.();
@@ -347,6 +353,13 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
         </div>
 
         <div className="p-5 space-y-4 overflow-y-auto">
+          {cuotaCobrada && (
+            <div className="space-y-1.5" data-testid="factura-cuota-cobrada">
+              <p className="text-xs font-semibold">Factura de la cuota{cuotaCobrada.numero ? ` #${cuotaCobrada.numero}` : ''} cobrada</p>
+              <EmitirFacturaCobro conversionId={conversion.id} paymentId={cuotaCobrada.paymentId}
+                onEmitida={() => { onSaved?.(); load(); }} />
+            </div>
+          )}
           {loading ? (
             <p className="text-sm text-muted-foreground">Cargando…</p>
           ) : mode === 'view' && installments.length > 0 ? (

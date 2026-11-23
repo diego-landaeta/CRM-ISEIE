@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-905 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+906 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -534,6 +534,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | facturacionAlDia | `GET /api/invoices/facturacion-al-dia` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
 | setFacturacionAlDia | `PUT /api/invoices/facturacion-al-dia` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
 | generarDeCola | `POST /api/invoices/cola/generar` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
+| cobrosDeVentaEnCola | `GET /api/invoices/cola/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | emitirColaHasta | `POST /api/invoices/cola/emitir-hasta` | sesión · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte/project_manager con «factura_manager» | `facturas.cola` |
 | list | `GET /api/invoices/` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
 | stats | `GET /api/invoices/stats` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |

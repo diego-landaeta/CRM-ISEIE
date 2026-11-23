@@ -907,6 +907,54 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
 }
 
 /*
+  LOS COBROS DE UNA VENTA QUE ESPERAN EN LA COLA (CRM#1043).
+
+  Ticket de soporte del 23/11: una gestora registró una venta con la primera
+  cuota cobrada y el CRM solo le ofreció la proforma. Dijo que no y la venta se
+  quedó en «Ventas sin factura» sin la factura de su cobro. Ahora, al registrar
+  la venta o el cobro, se ofrece «Emitir ya la factura de este cobro».
+
+  Es la MISMA cola que la de Facturación (`listPagosSinFactura`): lo que se
+  ofrece aquí es justo lo que el botón de la cola emitiría, y un cobro que ya
+  tiene su factura no sale, así que no hay forma de emitir dos del mismo cobro.
+  «El siguiente» se decide con la cola entera del campus, como allí.
+*/
+export async function cobrosDeVentaEnCola(conversionId, { personas = null } = {}) {
+  const { rows: [venta] } = await query('SELECT project_id FROM conversions WHERE id = $1', [conversionId]);
+  if (!venta) throw new AppError('Esa venta no existe', 404, 'NOT_FOUND');
+  const entera = await model.listPagosSinFactura(venta.project_id);
+  const primero = entera[0]?.payment_id;
+  const deLaVenta = entera
+    .filter((p) => Number(p.conversion_id) === Number(conversionId))
+    .filter(cobroDelEquipo(personas));
+  let duplicadas = new Map();
+  try {
+    duplicadas = await duplicadasDeLaCola(deLaVenta.map((p) => p.payment_id));
+  } catch (err) {
+    logger.warn({ err: err.message, conversionId }, 'no se pudo mirar si los cobros de la venta son posibles duplicadas');
+  }
+  // Las facturas que ya tiene (para decir «ya tiene su factura» y no ofrecer otra).
+  const { rows: facturas } = await query(
+    `SELECT id, codigo, payment_id, tipo, estado
+       FROM invoices
+      WHERE conversion_id = $1 AND estado <> 'cancelada'
+      ORDER BY id`,
+    [conversionId]);
+  return {
+    project_id: venta.project_id,
+    cobros: deLaVenta.map((p) => ({
+      payment_id: p.payment_id,
+      fecha: p.fecha,
+      importe: Number(p.importe || 0),
+      origen: p.de_stripe ? 'stripe' : 'manual',
+      es_el_siguiente: p.payment_id === primero,
+      posible_duplicada: duplicadas.get(Number(p.payment_id)) || null,
+    })),
+    facturas,
+  };
+}
+
+/*
   «COBRADA» EN UNA PROFORMA.
 
   Yolanda, 29/09: tenia dos proformas cobradas y no encontraba como pasarlas a

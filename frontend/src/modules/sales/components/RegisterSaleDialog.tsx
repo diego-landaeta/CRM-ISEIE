@@ -3,6 +3,7 @@ import { hoyEnMadrid, sumarMeses } from '@/shared/lib/fechas';
 import { Receipt, X, MagnifyingGlass, UserCheck, UserPlus, UserMinus } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
 import client from '@/shared/api/client';
+import EmitirFacturaCobro, { QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
 import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, type Falta } from '@/shared/lib/loQueFalta';
 import Portal from '@/shared/components/ui/portal';
@@ -112,7 +113,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   // El alumno ya tiene una venta de este programa (CRM#898): la que existe y
   // lo que se iba a mandar, por si se crea igualmente.
   const [ventaExistente, setVentaExistente] = useState<{ venta: VentaExistente; body: Record<string, unknown> } | null>(null);
-  useEffect(() => { if (!open) setVentaExistente(null); }, [open]);
+  // Venta registrada con algo cobrado: se dice qué pasa con la factura de ese
+  // cobro y, con «Emitir desde la cola», se emite ya (CRM#1043).
+  const [ventaConCobro, setVentaConCobro] = useState<number | null>(null);
+  useEffect(() => { if (!open) { setVentaExistente(null); setVentaConCobro(null); } }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -346,7 +350,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
       : (data.retroactiva ? `Venta histórica registrada (${fecha})${data.duplicado ? ' — sobre cliente existente' : ''}` : `Venta registrada${data.duplicado ? ' — sobre cliente existente' : ''}`);
     toast({ title: 'Venta creada', description: desc });
     onSaved?.(data);
-    onClose();
+    if (Number(body.importe_pagado) > 0 && data?.sale_id) setVentaConCobro(data.sale_id);
+    else onClose();
   }
 
   // «Crear otra venta igualmente»: lo mismo, con `forzar`. El servidor apunta quién.
@@ -359,6 +364,27 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
       const e = err as { data?: { error?: string }; message?: string };
       toast({ title: 'No se pudo registrar la venta', description: e?.data?.error || e?.message, variant: 'destructive' });
     }
+  }
+
+  if (ventaConCobro) {
+    return (
+      <Portal>
+        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
+          <div role="dialog" aria-modal="true" className="relative bg-card rounded-lg border border-border w-full max-w-md p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold text-base">Venta registrada</h3>
+              <button onClick={onClose} aria-label="Cerrar" className="p-1 rounded hover:bg-muted text-muted-foreground"><X size={18} /></button>
+            </div>
+            <EmitirFacturaCobro conversionId={ventaConCobro} />
+            <QueEsCadaUna />
+            <div className="flex justify-end">
+              <button type="button" onClick={onClose} className="h-9 px-4 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </Portal>
+    );
   }
 
   return (

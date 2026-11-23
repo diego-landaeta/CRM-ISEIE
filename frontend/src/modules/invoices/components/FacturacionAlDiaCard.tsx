@@ -64,8 +64,14 @@ function fecha(d: unknown) {
   return d ? new Date(String(d)).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' }) : '—';
 }
 
-export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia = false }: {
+export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia = false, resaltar = null }: {
   projectId?: number | null;
+  /**
+   * Un cobro al que se llega desde «Ventas sin factura» («factúrala desde la
+   * cola», CRM#1043): su fila se marca y se trae a la vista. Con `projectId`,
+   * solo lo busca la cola de ese campus.
+   */
+  resaltar?: { paymentId: number; projectId?: number | null } | null;
   /** El campus, cuando hay una cola por campus (empresa elegida arriba). */
   titulo?: string;
   /** Con varias colas, la que no tiene nada por facturar no se pinta. */
@@ -89,6 +95,17 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   }, [projectId]);
 
   useEffect(() => { cargar(); }, [cargar]);
+
+  // ¿Es esta la cola del cobro buscado, y está en ella?
+  const meToca = !!resaltar && (!resaltar.projectId || !projectId || Number(resaltar.projectId) === Number(projectId));
+  const resaltado = meToca && estado
+    ? (estado.cola || []).find((c) => Number(c.payment_id) === Number(resaltar!.paymentId)) || null
+    : null;
+  useEffect(() => {
+    if (!resaltado) return;
+    const fila = document.getElementById(`cobro-cola-${resaltado.payment_id}`);
+    fila?.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+  }, [resaltado]);
 
 
   /*
@@ -221,6 +238,12 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
         </div>
       )}
 
+      {meToca && !resaltado && (
+        <p role="note" data-testid="cobro-no-en-cola" className="mt-3 text-[11px] text-warning-soft-foreground rounded-md border border-warning/30 bg-warning-soft px-2.5 py-1.5">
+          El cobro de esa venta no sale en esta cola: o ya tiene factura, o queda antes de la fecha
+          {' '}«al día» o del año que se factura, o está más abajo de los que se muestran.
+        </p>
+      )}
       {cola.length > 0 && (
         <div className="mt-3">
           <div className="max-h-72 overflow-auto border border-border rounded-md">
@@ -239,8 +262,12 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                 {cola.map((c) => (
                   <tr
                     key={c.payment_id}
+                    id={`cobro-cola-${c.payment_id}`}
+                    aria-current={resaltado?.payment_id === c.payment_id ? 'true' : undefined}
                     className={`border-b border-border/50 last:border-0 ${
-                      c.es_el_siguiente ? 'bg-emerald-50/60 dark:bg-emerald-950/10' : ''
+                      resaltado?.payment_id === c.payment_id
+                        ? 'bg-primary/10 outline outline-2 outline-primary -outline-offset-2'
+                        : c.es_el_siguiente ? 'bg-emerald-50/60 dark:bg-emerald-950/10' : ''
                     }`}
                   >
                     <td className="px-2 py-1.5 text-muted-foreground whitespace-nowrap">{fecha(c.fecha)}</td>

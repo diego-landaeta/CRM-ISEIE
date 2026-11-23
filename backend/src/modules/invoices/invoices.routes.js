@@ -24,6 +24,9 @@ router.use(verifyToken);
 router.get('/facturacion-al-dia',     puede('facturas.view'), projectAccess, ctrl.facturacionAlDia);
 router.put('/facturacion-al-dia',     puede('facturas.cola'), projectAccess, ctrl.setFacturacionAlDia);
 router.post('/cola/generar',          puede('facturas.cola'), campusDelCuerpo, ctrl.generarDeCola);
+// Los cobros de UNA venta que esperan en la cola: «Emitir ya la factura de este
+// cobro» al registrar la venta o el cobro (CRM#1043). La emisión es la de arriba.
+router.get('/cola/venta/:conversionId', puede('facturas.view'), ventaDelParametro, ctrl.cobrosDeVentaEnCola);
 router.post('/cola/emitir-hasta',     puede('facturas.cola'), campusDelCuerpo, ctrl.emitirColaHasta);
 router.get('/',                       puede('facturas.view'), ctrl.list);
 router.get('/stats',                  puede('facturas.view'), ctrl.stats);
