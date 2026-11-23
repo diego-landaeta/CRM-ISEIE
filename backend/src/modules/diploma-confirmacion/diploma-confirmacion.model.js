@@ -172,6 +172,22 @@ export async function registrarEmision(matriculaId, { nexpediente, datos }) {
   return rows[0] || null;
 }
 
+/**
+ * Un diploma revertido (#351, gemela de CRM#624): su número queda anulado en Certifex y la
+ * matrícula vuelve a «Aprobados sin diploma». Se suelta aquí para que, al volver a emitir,
+ * `registrarEmision` apunte el número nuevo (solo escribe si `nexpediente IS NULL`) y
+ * `registrarEnvioDiploma` lo encuentre. Lo anulado no se pierde: queda en
+ * `certifex_reversiones` y en Certifex. Solo lo no enviado: un diploma enviado no se revierte.
+ */
+export async function soltarEmision(nexpediente) {
+  const { rowCount } = await query(
+    `UPDATE diploma_confirmaciones
+        SET nexpediente = NULL, emitido_at = NULL, datos_emision = NULL, updated_at = NOW()
+      WHERE nexpediente = $1 AND diploma_enviado_at IS NULL`,
+    [nexpediente]);
+  return rowCount;
+}
+
 /** El correo con el diploma salió (aviso aprobado en el panel). */
 export async function registrarEnvioDiploma(nexpedientes = []) {
   if (!nexpedientes.length) return 0;
