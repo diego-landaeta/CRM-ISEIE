@@ -127,6 +127,8 @@ beforeAll(async () => {
     await ponerClave(c, 'stripe', CLAVE_LECTURA);
   }
   await q('UPDATE projects SET links_pago_cobro_auto = TRUE, links_pago_cobro_auto_reintento_dias = 3 WHERE id = $1', [A]);
+  // Desde la 324 (#667) los campus nacen con el cobro automático encendido: B lo apaga a mano.
+  await q('UPDATE projects SET links_pago_cobro_auto = FALSE WHERE id = $1', [B]);
 }, 60_000);
 
 afterAll(async () => {

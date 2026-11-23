@@ -9,6 +9,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import AvisoConectarStripe, { AvisoCobroAutoApagado, tipoDeAviso } from './AvisoConectarStripe';
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
 import {
@@ -351,6 +352,12 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
   // campus: se dice en cuanto se sabe el campus y no se deja rellenar, en vez de
   // avisar después de rellenarlo todo (QA de /testeo del 18/11, gemela de CRM#948).
   const sinClave = (projectId && cfg?.aviso_clave) || null;
+  // «Inicial + cuotas» apagado por la clave de Stripe (CRM-ISEIE#667, gemela de CRM#992):
+  // el aviso que lleva a Integraciones › Links de pago, con el motivo concreto.
+  const tipoAviso = cuotas && !cuotas.disponible ? tipoDeAviso(cuotas.codigo) : null;
+  const avisoConectar = !venta && tipoAviso === 'conectar' && projectId && cuotas
+    ? <AvisoConectarStripe campus={[{ project_id: projectId, codigo: String(cuotas.codigo), motivo: cuotas.motivo }]} onIr={onClose} />
+    : null;
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
@@ -516,6 +523,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                   </p>
                 </div>
               )}
+              {sinClave && avisoConectar}
 
               <fieldset disabled={!!sinClave} aria-disabled={!!sinClave} className="space-y-4 min-w-0 disabled:opacity-60">
               {/* Curso, con buscador */}
@@ -616,10 +624,17 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                       </label>
                     </div>
                   )}
+                  {/* CRM#992: si es por la clave de Stripe, el aviso que lleva a ponerla
+                      (sin clave de links va arriba, fuera de lo apagado); si es el
+                      interruptor del servidor, que no está activo aquí; si no, el texto. */}
                   {!venta && cuotas && !cuotas.disponible && (
-                    <p className="text-xs text-muted-foreground" data-recorrido="links-asistente-cuotas-no">
-                      Cuotas no disponibles: {cuotas.motivo}
-                    </p>
+                    tipoAviso === 'conectar' ? (!sinClave && avisoConectar)
+                      : tipoAviso === 'entorno' ? <AvisoCobroAutoApagado motivo={cuotas.motivo} />
+                        : (
+                          <p className="text-xs text-muted-foreground" data-recorrido="links-asistente-cuotas-no">
+                            Cuotas no disponibles: {cuotas.motivo}
+                          </p>
+                        )
                   )}
 
                   {enCuotas && (
