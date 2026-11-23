@@ -1516,7 +1516,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, personas, projec
   };
 }
 
-export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, paisEntrada = null, search = null } = {}) {
+export async function getStats(projectId, { responsableId = null, dateFrom = null, dateTo = null, productId = null, canal = null, paisEntrada = null, search = null, status = null, includeConverted = false, conConversion = false } = {}) {
   // Los chips de stats deben reflejar los mismos filtros que el listado, no el
   // total global del proyecto. WHERE incremental igual que findAll.
   // `projectId` puede ser una LISTA de campus (#224): el Dashboard con una
@@ -1542,12 +1542,27 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
   if (paisEntrada) { extra.push(`${sqlPaisDelLead('')} = $${idx++}`); params.push(paisEntrada); }
   // La misma búsqueda que la lista: sin acentos y el teléfono por cifras.
   const busqueda = condicionDeBusqueda(search, { idx });
-  if (busqueda) {
+   if (busqueda) {
     extra.push(busqueda.sql);
     params.push(...busqueda.params);
     idx = busqueda.siguiente;
   }
+  // Mismo criterio que findAll (revision de Diego, gemela de CRM#868, sobre
+  // CRM-ISEIE#533/628): si piden un status concreto, la tarjeta cuenta
+  // exactamente lo mismo que la tabla. Si no, se excluyen los convertidos
+  // como siempre, salvo que pidan lo contrario explicitamente (el Dashboard,
+  // que nunca filtra por status).
+  if (conConversion) {
+    extra.push(`EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = leads.id)`);
+  }
+  if (status) {
+    extra.push(`status = $${idx++}`);
+    params.push(status);
+  } else if (!includeConverted && !conConversion) {
+    extra.push(NO_ES_CLIENTE('leads'));
+  }
   const where = extra.length ? ` AND ${extra.join(' AND ')}` : '';
+
   const { rows } = await query(
     `SELECT
        COUNT(*) as total,
@@ -1560,8 +1575,7 @@ export async function getStats(projectId, { responsableId = null, dateFrom = nul
        COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        -- La misma condición que el filtro «Sin gestora» de Prospectos (gemela de CRM#884).
        COUNT(*) FILTER (WHERE ${SIN_GESTORA('leads')}) as sin_asignar
-     FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL AND ${NO_ES_CLIENTE('leads')}${where}`,
-
+     FROM leads WHERE project_id = ANY($1::int[]) AND deleted_at IS NULL${where}`,
     params
   );
   return rows[0];
@@ -1588,7 +1602,7 @@ export async function getDashboardSummary(projectId, { days = 30, responsableId 
        COUNT(*) FILTER (WHERE status = 'no_interesado') as no_interesados,
        COUNT(*) FILTER (WHERE status = 'proxima_convocatoria') as proxima_convocatoria,
        COUNT(*) FILTER (WHERE responsable_id IS NULL AND status NOT IN ('convertido','no_interesado')) as sin_asignar
-     FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
+             FROM leads WHERE project_id = $1 AND deleted_at IS NULL${respFilter}`,
     params
   );
   return { ...rows[0], days };
