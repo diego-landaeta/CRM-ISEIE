@@ -117,3 +117,41 @@ describe('el aviso', () => {
     expect(m.has(6)).toBe(false);
   });
 });
+
+/*
+  Ana (CEDIA), 20/11/2026: «me salía que el número 296 ya estaba asignado».
+  No era el número: era el aviso de duplicada contra la factura de OTRA
+  clienta del mismo diplomado. El aviso dice ahora de quién es la otra y en
+  qué se parecen.
+*/
+describe('el aviso dice de quién es la otra y por qué se parece', () => {
+  const base = { id: 555, numero: '2026/0296', fecha: '2026-11-16', importe: 784, cliente: 'Alba Santos Ruescas' };
+
+  it('nombra a la otra clienta y empieza por «Posible duplicada»', () => {
+    const t = D.textoPosibleDuplicada({ ...base, coincide: 'nombre' });
+    expect(t).toMatch(/^Posible duplicada de la factura 2026\/0296 de Alba Santos Ruescas \(784,00 €, 16\/11\/2026\)/);
+    expect(t).toContain('mismo nombre de cliente');
+    expect(t).toContain('otra cuota');
+    expect(t).not.toMatch(/ya existe/i);
+  });
+
+  it('con el NIF, enseña cuál', () => {
+    expect(D.textoPosibleDuplicada({ ...base, coincide: 'nif', nif: '0000' })).toContain('mismo NIF (0000)');
+  });
+
+  it('con la venta, lo dice', () => {
+    expect(D.porQueSeParece({ coincide: 'venta' })).toBe('es de la misma venta');
+  });
+
+  it('la consulta devuelve en qué coincide y el NIF de la otra', async () => {
+    const exec = vi.fn(async () => ({
+      rows: [{ id: 555, codigo: '2026/0296', fecha: '2026-11-16', total: 784, cliente_nombre: 'Alba Santos Ruescas', cliente_nif: '0000', coincide: 'nif' }],
+    }));
+    const otra = await D.buscarPosibleDuplicada({ nombre: 'Sara', nif: '0000', total: 784 }, exec);
+    expect(otra).toMatchObject({ numero: '2026/0296', cliente: 'Alba Santos Ruescas', nif: '0000', coincide: 'nif' });
+    const [sql] = exec.mock.calls[0];
+    expect(sql).toMatch(/THEN 'venta'/);
+    expect(sql).toMatch(/THEN 'nif'/);
+    expect(sql).toMatch(/AS coincide/);
+  });
+});
