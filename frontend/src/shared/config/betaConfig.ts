@@ -27,6 +27,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/links-pago',                     // Links de pago de Stripe (v2.8.0; Diego, 19/11: «actívalo»)
   '/accounting',                    // Finanzas: dashboard, income, conversions, receivable, payable, integrations
   '/expenses',                      // Egresos
+  '/revenue',                       // Finanzas › Conversiones (salía «Próximamente»; en el 360, /finanzas/conversiones está activa)
   '/commissions',                   // Comisiones
   '/payroll',                       // Nóminas
   '/meta-ads',                      // Integracion Meta Ads (metricas campanas)

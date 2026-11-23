@@ -9,7 +9,7 @@ import {
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, LinkSimple } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, LinkSimple, ListBullets } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
@@ -166,6 +166,8 @@ export const NAV_SECTIONS = [
       // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
       { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
+      // «Productos por categoría», como en el 360: la pantalla (/products/tree) existía sin entrada en el menú.
+      { to: '/products/tree', label: 'Productos por categoría', icon: ListBullets, roles: ['admin', 'superadmin'], permiso: 'products.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
       // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
@@ -277,7 +279,8 @@ export const NAV_SECTIONS = [
     items: [
       // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
       // en pruebas: sale con ello.
-      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' }] : []),
+      // Siempre, como en el 360 (ya no depende de VITE_PROCESO_EN_PRUEBAS).
+      { to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' },
       // El chat interno del equipo, como en MultiCRM.
       { to: '/mensajes', label: 'Mensajes', icon: ChatsCircle, permiso: 'mensajes.usar' },
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge, permiso: 'change_requests.view' },

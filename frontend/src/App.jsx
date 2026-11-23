@@ -431,9 +431,10 @@ function App() {
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
-          {/* Las novedades de la 2.0.0 cuentan lo que aun esta en pruebas: con ello. */}
-          <Route path="/novedades"
-            element={PROCESO_EN_PRUEBAS ? <NovedadesPage /> : <Navigate to="/" replace />} />
+          {/* Novedades, siempre (como en el 360): ya no depende de VITE_PROCESO_EN_PRUEBAS.
+              Un build sin esa variable dejaba el aviso de la campana y el correo
+              de cada versión llevando a una pantalla que redirigía al inicio. */}
+          <Route path="/novedades" element={<NovedadesPage />} />
           <Route path="/notificaciones" element={<NotificacionesPage />} />
           <Route path="/notifications" element={<Navigate to="/notificaciones" replace />} />
           <Route path="/activity" element={<ActivityPage />} />
