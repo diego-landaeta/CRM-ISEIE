@@ -6,16 +6,20 @@ import { alcanceComercial, alcanceDeLider, personasDentro } from '../../shared/u
 
 // GET /accounting/receivable — cuentas por cobrar con filtros gestora/proyecto/periodo.
 // El gestor solo ve las suyas (se fuerza su responsableId).
+//
+// El campus, una empresa o «todos» los resuelve `proyectosDelAmbito`, siempre
+// dentro de los campus de quien pide (#73, como en el 360): antes iba con el
+// `projectId` de la dirección sin mirar de quién era y, sin él, todo el CRM.
 export async function receivable(req, res, next) {
   try {
-    const projectId = req.query.projectId ? Number(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? Number(req.query.responsableId) : null;
     // seguridad; con equipo comercial (09/11/2026), las suyas y las de sus gestoras
     const alcance = await alcanceComercial(req.user);
     if (alcance) responsableId = personasDentro(alcance, responsableId);
     const from = req.query.from || null;
     const to = req.query.to || null;
-    const data = await model.getReceivable({ projectId, responsableId, from, to });
+    const data = await model.getReceivable({ projectId, projectIds, responsableId, from, to });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }
