@@ -8,10 +8,11 @@ export async function list(req, res, next) {
   try {
     const categoryId = req.query.categoryId ? parseInt(req.query.categoryId) : null;
     const includeInactive = req.query.includeInactive === 'true';
-    // `/ambito` (#218): con «Todos» o una empresa, los campus de quien pide; si
-    // no, el campus que ha comprobado `projectAccess`.
+    // `/ambito` (#218): con «Todos» o una empresa, esos campus; si no, el campus
+    // pedido (`campusDelCatalogo`). Sin recortar a los de quien pide: los
+    // productos los ven todos, de todos (Diego, 23/11/2026).
     const campus = req.path === '/ambito'
-      ? ((await listaDelAmbito(req)) || await campusDeTodos(req))
+      ? ((await listaDelAmbito(req, { sinRecorte: true })) || await campusDeTodos(req, { sinRecorte: true }))
       : req.projectId;
     const products = await ProductService.listByProject(campus, { categoryId, includeInactive });
     // Resolver presigned URLs en paralelo solo para los que tienen image_url.
