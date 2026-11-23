@@ -82,7 +82,7 @@ export async function exigirCampusSuyo(req, projectId, mensaje = 'No encontrado'
  *   un proyecto   →  { projectId: 7,    projectIds: null }
  *   todo          →  { projectId: null, projectIds: null }
  */
-export async function proyectosDelAmbito(req) {
+export async function proyectosDelAmbito(req, { sinRecorte = false } = {}) {
   const issuerId = req.query?.issuerId ? Number(req.query.issuerId) : null;
   const projectId = req.query?.projectId ? Number(req.query.projectId) : null;
   let pedido;
@@ -96,7 +96,7 @@ export async function proyectosDelAmbito(req) {
     // casa con nada y la pantalla sale vacía, que es la respuesta honesta.
     pedido = { projectId: null, projectIds: rows.length ? rows.map((r) => Number(r.id)) : [-1] };
   }
-  if (veTodoElCrm(req.user)) return pedido;
+  if (sinRecorte || veTodoElCrm(req.user)) return pedido;
 
   // El resto, solo dentro de sus campus (#245). Lo mismo que arriba: quedarse
   // sin ninguno es una lista que no casa con nada, nunca «todos».
@@ -123,17 +123,21 @@ export async function proyectosDelAmbito(req) {
  *
  * Antes cada módulo leía `projectIds` a su manera y sin recortar: un admin de
  * CEDIA veía el seguimiento y los informes de ICTESS cambiando la URL.
+ *
+ * `sinRecorte`: lo que ve todo el mundo de todos los campus, como el catálogo de
+ * productos (Diego, 23/11/2026: «los productos los ven todos, de todos»). Se lee
+ * lo pedido tal cual, como para el super admin.
  */
-export async function listaDelAmbito(req) {
+export async function listaDelAmbito(req, { sinRecorte = false } = {}) {
   const varios = String(req.query?.projectIds || '').split(',')
     .map((n) => Number(n)).filter((n) => Number.isInteger(n) && n > 0);
   if (varios.length && !req.query?.issuerId) {
-    if (veTodoElCrm(req.user)) return varios;
+    if (sinRecorte || veTodoElCrm(req.user)) return varios;
     const mios = await campusDeLaPersona(req.user?.userId);
     const quedan = varios.filter((id) => mios.includes(id));
     return quedan.length ? quedan : [-1];
   }
-  const { projectId, projectIds } = await proyectosDelAmbito(req);
+  const { projectId, projectIds } = await proyectosDelAmbito(req, { sinRecorte });
   return comoLista(projectId, projectIds);
 }
 
@@ -143,8 +147,8 @@ export async function listaDelAmbito(req) {
  * un campus de pruebas solo se ve si se elige). Para los modelos que, sin lista,
  * devolverían todo, también lo de pruebas.
  */
-export async function campusDeTodos(req) {
-  if (!veTodoElCrm(req.user)) {
+export async function campusDeTodos(req, { sinRecorte = false } = {}) {
+  if (!sinRecorte && !veTodoElCrm(req.user)) {
     const mios = await campusDeLaPersona(req.user?.userId);
     return mios.length ? mios : [-1];
   }

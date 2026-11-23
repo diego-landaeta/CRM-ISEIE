@@ -83,6 +83,17 @@ const LISTA = [
     ]
   },
   {
+    "version": "2.9.7",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.7",
+    "intro": "El menú, por permiso.",
+    "grupos": [],
+    "arreglos": [
+      "El menú enseña cada pantalla a quien tiene su permiso, sea cual sea su rol.",
+      "Productos: se ven los de todos los campus, para registrar la venta o el link de pago de un alumno de otro campus. Crear y editar productos sigue siendo solo en los campus de cada uno."
+    ]
+  },
+  {
     "version": "2.9.6",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.6",
