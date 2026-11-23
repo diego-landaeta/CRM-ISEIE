@@ -232,7 +232,9 @@ export default function CursosDeProductosPage() {
               {productos.length === 0 ? 'Este campus no tiene productos en el catálogo.' : 'Ningún producto con ese filtro.'}
             </p>
           ) : (
-            <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card" data-recorrido="cursos-producto-lista">
+            // Sin overflow-hidden: recortaba el buscador de cursos, que se abre por debajo de la
+            // fila; en la última no se veía ningún curso.
+            <ul className="divide-y divide-border rounded-lg border border-border bg-card" data-recorrido="cursos-producto-lista">
               {visibles.map((p) => {
                 const curso = p.cursos[0];
                 const abierto = editando === p.id;
