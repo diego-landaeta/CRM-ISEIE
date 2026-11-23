@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Receipt, CurrencyEur, CheckCircle, LinkSimple, ArrowRight } from '@phosphor-icons/react';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -178,12 +179,17 @@ export default function ConciliacionFacturasPage() {
       <PageHeader
         title="Facturas y cobros"
         subtitle="Facturas emitidas sin su cobro y cobros sin factura, por campus y por mes. «Enlazar» no cambia el número, el importe ni los datos del cliente."
-        actions={r && r.seguras > 0 ? (
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="conciliacion-facturas" listo={!cargando} />
+            {r && r.seguras > 0 && (
           <button type="button" onClick={() => setConfirmar(true)} disabled={cargando || todas} data-recorrido="conciliacion-todas"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40">
             <LinkSimple size={14} weight="bold" /> Enlazar todas las seguras ({r.seguras})
           </button>
-        ) : null}
+        )}
+          </div>
+        )}
       />
 
       <div className="flex flex-wrap items-end gap-3" data-recorrido="conciliacion-filtros">

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowsClockwise, ChatCircleText, LockKey, MagnifyingGlass } from '@phosphor-icons/react';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -164,11 +165,16 @@ export default function ConsultasPage() {
         subtitle={vista === 'mias'
           ? 'Las dudas que te escriben tus alumnos en el campus. Responde desde aquí: les llega al campus.'
           : `Todas las consultas de ${activeIssuerId ? 'la empresa elegida' : activeProject?.id && activeProject.id > 0 ? activeProject.nombre : 'tus campus'}.`}
-        actions={puedeLeerElCampus && vista === 'todas' ? (
-          <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo} data-recorrido="consultas-leer">
-            <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
-          </Button>
-        ) : undefined}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="consultas-chat" listo={!cargando} />
+            {puedeLeerElCampus && vista === 'todas' && (
+              <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo} data-recorrido="consultas-leer">
+                <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
+              </Button>
+            )}
+          </div>
+        )}
       />
 
       <CampusSinTutorAviso campus={sinTutorCampus} />
