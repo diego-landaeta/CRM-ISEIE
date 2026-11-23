@@ -25,7 +25,7 @@ import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
 import EtiquetaDelPdf, { EtiquetaVendedora } from '../components/EtiquetaDelPdf';
 import ConfirmacionDelPago from '../components/ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
-// El recorrido guiado de la pantalla (#611): la primera vez sale solo.
+// El recorrido guiado de la pantalla (#611): solo con el botón (#681).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**

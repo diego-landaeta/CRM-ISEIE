@@ -12,7 +12,7 @@ import {
 } from '../api/tutores.api';
 // El % hecho con su barra: el mismo componente que la ficha del cliente (gemela de CRM#871).
 import Progreso from '@/modules/moodle/components/ProgresoCurso';
-// El recorrido guiado de la pantalla (#611): la primera vez sale solo.
+// El recorrido guiado de la pantalla (#611): solo con el botón (#681).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
@@ -405,7 +405,7 @@ export default function MiCampusPage() {
         subtitle={leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle'}
         actions={(
           <>
-            {/* La primera vez sale solo, con el campus ya leído (#611, gemela de CRM#928). */}
+            {/* El recorrido (#611): solo con el botón (#681). */}
             <VerRecorrido id="mi-campus" listo={!cargando} compacto />
             {/* En ISEIE «Mis cursos y comisiones» es un enlace, no una pestaña como
                 en el 360: el paso del recorrido lo señala a él. */}

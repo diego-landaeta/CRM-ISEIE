@@ -14,7 +14,7 @@ import {
 import { TIPOS, ORDEN_TIPOS, ESTADOS, GRAVEDADES, ENTIDADES, enlaceDe, fechaHora } from '../lib/incidencias';
 import IncidenciaDialog, { type Persona, type Campus } from '../components/IncidenciaDialog';
 import CifrasIncidencias from '../components/CifrasIncidencias';
-// El recorrido guiado de la pantalla (#611): la primera vez sale solo.
+// El recorrido guiado de la pantalla (#611): solo con el botón (#681).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
@@ -156,7 +156,7 @@ export default function IncidenciasPage() {
         subtitle="Qué salió mal, cómo se arregló y quién necesita formación."
         actions={
           <div className="flex items-center gap-2">
-            {/* La primera vez sale solo, con la lista ya cargada (#611). Pequeño: a
+            {/* Solo con el botón (#681). Pequeño: a
                 375 px, con el normal, «Nueva incidencia» se partía en dos líneas. */}
             <VerRecorrido id="incidencias" listo={!cargando} compacto />
             <button type="button" onClick={cargar} disabled={cargando} aria-label="Actualizar" title="Actualizar"

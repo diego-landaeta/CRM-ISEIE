@@ -188,9 +188,13 @@ describe('el día a día de una gestora en el modelo (#619, tanda C)', () => {
 });
 
 describe.each(IDS)('%s: la pantalla de verdad, recorrida entera', (id) => {
-  it('la primera vez sale solo, cuando la pantalla ha cargado, y se recorre sin saltarse nada', async () => {
+  it('nunca sale solo (CRM#1012), ni la primera vez; con su botón se recorre sin saltarse nada', async () => {
     pintar(id);
     await cargada(id);
+    await new Promise((r) => setTimeout(r, 1200));
+    expect(screen.queryByRole('dialog', { name: titulos(id)[0] })).toBeNull();
+    expect(localStorage.getItem(claveRecorrido(id, 41))).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: PANTALLAS[id].boton }));
     await screen.findByRole('dialog', { name: titulos(id)[0] }, { timeout: 3000 });
     // Se marca como visto al abrirse (en un efecto: puede llegar justo después del cartel).
     await waitFor(() => expect(localStorage.getItem(claveRecorrido(id, 41))).toBe('1'));
@@ -199,7 +203,7 @@ describe.each(IDS)('%s: la pantalla de verdad, recorrida entera', (id) => {
     expect(screen.queryByRole('dialog', { name: /./ })).toBeNull();
   });
 
-  it('ya visto, no vuelve a salir solo; el botón lo repite', async () => {
+  it('ya visto, tampoco sale; el botón lo repite', async () => {
     localStorage.setItem(claveRecorrido(id, 41), '1');
     pintar(id);
     await cargada(id);
@@ -215,6 +219,7 @@ describe('lo que no está, se salta solo', () => {
     yo.current = { id: 41, role: 'gestor' };
     pintar('clientes');
     await cargada('clientes');
+    fireEvent.click(await screen.findByRole('button', { name: PANTALLAS.clientes.boton }, { timeout: 3000 }));
     await screen.findByRole('dialog', { name: 'Quién ya compró' }, { timeout: 3000 });
     expect(recorrer(8)).toEqual(titulos('clientes'));
   });
@@ -223,6 +228,7 @@ describe('lo que no está, se salta solo', () => {
     api.get.mockImplementation(async (url) => (String(url).startsWith('/proceso/lead/') ? { success: true, data: [] } : responder(url)));
     pintar('prospecto-ficha');
     await screen.findByText('Información del lead', {}, { timeout: 5000 });
+    fireEvent.click(await screen.findByRole('button', { name: PANTALLAS['prospecto-ficha'].boton }, { timeout: 3000 }));
     await screen.findByRole('dialog', { name: 'La ficha de una persona' }, { timeout: 3000 });
     expect(recorrer(8)).toEqual(titulos('prospecto-ficha', ['El proceso comercial']));
   });
@@ -231,6 +237,7 @@ describe('lo que no está, se salta solo', () => {
     enPruebas.proceso = false;
     pintar('prospecto-ficha');
     await screen.findByText('Información del lead', {}, { timeout: 5000 });
+    fireEvent.click(await screen.findByRole('button', { name: PANTALLAS['prospecto-ficha'].boton }, { timeout: 3000 }));
     await screen.findByRole('dialog', { name: 'La ficha de una persona' }, { timeout: 3000 });
     expect(document.querySelector('[data-recorrido="ficha-proceso"]')).toBeNull();
     expect(recorrer(8)).toEqual(titulos('prospecto-ficha', ['El proceso comercial']));
@@ -241,6 +248,7 @@ describe('lo que no está, se salta solo', () => {
     ambito.current = UN_CAMPUS;
     render(<MemoryRouter><ColaDelDiaPage /></MemoryRouter>);
     await cargada('cola-del-dia');
+    fireEvent.click(await screen.findByRole('button', { name: PANTALLAS['cola-del-dia'].boton }, { timeout: 3000 }));
     await screen.findByRole('dialog', { name: 'A quién le toca hoy' }, { timeout: 3000 });
     expect(document.querySelector('[data-recorrido="cola-equipo"]')).toBeNull();
     expect(recorrer(8)).toEqual(titulos('cola-del-dia', ['De quién es la cola']));

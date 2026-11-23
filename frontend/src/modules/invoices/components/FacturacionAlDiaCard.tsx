@@ -288,7 +288,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                     </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>
                     <td className="px-2 py-1.5">
-                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 text-muted-foreground" data-recorrido="cola-origen">
                         {c.origen === 'stripe'
                           ? <><CreditCard size={11} weight="bold" /> Stripe</>
                           : <><User size={11} weight="bold" /> Manual</>}

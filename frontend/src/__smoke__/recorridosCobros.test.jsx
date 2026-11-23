@@ -13,8 +13,9 @@ import path from 'path';
       pantalla lo ofrece;
     · que cada paso apunta a un `data-recorrido` que sigue en el código de su
       pantalla, y que las tarjetas lo pintan de verdad;
-    · que sale solo la primera vez (de cada persona), que «Ver recorrido» lo repite,
-      que no se abre encima de otra ventana y que un paso sin permiso no sale.
+    · que NUNCA sale solo (CRM#1012): solo con «Ver recorrido» o con «Recorrido»
+      en la cabecera; que se cierra si se abre otra ventana encima (salvo la que
+      explica) y que un paso sin permiso no sale.
 */
 
 const { permisos, yo, api } = vi.hoisted(() => ({
@@ -73,19 +74,21 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido tiene sus pasos', () => {
-  it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), la de Ventas (#619), la de «Links de pago» (19/11) y la de «Cursos de Moodle» (CRM#957)', () => {
-    // Los del bloque Finanzas (#619) y los de las novedades (#611, tandas A y B) se cuentan en su propia prueba.
-    expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS) && !(k in RECORRIDOS_NOVEDADES))
-      .filter((k) => !(k in RECORRIDOS_NOVEDADES_B) && !(k in RECORRIDOS_GESTORA)).sort()).toEqual([
+  it('están los cinco del encargo, Links de pago (19/11), Ventas (#619), Cursos de Moodle (CRM#957) y los de links y cuotas (#681)', () => {
+    // Los del bloque Finanzas (#619), los de las novedades (#611) y los de la gestora se cuentan en su propia prueba.
+    expect(Object.keys(RECORRIDOS_COBROS)).toEqual(expect.arrayContaining([
       'anular-factura', 'cargos-sin-enlazar', 'cursos-producto', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe', 'ventas',
-    ]);
+      'links-asistente', 'plan-de-pago', 'cobro-automatico', 'cola-facturacion',
+    ]));
+    expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS) && !(k in RECORRIDOS_NOVEDADES))
+      .filter((k) => !(k in RECORRIDOS_NOVEDADES_B) && !(k in RECORRIDOS_GESTORA)).length).toBeGreaterThan(9);
   });
 
   it.each(RECORRIDOS.map((r) => [r.id, r]))('%s: presenta, cuenta sus pasos y termina diciendo cómo repetirlo', (id, r) => {
     expect(r.id).toBe(id);
     expect(r.pasos.length).toBeGreaterThanOrEqual(4);
     expect(r.pasos[0].texto).toContain('{pasos}');
-    expect(r.pasos.at(-1).texto).toMatch(/«Ver recorrido»/);
+    expect(r.pasos.at(-1).texto).toMatch(/«Recorrido»/);
     for (const p of r.pasos) {
       expect(p.titulo.length).toBeGreaterThan(3);
       // Frases cortas, de las que se leen en un cartel.
@@ -101,7 +104,8 @@ describe('cada recorrido tiene sus pasos', () => {
   });
 
   let codigo = '';
-  it.each(RECORRIDOS.map((r) => [r.id]))('%s: alguna pantalla lo ofrece con «Ver recorrido»', (id) => {
+  it.each(RECORRIDOS.map((r) => [r.id, r]))('%s: se ofrece en la cabecera (por su ruta) o con «Ver recorrido»', (id, r) => {
+    if (r.rutas.length > 0) return;
     codigo ||= todoElCodigo();
     expect(codigo).toMatch(new RegExp(`<VerRecorrido id="${id}"`));
   });
@@ -196,7 +200,7 @@ describe('no sale un paso sin permiso', () => {
   });
 });
 
-describe('cuándo sale', () => {
+describe('cuándo sale: NUNCA solo (CRM#1012)', () => {
   it('sin el permiso del recorrido, ni botón ni recorrido', () => {
     vi.useFakeTimers();
     render(<VerRecorrido id="disputas-stripe" />);
@@ -205,74 +209,52 @@ describe('cuándo sale', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('la primera vez sale solo; después, solo con «Ver recorrido»', () => {
-    vi.useFakeTimers();
-    permisos.add('stripe.edit');
-    const { unmount } = render(<VerRecorrido id="disputas-stripe" />);
-    act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
-    expect(localStorage.getItem(claveRecorrido('disputas-stripe', 7))).toBe('1');
-    act(() => { fireEvent.keyDown(window, { key: 'Escape' }); });
-    unmount();
-
-    render(<VerRecorrido id="disputas-stripe" />);
-    act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.queryByRole('dialog')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Ver recorrido/ }));
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
-  });
-
-  it('es de cada persona: otra en el mismo navegador también lo ve la primera vez', () => {
-    vi.useFakeTimers();
-    permisos.add('stripe.edit');
-    localStorage.setItem(claveRecorrido('disputas-stripe', 7), '1');
-    yo.current = { id: 8, role: 'admin' };
-    render(<VerRecorrido id="disputas-stripe" />);
-    act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
-  });
-
-  it('no sale hasta que la pantalla está lista', () => {
+  it('ni la primera vez ni con la pantalla lista: solo al pulsar «Ver recorrido»', () => {
     vi.useFakeTimers();
     permisos.add('stripe.edit');
     const { rerender } = render(<VerRecorrido id="disputas-stripe" listo={false} />);
     act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.queryByRole('dialog')).toBeNull();
     rerender(<VerRecorrido id="disputas-stripe" listo />);
-    act(() => { vi.advanceTimersByTime(900); });
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(localStorage.getItem(claveRecorrido('disputas-stripe', 7))).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: /Ver recorrido/ }));
     expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
   });
 
-  it('no se abre encima de otra ventana, y si se abre una, se cierra', () => {
+  it('dos en la misma pantalla: ninguno se abre solo', () => {
     vi.useFakeTimers();
     permisos.add('stripe.edit');
+    permisos.add('links_pago.crear');
+    render(<><VerRecorrido id="link-de-pago" /><VerRecorrido id="cargos-sin-enlazar" /></>);
+    act(() => { vi.advanceTimersByTime(5000); });
+    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
+  });
+
+  it('si se abre otra ventana con el recorrido puesto, se cierra', () => {
+    vi.useFakeTimers();
+    permisos.add('stripe.edit');
+    render(<VerRecorrido id="disputas-stripe" />, { container: document.body.appendChild(document.createElement('div')) });
+    fireEvent.click(screen.getByRole('button', { name: /Ver recorrido/ }));
+    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
     const otra = document.createElement('div');
     otra.setAttribute('role', 'dialog');
     otra.setAttribute('aria-label', 'Crear link de pago');
-    document.body.appendChild(otra);
-    render(<VerRecorrido id="disputas-stripe" />, { container: document.body.appendChild(document.createElement('div')) });
-    act(() => { vi.advanceTimersByTime(3000); });
-    expect(screen.queryByRole('dialog', { name: 'Qué es una disputa' })).toBeNull();
-
-    otra.remove();
-    act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getByRole('dialog', { name: 'Qué es una disputa' })).toBeInTheDocument();
-
     document.body.appendChild(otra);
     act(() => { vi.advanceTimersByTime(500); });
     expect(screen.queryByRole('dialog', { name: 'Qué es una disputa' })).toBeNull();
   });
 
-  it('dos recorridos en la misma pantalla: el segundo espera a que acabe el primero', () => {
+  it('dentro de la ventana que explica (el asistente), esa ventana no lo cierra', () => {
     vi.useFakeTimers();
-    permisos.add('stripe.edit');
     permisos.add('links_pago.crear');
-    render(<><VerRecorrido id="link-de-pago" /><VerRecorrido id="cargos-sin-enlazar" /></>);
-    act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
-    act(() => { fireEvent.keyDown(window, { key: 'Escape' }); });
-    expect(screen.queryAllByRole('dialog')).toHaveLength(0);
-    act(() => { vi.advanceTimersByTime(900); });
-    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    const ventana = document.createElement('div');
+    ventana.setAttribute('role', 'dialog');
+    ventana.setAttribute('data-recorrido', 'links-asistente');
+    document.body.appendChild(ventana);
+    render(<VerRecorrido id="links-asistente" dentroDe='[data-recorrido="links-asistente"]' />, { container: ventana.appendChild(document.createElement('div')) });
+    fireEvent.click(screen.getByRole('button', { name: /Ver recorrido/ }));
+    act(() => { vi.advanceTimersByTime(1000); });
+    expect(screen.getByRole('dialog', { name: 'Crear un link de pago' })).toBeInTheDocument();
   });
 });

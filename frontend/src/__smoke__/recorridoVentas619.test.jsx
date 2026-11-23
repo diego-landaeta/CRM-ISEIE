@@ -98,7 +98,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 describe('los pasos del recorrido de Ventas', () => {
   it('presenta, cuenta sus pasos y termina diciendo cómo repetirlo', () => {
     expect(VENTAS.pasos[0].texto).toContain('{pasos}');
-    expect(VENTAS.pasos.at(-1).texto).toMatch(/«Ver recorrido»/);
+    expect(VENTAS.pasos.at(-1).texto).toMatch(/«Recorrido»/);
     for (const p of VENTAS.pasos) {
       expect(p.titulo.length).toBeGreaterThan(3);
       expect(p.texto.length).toBeLessThan(330);
@@ -158,12 +158,15 @@ describe('la pantalla de Ventas, con datos', () => {
     expect(screen.queryByRole('button', { name: /Ver recorrido/ })).toBeNull();
   });
 
-  it('la primera vez sale solo, pasa por todos los pasos, vuelve atrás y se cierra con Escape', async () => {
+  it('no sale solo (#681, gemela de CRM#1012); con «Ver recorrido» pasa por todos los pasos, vuelve atrás y se cierra con Escape', async () => {
     abrir();
     await screen.findAllByText('Ana Pérez', {}, { timeout: 8000 });
     await screen.findByText('Mi meta del mes', {}, { timeout: 8000 });
     await screen.findByText(/Programas más vendidos/, {}, { timeout: 8000 });
-    // Sale solo cuando la pantalla ha cargado.
+    // Ni con la pantalla cargada: solo con el botón.
+    await new Promise((r) => setTimeout(r, 900));
+    expect(screen.queryByRole('dialog', { name: 'Las ventas del periodo' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver recorrido: Ventas' }));
     await waitFor(() => expect(screen.getByRole('dialog', { name: 'Las ventas del periodo' })).toBeInTheDocument(), { timeout: 3000 });
     expect(localStorage.getItem(claveRecorrido('ventas', 7))).toBe('1');
     const total = pasosPara(VENTAS, (k) => permisos.has(k)).length;
@@ -175,7 +178,8 @@ describe('la pantalla de Ventas, con datos', () => {
       if (!sig) break;
       fireEvent.click(sig);
     }
-    expect(vistos).toEqual(VENTAS.pasos.map((p) => p.titulo));
+    // Sin «crear links» en esta prueba, «Link y Plan en cada venta» no sale (#681).
+    expect(vistos).toEqual(pasosPara(VENTAS, (k) => permisos.has(k)).map((p) => p.titulo));
     // Atrás vuelve al anterior.
     fireEvent.click(screen.getByRole('button', { name: /Atrás/ }));
     expect(document.getElementById('recorrido-titulo').textContent).toBe('Nueva venta');
