@@ -440,7 +440,7 @@ export async function completeReminder(req, res, next) {
   try {
     const reminderId = parseInt(req.params.reminderId);
     if (isNaN(reminderId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
-    const result = await leadService.markReminderComplete(reminderId);
+    const result = await leadService.markReminderComplete(reminderId, req.user?.id ?? null);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

@@ -1292,8 +1292,19 @@ export async function createReminder(leadId, fechaRecordatorio, nota, createdBy)
   return rows[0];
 }
 
-export async function completeReminder(reminderId) {
-  await query(`UPDATE lead_reminders SET completado = true WHERE id = $1`, [reminderId]);
+/**
+ * Marca el recordatorio como hecho y apunta cuándo y quién (#169, migración 329): así sale
+ * en «Qué ha pasado hoy». Si ya estaba completado, se queda con la primera fecha.
+ */
+export async function completeReminder(reminderId, userId = null) {
+  await query(
+    `UPDATE lead_reminders
+        SET completado = true,
+            completado_at = COALESCE(completado_at, NOW()),
+            completado_por = COALESCE(completado_por, $2)
+      WHERE id = $1`,
+    [reminderId, userId]
+  );
 }
 
 export async function reassignLead(leadId, newResponsableId) {
