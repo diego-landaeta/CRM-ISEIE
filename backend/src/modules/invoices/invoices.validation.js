@@ -37,7 +37,9 @@ export const createInvoiceSchema = z.object({
   clienteDireccion: z.string().optional().nullable(),
   clienteCiudad: z.string().optional().nullable(),
   clienteCp: z.string().optional().nullable(),
-  clientePais: z.string().min(1, 'País requerido'),
+  // Sin pais por defecto (23/11/2026: se ponia 'España' a clientes de fuera).
+  // Como el NIF: opcional en borrador y proforma, obligatorio al emitir.
+  clientePais: z.string().optional().nullable(),
   // Email tolerante: si viene vacío, '—' o con formato inválido → null (no bloquea
   // la emisión de la factura/proforma; muchos clientes no tienen email cargado).
   clienteEmail: z.preprocess(
@@ -84,6 +86,7 @@ export const createInvoiceSchema = z.object({
     ['clienteDireccion', 'Dirección requerida'],
     ['clienteCiudad', 'Ciudad requerida'],
     ['clienteCp', 'Código postal requerido'],
+    ['clientePais', 'País requerido'],
   ]) {
     if (!d[field] || !String(d[field]).trim()) {
       ctx.addIssue({ code: z.ZodIssueCode.custom, path: [field], message: msg });
