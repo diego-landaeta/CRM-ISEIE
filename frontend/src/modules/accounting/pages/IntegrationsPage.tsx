@@ -8,11 +8,17 @@ import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
 import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
+import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
 import CodigosPromocionales from '@/modules/links-pago/components/CodigosPromocionales';
+import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+import { GRUPOS_DE_FUNCIONES_MOODLE, faltasDeFunciones, type FuncionesProbadas } from '../lib/funcionesMoodle';
+
+/** Cuántas funciones pide el CRM al servicio del Moodle (CRM#925): 12. */
+const TOTAL_FUNCIONES_MOODLE = GRUPOS_DE_FUNCIONES_MOODLE.reduce((n, g) => n + g.funciones.length, 0);
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
   ArrowSquareOut, FloppyDisk, PlugsConnected, Trash, Question, GraduationCap,
@@ -132,7 +138,7 @@ export default function IntegrationsPage() {
           <p><strong>3) Uso real:</strong></p>
           <ul className="list-disc list-inside pl-2 space-y-0.5">
             <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
-            <li><strong>Campus (Moodle):</strong> las consultas de alumnos. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto.</li>
+            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Tutores › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
           </ul>
           <p className="text-amber-700 dark:text-amber-400 pt-1">
@@ -1040,6 +1046,8 @@ function PaypalCard({ projectId }: { projectId: number }) {
 // config_public.url y el token, cifrado, como las demás claves. Con él, el CRM
 // comprueba que el correo de cada tutor es usuario del campus.
 function MoodleCard({ projectId }: { projectId: number }) {
+  // El plugin del CRM: en /staging y en local, o si el servidor lo tiene aprobado (#517).
+  const pluginMoodle = usePluginMoodle();
   const [data, setData] = useState<Integration | null>(null);
   const [loading, setLoading] = useState(true);
   const [showHelp, setShowHelp] = useState(false);
@@ -1050,6 +1058,10 @@ function MoodleCard({ projectId }: { projectId: number }) {
   const [consultas, setConsultas] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  // CRM#925: lo que dijo la última prueba de las 12 funciones (lo guarda el servidor).
+  const funcionesProbadas = data?.config_public?.funciones as unknown as FuncionesProbadas | null | undefined;
+  const consultasGuardadas = String(data?.config_public?.consultas) === 'true';
+  const faltas = data?.last_test_status === 'success' ? faltasDeFunciones(funcionesProbadas, consultasGuardadas) : [];
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -1097,8 +1109,11 @@ function MoodleCard({ projectId }: { projectId: number }) {
   async function test() {
     setTesting(true);
     try {
-      const res = await client.post<{ ok: boolean; message: string }>(`/integrations/moodle/test?projectId=${projectId}`);
-      if (res.success) {
+      const res = await client.post<{ ok: boolean; message: string; aviso?: boolean }>(`/integrations/moodle/test?projectId=${projectId}`);
+      if (res.success && res.data?.aviso) {
+        // CRM#925: el token vale, pero al servicio le faltan funciones (la lista, en la tarjeta).
+        toast({ title: 'Conecta, pero faltan funciones', description: res.data?.message });
+      } else if (res.success) {
         toast({ title: '✓ Conexión OK', description: res.data?.message });
       } else {
         toast({ title: 'La prueba ha fallado', description: res.data?.message || (res as { error?: string }).error || 'El campus no ha contestado.', variant: 'destructive' });
@@ -1132,10 +1147,18 @@ function MoodleCard({ projectId }: { projectId: number }) {
           <h3 className="font-semibold text-base">Campus (Moodle)</h3>
           <p className="text-xs text-muted-foreground">Consultas de alumnos: comprobar que cada tutor es usuario del campus de este proyecto.</p>
         </div>
-        <StatusPill data={data} />
+        <StatusPill data={data} aviso={faltas.length > 0} />
       </div>
 
       <div className="p-5 space-y-4">
+        {/* Lo fácil primero: con el plugin, instalar y pegar un código (#406). En producción,
+            solo con PLUGIN_MOODLE_EN_PRODUCCION=1 en el servidor (`shared/lib/pluginMoodle`). */}
+        {pluginMoodle && (
+          <>
+            <PluginDelCrm projectId={projectId} alConectar={load} />
+            <p className="text-xs font-semibold text-muted-foreground">O, sin el plugin, a mano:</p>
+          </>
+        )}
         <button onClick={() => setShowHelp((v) => !v)}
           className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
           <Question size={12} weight="bold" /> {showHelp ? 'Ocultar tutorial' : 'Cómo obtener el token del campus'}
@@ -1146,7 +1169,20 @@ function MoodleCard({ projectId }: { projectId: number }) {
             <ol className="list-decimal list-inside space-y-1 pl-1 text-muted-foreground">
               <li><strong>Administración del sitio → Servidor → Servicios web</strong>: que estén habilitados los servicios web y el protocolo <strong>REST</strong>.</li>
               <li><strong>Servicios externos → Agregar</strong>: un servicio para el CRM, habilitado.</li>
-              <li>En ese servicio, <strong>Funciones → Agregar</strong>: <code className="px-1 rounded bg-card">core_webservice_get_site_info</code> y <code className="px-1 rounded bg-card">core_user_get_users_by_field</code>. Solo leen.</li>
+              <li>
+                En ese servicio, <strong>Funciones → Agregar</strong> estas {TOTAL_FUNCIONES_MOODLE}. Todas solo leen:
+                <ul className="mt-1 mb-1 space-y-1.5 pl-4" data-testid="moodle-funciones-tutorial">
+                  {GRUPOS_DE_FUNCIONES_MOODLE.map((g) => (
+                    <li key={g.clave}>
+                      <span className="font-semibold text-foreground">{g.titulo}</span> — {g.para}:
+                      <span className="flex flex-wrap gap-1 mt-0.5">
+                        {g.funciones.map((f) => <code key={f} className="px-1 rounded bg-card break-all">{f}</code>)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+              <li>En el mismo servicio, <strong>Editar → Mostrar más…</strong> y marca <strong>«Puede descargar archivos»</strong>: sin ella, las entregas de los alumnos no se abren en «Mi campus».</li>
               <li><strong>Administrar tokens → Crear token</strong> para ese servicio y cópialo.</li>
               <li>Pega abajo la dirección del campus y el token, guarda y pulsa <strong>«Probar conexión»</strong>.</li>
             </ol>
@@ -1191,14 +1227,17 @@ function MoodleCard({ projectId }: { projectId: number }) {
             Solo lo escrito desde que se marca (no el historial). El token tiene que poder leer los mensajes de todos
             (usuario administrador) y su servicio, tener <code>core_message_get_conversations</code> y <code>core_message_get_conversation_messages</code>,
             y para «Alumnos sin mensajes», <code>core_enrol_get_users_courses</code> y <code>core_enrol_get_enrolled_users</code>.
-            «Probar conexión» dice si falta alguna.
+            «Probar conexión» dice cuáles faltan, de estas y de las demás.
           </p>
           {consultas && data?.config_public?.consultas_desde && (
             <p className="text-xs text-muted-foreground">Leyendo desde el {fmt(String(data.config_public.consultas_desde))}.</p>
           )}
         </div>
 
-        <TestStatus data={data} />
+        <TestStatus data={data} aviso={faltas.length > 0} />
+        {funcionesProbadas?.grupos && (
+          <FuncionesDelServicio funciones={funcionesProbadas} consultas={consultasGuardadas} />
+        )}
 
         <div className="flex flex-wrap gap-2 pt-2 border-t border-border">
           <button onClick={save} disabled={saving}
@@ -1223,11 +1262,149 @@ function MoodleCard({ projectId }: { projectId: number }) {
   );
 }
 
+// ─── Plugin del CRM en el Moodle (#679) ───────────────────────────────────
+interface EstadoPlugin {
+  configurado: boolean;
+  activo: boolean;
+  ultimo_aviso_at: string | null;
+  clave_desde: string | null;
+  ruta: string;
+  /** El repaso de cada 15 minutos (plugin 1.8.0). */
+  sincronizado_at?: string | null;
+  sincronizacion_error?: string | null;
+  version_plugin?: string | null;
+}
+
+/**
+ * Conectar el campus con el plugin `local_crm`, como Certifex: se instala el plugin
+ * en el Moodle y se pega UN código. El plugin crea su token y se presenta al CRM, que
+ * guarda la conexión (dirección, token, «Leer las consultas») y le da su clave. Aquí
+ * se genera el código y se ve si el campus está avisando.
+ */
+function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar: () => void }) {
+  const [estado, setEstado] = useState<EstadoPlugin | null>(null);
+  const [codigo, setCodigo] = useState<{ codigo: string; expira_at: string } | null>(null);
+  const [trabajando, setTrabajando] = useState(false);
+
+  const cargar = useCallback(async () => {
+    try {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) setEstado(res.data);
+    } catch {/* sin permiso: no se enseña */}
+  }, [projectId]);
+  useEffect(() => { setCodigo(null); cargar(); }, [cargar]);
+
+  // Mientras hay un código a la vista, se mira cada 5 s si el campus ya se ha conectado.
+  useEffect(() => {
+    if (!codigo) return undefined;
+    const t = setInterval(async () => {
+      const res = await client.get<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`).catch(() => null);
+      if (res?.success && res.data.activo && res.data.clave_desde && (!estado?.clave_desde || res.data.clave_desde !== estado.clave_desde)) {
+        setEstado(res.data); setCodigo(null);
+        toast({ title: 'Campus conectado', description: 'El plugin ya está avisando al CRM.' });
+        alConectar();
+      }
+    }, 5000);
+    return () => clearInterval(t);
+  }, [codigo, projectId, estado?.clave_desde, alConectar]);
+
+  async function generar() {
+    setTrabajando(true);
+    try {
+      const res = await client.post<{ codigo: string; expira_at: string }>(`/consultas/campus/${projectId}/plugin/codigo`);
+      if (res.success) setCodigo(res.data);
+    } catch (e: unknown) {
+      const err = e as { data?: { error?: string }; message?: string };
+      toast({ title: 'No se ha podido generar el código', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setTrabajando(false); }
+  }
+
+  async function apagar() {
+    if (!confirm('El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?')) return;
+    setTrabajando(true);
+    try {
+      const res = await client.delete<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);
+      if (res.success) { setEstado(res.data); setCodigo(null); }
+    } finally { setTrabajando(false); }
+  }
+
+  if (!estado) return null;
+  const conectado = estado.activo;
+  return (
+    <div className="space-y-3 rounded-lg border border-border p-4" data-testid="plugin-del-crm">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <p className="flex flex-wrap items-center gap-2 text-sm font-semibold">Plugin del CRM <EtiquetaEnPruebas /></p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Los mensajes del campus llegan al momento y las tutoras contestan desde el CRM.
+          </p>
+        </div>
+        {conectado ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-success-soft px-2 py-1 text-[11px] font-bold text-success-soft-foreground">
+            <CheckCircle size={12} weight="fill" aria-hidden />
+            {estado.ultimo_aviso_at ? `Conectado · último aviso ${fmt(estado.ultimo_aviso_at)}` : 'Conectado · sin mensajes todavía'}
+          </span>
+        ) : (
+          <span className="rounded-full bg-muted px-2 py-1 text-[11px] font-bold text-muted-foreground">Sin conectar</span>
+        )}
+      </div>
+      {conectado && (estado.sincronizado_at || estado.sincronizacion_error) && (
+        <p className={`mt-2 text-xs ${estado.sincronizacion_error ? 'text-destructive' : 'text-muted-foreground'}`}>
+          {estado.sincronizacion_error
+            ? <>{estado.sincronizacion_error}{estado.sincronizado_at ? ` · último repaso bueno ${fmt(estado.sincronizado_at)}` : ''}</>
+            : <>Al día · repasado {fmt(estado.sincronizado_at!)}{estado.version_plugin ? ` · plugin ${estado.version_plugin}` : ''}</>}
+        </p>
+      )}
+
+      {codigo ? (
+        <div className="space-y-2 rounded-md bg-muted/60 p-3">
+          <ol className="list-decimal space-y-1 pl-4 text-xs text-foreground">
+            <li>Instala el plugin <code>local_crm</code> en el Moodle (Extensiones › Instalar complementos, con el ZIP).</li>
+            <li>En el Moodle: <strong>Extensiones › Extensiones locales › Conectar con el CRM</strong>.</li>
+            <li>Pega este código y pulsa <strong>Conectar</strong>. Nada más.</li>
+          </ol>
+          <div className="flex items-start gap-2">
+            <code className="min-w-0 flex-1 break-all rounded border border-border bg-card px-2 py-1.5 text-[11px] leading-5" data-testid="codigo-de-conexion">{codigo.codigo}</code>
+            <button type="button"
+              onClick={() => navigator.clipboard?.writeText(codigo.codigo).then(() => toast({ title: 'Código copiado' }), () => {})}
+              className="inline-flex h-8 shrink-0 items-center rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+              Copiar
+            </button>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Sirve una vez y caduca el {fmt(codigo.expira_at)}. Esta pantalla avisa sola cuando el campus se conecte.
+          </p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          <button type="button" onClick={generar} disabled={trabajando}
+            className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50">
+            <PlugsConnected size={14} weight="bold" aria-hidden /> {conectado ? 'Volver a conectar' : 'Conectar campus'}
+          </button>
+          {conectado && (
+            <button type="button" onClick={apagar} disabled={trabajando}
+              className="inline-flex h-9 items-center rounded-md border border-destructive/30 bg-card px-3 text-sm font-semibold text-destructive hover:bg-destructive-soft disabled:opacity-50">
+              Desconectar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── UI helpers ───────────────────────────────────────────────────────────
-function StatusPill({ data }: { data: Integration | null }) {
+// `aviso` (CRM#925, solo Moodle): la prueba fue bien, pero al servicio del token le
+// faltan funciones. No es verde: «Mi campus» o las notas saldrían vacías.
+function StatusPill({ data, aviso = false }: { data: Integration | null; aviso?: boolean }) {
   if (!data?.has_secret) return (
     <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-muted text-muted-foreground">
       Sin configurar
+    </span>
+  );
+  if (data.last_test_status === 'success' && aviso) return (
+    <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-warning-soft text-warning-soft-foreground whitespace-nowrap">
+      <WarningCircle size={10} weight="fill" /> Faltan funciones
     </span>
   );
   if (data.last_test_status === 'success') return (
@@ -1247,16 +1424,71 @@ function StatusPill({ data }: { data: Integration | null }) {
   );
 }
 
-function TestStatus({ data }: { data: Integration | null }) {
+function TestStatus({ data, aviso = false }: { data: Integration | null; aviso?: boolean }) {
   if (!data?.last_test_at) return null;
   const ok = data.last_test_status === 'success';
+  const color = ok && aviso ? 'bg-warning-soft text-warning-soft-foreground'
+    : ok ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400';
   return (
-    <div className={`text-xs p-2 rounded-md ${ok ? 'bg-emerald-50 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-400' : 'bg-red-50 dark:bg-red-950/20 text-red-800 dark:text-red-400'}`}>
+    <div className={`text-xs p-2 rounded-md ${color}`}>
       <div className="flex items-center gap-1.5">
-        {ok ? <CheckCircle size={12} weight="fill" /> : <WarningCircle size={12} weight="fill" />}
+        {ok && !aviso ? <CheckCircle size={12} weight="fill" /> : <WarningCircle size={12} weight="fill" />}
         <strong>Último test:</strong> <span>{fmt(data.last_test_at)}</span>
       </div>
       <p className="mt-0.5 ml-5 break-words">{data.last_test_message || '(sin mensaje)'}</p>
+    </div>
+  );
+}
+
+/**
+ * Las 12 funciones del servicio del token, por grupo, como las encontró la última
+ * prueba (CRM#925). Lo que falta, con su nombre: es lo que hay que añadir en el Moodle.
+ */
+function FuncionesDelServicio({ funciones, consultas }: { funciones: FuncionesProbadas; consultas: boolean }) {
+  const grupos = funciones.grupos || [];
+  return (
+    <div className="rounded-md border border-border p-3 space-y-2 text-xs" data-testid="moodle-funciones">
+      <p className="font-semibold">Funciones del servicio del token</p>
+      <ul className="space-y-1.5">
+        {grupos.map((g) => {
+          const noCuenta = g.clave === 'consultas' && !consultas;
+          const completo = g.faltan.length === 0;
+          return (
+            <li key={g.clave} className="flex items-start gap-1.5" data-grupo={g.clave}>
+              {completo
+                ? <CheckCircle size={14} weight="fill" className="text-success flex-shrink-0 mt-px" />
+                : noCuenta
+                  ? <MinusCircle size={14} weight="fill" className="text-muted-foreground flex-shrink-0 mt-px" />
+                  : <WarningCircle size={14} weight="fill" className="text-warning flex-shrink-0 mt-px" />}
+              <div className="min-w-0">
+                <span className="font-semibold">{g.titulo}</span>{' '}
+                <span className="text-muted-foreground">
+                  {completo ? `${g.total} de ${g.total}` : `faltan ${g.faltan.length} de ${g.total}`}
+                  {!completo && noCuenta && ' (no hacen falta con «Leer las consultas» apagado)'}
+                </span>
+                {!completo && (
+                  <span className="flex flex-wrap gap-1 mt-0.5">
+                    {g.faltan.map((f) => <code key={f} className="px-1 rounded bg-muted break-all">{f}</code>)}
+                  </span>
+                )}
+              </div>
+            </li>
+          );
+        })}
+        {funciones.descargas !== null && funciones.descargas !== undefined && (
+          <li className="flex items-start gap-1.5" data-grupo="descargas">
+            {funciones.descargas
+              ? <CheckCircle size={14} weight="fill" className="text-success flex-shrink-0 mt-px" />
+              : <WarningCircle size={14} weight="fill" className="text-warning flex-shrink-0 mt-px" />}
+            <span>
+              <span className="font-semibold">Puede descargar archivos</span>{' '}
+              <span className="text-muted-foreground">
+                {funciones.descargas ? 'marcado' : 'sin marcar: las entregas no se abren en «Mi campus»'}
+              </span>
+            </span>
+          </li>
+        )}
+      </ul>
     </div>
   );
 }

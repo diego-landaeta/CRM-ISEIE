@@ -1,7 +1,7 @@
 import { cifrasSinRespaldo } from './cifras.js';
 import { llamarAnthropic } from './preguntar.service.js';
 import * as gasto from '../../shared/services/gastoIA.service.js';
-import { getDecryptedValue } from '../credentials/credentials.model.js';
+import { soloLaClave } from '../credentials/clave-ia.js';
 import { logger } from '../../shared/utils/logger.js';
 
 /**
@@ -70,13 +70,9 @@ const INSTRUCCION = [
   '4. Sin saludos, sin títulos ni listas: solo el texto.',
 ].join('\n');
 
-async function claveDeAnthropic() {
-  try {
-    const g = await getDecryptedValue('anthropic', null);
-    if (g) return g;
-  } catch { /* se prueba la del servidor */ }
-  return process.env.ANTHROPIC_API_KEY || null;
-}
+// La global de la web o la del servidor: la lectura es de una empresa, no de un
+// campus (CRM#893).
+const claveDeAnthropic = () => soloLaClave(null);
 
 /**
  * Devuelve `{ texto }` o `null`. `null` significa «no hay lectura esta semana» y

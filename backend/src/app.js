@@ -58,8 +58,8 @@ import webhooksSalientesModule from './modules/webhooks-salientes/index.js';
 import asignacionModule from './modules/asignacion/index.js';
 import { registrarActividad } from './shared/middleware/registrarActividad.js';
 import { startWebhooksSalientesScheduler } from './jobs/webhooksSalientesScheduler.js';
-import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
+import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
@@ -91,21 +91,27 @@ import mcpModule from './modules/mcp/index.js';
 // cursos pendientes, «qué ha pasado hoy», «Pregunta a tus datos» y los pedidos de WooCommerce.
 import moodleModule from './modules/moodle/index.js';
 import soporteModule from './modules/soporte/index.js';
+// Incidencias (gemela de CRM#612): al lado de Soporte, sobre todo las de capa 8.
+import incidenciasModule from './modules/incidencias/index.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
 import wcWebhook from './modules/woocommerce/wc.webhook.js';
+import moodleAvisos from './modules/consultas/consultas.webhook.js';
 import githubWebhook from './modules/tasks/tasks.github.webhook.js';
 import { githubTableroActivo } from './modules/tasks/tasks.github.js';
 import { startFeedbackDia7Scheduler } from './jobs/feedbackDia7Scheduler.js';
 import { startFacturaAutomaticaScheduler } from './jobs/facturaAutomaticaScheduler.js';
 import { startDiplomaConfirmacionScheduler } from './jobs/diplomaConfirmacionScheduler.js';
+// Matrícula automática en Moodle, fase 1 (gemela de CRM#838). Apagada de serie.
+import { startMatriculaMoodleScheduler } from './jobs/matriculaMoodleScheduler.js';
 import { startNovedadesScheduler } from './jobs/novedadesScheduler.js';
 import convocatoriasModule from './modules/convocatorias/index.js';
 import { startEmailSequenceScheduler } from './jobs/emailSequenceScheduler.js';
 import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js';
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
+import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
@@ -115,6 +121,7 @@ import { startStripeDisputasScheduler } from './jobs/stripeDisputasScheduler.js'
 import { startTutorCommissionsScheduler } from './jobs/tutorCommissionsScheduler.js';
 import { startTutoresCampusScheduler } from './jobs/tutoresCampusScheduler.js';
 import { startConsultasCampusScheduler } from './jobs/consultasCampusScheduler.js';
+import { startMoodleSincronizacionScheduler } from './jobs/moodleSincronizacionScheduler.js';
 import { startConsultasAlumnosScheduler } from './jobs/consultasAlumnosScheduler.js';
 import { startConsultasResumenScheduler } from './jobs/consultasResumenScheduler.js';
 import { startConsultasPlazoScheduler } from './jobs/consultasPlazoScheduler.js';
@@ -128,6 +135,7 @@ import { startLinksPagoExternosScheduler } from './jobs/linksPagoExternosSchedul
 import { startCobroAutomaticoScheduler } from './jobs/cobroAutomaticoScheduler.js';
 import { startLinksPagoSeguimientoScheduler } from './jobs/linksPagoSeguimientoScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
+import { startEntregasSinCorregirScheduler } from './jobs/entregasSinCorregirScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
 import { startMcpRotacionScheduler } from './jobs/mcpRotacionScheduler.js';
@@ -139,7 +147,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
 // el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
-import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, cobroAutomaticoActivo, seguimientoLinksActivo } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMoodleActivo, cobroAutomaticoActivo, seguimientoLinksActivo } from './shared/config/soloEnPruebas.js';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
@@ -182,6 +190,11 @@ app.use('/api/webhook-tokens/receive/:token', porteroDelWebhook, topeDelEnvio,
 
 // El aviso de WooCommerce (#14) lleva su propio parser, en bruto, para poder comprobar la firma.
 app.use('/api/woocommerce/webhook', wcWebhook);
+// El aviso del plugin del CRM en cada Moodle (#406, gemela de MultiCRM #679): cada mensaje
+// del campus, firmado. Solo en pruebas hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION): sin
+// montar, responde 404 y ningún campus puede conectarse ni avisar al CRM de producción.
+if (pluginMoodleActivo()) app.use('/api/moodle-avisos', moodleAvisos);
+else logger.info('Rutas SKIP (solo en pruebas): /api/moodle-avisos (plugin del CRM en Moodle)');
 
 // El aviso de GitHub (CRM-ISEIE#435): las issues del repositorio, al tablero. Firmado
 // (X-Hub-Signature-256), con su parser en bruto. Solo con el tablero montado y
@@ -398,6 +411,8 @@ const MODULES = [
   moodleModule,
   // Soporte (#38): los tickets se guardan en el servidor y llegan a alguien.
   soporteModule,
+  // Incidencias (gemela de CRM#612), al lado de Soporte.
+  incidenciasModule,
   // «Qué ha pasado hoy», para cada gestora con lo suyo (#13).
   actividadModule,
   // Cursos pendientes para las tutoras, por campus (#336).
@@ -535,6 +550,12 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Meta Ads sync scheduler fallo al arrancar');
       }
     }
+    // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
+    try {
+      startMetaTokensScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Renovación de tokens de Meta fallo al arrancar');
+    }
     if (process.env.REMINDER_DISABLED !== '1') {
       try {
         startReminderScheduler();
@@ -562,6 +583,7 @@ if (process.env.NODE_ENV !== 'test') {
         startFeedbackDia7Scheduler();
         startFacturaAutomaticaScheduler();
         startDiplomaConfirmacionScheduler();
+        startMatriculaMoodleScheduler();
         startNovedadesScheduler();
         startResumenDiarioScheduler();
         startReporteSemanalScheduler();
@@ -614,12 +636,21 @@ if (process.env.NODE_ENV !== 'test') {
       ['cursos pendientes', startCursosPendientesScheduler],
       ['avisos del Moodle', startMoodleAvisosScheduler],
       ['diplomas revertidos', startCertifexReversionesScheduler],
+      // El repaso de los campus con el plugin: solo con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
+      ...(pluginMoodleActivo() ? [['repaso de los campus con el plugin', startMoodleSincronizacionScheduler]] : []),
     ]) {
       try {
         arrancar();
       } catch (err) {
         logger.error({ err }, `${nombre}: el trabajo falló al arrancar`);
       }
+    }
+    // Entregas sin corregir (#457): lee Moodle y escribe a tutoras y administración.
+    // Apagado en producción hasta aprobarlo (PLUGIN_MOODLE_EN_PRODUCCION=1), como en el 360.
+    try {
+      if (pluginMoodleActivo()) startEntregasSinCorregirScheduler();
+    } catch (err) {
+      logger.error({ err }, 'entregas sin corregir: el trabajo falló al arrancar');
     }
     // Links de pago (#407, gemela de CRM#680): desactivar en Stripe los que caducan sin
     // pagar. Solo con los links encendidos (LINKS_PAGO_EN_PRODUCCION); sin interruptor propio.
@@ -661,17 +692,17 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Facturas de colaboradores: los avisos a la empresa fallaron al arrancar');
       }
     }
-    // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
-    try {
-      startFacturacionAuditoriaScheduler();
-    } catch (err) {
-      logger.error({ err }, 'Auditoría de facturación: falló al arrancar');
-    }
     // La copia diaria de la base, cifrada y por correo (11/11). Apagada de serie: COPIA_DIARIA_ACTIVA.
     try {
       startCopiaDiariaScheduler();
     } catch (err) {
       logger.error({ err }, 'Copia diaria de la base: falló al arrancar');
+    }
+    // La auditoría de facturación cada 2 horas (#765). Apagada de serie: FACTURACION_AUDITORIA_ACTIVA.
+    try {
+      startFacturacionAuditoriaScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Auditoría de facturación: falló al arrancar');
     }
     // El informe del mes y las facturas a la gestoría (#772). Apagado de serie: INFORME_MENSUAL_ACTIVO.
     try {

@@ -147,7 +147,15 @@ export async function changePassword(req, res, next) {
 
     const newHash = await bcrypt.hash(newPassword, 12);
     await query('UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2', [newHash, userId]);
-    await authModel.logActivity(userId, 'change_password', null, req.ip);
+    // Queda anotado en el registro, como cuando lo cambia otra persona
+    // (`usuario.cambiar_contrasena`). Nunca la contraseña: solo que la cambió
+    // ella misma. Si apuntarlo falla, la contraseña ya está cambiada: no se
+    // contesta un 500 por eso (se avisa en el log).
+    try {
+      await authModel.logActivity(userId, 'password_changed', { propia: true }, req.ip);
+    } catch (err) {
+      logger.warn({ err: err.message, userId }, 'change-password: no se pudo anotar en user_activity_log');
+    }
 
     res.json({ success: true, data: { message: 'Contrasena actualizada' } });
   } catch (err) { next(err); }

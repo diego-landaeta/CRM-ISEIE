@@ -1,14 +1,17 @@
 import * as leadService from './lead.service.js';
 import { query } from '../../shared/config/db.js';
 import * as leadModel from './lead.model.js';
-import { webhookLeadSchema, listLeadsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
+import { webhookLeadSchema, listLeadsSchema, quickCountsSchema, updateStatusSchema, createInteractionSchema, updateInteractionSchema, createReminderSchema, reassignSchema, updateLeadSchema, createLeadManualSchema } from './lead.validation.js';
 import * as dupQueue from './dup-queue.service.js';
+import { leerFiltroPais } from './pais.js';
 import * as leadProducts from './lead-products.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { veTodoElCrm, campusDeLaPersona, listaDelAmbito, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo, alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
+import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
+import { avanceDelAlumno } from './avance-moodle.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -110,6 +113,34 @@ export async function list(req, res, next) {
       data: result.leads,
       pagination: { total: result.total, page: result.page, limit: result.limit, totalPages: result.totalPages },
     });
+  } catch (err) { next(err); }
+}
+
+/**
+ * GET /api/leads/quick-counts — cuántos hay en cada filtro rápido (gemela de la
+ * #132 del 360), con la misma regla que el listado: solo campus propios (uno
+ * ajeno, 403) y una gestora cuenta lo suyo (con equipo, lo de su equipo).
+ */
+export async function quickCounts(req, res, next) {
+  try {
+    const parsed = quickCountsSchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    const filtros = { ...parsed.data };
+    if (!veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user?.userId);
+      if (filtros.projectId && !mios.includes(Number(filtros.projectId))) {
+        throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
+      }
+      if (Array.isArray(filtros.projectIds)) {
+        const quedan = filtros.projectIds.filter((id) => mios.includes(Number(id)));
+        filtros.projectIds = quedan.length ? quedan : [-1];
+      }
+    }
+    const alcance = await alcanceComercial(req.user);
+    if (alcance) filtros.responsableId = personasDentro(alcance, filtros.responsableId);
+    res.json({ success: true, data: await leadModel.contarFiltrosRapidos(filtros) });
   } catch (err) { next(err); }
 }
 
@@ -227,6 +258,30 @@ export async function getById(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/**
+ * El avance del alumno en Moodle (#532): sus cursos de cada campus con su último acceso,
+ * el % hecho, las notas y el estado. Los mismos permisos que su ficha (una gestora, solo
+ * los suyos; quien lleva un equipo, los de su equipo) y, además, solo los campus de quien
+ * mira. Con el plugin del CRM sin aprobar en este servidor (PLUGIN_MOODLE_EN_PRODUCCION)
+ * contesta `disponible: false` y no llama a ningún campus: el frontal no enseña el bloque.
+ */
+export async function avanceEnMoodle(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
+    if (!pluginMoodleActivo()) return res.json({ success: true, data: { disponible: false, campus: [] } });
+    const { rows } = await query(
+      'SELECT id, project_id, email FROM leads WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!rows[0]) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
+    await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
+    const campusPermitidos = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
+    const refrescar = ['1', 'true'].includes(String(req.query.refrescar || ''));
+    const data = await avanceDelAlumno(rows[0], { campusPermitidos, refrescar });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 /*
   «Todos» o una EMPRESA en el Dashboard: la lista de campus en UNA peticion
   (#224). Antes el navegador pedia stats y today por cada campus —con CEDIA,
@@ -274,8 +329,16 @@ export async function stats(req, res, next) {
       dateTo: req.query.dateTo || null,
       productId: req.query.productId ? parseInt(req.query.productId) : null,
       canal: req.query.canal || null,
+      // País de entrada (#221). Lo que no sea un código ni `sin_pais` se ignora.
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
       search: req.query.search || null,
+      // Mismo criterio que la lista: si piden un status, la tarjeta cuenta lo
+      // mismo que la tabla (revision de Diego, gemela de CRM#868/#951).
+      status: req.query.status || null,
+      includeConverted: req.query.includeConverted === 'true',
+      conConversion: req.query.conConversion === 'true',
     };
+
     // SEGURIDAD: gestor solo ve sus propios stats, ignoramos responsableId del query.
     // Con equipo, los de su equipo (09/11/2026).
     const alcance = await alcanceComercial(req.user);
@@ -377,7 +440,7 @@ export async function completeReminder(req, res, next) {
   try {
     const reminderId = parseInt(req.params.reminderId);
     if (isNaN(reminderId)) throw new AppError('ID invalido', 400, 'INVALID_ID');
-    const result = await leadService.markReminderComplete(reminderId);
+    const result = await leadService.markReminderComplete(reminderId, req.user?.id ?? null);
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }

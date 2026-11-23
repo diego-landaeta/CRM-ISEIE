@@ -44,7 +44,7 @@ export function confirmacionCambioCorreo(nombre: string, de: string, a: string, 
     `Vas a cambiar el correo de ${nombre}:`,
     `${de} → ${a}`,
     '',
-    'Con el correo viejo ya no podrá entrar, y se cerrarán sus sesiones abiertas.',
+    'Con el correo viejo ya no podrá entrar. Una sesión que ya tenga abierta puede seguir hasta 8 horas, y sus URL del MCP de Claude siguen funcionando.',
     'Se le avisará por correo en la dirección vieja (a los tutores no, mientras siga el freno).',
   ];
   if (aviso?.recibeProspectos) {

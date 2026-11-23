@@ -247,6 +247,17 @@ export const CAMBIOS_POR_DATOS = [
   },
 ];
 
+// #694 / #752 (Diego, 12/11): «MCP del colaborador: bloqueado siempre». Va por DATOS:
+// de serie el colaborador no lo traía; lo pierde solo el que lo tenía con la casilla
+// (o una excepción). Su `mcp.usar` ahora es `nunca` / `nuncaPrincipal`.
+CAMBIOS_POR_DATOS.push({
+  id: 'colaborador-sin-mcp',
+  que: 'El colaborador no puede usar el MCP, ni con la casilla ni con excepción ni con un rol de más, como el tutor y el tutor redactor. El colaborador que lo tenía con la casilla lo pierde. En su ficha sale la casilla bloqueada, con el motivo.',
+  motivo: 'Diego, 11/11 en la #694 («Nunca para ese rol: WhatsApp y el MCP para tutor, tutor redactor y colaborador») y 12/11 en la #752, sabiendo que el colaborador con la casilla lo pierde: «bloqueado siempre».',
+  explica: ({ persona, fila, antes, despues }) => persona.role === 'colaborador' && fila.modulo === 'mcp' && antes === true && despues === false,
+  aprobadoPor: 'Diego, 12/11',
+});
+
 /**
  * Lo que cambia en el MENÚ, por perfil (QA de Diego, punto 6: «soporte pierde
  * 10 entradas del menú; el admin con factura_manager gana Facturación»). Ningún
@@ -309,6 +320,19 @@ export const CAMBIOS_DE_MENU = [
     perfiles: { soporte: ['- Captación › Webhooks'] },
     rutas: { 'Captación › Webhooks': 'GET /api/webhook-tokens/' },
     aprobadoPor: 'Diego, 02/11 (la 2.6.0 de ISEIE, tal cual MultiCRM)',
+  },
+  {
+    id: 'menu-mi-campus',
+    que: '«Tutores › Mi campus»: la tutora ve sus cursos de Moodle con lo que tiene por corregir, sus dudas, sus alumnos y lo que tiene por desarrollar (CRM-ISEIE#408, gemela de CRM#681).',
+    motivo: 'Pantalla nueva con el mismo permiso que «Mis cursos» (`tutores.mis_cursos`); el servidor solo enseña lo de la tutora de la sesión. «Mis cursos» se queda en el menú (aquí no va como pestaña, a diferencia del 360).',
+    perfiles: {
+      superadmin: ['+ Tutores › Mi campus'],
+      tutor: ['+ Tutores › Mi campus'],
+      'gestora+tutor': ['+ Tutores › Mi campus'],
+    },
+    rutas: { 'Tutores › Mi campus': 'GET /api/tutores/mi-campus' },
+    // Diego lo aprobó el 19/11 en la sesión de trabajo: «sí, apruébala».
+    aprobadoPor: 'Diego, 19/11',
   },
   {
     // Gemela de CRM#643. En ISEIE solo el Banco: Status tiene aquí una parte
@@ -438,19 +462,40 @@ export const CAMBIOS_DE_MENU = [
     aprobadoPor: 'Diego, 18/11',
   },
   {
+    id: 'menu-sin-proximamente-534',
+    que: 'Las entradas sin pantalla salen del menú: «Captación › Campañas», «Captación › Tráfico orgánico» y «Publicidad › Google Ads» (gemela de CRM#900, parte 3 de la #534; aquí, CRM-ISEIE#367).',
+    motivo: 'Manuel (29/10) y la maqueta de Diego (03/11): «fuera del menú hasta que funcionen». Campañas y Google Ads eran «Próximamente» (sin enlace) y Tráfico orgánico llevaba a «Aún no conectado»: ninguna enseña nada, así que no cambia el acceso de nadie. Vuelven al menú cuando exista su pantalla.',
+    // Solo menú y sin ruta en el servidor (`null`): no hay pantalla con datos detrás.
+    soloMenu: true,
+    perfiles: Object.fromEntries(['superadmin', 'admin', 'soporte', 'gestora+admin'].map((p) => [p, [
+      '- Captación › Campañas', '- Captación › Tráfico orgánico', '- Publicidad › Google Ads',
+    ]])),
+    rutas: { 'Captación › Campañas': null, 'Captación › Tráfico orgánico': null, 'Publicidad › Google Ads': null },
+    // Diego lo aprobó el 18/11 en el 360 (CRM#903) para los dos CRM.
+    aprobadoPor: 'Diego, 18/11',
+  },
+  {
     id: 'menu-actividad-paypal-incidencias',
-    que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) salen en el menú a quien tiene su permiso (gemela de CRM#922).',
+    que: '«Equipo de Desarrollo › Actividad» (Monitask), «Finanzas › PayPal y banco» (cobros de PayPal y extractos del banco) y «Sistema › Incidencias» salen en el menú a quien tiene su permiso (gemela de CRM#922).',
     motivo: 'Entraron con sus funciones y no se habían apuntado aquí: la foto del menú las daba como sobrantes (menuPorPerfil423 en rojo en los dos staging). Diego las aprobó las tres el 18/11. «Actividad» y «PayPal y banco» siguen detrás de su interruptor: en producción no se ven hasta que se encienda. «PayPal y banco» la ven también soporte y project manager, por su permiso.',
     perfiles: {
-      superadmin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
-      admin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
-      'gestora+admin': ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco'],
-      soporte: ['+ Finanzas › PayPal y banco'],
+      superadmin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      admin: ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      'gestora+admin': ['+ Equipo de Desarrollo › Actividad', '+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
+      soporte: ['+ Finanzas › PayPal y banco', '+ Sistema › Incidencias'],
       project_manager: ['+ Finanzas › PayPal y banco'],
+      gestora: ['+ Sistema › Incidencias'],
+      'gestora+tutor': ['+ Sistema › Incidencias'],
+      'gestora con factura_manager': ['+ Sistema › Incidencias'],
+      'gestora con editar_fechas_factura': ['+ Sistema › Incidencias'],
+      'gestora con usa_mcp': ['+ Sistema › Incidencias'],
+      'gestora con diplomas.view': ['+ Sistema › Incidencias'],
+      'gestora con tasks.close': ['+ Sistema › Incidencias'],
     },
     rutas: {
       'Equipo de Desarrollo › Actividad': 'GET /api/monitask/actividad',
       'Finanzas › PayPal y banco': 'GET /api/cobros-externos/estado',
+      'Sistema › Incidencias': 'GET /api/incidencias/',
     },
     // Aprobado por Diego el 18/11 en la sesión de trabajo: «apruébalas las tres».
     aprobadoPor: 'Diego, 18/11',
@@ -477,6 +522,21 @@ export const CAMBIOS_DE_MENU = [
     },
     // La escribe Claude principal con el sí de Diego.
     aprobadoPor: 'Pendiente de Diego',
+  },
+  {
+    id: 'menu-cursos-moodle-957',
+    que: '«Académico › Cursos de Moodle» (y la pestaña del mismo nombre en Productos): cada producto del catálogo de un campus con su curso de Moodle, o «Sin curso», y elegirlo de la lista de cursos de su Moodle, cambiarlo o quitarlo (CRM#957). Avisa de los productos vendidos sin curso. La ve quien tiene `moodle.cursos_producto`, clave nueva: admin y soporte de serie, cada uno en sus campus.',
+    motivo: 'Diego (19/11, CRM#957, a petición de CRM-ISEIE#355): sin esta unión la matrícula automática (#767) no sabe en qué curso matricular a quien compra. Hasta ahora solo se podía con SQL a mano en `moodle_cursos_producto`.',
+    perfiles: {
+      superadmin: ['+ Académico › Cursos de Moodle'],
+      admin: ['+ Académico › Cursos de Moodle'],
+      soporte: ['+ Académico › Cursos de Moodle'],
+      'gestora+admin': ['+ Académico › Cursos de Moodle'],
+    },
+    rutas: {
+      'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#957)',
   },
   {
     id: 'menu-conciliacion-905',

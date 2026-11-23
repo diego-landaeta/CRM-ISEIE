@@ -2,7 +2,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { tieneRol, ROLES_DE_TUTOR } from '../../shared/utils/roles.js';
-import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, comoLista } from '../../shared/utils/ambito.js';
+import { proyectosDelAmbito, veTodoElCrm, campusDeLaPersona, comoLista, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { saveLocal, getLocal } from '../../shared/services/localStorage.service.js';
 import { tutoresQueRecibenConsultas, campusDelTutor } from '../tutores/tutor.campus.js';
 import * as model from './consultas.model.js';
@@ -10,6 +10,9 @@ import * as servicio from './consultas.service.js';
 import * as alumnos from './consultas.alumnos.js';
 import * as carga from './consultas.carga.js';
 import * as metricas from './consultas.metricas.js';
+import * as plugin from './consultas.plugin.js';
+import { contextoDeLaConsulta } from './consultas.contexto.js';
+import * as equipo from './consultas.equipo.js';
 import {
   responderSchema, reasignarSchema, tokenTutorSchema, listarSchema,
   escribirSchema, cargaSchema, metricasSchema,
@@ -33,6 +36,12 @@ function valida(schema, datos) {
   return r.data;
 }
 
+/**
+ * Cuántas filas hay en total aunque la lista venga recortada por su tope: lo trae cada
+ * fila (`COUNT(*) OVER ()`). Sin filas, 0.
+ */
+const totalDe = (filas) => (filas.length ? Number(filas[0].total) || filas.length : 0);
+
 /** Que pueda ver esta consulta: su tutor, o administración de ese campus. */
 async function exigirVer(req, c) {
   if (!c) throw new AppError('Consulta no encontrada', 404, 'NOT_FOUND');
@@ -46,14 +55,88 @@ async function exigirVer(req, c) {
   throw new AppError('Consulta no encontrada', 404, 'NOT_FOUND');
 }
 
+// POST /api/consultas/:id/notas  { texto } — nota interna: la ven su tutora y administración, nunca el alumno
+export async function anotar(req, res, next) {
+  try {
+    const c = await model.cabecera(parseInt(req.params.id));
+    await exigirVer(req, c);
+    res.json({ success: true, data: await equipo.anotar(c, req.user.userId, req.body?.texto) });
+  } catch (err) { next(err); }
+}
+
+/** Los campus de quien pide: los que lleva como tutora y los de su ámbito. Null = todos. */
+async function campusParaRespuestas(req) {
+  if (veTodoElCrm(req.user)) return null;
+  const suyos = new Set((await campusDelTutor(req.user.userId)).map((x) => Number(x.project_id)));
+  (await campusDeLaPersona(req.user.userId)).forEach((x) => suyos.add(Number(x)));
+  return [...suyos];
+}
+
+// GET /api/consultas/respuestas — las suyas y las de sus campus
+export async function respuestas(req, res, next) {
+  try {
+    res.json({ success: true, data: await equipo.respuestasDe(req.user.userId, await campusParaRespuestas(req)) });
+  } catch (err) { next(err); }
+}
+
+/** Una respuesta del campus solo la crea, cambia o borra quien gestiona las consultas de ese campus. */
+async function exigirGestionDelCampus(req, projectId) {
+  if (!(await tienePermiso(req, 'consultas.gestionar'))) {
+    throw new AppError('Solo coordinación puede tocar las respuestas del campus', 403, 'FORBIDDEN');
+  }
+  await exigirCampusSuyo(req, Number(projectId));
+}
+
+// POST /api/consultas/respuestas  { titulo, texto, projectId? } — personal, o del campus con projectId
+export async function crearRespuesta(req, res, next) {
+  try {
+    const projectId = req.body?.projectId ? parseInt(req.body.projectId) : null;
+    if (projectId) await exigirGestionDelCampus(req, projectId);
+    await equipo.crearRespuesta(req.user.userId, req.body || {}, projectId);
+    res.json({ success: true, data: await equipo.respuestasDe(req.user.userId, await campusParaRespuestas(req)) });
+  } catch (err) { next(err); }
+}
+
+async function respuestaSuya(req) {
+  const r = await equipo.respuesta(parseInt(req.params.rid));
+  if (!r) throw new AppError('Respuesta no encontrada', 404, 'NOT_FOUND');
+  if (r.user_id != null && Number(r.user_id) !== req.user.userId) throw new AppError('Respuesta no encontrada', 404, 'NOT_FOUND');
+  if (r.project_id != null) await exigirGestionDelCampus(req, r.project_id);
+  return r;
+}
+
+// PUT /api/consultas/respuestas/:rid  { titulo, texto }
+export async function cambiarRespuesta(req, res, next) {
+  try {
+    const r = await respuestaSuya(req);
+    await equipo.cambiarRespuesta(r.id, req.body || {});
+    res.json({ success: true, data: await equipo.respuestasDe(req.user.userId, await campusParaRespuestas(req)) });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/consultas/respuestas/:rid
+export async function borrarRespuesta(req, res, next) {
+  try {
+    const r = await respuestaSuya(req);
+    await equipo.borrarRespuesta(r.id);
+    res.json({ success: true, data: await equipo.respuestasDe(req.user.userId, await campusParaRespuestas(req)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/consultas/respuestas/importar  { respuestas: [{titulo, texto}] } — las del navegador, a su cuenta
+export async function importarRespuestas(req, res, next) {
+  try {
+    const n = await equipo.importarDelNavegador(req.user.userId, req.body?.respuestas);
+    res.json({ success: true, data: { importadas: n, respuestas: await equipo.respuestasDe(req.user.userId, await campusParaRespuestas(req)) } });
+  } catch (err) { next(err); }
+}
+
 // GET /api/consultas/mias?estado=  — la bandeja del tutor
 export async function mias(req, res, next) {
   try {
     const f = valida(listarSchema, req.query);
-    res.json({ success: true, data: {
-      consultas: await model.listar({ tutorId: req.user.userId, estado: f.estado, buscar: f.buscar }),
-      plazoHoras: model.PLAZO_HORAS,
-    } });
+    const consultas = await model.listar({ tutorId: req.user.userId, estado: f.estado, buscar: f.buscar });
+    res.json({ success: true, data: { consultas, total: totalDe(consultas), plazoHoras: model.PLAZO_HORAS } });
   } catch (err) { next(err); }
 }
 
@@ -62,12 +145,10 @@ export async function panel(req, res, next) {
   try {
     const f = valida(listarSchema, req.query);
     const { projectId, projectIds } = await proyectosDelAmbito(req);
-    res.json({ success: true, data: {
-      consultas: await model.listar({
-        projectIds: comoLista(projectId, projectIds), estado: f.estado, sinTutor: Boolean(f.sinTutor), buscar: f.buscar,
-      }),
-      plazoHoras: model.PLAZO_HORAS,
-    } });
+    const consultas = await model.listar({
+      projectIds: comoLista(projectId, projectIds), estado: f.estado, sinTutor: Boolean(f.sinTutor), buscar: f.buscar,
+    });
+    res.json({ success: true, data: { consultas, total: totalDe(consultas), plazoHoras: model.PLAZO_HORAS } });
   } catch (err) { next(err); }
 }
 
@@ -79,6 +160,15 @@ export async function ver(req, res, next) {
     // La primera lectura la marca su tutor al abrirla, no administración.
     if (quien === 'tutor') await model.marcarLeida(id, req.user.userId);
     res.json({ success: true, data: { ...(await model.detalle(id)), plazoHoras: model.PLAZO_HORAS, puedes: quien } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/consultas/:id/contexto  — la ficha del alumno junto a la conversación (#679)
+export async function contexto(req, res, next) {
+  try {
+    const c = await model.cabecera(parseInt(req.params.id));
+    const quien = await exigirVer(req, c);
+    res.json({ success: true, data: await contextoDeLaConsulta(c, { quien, userId: req.user.userId }) });
   } catch (err) { next(err); }
 }
 
@@ -208,8 +298,11 @@ export async function tokensDelTutor(req, res, next) {
     const { rows } = await query(
       'SELECT project_id, (token_cifrado IS NOT NULL) AS tiene FROM tutor_campus WHERE tutor_id = $1', [tutorId]);
     const tiene = new Map(rows.map((r) => [Number(r.project_id), r.tiene]));
-    res.json({ success: true, data: campus.map((c) => ({
+    // #850: en el campus conectado por el plugin la respuesta no usa su token.
+    const porPlugin = await Promise.all(campus.map((c) => servicio.respondePorElPlugin(c.project_id)));
+    res.json({ success: true, data: campus.map((c, i) => ({
       project_id: c.project_id, campus: c.campus, estado: c.estado, tiene_token: Boolean(tiene.get(c.project_id)),
+      por_plugin: Boolean(porPlugin[i]),
     })) });
   } catch (err) { next(err); }
 }
@@ -250,8 +343,9 @@ async function quienYAmbito(req) {
 export async function alumnosSinMensajes(req, res, next) {
   try {
     const q = await quienYAmbito(req);
+    const lista = await alumnos.sinMensajes(q.todas ? { projectIds: q.projectIds } : { tutorId: q.tutorId });
     res.json({ success: true, data: {
-      alumnos: await alumnos.sinMensajes(q.todas ? { projectIds: q.projectIds } : { tutorId: q.tutorId }),
+      alumnos: lista, total: totalDe(lista),
       diasAmbar: alumnos.DIAS_AMBAR, diasRojo: alumnos.DIAS_ROJO,
     } });
   } catch (err) { next(err); }
@@ -331,5 +425,38 @@ export async function campusSinTutor(req, res, next) {
   try {
     const { projectId, projectIds } = await proyectosDelAmbito(req);
     res.json({ success: true, data: await carga.campusSinTutor(comoLista(projectId, projectIds)) });
+  } catch (err) { next(err); }
+}
+
+// ─── Plugin del CRM en el campus (#679) ─────────────────────────────────────
+
+async function campusDelPlugin(req) {
+  const id = parseInt(req.params.projectId);
+  if (!Number.isInteger(id) || id <= 0) throw new AppError('Campus no válido', 400, 'VALIDATION_ERROR');
+  await exigirCampusSuyo(req, id, 'Campus no encontrado');
+  return id;
+}
+
+// GET /api/consultas/campus/:projectId/plugin  — si está conectado y su último aviso
+export async function estadoDelPlugin(req, res, next) {
+  try {
+    res.json({ success: true, data: await plugin.estado(await campusDelPlugin(req)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/consultas/campus/:projectId/plugin/codigo  — el código para pegar en el Moodle
+export async function codigoDeConexion(req, res, next) {
+  try {
+    const id = await campusDelPlugin(req);
+    res.json({ success: true, data: await plugin.crearCodigo(id, req.user.userId) });
+  } catch (err) { next(err); }
+}
+
+// DELETE /api/consultas/campus/:projectId/plugin  — deja de aceptar avisos
+export async function desactivarPlugin(req, res, next) {
+  try {
+    const id = await campusDelPlugin(req);
+    await plugin.desactivar(id);
+    res.json({ success: true, data: await plugin.estado(id) });
   } catch (err) { next(err); }
 }

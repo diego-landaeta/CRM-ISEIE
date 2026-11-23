@@ -1,5 +1,6 @@
 import { logger } from '../shared/utils/logger.js';
 import { avisarVencimientos, resumenDeLaSemana } from '../modules/cursos-pendientes/cursos-pendientes.service.js';
+import { avisarSubidasVencidas } from '../modules/cursos-pendientes/cursos-pendientes.subidas.js';
 import { vigilar } from './latido.js';
 
 /**
@@ -17,6 +18,8 @@ const TICK_MS = parseInt(process.env.CURSOS_PENDIENTES_TICK_MS || String(60 * 60
 async function vuelta() {
   try {
     await avisarVencimientos();
+    // Control de subidas (#771): solo con CONTROL_SUBIDAS_AVISOS=1; si no, no hace nada.
+    await avisarSubidasVencidas().catch((err) => logger.error({ err: err.message }, 'Fallo en los avisos del control de subidas'));
     // El resumen de los lunes (#336): UNA vez por semana, a partir de la hora configurada.
     const ahora = new Date();
     const dia = new Intl.DateTimeFormat('en-US', { timeZone: process.env.APP_TIMEZONE || 'Europe/Madrid', weekday: 'short' }).format(ahora);

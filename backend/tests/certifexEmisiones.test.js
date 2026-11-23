@@ -22,7 +22,6 @@ const request = supertest(app);
 let saToken;
 let saUser;
 let proyectoBase;
-let proyectoCreado = false;
 let pedidas = [];
 let respuesta = () => ({ status: 200, body: {} });
 
@@ -35,13 +34,12 @@ beforeAll(async () => {
     [`sa.certifex.${Date.now()}.${Math.floor(Math.random() * 1e6)}@prueba.test`]);
   saUser = u;
   saToken = jwt.sign({ userId: u.id, email: u.email, role: 'superadmin', roles_extra: [] }, process.env.JWT_SECRET, { expiresIn: '10m' });
-  // Y un proyecto, si no hay ninguno: las fichas de prueba cuelgan de uno.
-  proyectoBase = (await pool.query('SELECT id FROM projects WHERE NOT COALESCE(es_prueba, false) ORDER BY id LIMIT 1')).rows[0]?.id;
-  if (!proyectoBase) {
-    proyectoBase = (await pool.query(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Prueba Certifex', $1, $1) RETURNING id`,
-      [`prueba-certifex-${Date.now()}`])).rows[0].id;
-    proyectoCreado = true;
-  }
+  // Y su propio campus, siempre: las fichas de prueba cuelgan de uno. Antes cogía
+  // «el primero de la base», y si otra prueba que corría a la vez lo borraba, el
+  // INSERT de la ficha chocaba con la clave foránea (CI del 23/11).
+  const marca = `prueba-certifex-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+  proyectoBase = (await pool.query(`INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ('Prueba Certifex', $1, $1) RETURNING id`,
+    [marca])).rows[0].id;
   // Solo se intercepta lo que va a Certifex; supertest no usa fetch.
   globalThis.fetch = vi.fn(async (url, opts = {}) => {
     if (!String(url).startsWith('https://certifex.test/')) return fetchReal(url, opts);
@@ -53,7 +51,7 @@ beforeAll(async () => {
 afterAll(async () => {
   globalThis.fetch = fetchReal;
   if (saUser) await pool.query('DELETE FROM users WHERE id = $1', [saUser.id]);
-  if (proyectoCreado) await pool.query('DELETE FROM projects WHERE id = $1', [proyectoBase]);
+  if (proyectoBase) await pool.query('DELETE FROM projects WHERE id = $1', [proyectoBase]);
   await pool.end();
 });
 beforeEach(() => {

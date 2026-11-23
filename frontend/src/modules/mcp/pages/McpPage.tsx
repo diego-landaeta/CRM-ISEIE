@@ -209,7 +209,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
           {/* Alcance: lo primero que tiene que quedar claro es QUE va a ver Claude. */}
           <div className="bg-card border border-border rounded-lg p-4 space-y-3">
             <div className="flex items-center gap-2">
-              <ShieldCheck size={18} weight="bold" className="text-emerald-600" />
+              <ShieldCheck size={18} weight="bold" className="text-success" />
               <h2 className="font-semibold text-sm">Lo que Claude podrá consultar{estado.puedeAdministrar ? '' : ' con tu URL personal'}</h2>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -221,7 +221,7 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
               {' '}Nunca datos de otros campus, ni DNI, IBAN, datos fiscales o contraseñas. No puede crear, cambiar ni borrar nada.
             </p>
             {porEmpresa.length === 0 ? (
-              <p className="text-sm text-amber-600 flex items-center gap-1.5">
+                <p className="text-sm text-warning flex items-center gap-1.5">
                 <WarningCircle size={16} weight="fill" /> No tienes ningún campus asignado: Claude no verá nada.
               </p>
             ) : (
@@ -252,16 +252,16 @@ Su URL no se borra: si le devuelves el acceso, volverá a funcionar sin que teng
 
           {/* El token recien creado, UNA vez. */}
           {nuevo && (
-            <div className="border border-emerald-300 dark:border-emerald-900 bg-emerald-50 dark:bg-emerald-950/20 rounded-lg p-4 space-y-3">
+              <div className="border border-success/30 bg-success-soft rounded-lg p-4 space-y-3">
               <div className="flex items-start gap-2">
-                <CheckCircle size={20} weight="fill" className="text-emerald-600 flex-shrink-0 mt-0.5" />
+                <CheckCircle size={20} weight="fill" className="text-success flex-shrink-0 mt-0.5" />
                 <div>
                   <p className="font-semibold text-sm">URL creada. Cópiala ahora: no se volverá a mostrar.</p>
                   <p className="text-xs text-muted-foreground">Si la pierdes, revócala y crea otra. No la compartas: da acceso a tus datos del CRM.</p>
                 </div>
               </div>
               <Bloque titulo="Tu URL para Claude · Conectores → Agregar conector personalizado" texto={urlPersonal(url, nuevo)} />
-              <p className="text-xs text-amber-700 dark:text-amber-400 flex items-start gap-1.5">
+              <p className="text-xs text-warning flex items-start gap-1.5">
                 <WarningCircle size={14} weight="fill" className="flex-shrink-0 mt-0.5" />
                 Esta URL es tu llave: quien la tenga consulta el CRM con tus permisos. No la compartas ni la pegues en capturas.
               </p>

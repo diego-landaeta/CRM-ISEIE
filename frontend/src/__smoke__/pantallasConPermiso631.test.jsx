@@ -208,7 +208,10 @@ describe('#631 · Status solo pide lo que se puede ver', () => {
     await new Promise((ok) => setTimeout(ok, 0));
     expect(pedidas()).not.toContain('/status/piezas');
     expect(pedidas()).not.toContain('/status/correos');
-    expect(pedidas()).toContain('/status/incidents');
+    // Las incidencias activas vienen dentro de `/status` desde #481 (antes
+    // `/status/incidents`, que daba también el historial).
+    expect(pedidas()).toContain('/status');
+    expect(pedidas()).not.toContain('/status/incidents');
   });
 
   it('con soporte: también las piezas y los correos', async () => {

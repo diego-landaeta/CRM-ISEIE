@@ -5,6 +5,11 @@ import { render, screen, cleanup, within, fireEvent } from '@testing-library/rea
 import RecorridoGuiado, { colocarCartel, MARGEN_CARTEL } from '@/shared/components/ui/RecorridoGuiado';
 import { PASOS_TABLERO, CLAVE_RECORRIDO_TABLERO } from '@/modules/tasks/lib/recorridoTablero';
 import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
+import { RECORRIDOS_DE_PRUEBA, pasosDePruebaPara, pasosApagada } from '@/shared/lib/recorridosDePrueba';
+import { RECORRIDOS_FINANZAS } from '@/shared/lib/recorridosFinanzas';
+import { RECORRIDOS_NOVEDADES } from '@/shared/lib/recorridosNovedades';
+import { RECORRIDOS_NOVEDADES_B } from '@/shared/lib/recorridosNovedadesB';
+import { RECORRIDOS_GESTORA } from '@/shared/lib/recorridosGestora';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -136,10 +141,54 @@ describe('a 375 px, con la página más ancha que la pantalla', () => {
 */
 const TODOS = [
   ...Object.values(RECORRIDOS_COBROS).map((r) => [r.id, pasosPara(r, () => true)]),
+  // Los de «Ver cómo funciona» para probar staging (#522), encendidos y apagados.
+  ...Object.values(RECORRIDOS_DE_PRUEBA).map((r) => [`prueba ${r.id}`, pasosDePruebaPara(r, () => true)]),
+  ...Object.values(RECORRIDOS_DE_PRUEBA).map((r) => [`prueba ${r.id} (apagada)`, pasosApagada(r)]),
   ['tablero de Tareas', PASOS_TABLERO],
 ];
 
 describe('a 375 px, todos los recorridos, paso a paso', () => {
+  it('entre ellos, el de Ventas (#619, gemela de CRM#941), con todos sus pasos', () => {
+    const ventas = TODOS.find(([id]) => id === 'ventas');
+    expect(ventas).toBeTruthy();
+    expect(ventas[1]).toHaveLength(RECORRIDOS_COBROS.ventas.pasos.length);
+  });
+
+  it('entre ellos, los once del bloque Finanzas (#619, las tres tandas), con todos sus pasos', () => {
+    for (const r of Object.values(RECORRIDOS_FINANZAS)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los cuatro de las novedades del 18/11 (#611, tanda A), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_NOVEDADES)).toEqual(['menu-bloques', 'hoy-dashboard', 'ventas-repetidas', 'venta-cuotas']);
+    for (const r of Object.values(RECORRIDOS_NOVEDADES)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los de las novedades del 18/11, tanda B (#611, gemela de CRM#928), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_NOVEDADES_B)).toEqual(['mi-factura', 'facturas-colaboradores', 'mi-campus', 'incidencias', 'prospectos']);
+    for (const r of Object.values(RECORRIDOS_NOVEDADES_B)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los del día a día de una gestora (#619, tanda C), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_GESTORA)).toEqual(['clientes', 'prospecto-ficha', 'cola-del-dia']);
+    for (const r of Object.values(RECORRIDOS_GESTORA)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
   it.each(TODOS)('%s: el cartel cabe en cada paso y «Siguiente» se puede pulsar', (_id, pasos) => {
     comoMovil();
     const sitios = [

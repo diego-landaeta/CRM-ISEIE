@@ -15,7 +15,7 @@ import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { render, screen, cleanup } from '@testing-library/react';
+import { render, screen, cleanup, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 // Las gráficas de Recharts del Dashboard lo piden y jsdom no lo trae.
@@ -49,6 +49,10 @@ vi.mock('@/shared/components/dashboard/PerformanceInsights', () => ({ default: (
 // solo se mira el ranking.
 vi.mock('@/modules/reports/components/ActividadPorComercial', () => ({ TarjetaActividad: () => null, default: () => null }));
 vi.mock('@/shared/components/dashboard/ActividadDeHoy', () => ({ default: () => null }));
+// Las cifras de arriba del Dashboard «Hoy» (gemela de CRM#884) piden su API: aquí solo se mira el ranking.
+vi.mock('@/shared/components/dashboard/CifrasDeHoy', () => ({ default: () => null }));
+// «Ver recorrido» de «Hoy» (#611) pide la sesión: aquí solo se mira el ranking.
+vi.mock('@/shared/components/ui/VerRecorrido', () => ({ default: () => null }));
 
 import DashboardPage from '@/shared/pages/DashboardPage';
 
@@ -58,9 +62,13 @@ const pintar = () => render(<MemoryRouter><DashboardPage /></MemoryRouter>);
 
 describe('El ranking de gestoras no depende de la bandera del proceso', () => {
   it('el Dashboard YA CARGADO enseña «Cómo voy» con la bandera apagada (antes, nada)', () => {
+    localStorage.clear();
     pintar();
-    // Por lo cobrado (12/11/2026, «los rankings de todas las vistas, por lo cobrado»):
-    // sin `medida`, que es lo de serie. Antes iba con medida="facturado" (#224).
+    // Desde el Dashboard «Hoy» (gemela de CRM#884) va en «El equipo este mes»,
+    // plegado de entrada: se abre y ahí está.
+    fireEvent.click(screen.getByText('El equipo este mes'));
+    // Por lo cobrado, la medida por defecto (Diego, 12/11/2026: «los montos de
+    // los rankings de todas las vistas son del monto cobrado»).
     expect(screen.getByTestId('como-voy')).toHaveAttribute('data-medida', '');
   });
 

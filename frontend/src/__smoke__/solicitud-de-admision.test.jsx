@@ -33,10 +33,11 @@ describe('Solicitud de admisión en el menú', () => {
     ['una gestora', 'gestor', []],
     ['quien tiene la gestora como rol de más', 'colaborador', ['gestor']],
     ['un admin', 'admin', []],
-  ])('%s la ve en Clientes, con su nombre nuevo y la misma dirección', (_n, role, extra) => {
+  ])('%s la ve en Comercial, con su nombre nuevo y la misma dirección', (_n, role, extra) => {
     const entrada = menuDe(role, extra).find((i) => i.to === '/matriculas');
     expect(entrada).toBeTruthy();
-    expect(entrada.seccion).toBe('Clientes');
+    // En «Comercial» desde el reparto por bloques (gemela de CRM#900); antes, «Clientes».
+    expect(entrada.seccion).toBe('Comercial');
     expect(entrada.label).toBe('Solicitud de admisión');
   });
 

@@ -87,6 +87,49 @@ describe('la tarjeta de la ficha', () => {
   });
 });
 
+describe('crear sin clave de links en el campus (QA de /testeo del 18/11)', () => {
+  const conAviso = (aviso_clave) => get.mockImplementation(async (url) => {
+    if (url === '/links-pago') return { success: true, data: [] };
+    if (url === '/links-pago/ventas-del-prospecto') {
+      return { success: true, data: { lead: { id: 3, nombre: 'Ana', email: null, telefono: null, project_id: 1, producto_interes_id: 5 }, ventas: [] } };
+    }
+    if (url.startsWith('/links-pago/config')) return { success: true, data: { ...CONFIG, aviso_clave } };
+    if (url === '/products') return { success: true, data: CURSOS };
+    return { success: true, data: [] };
+  });
+
+  it('el asistente lo dice en cuanto sabe el campus y no deja rellenar ni enviar', async () => {
+    permisos.mapa = { 'links_pago.crear': true };
+    conAviso({ code: 'SIN_CLAVE_DE_LINKS', error: 'Este campus no tiene la clave de links de pago. La pone un admin en Integraciones › Links de pago.' });
+    render(<LinksDePagoCard projectId={1} leadId={3} productoId={5} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
+    const dialogo = await screen.findByRole('dialog');
+    const alerta = await within(dialogo).findByRole('alert');
+    expect(alerta.textContent).toContain('no tiene la clave de links de pago');
+    // En ISEIE el asistente va curso › importe › cómo paga; la venta, en «Para un
+    // prospecto o una venta concretos». Lo que se rellena queda deshabilitado.
+    expect(within(dialogo).getByLabelText('Importe').closest('fieldset').disabled).toBe(true);
+    expect(within(dialogo).getByRole('radiogroup', { name: 'Cómo paga' }).closest('fieldset').disabled).toBe(true);
+    expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(true);
+    // El aviso no se repite en la lista de «por qué no deja»: lo dice una vez, arriba.
+    expect(within(dialogo).getAllByText(/no tiene la clave de links de pago/)).toHaveLength(1);
+    expect(within(dialogo).getByRole('button', { name: 'Cerrar' })).toBeTruthy();
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it('con clave (aviso_clave null) se rellena como siempre', async () => {
+    permisos.mapa = { 'links_pago.crear': true };
+    conAviso(null);
+    render(<LinksDePagoCard projectId={1} leadId={3} productoId={5} />);
+    fireEvent.click(await screen.findByRole('button', { name: /Crear link de pago/ }));
+    const dialogo = await screen.findByRole('dialog');
+    const importe = within(dialogo).getByLabelText('Importe');
+    await vi.waitFor(() => expect(importe.closest('fieldset').disabled).toBe(false));
+    expect(within(dialogo).queryByRole('alert')).toBeNull();
+    await vi.waitFor(() => expect(within(dialogo).getByRole('button', { name: 'Crear link' }).disabled).toBe(false));
+  });
+});
+
 describe('las reglas del campus en Integraciones', () => {
   it('salen las guardadas y solo se manda lo que cambia', async () => {
     put.mockResolvedValue({ success: true, data: { ...CONFIG, caducidad_dias: 5, monedas: ['EUR', 'USD'] } });

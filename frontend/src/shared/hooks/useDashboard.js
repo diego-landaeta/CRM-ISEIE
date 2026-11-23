@@ -27,6 +27,8 @@ export function normalizeStats(raw) {
     en_seguimiento: Number(d.en_seguimiento) || 0,
     convertido,
     no_interesado: noInteresado,
+    // Abiertos sin gestora: la alerta del Dashboard (gemela de CRM#884).
+    sin_asignar: Number(d.sin_asignar) || 0,
     conversionRate: total > 0 ? Math.round((convertido / total) * 100) : 0,
     abandonRate: total > 0 ? Math.round((noInteresado / total) * 100) : 0,
   };
@@ -64,7 +66,7 @@ export function useDashboard() {
       try {
         const csv = idsDelAmbito.join(',');
         const [statsRes, todayRes, leadsRes] = await Promise.all([
-          client.get(`/leads/stats?projectIds=${csv}`).catch(() => ({ success: false })),
+          client.get(`/leads/stats?projectIds=${csv}&includeConverted=true`).catch(() => ({ success: false })),
           client.get(`/leads/today?projectIds=${csv}`).catch(() => ({ success: false })),
           client.get(`/leads?projectIds=${csv}&limit=10&page=1`).catch(() => ({ success: false })),
         ]);
@@ -91,7 +93,7 @@ export function useDashboard() {
     setError(null);
     try {
       const [statsRes, leadsRes, todayRes] = await Promise.all([
-        client.get(`/leads/stats?projectId=${pid}`),
+        client.get(`/leads/stats?projectId=${pid}&includeConverted=true`),
         client.get(`/leads?projectId=${pid}&limit=5&page=1`),
         client.get(`/leads/today?projectId=${pid}`).catch(() => ({ success: false })),
       ]);

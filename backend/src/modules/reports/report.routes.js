@@ -28,6 +28,8 @@ router.get('/mi-puesto', puede('reports.mis_informes'), ctrl.miPuesto);
 router.get('/panel', puede('reports.mis_informes'), ctrl.panel);
 router.get('/seguimiento', puede('reports.mis_informes'), ctrl.seguimiento);
 router.get('/paises', puede('reports.mis_informes'), ctrl.paises);
+// Por campus y país de entrada, el del subdominio (#221).
+router.get('/paises-entrada', puede('reports.mis_informes'), ctrl.paisesEntrada);
 router.get('/formaciones', puede('reports.mis_informes'), ctrl.formaciones);
 router.get('/canales', puede('reports.mis_informes'), ctrl.canales);
 // Con el gasto de publicidad: solo administracion.

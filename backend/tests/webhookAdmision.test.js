@@ -123,7 +123,8 @@ describe('los datos de la persona, en campos propios', () => {
     expect(r.body.data).toEqual({ recibido: true, envio_id: expect.stringMatching(/^[0-9a-f]{64}$/) });
     const m = await enviada(r);
     expect(m).toMatchObject({
-      nombre: 'Laura Sanz', email: correo('laura'), telefono: '+34 600 111 222', documento_tipo: 'DNI', dni: '12345678Z',
+      // El teléfono, con su prefijo y sin espacios (E.164, 17/11): así funciona el botón de WhatsApp.
+      nombre: 'Laura Sanz', email: correo('laura'), telefono: '+34600111222', documento_tipo: 'DNI', dni: '12345678Z',
       direccion: 'C/ Mayor 1', pais: 'España', estudios: 'Grado en Psicología', curso_solicitado: 'Máster en Neuropsicología',
       estado: 'solicitud_admision', source: 'webhook',
     });
@@ -132,6 +133,7 @@ describe('los datos de la persona, en campos propios', () => {
     expect(dia.slice(0, 10)).toBe('1990-05-17');
     // El envío se conserva tal cual llegó.
     expect(m.datos_admision.estudios).toBe('Grado en Psicología');
+    expect(m.datos_admision.telefono).toBe('+34 600 111 222');
     expect((await historial(m.id)).map((e) => e.evento)).toEqual(['recibida']);
   });
 
@@ -784,7 +786,7 @@ describe('el contrato de la lista y la ficha (Diego, 01/10)', () => {
     const m = await enviada(r);
     const fila = lista.body.data.find((x) => x.id === m.id);
     expect(fila).toMatchObject({
-      persona: { nombre: 'Rosa Contrato', email: correo('rosa-contrato'), telefono: '+34 677 000 111' },
+      persona: { nombre: 'Rosa Contrato', email: correo('rosa-contrato'), telefono: '+34677000111' },
       curso: 'Curso C', proyecto: `${MARCA} Campus`, documento: '44444444A', estado: 'solicitud_admision',
       documentos: { dni_frente: false, dni_dorso: false, foto: false, titulo: false, firma: true },
       lead_id: m.lead_id, conversion_id: null,

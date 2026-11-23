@@ -1,5 +1,7 @@
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
+// `lazy` que recarga UNA vez si la pieza ya no existe tras un despliegue (23/11).
+import { lazyConRecarga as lazy } from '@/shared/lib/piezaNueva';
 import RedirigirAWebhooks from './modules/webhooks/components/RedirigirAWebhooks';
 import { useAuth } from '@/contexts/AuthContext';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
@@ -62,6 +64,8 @@ const TutoresPage = lazy(() => import('./modules/tutores/pages/TutoresPage'));
 const ComisionesTutoresPage = lazy(() => import('./modules/tutores/pages/ComisionesTutoresPage'));
 const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/FormacionesSinTutorPage'));
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
+// «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene por hacer en Moodle.
+const MiCampusPage = lazy(() => import('./modules/tutores/pages/MiCampusPage'));
 // Consultas de alumnos (#188): la bandeja del tutor y el panel de administración.
 const ConsultasPage = lazy(() => import('./modules/consultas/pages/ConsultasPage'));
 const ConsultaPage = lazy(() => import('./modules/consultas/pages/ConsultaPage'));
@@ -70,6 +74,7 @@ const AlumnosSinMensajesPage = lazy(() => import('./modules/consultas/pages/Alum
 const MiCargaPage = lazy(() => import('./modules/consultas/pages/MiCargaPage'));
 const TutoresConsultasPage = lazy(() => import('./modules/consultas/pages/TutoresConsultasPage'));
 const MetricasConsultasPage = lazy(() => import('./modules/consultas/pages/MetricasConsultasPage'));
+const RespuestasCampusPage = lazy(() => import('./modules/consultas/pages/RespuestasCampusPage'));
 const InvoicesPage = lazy(() => import('./modules/invoices/pages/InvoicesPage'));
 const InvoicingConfigPage = lazy(() => import('./modules/invoices/pages/InvoicingConfigPage'));
 const InvoiceTemplateEditorPage = lazy(() => import('./modules/invoices/pages/InvoiceTemplateEditorPage'));
@@ -88,6 +93,7 @@ const ExternalPanelPage = lazy(() => import('./modules/external-panels/pages/Ext
 const ManualPage = lazy(() => import('./modules/manual/pages/ManualPage'));
 const PreferencesPage = lazy(() => import('./modules/preferences/pages/PreferencesPage'));
 const SoportePage = lazy(() => import('./modules/soporte/pages/SoportePage'));
+const IncidenciasPage = lazy(() => import('./modules/incidencias/pages/IncidenciasPage'));
 const CommissionsPage = lazy(() => import('./modules/commissions/pages/CommissionsPage'));
 const ExpensesPage = lazy(() => import('./modules/expenses/pages/ExpensesPage'));
 const ProfilePage = lazy(() => import('./shared/pages/ProfilePage'));
@@ -132,6 +138,8 @@ const McpPage = lazy(() => import('./modules/mcp/pages/McpPage'));
 // Conexión → Moodle (#335): cursos, alumnos y recursos de cada campus, como en MultiCRM.
 const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
 const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
+// Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto (lo lee la matrícula automática).
+const CursosDeProductosPage = lazy(() => import('./modules/moodle/pages/CursosDeProductosPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -198,6 +206,7 @@ const ROUTE_TITLES = {
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
   '/conexion/moodle':                 'Moodle',
+  '/mis-cursos/campus':               'Mi campus',
   '/consultas':                       'Consultas',
   '/consultas/alumnos':               'Alumnos sin mensajes',
   '/consultas/carga':                 'Mi carga',
@@ -206,7 +215,9 @@ const ROUTE_TITLES = {
   '/informes/preguntar':              'Pregunta a tus datos',
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
+  '/products/cursos-moodle':          'Cursos de Moodle',
   '/soporte':                         'Soporte',
+  '/incidencias':                     'Incidencias',
   '/conexion/conectores':             'Conectores',
   '/conexion/webhooks':                'Webhooks',
   '/conexion/webhooks/prospectos':     'Webhooks de prospectos',
@@ -316,6 +327,7 @@ function App() {
           <Route path="/products" element={<ProductsPage />} />
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
+          <Route path="/products/cursos-moodle" element={<CursosDeProductosPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
           {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}
@@ -365,6 +377,8 @@ function App() {
           {/* #216: enseñaba datos de ejemplo de Search Console. Hasta que esté conectado (#17). */}
           <Route path="/seo" element={<AunNoConectadoPage titulo="Tráfico orgánico" />} />
           <Route path="/soporte" element={<SoportePage />} />
+          {/* Incidencias (gemela de CRM#612), al lado de Soporte. */}
+          <Route path="/incidencias" element={<IncidenciasPage />} />
           <Route path="/payroll" element={<PayrollPage />} />
           <Route path="/matriculas" element={<MatriculasPage />} />
           {/* Conexión → MCP y Conectores, como en MultiCRM. Quién puede usar el MCP lo decide el servidor. */}
@@ -408,12 +422,15 @@ function App() {
           <Route path="/tutores/comisiones" element={<ComisionesTutoresPage />} />
           <Route path="/tutores/sin-tutor" element={<FormacionesSinTutorPage />} />
           <Route path="/mis-cursos" element={<MisCursosPage />} />
+          {/* «Mi campus» (#408): bajo /mis-cursos para que el tutor ya pueda abrirlo (ProtectedRoute, betaConfig). */}
+          <Route path="/mis-cursos/campus" element={<MiCampusPage />} />
           {/* Consultas de alumnos (#187–#190), como en MultiCRM. */}
           <Route path="/consultas" element={<ConsultasPage />} />
           <Route path="/consultas/alumnos" element={<AlumnosSinMensajesPage />} />
           <Route path="/consultas/carga" element={<MiCargaPage />} />
           <Route path="/consultas/tutores" element={<TutoresConsultasPage />} />
           <Route path="/consultas/metricas" element={<MetricasConsultasPage />} />
+          <Route path="/consultas/respuestas" element={<RespuestasCampusPage />} />
           <Route path="/consultas/:id" element={<ConsultaPage />} />
           {/* Make y Webhooks vivían aquí (Captación); desde la gemela de CRM#755
               están en Conexión › Webhooks. Las direcciones de antes redirigen: los
@@ -444,6 +461,11 @@ function App() {
               al inicio (/dashboard) en vez de «Página no encontrada». */}
           <Route path="/chat-ia" element={<Navigate to="/dashboard" replace />} />
           <Route path="/ai-chat" element={<Navigate to="/dashboard" replace />} />
+          {/* «Análisis IA» (/informes/ia) es de MultiCRM: ISEIE no tiene esa
+              pantalla. Quien llegue con la dirección (un enlace o un favorito
+              de allí) va al inicio, como las otras dos, y no a «Página no
+              encontrada» (QA del 11/11). */}
+          <Route path="/informes/ia" element={<Navigate to="/dashboard" replace />} />
           {/* El panel de feedback, fuera de produccion hasta aprobarlo. */}
           <Route path="/informes/feedback"
             element={PROCESO_EN_PRUEBAS ? <FeedbackPanelPage /> : <Navigate to="/informes" replace />} />
@@ -478,7 +500,8 @@ function App() {
             copiaron de MultiCRM y cuatro llevaban a «Página no encontrada»:
             /informes/ia, /mensajes, /chat-ia y /configuracion/plantillas-email
             no existen en ISEIE. Las dos sin pantalla equivalente se quitan.
-            (/chat-ia y /ai-chat llevan a /dashboard desde el 10/11, arriba: #30.) */}
+            (/chat-ia y /ai-chat llevan a /dashboard desde el 10/11, y
+            /informes/ia desde el 11/11, arriba: #30.) */}
         <Route path="/reports/ia" element={<Navigate to="/informes" replace />} />
         <Route path="/reports" element={<Navigate to="/informes" replace />} />
         <Route path="/sales" element={<Navigate to="/ventas" replace />} />

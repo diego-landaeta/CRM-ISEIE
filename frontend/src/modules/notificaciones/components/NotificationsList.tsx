@@ -82,7 +82,7 @@ export default function NotificationsList() {
                   </div>
                   {n.message && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>}
                 </div>
-                {n.is_read && <CheckCircle size={13} weight="fill" className="text-emerald-500 mt-1 flex-shrink-0" />}
+                {n.is_read && <CheckCircle size={13} weight="fill" className="text-success mt-1 flex-shrink-0" />}
               </button>
             </li>
           ))}

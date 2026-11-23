@@ -1,6 +1,7 @@
 import { Component } from 'react';
 import { WarningCircle, ArrowClockwise } from '@phosphor-icons/react';
 import { API_BASE_URL } from '@/shared/api/client';
+import { recargarUnaVez } from '@/shared/lib/piezaNueva';
 
 /**
  * ErrorBoundary global. Captura errores no manejados en cualquier descendiente
@@ -29,6 +30,9 @@ export default class ErrorBoundary extends Component {
   }
 
   componentDidCatch(error, info) {
+    // Una pieza del frontal que ya no existe tras un despliegue (23/11): se recarga
+    // una vez y no se avisa al servidor, que no es un fallo de la pantalla.
+    if (recargarUnaVez(error)) { this.setState({ recargando: true }); return; }
     console.error('[ErrorBoundary]', error, info?.componentStack);
     // Y al servidor, que es donde alguien lo puede ver: sin esto una pantalla rota
     // solo deja rastro en el navegador de quien la sufre.
@@ -59,6 +63,7 @@ export default class ErrorBoundary extends Component {
 
   render() {
     if (!this.state.error) return this.props.children;
+    if (this.state.recargando) return null;
 
     return (
       <div

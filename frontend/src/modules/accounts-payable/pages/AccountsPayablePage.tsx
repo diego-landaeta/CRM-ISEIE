@@ -2,6 +2,8 @@ import { lazy, Suspense, useEffect, useState } from 'react';
 import { payableApi } from '../api/payable.api';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
@@ -75,23 +77,29 @@ export default function AccountsPayablePage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Cuentas por pagar"
         subtitle={`${activeProject ? activeProject.nombre + ' — ' : ''}Facturas y deudas con proveedores`}
         actions={
+          <>
+          <VerRecorrido id="por-pagar" listo={!loading} />
           <button
             onClick={() => setDialog('new')}
+            data-recorrido="pagar-nueva"
             aria-label="Nueva factura"
             className="inline-flex items-center gap-2 h-9 px-3 sm:px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
           >
             <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nueva factura</span>
           </button>
+          </>
         }
       />
 
       {stats && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div data-recorrido="pagar-tarjetas" className="grid grid-cols-2 md:grid-cols-4 gap-3">
           <KpiCard
             icon={Receipt}
             iconBg="bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-400"
@@ -122,7 +130,7 @@ export default function AccountsPayablePage() {
       )}
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="p-3 border-b border-border overflow-x-auto">
+        <div data-recorrido="pagar-filtros" className="p-3 border-b border-border overflow-x-auto">
           <div className="flex items-center gap-2 w-max">
             {ESTADOS.map(e => (
               <button
@@ -143,7 +151,9 @@ export default function AccountsPayablePage() {
         ) : items.length === 0 ? (
           <EmptyState icon={Receipt} title="Sin facturas" description="No hay cuentas por pagar registradas" />
         ) : (
-          <>
+          // Envuelve la tabla (escritorio) y las tarjetas (móvil): el recorrido
+          // señala la lista en los dos (#619).
+          <div data-recorrido="pagar-lista">
             {/* Tabla escritorio */}
             <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-sm">
@@ -278,7 +288,7 @@ export default function AccountsPayablePage() {
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
       </div>
 

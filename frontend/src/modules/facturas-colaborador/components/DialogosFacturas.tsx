@@ -64,25 +64,31 @@ const VACIA: FormEmpresa = { acordado: '', moneda: 'EUR', modalidad: '', fijo: '
 /** Texto a número (vacío → null; mal escrito → NaN, para avisar). */
 const numero = (v: string) => (v.trim() === '' ? null : Number(normalizarImporte(v)));
 
-export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, tipoNuevo = 'colaborador' }: {
+export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, tipoNuevo = 'colaborador', semilla }: {
   colaborador: Colaborador | null;
   empresas: EmpresaDelGrupo[];
   /** Con el filtro «Vendedoras» puesto, la ficha nueva sale de vendedora (CRM#710). */
   tipoNuevo?: Tipo;
+  /**
+   * Lo que ya se sabe de una ficha nueva (CRM-ISEIE#687): la de una tutora redactora
+   * sale con su nombre, su correo, su usuario y el área «Redacción de cursos».
+   * Su usuario vale aunque esté desactivada (se activan con el chat de Moodle).
+   */
+  semilla?: { nombre?: string; email?: string; area?: Area; usuario?: UsuarioColaborador & { active?: boolean } };
   alCerrar: () => void;
   alGuardar: () => void;
 }) {
   const c = colaborador;
-  const [nombre, setNombre] = useState(c?.nombre ?? '');
-  const [email, setEmail] = useState(c?.email ?? '');
+  const [nombre, setNombre] = useState(c?.nombre ?? semilla?.nombre ?? '');
+  const [email, setEmail] = useState(c?.email ?? semilla?.email ?? '');
   const [nif, setNif] = useState(c?.nif ?? '');
-  const [area, setArea] = useState<Area>(c?.area ?? 'otra');
+  const [area, setArea] = useState<Area>(c?.area ?? semilla?.area ?? 'otra');
   // Colaborador o vendedora (CRM#710): la vendedora es una gestora o comercial de la lista.
   const [tipo, setTipo] = useState<Tipo>(c?.tipo ?? tipoNuevo);
   const esVendedora = tipo === 'vendedora';
   const [notas, setNotas] = useState(c?.notas ?? '');
   const [altaDesde, setAltaDesde] = useState(c?.alta_desde ?? '');
-  const [userId, setUserId] = useState<number | null>(c?.user_id ?? null);
+  const [userId, setUserId] = useState<number | null>(c?.user_id ?? semilla?.usuario?.id ?? null);
   // Empresa marcada → lo acordado y cómo cobra de ella.
   const [marcadas, setMarcadas] = useState<Record<number, FormEmpresa>>(() => Object.fromEntries(
     (c?.empresas ?? []).map((e) => [e.issuer_id, deLaFicha(e)]),
@@ -104,10 +110,16 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, 
       client.get(`/users?role=${rol}&active=true&limit=200`).then((r: any) => r.data || []).catch(() => [])))
       .then((listas: UsuarioColaborador[][]) => {
         const vistos = new Set<number>();
-        setUsuarios(listas.flat().filter((u) => (vistos.has(u.id) ? false : (vistos.add(u.id), true))));
+        const todos = listas.flat().filter((u) => (vistos.has(u.id) ? false : (vistos.add(u.id), true)));
+        // La redactora de la semilla, aunque esté desactivada: la lista solo trae activos.
+        const suya = semilla?.usuario;
+        if (suya && !esVendedora && !vistos.has(suya.id)) {
+          todos.push({ id: suya.id, nombre: suya.active === false ? `${suya.nombre} (desactivada)` : suya.nombre, email: suya.email });
+        }
+        setUsuarios(todos);
       })
-      .catch(() => setUsuarios([]));
-  }, [esVendedora]);
+      .catch(() => setUsuarios(semilla?.usuario && !esVendedora ? [semilla.usuario] : []));
+  }, [esVendedora, semilla?.usuario]);
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault();
@@ -161,7 +173,7 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, 
   const soloSusEmpresas = Boolean(c?.compartido);
 
   return (
-    <Dialogo titulo={c ? `Editar · ${c.nombre}` : esVendedora ? 'Añadir vendedora' : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
+    <Dialogo titulo={c ? `Editar · ${c.nombre}` : esVendedora ? 'Añadir vendedora' : area === 'redaccion' ? 'Añadir tutora redactora' : 'Añadir colaborador'} alCerrar={alCerrar} ancho="max-w-2xl">
       <form onSubmit={guardar} className="space-y-4" noValidate>
         {soloSusEmpresas && (
           <p className="rounded-md bg-info-soft text-info-soft-foreground px-3 py-2 text-xs">

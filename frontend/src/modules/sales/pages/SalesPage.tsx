@@ -1,9 +1,11 @@
 import { lazy, Suspense, useState, useEffect } from 'react';
-import { Plus, Receipt, UsersThree, CaretDown, User, Users, Robot } from '@phosphor-icons/react';
+import { Plus, Receipt, UsersThree, CaretDown, User, Users, Robot, GlobeHemisphereWest } from '@phosphor-icons/react';
+import { opcionesDePais } from '@/shared/lib/paises';
 import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
 const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
@@ -18,7 +20,10 @@ const PosiblesRepetidasCard = lazy(() => import('../components/PosiblesRepetidas
 import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
 
 export default function SalesPage() {
-  const { activeProject } = useProjectContext() as { activeProject: { id: number; nombre?: string } | null };
+  const { activeProject, projects } = useProjectContext() as {
+    activeProject: { id: number; nombre?: string } | null;
+    projects?: Array<{ id: number; paises_por_subdominio?: Record<string, string> | null }>;
+  };
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
@@ -63,8 +68,17 @@ export default function SalesPage() {
     client.get(`/users?limit=100&alcance=comercial${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
   }, [isAdmin, projectIdParam]);
 
+  // País de entrada (#221): el del prospecto de cada venta. Solo sale si algún
+  // campus de lo que se mira tiene tabla de países.
+  const [paisEntrada, setPaisEntrada] = useState('');
+  const opcionesPais = opcionesDePais(
+    projectIdParam ? (projects || []).filter((p) => p.id === projectIdParam) : projects,
+  );
+
   return (
-    <div className="space-y-6">
+    // El margen de scroll, como en Ventas (#619): la barra fija de arriba no
+    // tapa lo que señala el recorrido (#611).
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -76,7 +90,9 @@ export default function SalesPage() {
               : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* El recorrido de las ventas repetidas (#611): solo con el botón (#681). */}
+          <VerRecorrido id="ventas-repetidas" />
           {isAdmin && !allProjects && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />
@@ -91,6 +107,21 @@ export default function SalesPage() {
               </select>
             </div>
           )}
+          {(opcionesPais.length > 0 || paisEntrada) && (
+            <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
+              <GlobeHemisphereWest size={14} className="text-muted-foreground" />
+              <select
+                value={paisEntrada}
+                onChange={(e) => setPaisEntrada(e.target.value)}
+                className="bg-transparent focus:outline-none max-w-[160px]"
+                title="País de entrada del prospecto de cada venta"
+                aria-label="País de entrada"
+              >
+                <option value="">Todos los países</option>
+                {opcionesPais.map((o) => <option key={o.valor} value={o.valor}>{o.etiqueta}</option>)}
+              </select>
+            </div>
+          )}
           {/* NUEVA VENTA, con sus tipos dentro.
               Quien no tiene mas que uno ve el boton de siempre: un desplegable
               de una sola opcion es un clic de mas por nada. */}
@@ -98,6 +129,7 @@ export default function SalesPage() {
             <div className="relative">
               <button
                 type="button"
+                data-recorrido="ventas-repetidas-nueva"
                 onClick={() => setMenuAbierto((v) => !v)}
                 disabled={!hasActiveCtx || allProjects}
                 aria-haspopup="menu"
@@ -156,6 +188,7 @@ export default function SalesPage() {
           ) : (
             <button
               type="button"
+              data-recorrido="ventas-repetidas-nueva"
               onClick={() => abrirVenta('existing')}
               disabled={!hasActiveCtx || allProjects}
               title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
@@ -182,11 +215,11 @@ export default function SalesPage() {
       ) : (
         <>
           <Suspense fallback={null}>
-            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+            <ResumenVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
           </Suspense>
 
           <Suspense fallback={null}>
-            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} from={rango.from} to={rango.to} />
+            <CursosVendidosCard projectId={projectIdParam} responsableId={responsableId} paisEntrada={paisEntrada} from={rango.from} to={rango.to} />
           </Suspense>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
@@ -203,29 +236,31 @@ export default function SalesPage() {
               también la gestora: el servidor le devuelve solo lo suyo. */}
           {!allProjects && (
             <Suspense fallback={null}>
-              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <EvolucionVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <DesgloseVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <VentasPorPais projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
           {!allProjects && (
             <Suspense fallback={null}>
-              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} />
+              <ClientesVentas projectId={projectIdParam} from={rango.from} to={rango.to} responsableId={responsableId} paisEntrada={paisEntrada} />
             </Suspense>
           )}
 
-          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898). */}
+          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898).
+              Salía dos veces (se duplicó al traer main a staging); el recorrido
+              de las ventas repetidas (#611) la señala, y con una basta. */}
           {can('conversions.edit') && (
             <Suspense fallback={null}>
               <PosiblesRepetidasCard projectId={projectIdParam} />

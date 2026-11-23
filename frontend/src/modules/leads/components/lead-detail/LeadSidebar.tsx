@@ -29,7 +29,8 @@ export default function LeadSidebar({
   const { can } = usePermission();
   return (
     <div className="space-y-3">
-      <div className="bg-card p-4 rounded-lg border border-border">
+      {/* `data-recorrido`: el paso «Cambiar estado» del recorrido de la ficha (#619). */}
+      <div data-recorrido="ficha-estado" className="bg-card p-4 rounded-lg border border-border">
         <h3 className="text-[13px] font-semibold mb-2 flex items-center gap-1.5">
           <Funnel size={14} weight="regular" className="text-muted-foreground" /> Cambiar estado
         </h3>

@@ -20,9 +20,11 @@ import {
   ArrowLeft, WhatsappLogo, EnvelopeSimple, Phone, ArrowSquareOut,
   ShoppingCart, CurrencyEur, Wallet, CheckCircle, WarningCircle,
   Note, CalendarCheck, Users, MagnifyingGlass, Tag,
-  ChatCircleDots, User, PencilSimple, Trash, GitMerge,
+  ChatCircleDots, User, PencilSimple, Trash, GitMerge, GraduationCap,
 } from '@phosphor-icons/react';
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
+import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
+import AvanceMoodleBloque from '../components/AvanceMoodle';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConversionsTab = lazy(() => import('@/modules/conversions/components/ConversionsTab'));
@@ -130,7 +132,10 @@ export default function ClientDetailPage() {
   const [editOpen, setEditOpen] = useState<boolean>(false);
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
   const [mergeOpen, setMergeOpen] = useState<boolean>(false);
-  const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios'>('compras');
+  const [tab, setTab] = useState<'compras' | 'interacciones' | 'recordatorios' | 'campus'>('compras');
+  // Su avance en Moodle (#532). Se pide al abrir la ficha; la pestaña solo sale si el
+  // servidor lo tiene encendido (el plugin del CRM aprobado en ese entorno).
+  const avance = useAvanceMoodle(id);
 
   // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
@@ -336,13 +341,15 @@ export default function ClientDetailPage() {
 
           {/* Tabs */}
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="flex border-b border-border px-4">
+            {/* Con la pestaña «Campus» (#532) no caben tres en móvil: se desplazan dentro, sin mover la página. */}
+            <div className="flex overflow-x-auto border-b border-border px-4">
               {[
                 // Compras y cobros: qué compró y qué debe (cuotas pendientes,
                 // facturas) se ve y gestiona aquí mismo, sin ir a la ficha de
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
+                ...(avance.datos?.disponible ? [{ id: 'campus', label: 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
@@ -350,7 +357,7 @@ export default function ClientDetailPage() {
                     key={t.id}
                     onClick={() => setTab(t.id)}
                     aria-pressed={tab === t.id}
-                    className={`flex items-center gap-1.5 px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
+                    className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
                       tab === t.id
                         ? 'border-primary text-primary'
                         : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -372,6 +379,14 @@ export default function ClientDetailPage() {
                     canManage={canManage}
                   />
                 </Suspense>
+              )}
+              {tab === 'campus' && (
+                <AvanceMoodleBloque
+                  datos={avance.datos}
+                  cargando={avance.cargando}
+                  error={avance.error}
+                  onActualizar={avance.actualizar}
+                />
               )}
               {tab === 'interacciones' && (
                 <div>

@@ -194,7 +194,7 @@ export default function LinksDePagoPage() {
               const est = ESTADOS[l.estado] || ESTADOS.creado;
               return (
                 <li key={l.id} className="p-3 sm:px-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 text-sm" data-link-id={l.id}>
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${est.tono}`}>{est.texto}</span>
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${est.tono}`} data-recorrido="links-pantalla-estado">{est.texto}</span>
                   <span className="font-semibold tabular-nums">
                     {dinero(l.importe, l.moneda)}
                     {/* Con descuento (CRM#982), el precio de antes, tachado. */}
@@ -222,8 +222,8 @@ export default function LinksDePagoPage() {
                     : <span className="text-muted-foreground italic">Sin prospecto todavía</span>}
                   <span className="text-xs text-muted-foreground truncate max-w-[240px]" title={l.product_nombre || ''}>{l.product_nombre || '—'}</span>
                   {l.conversion_id
-                    ? <Link to={`/ventas/${l.conversion_id}`} className="text-xs underline" title={l.venta_producto_nombre || ''}>Venta n.º {l.conversion_id}</Link>
-                    : <span className="text-xs text-muted-foreground">{l.estado === 'creado' || l.estado === 'abierto' ? 'la venta se crea al pagar' : 'sin venta'}</span>}
+                    ? <Link to={`/ventas/${l.conversion_id}`} className="text-xs underline" title={l.venta_producto_nombre || ''} data-recorrido="links-pantalla-venta">Venta n.º {l.conversion_id}</Link>
+                    : <span className="text-xs text-muted-foreground" data-recorrido="links-pantalla-venta">{l.estado === 'creado' || l.estado === 'abierto' ? 'la venta se crea al pagar' : 'sin venta'}</span>}
                   <span className="text-xs text-muted-foreground basis-full sm:basis-auto">
                     {l.project_nombre ? `${l.project_nombre} · ` : ''}{l.creado_por_nombre || '—'} · {cuando(l.created_at)}
                     {vivo && l.caduca_el && <> · caduca {cuando(l.caduca_el)}</>}
@@ -232,7 +232,7 @@ export default function LinksDePagoPage() {
                     {l.estado === 'anulado' && <> · anulado: {l.motivo_anulacion}</>}
                   </span>
                   <DatosDeSeguimiento link={l} />
-                  <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                  <span className="ml-auto flex flex-wrap items-center gap-1.5" data-recorrido="links-pantalla-acciones">
                     {vivo && l.url && (
                       <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]" title={l.url}>{l.url.replace(/^https?:\/\//, '')}</span>
                     )}

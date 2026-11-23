@@ -38,6 +38,9 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 
 // La ficha del curso que imparte, sin poder tocarla.
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
+// «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
+// por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
+router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.
@@ -58,6 +61,12 @@ router.delete('/:id', puede('tutores.gestionar'), ctrl.retirarTutor);
 router.get('/:id/campus', ctrl.campusDelTutor);
 router.post('/:id/campus', puede('tutores.gestionar'), ctrl.asignarCampus);
 router.post('/:id/campus/comprobar', puede('tutores.gestionar'), ctrl.comprobarCampus);
+// Su cuenta de Moodle, campus a campus y solo en los de tu empresa (#679, revisión de la #689).
+// Su cuenta cambió de verdad: olvidar la vinculada y buscarla de nuevo.
+router.post('/:id/campus/:projectId/desvincular', puede('tutores.gestionar'), ctrl.desvincularCuenta);
+// Su correo del CRM no es el de Moodle: buscar su cuenta y vincularla a mano.
+router.get('/:id/campus/:projectId/buscar-cuenta', puede('tutores.gestionar'), ctrl.buscarCuentaMoodle);
+router.post('/:id/campus/:projectId/vincular', puede('tutores.gestionar'), ctrl.vincularCuentaMoodle);
 router.post('/:id/empresas', puede('tutores.gestionar'), ctrl.asignarEmpresa);
 router.delete('/:id/empresas/:issuerId', puede('tutores.gestionar'), ctrl.quitarEmpresa);
 router.patch('/:id/disponible', puede('tutores.gestionar'), ctrl.cambiarDisponible);

@@ -17,8 +17,6 @@ router.get('/', puede('stripe.view'), ctrl.list);
 router.get('/stats', puede('stripe.view'), ctrl.stats);
 // Solo los campus de quien lo pide (#428): antes el projectId del cuerpo iba tal cual.
 router.post('/sync', puede('stripe.view'), projectAccess, ctrl.sync);
-// Cargos sueltos y cobros sin cargo de una venta, para enlazarlos (CRM#888).
-router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
 // Disputas (#396): solo lectura, admin y super admin (y soporte), cada uno en sus
 // campus. Antes de `/:id`: con el comodin por delante, `/disputas` se leeria
 // como el cargo con id «disputas».
@@ -30,6 +28,8 @@ router.post('/disputas/sincronizar', puede('stripe.edit'), projectAccess, disput
 router.get('/conciliacion', puede('stripe.edit'), conciliacion.listar);
 router.get('/conciliacion/opciones', puede('stripe.edit'), projectAccess, conciliacion.opciones);
 router.post('/conciliacion/enlazar-seguros', puede('stripe.edit'), projectAccess, conciliacion.enlazarSeguros);
+// Cargos sueltos y cobros sin cargo de una venta, para enlazarlos (CRM#888).
+router.get('/de-la-venta/:conversionId', puede('stripe.edit'), ctrl.deLaVenta);
 router.get('/:id', puede('stripe.view'), ctrl.getOne);
 
 // Asociar o desasociar a mano y decidir disputas: solo admin y superadmin.

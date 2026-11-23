@@ -43,7 +43,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: backend/package-lock.json
 
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -89,6 +89,29 @@ jobs:
       # El build es la comprobacion que mas fallos reales pilla: un icono sin
       # importar o una ruta mal puesta no los ve el linter y tumban la pantalla.
       - run: npm run build
+        working-directory: frontend
+
+  # Las pruebas del frontal (vitest) no se pasaban en el CI: solo lint, tipos y
+  # build. Por eso entraron en staging pruebas rotas sin que nadie lo viera
+  # (CRM#1061 / CRM-ISEIE#721). Van en un trabajo aparte para que un fallo aqui
+  # no tape lo que digan el lint o el build.
+  frontend-pruebas:
+    name: Frontend · pruebas
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      # `dot` deja el registro corto: un punto por prueba y, al final, solo
+      # las que fallan con su error.
+      - run: npm test -- --reporter=dot
         working-directory: frontend
 
   paridad:

@@ -203,7 +203,44 @@ export interface CursoFicha {
   brochure: { id: number; filename_original: string; version: number; size_bytes: number | null } | null;
 }
 
+// «Mi campus» (#408, gemela de CRM#681): lo que devuelve GET /tutores/mi-campus.
+export interface MiCampusAlumno {
+  id: number; nombre: string | null; email: string | null; ultimoAcceso: string | null; mensajeUrl: string;
+  /** % del curso hecho según Moodle; null = sin seguimiento o sin dato: «—», no 0 %. */
+  progreso?: number | null;
+}
+export interface MiCampusDuda { consultaId: number; alumnoId: number | null; alumno: string | null; desde: string | null }
+export interface MiCampusTarea {
+  id: number; nombre: string | null; entrega: string | null;
+  /** La tarea en el calificador de Moodle (aquí no se corrige desde el CRM). */
+  corregirUrl: string;
+  sinCorregir: Array<{ alumnoId: number; alumno: string | null; entregadaAt: string | null; corregirUrl: string }>;
+  notaMax?: number;
+  enGrupo?: boolean;
+}
+export interface MiCampusCurso {
+  id: number; nombre: string | null; url: string; error: string | null;
+  /** ¿Tiene activado el seguimiento de finalización en Moodle? Sin él, el % de todos es «—». */
+  seguimiento?: boolean;
+  /** Por qué no se ha leído el % de sus alumnos (demasiados, o Moodle no contesta). */
+  avisoProgreso?: string | null;
+  alumnos: MiCampusAlumno[]; dudas: MiCampusDuda[]; tareas: MiCampusTarea[];
+}
+export interface MiCampusCampus {
+  projectId: number; campus: string; url: string | null; error: string | null;
+  cursos: MiCampusCurso[]; dudasSinCurso: MiCampusDuda[];
+}
+export interface MiCampusPendiente {
+  id: number; nombre: string; tipo: string; estado: string; campus: string; fechaComprometida: string | null;
+  avance: { foto: boolean; video: boolean; modulos: number };
+}
+export interface MiCampusSinConectar { projectId: number; campus: string; estado: string | null; motivo: string }
+export interface MiCampus { leidoAt: string; campus: MiCampusCampus[]; pendientes: MiCampusPendiente[]; sinConectar?: MiCampusSinConectar[] }
+
 export const tutoresApi = {
+  /** «Mi campus» de quien pide (el servidor usa su sesión). Con `refrescar`, sin la copia de 2 min. */
+  miCampus: (refrescar = false) =>
+    client.get(`/tutores/mi-campus${refrescar ? '?refrescar=1' : ''}`) as Promise<ApiResponse<MiCampus>>,
   /** Por defecto solo los que dan clase hoy. Con `incluirRetirados` salen
    *  tambien los que se dieron de baja — es la unica forma de volver a
    *  activar a alguien, porque retirado desaparece de la lista. */

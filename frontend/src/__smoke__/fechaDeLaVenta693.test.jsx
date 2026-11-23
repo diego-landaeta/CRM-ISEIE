@@ -21,12 +21,17 @@ import { formatDate } from '@/shared/lib/format';
 const venta = vi.hoisted(() => ({ actual: null }));
 vi.mock('@/shared/api/client', () => ({
   default: { get: vi.fn(async () => ({ success: true, data: venta.actual })) },
+  // ProjectContext arma el icono con él al cargarse (lo trae el asistente de links).
+  APP_BASE_URL: '',
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 vi.mock('@/modules/sales/components/RepartoVentaCard', () => ({ default: () => null }));
 // La ficha pide permisos (cargos de Stripe sin enlazar, gemela de CRM#892; links de
 // pago). Aquí no se miran: sin ninguno, esas tarjetas no salen y no hace falta sesión.
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => false, llevaEquipo: false }) }));
+// Los botones «Link» y «Plan» de la ficha (v2.8.0) miran si los links están encendidos,
+// que sale de la sesión; aquí no se miran.
+vi.mock('@/shared/lib/linksPago', async (original) => ({ ...(await original()), useLinksPagoEncendidos: () => false }));
 
 const { default: SaleDetailPage } = await import('@/modules/sales/pages/SaleDetailPage');
 

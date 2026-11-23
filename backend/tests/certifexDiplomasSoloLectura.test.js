@@ -203,6 +203,14 @@ describe('por rol, desde Configuración › Roles', () => {
     // El project manager trae «Diplomas · Ver» de serie desde el 04/11 (Diego: «el project
     // manager ve todo»). Se prueba al revés que antes: quitárselo al rol y devolvérselo.
     expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(200);
+    // «Requiere» en el servidor (#758): el project manager trae también «Ver emisiones y
+    // firmas», que necesita «Ver diplomas». Quitar solo «Ver diplomas» se rechaza, y dice
+    // qué depende de él; se quita antes eso desde Roles y se devuelve al final.
+    const cojo = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false });
+    expect(cojo.status).toBe(400);
+    expect(cojo.body.code).toBe('FALTA_REQUISITO');
+    expect(cojo.body.error).toMatch(/«Ver emisiones y firmas»/);
+    expect((await como('sa')(request.put('/api/permissions/roles/fijos/project_manager')).send({ permisos: { 'diplomas.view_emisiones': false } })).status).toBe(200);
     // Diego, 26/10: el admin sigue cambiando lo que trae cada rol (y «Diplomas · Ver» lo tiene).
     const delAdmin = await como('adminAjeno')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: false });
     expect(delAdmin.status, JSON.stringify(delAdmin.body)).toBe(200);
@@ -217,6 +225,7 @@ describe('por rol, desde Configuración › Roles', () => {
 
     const si = await como('sa')(request.put('/api/permissions/claves/diplomas.view/rol/project_manager')).send({ permitido: true });
     expect(si.body.data.permitido).toBe(true);
+    expect((await como('sa')(request.put('/api/permissions/roles/fijos/project_manager')).send({ permisos: { 'diplomas.view_emisiones': true } })).status).toBe(200);
     // Lo que vuelve a ser como el código no deja fila.
     expect((await pool.query(`SELECT 1 FROM role_permission_overrides WHERE role = 'project_manager' AND resource = 'diplomas'`)).rows).toEqual([]);
     expect((await como('pm')(request.get('/api/certifex/diplomas'))).status).toBe(200);

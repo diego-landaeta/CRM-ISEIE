@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import * as service from './cursos-pendientes.service.js';
+import * as subidas from './cursos-pendientes.subidas.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito, comoLista } from '../../shared/utils/ambito.js';
+import { esRolDeTutor } from '../../shared/utils/roles.js';
 
 const entero = z.coerce.number().int().positive();
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha tiene que ser AAAA-MM-DD');
@@ -20,7 +22,7 @@ const modificarSchema = z.object({
   tutor_id: entero.nullable().optional(),
   fecha_comprometida: fecha.optional(),
   motivo: z.string().trim().max(1000).optional(),
-  estado: z.enum(['en_desarrollo', 'cancelado', 'cerrado', 'publicado']).optional(),
+  estado: z.enum(['en_desarrollo', 'entregado', 'cancelado', 'cerrado', 'publicado']).optional(),
   tipo: z.enum(['curso', 'diplomado', 'master']).optional(),
   avance_foto: z.boolean().optional(),
   avance_video: z.boolean().optional(),
@@ -46,12 +48,13 @@ function leer(schema, datos) {
 }
 
 /**
- * Los campus que pide la pantalla, recortados a los de la persona. Una tutora no
+ * Los campus que pide la pantalla, recortados a los de la persona. Una tutora (o
+ * un tutor redactor, #770) no
  * se recorta por campus (ve los cursos que le han asignado), solo se filtra si
  * pide uno.
  */
 async function campus(req) {
-  if (req.user?.role === 'tutor') {
+  if (esRolDeTutor(req.user?.role)) {
     const id = req.query.projectId ? Number(req.query.projectId) : null;
     return id ? [id] : null;
   }
@@ -114,5 +117,45 @@ export async function marcarAlumna(req, res, next) {
   try {
     const d = leer(marcarSchema, req.body);
     res.json({ success: true, data: await service.marcarAlumna(req.user, entero.parse(req.params.id), entero.parse(req.params.alumnaId), d) });
+  } catch (err) { next(err); }
+}
+
+// ── Control de subidas (#771) ─────────────────────────────────────────────
+// El permiso lo pone la ruta (`tutores.gestionar`); el campus, `campus(req)` y el servicio.
+
+const PUNTO = z.enum(subidas.PUNTOS.map((p) => p.clave));
+const marcarSubidaSchema = z.object({
+  hecho: z.boolean().optional(),
+  enlace: z.string().trim().max(2000).nullable().optional(),
+  nota: z.string().trim().max(2000).nullable().optional(),
+  fecha_limite: fecha.optional(),
+}).strict();
+
+/** Lo que falta subir, por curso y desde cuándo. `?soloAtrasadas=true`: la vista de administración. */
+export async function controlSubidas(req, res, next) {
+  try {
+    const filas = await subidas.listarPendientes({
+      projectIds: await campus(req),
+      soloAtrasadas: req.query.soloAtrasadas === 'true',
+      incluirHechas: req.query.incluirHechas === 'true',
+    });
+    res.json({ success: true, data: {
+      puntos: subidas.PUNTOS, plazo_dias: subidas.plazoDias(), avisos_activos: subidas.avisosActivos(), filas,
+    } });
+  } catch (err) { next(err); }
+}
+
+export async function abrirSubidas(req, res, next) {
+  try {
+    const r = await service.abrirSubidas(req.user, entero.parse(req.params.id));
+    res.status(r.creados ? 201 : 200).json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
+export async function marcarSubida(req, res, next) {
+  try {
+    const punto = leer(PUNTO, req.params.punto);
+    const cambios = leer(marcarSubidaSchema, req.body);
+    res.json({ success: true, data: await service.marcarSubida(req.user, entero.parse(req.params.id), punto, cambios) });
   } catch (err) { next(err); }
 }

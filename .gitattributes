@@ -1,2 +1,4 @@
 # Los scripts de servidor se ejecutan en Linux: con CRLF fallan al arrancar.
 *.sh text eol=lf
+# Las unidades de systemd y su entorno también van tal cual al servidor (#634).
+scripts/servidor/systemd/* text eol=lf

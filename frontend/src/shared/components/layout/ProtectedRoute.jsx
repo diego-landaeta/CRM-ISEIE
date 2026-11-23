@@ -14,11 +14,14 @@ const BYPASS = String(import.meta.env.VITE_DEV_BYPASS_AUTH || '').toLowerCase() 
 // servidor, que le fuerza su propio identificador; aqui solo se evita que vea
 // pantallas que no son suyas.
 // /consultas: su bandeja de consultas de alumnos (#188).
+// /products/pending: sus cursos por desarrollar (#336, gemela de CRM#843). Es a donde
+// llevan sus avisos («Te han asignado un curso»); sin esto, el enlace le echaba
+// a «Mis cursos». Solo esa pestaña: el catálogo, no.
 // /tareas: su tablero (Diego, 04/11). El menú le enseña «Mi tablero» y el
 // servidor ya le deja `/api/tasks` (RUTAS_DEL_TUTOR en shared/utils/roles.js);
 // aquí faltaba y la entrada le devolvía a «Mi campus». Lo de dentro que no es
 // suyo (configurar el tablero) lo cierra el permiso (`rutaPermitida`).
-const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/tareas', '/preferencias', '/perfil', '/set-password'];
+const RUTAS_DEL_TUTOR = ['/mis-cursos', '/consultas', '/tareas', '/products/pending', '/preferencias', '/perfil', '/set-password'];
 
 function tutorPuede(pathname) {
   return RUTAS_DEL_TUTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));
@@ -37,8 +40,9 @@ function colaboradorPuede(pathname) {
 
 // Lo unico que abre un tutor redactor (CRM#708): su tablero y su factura, como
 // un colaborador, y sus consultas y sus cursos, como un tutor. El corte de
-// verdad esta en el servidor (`RUTAS_DEL_TUTOR_REDACTOR`).
-const RUTAS_DEL_TUTOR_REDACTOR = ['/tareas', '/mi-factura', '/mis-cursos', '/consultas', '/preferencias', '/perfil', '/set-password'];
+// verdad esta en el servidor (`RUTAS_DEL_TUTOR_REDACTOR`). Y los cursos que
+// tiene que desarrollar (gemela de CRM#843), como el tutor.
+const RUTAS_DEL_TUTOR_REDACTOR = ['/tareas', '/mi-factura', '/mis-cursos', '/consultas', '/products/pending', '/preferencias', '/perfil', '/set-password'];
 
 function redactorPuede(pathname) {
   return RUTAS_DEL_TUTOR_REDACTOR.some((p) => pathname === p || pathname.startsWith(p + '/'));

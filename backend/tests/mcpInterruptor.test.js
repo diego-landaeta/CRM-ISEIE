@@ -47,6 +47,7 @@ const { default: mcp } = await import('../src/modules/mcp/index.js');
 const { huella } = await import('../src/modules/mcp/mcp.acceso.js');
 const LLAVE_CONEXION = 'crm_mcc_' + 'k'.repeat(43);
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
+const { logger } = await import('../src/shared/utils/logger.js');
 
 const app = express();
 app.use(express.json());
@@ -189,6 +190,11 @@ describe('el botón del super admin', () => {
       if (/mcp_interruptor/.test(sql)) throw new Error('base caída');
       return { rows: [], rowCount: 0 };
     });
+    // Pero se registra como ERROR, no como aviso (#262): un interruptor que no se
+    // puede leer es un interruptor que no se puede apagar, y eso hay que verlo.
+    const error = vi.spyOn(logger, 'error');
     expect((await llamarMcp()).status).toBe(200);
+    expect(error).toHaveBeenCalledWith(expect.objectContaining({ err: 'base caída' }), expect.stringMatching(/interruptor/));
+    error.mockRestore();
   });
 });

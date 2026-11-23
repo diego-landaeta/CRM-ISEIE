@@ -240,3 +240,46 @@ describe('las piezas', () => {
     expect(frase({ tipo: 'contacto', lead_nombre: 'Marta', persona: 'Laura', detalle: 'nota' })).toBe('Laura dejó una nota en la ficha de Marta');
   });
 });
+
+describe('recordatorios completados (#169, migración 329)', () => {
+  it('completar apunta cuándo y quién; sale en la actividad con su frase, para quien lo hizo y para el admin', async () => {
+    const { completeReminder } = await import('../src/modules/leads/lead.model.js');
+    const l = await lead('Lucía', { responsable: ANA.id, minutos: 30 });
+    const [r] = await q(
+      `INSERT INTO lead_reminders (lead_id, fecha_recordatorio, nota, created_by) VALUES ($1, CURRENT_DATE, 'Llamar para la matrícula de enero', $2) RETURNING id`,
+      [l, ANA.id]
+    );
+    // Uno completado ANTES de la 329: sin fecha, no sale (no se inventa).
+    const [viejo] = await q(
+      `INSERT INTO lead_reminders (lead_id, fecha_recordatorio, nota, created_by, completado) VALUES ($1, CURRENT_DATE, 'viejo', $2, true) RETURNING id`,
+      [l, ANA.id]
+    );
+    await completeReminder(r.id, LAURA.id);
+    await completeReminder(r.id, ADMIN.id); // completarlo otra vez no cambia quién ni cuándo
+    const [fila] = await q(`SELECT completado, completado_at, completado_por FROM lead_reminders WHERE id = $1`, [r.id]);
+    expect(fila.completado).toBe(true);
+    expect(fila.completado_at).not.toBeNull();
+    expect(fila.completado_por).toBe(LAURA.id);
+
+    const res = await pide(ADMIN, '&tipos=recordatorio_completado');
+    expect(res.status).toBe(200);
+    const mios = res.body.data.eventos.filter((e) => e.lead_id === l);
+    expect(mios).toHaveLength(1); // el viejo no sale
+    expect(mios[0].tipo).toBe('recordatorio_completado');
+    expect(mios[0].texto).toBe(`${MARCA} LAURA completó un recordatorio de ${MARCA} Lucía: «Llamar para la matrícula de enero»`);
+    // Laura lo hizo ella (aunque el prospecto es de Ana); Ana lo ve porque el prospecto es suyo.
+    for (const u of [LAURA, ANA]) {
+      const r2 = await pide(u, '&tipos=recordatorio_completado');
+      expect(r2.body.data.eventos.some((e) => e.lead_id === l)).toBe(true);
+    }
+    expect(viejo.id).toBeGreaterThan(0);
+  });
+
+  it('la frase: sin nota, sin los dos puntos; una nota larga, cortada', () => {
+    expect(frase({ tipo: 'recordatorio_completado', persona: 'Laura', lead_nombre: 'Lucía', detalle: null }))
+      .toBe('Laura completó un recordatorio de Lucía');
+    const larga = 'a'.repeat(120);
+    expect(frase({ tipo: 'recordatorio_completado', persona: 'Laura', lead_nombre: 'Lucía', detalle: larga }))
+      .toBe(`Laura completó un recordatorio de Lucía: «${'a'.repeat(79)}…»`);
+  });
+});

@@ -75,11 +75,16 @@ async function bajarLogo(url) {
 /** Un rectángulo liso de un color, para el fondo y el filete. */
 const liso = (width, height, background) => sharp({ create: { width, height, channels: 3, background } });
 
-export async function dibujar(marca) {
+/**
+ * La cabecera, y si le falta un logo que debería llevar (`faltaLogo`): la marca
+ * tiene logo pero no bajó o no se pudo leer.
+ */
+async function dibujarCabecera(marca) {
   const fondo = hex(marca.color_cabecera) || '#ffffff';
   const acento = hex(marca.theme_color) || '#1f4e79';
   const capas = [{ input: await liso(ANCHO, FILETE, acento).png().toBuffer(), top: ALTO - FILETE, left: 0 }];
   const original = await bajarLogo(marca.logo_url);
+  let conLogo = false;
   if (original) {
     try {
       // `inside`: cabe entero sin deformarse; el transparente se queda
@@ -87,6 +92,7 @@ export async function dibujar(marca) {
       const logo = await sharp(original).resize({ width: LOGO_ANCHO, height: LOGO_ALTO, fit: 'inside' }).png().toBuffer();
       const { height } = await sharp(logo).metadata();
       capas.push({ input: logo, top: Math.round((ALTO - FILETE - height) / 2), left: MARGEN });
+      conLogo = true;
     } catch (err) {
       logger.warn({ err: err.message, url: marca.logo_url }, 'cabecera: el logo no se pudo leer');
     }
@@ -94,17 +100,31 @@ export async function dibujar(marca) {
   // Sin logo, la cabecera queda en el color de la marca y el correo lleva su
   // nombre en el texto de al lado (`alt`): mejor eso que letras sin fuente.
   // Sin canal de transparencia: nada que un proxy pueda volver a pintar de negro.
-  return liso(ANCHO, ALTO, fondo).composite(capas).removeAlpha().png().toBuffer();
+  const png = await liso(ANCHO, ALTO, fondo).composite(capas).removeAlpha().png().toBuffer();
+  return { png, faltaLogo: Boolean(marca.logo_url) && !conLogo };
 }
 
-/** La cabecera de esa marca, de memoria o recién dibujada. */
+export async function dibujar(marca) {
+  return (await dibujarCabecera(marca)).png;
+}
+
+/**
+ * La cabecera de esa marca, de memoria o recién dibujada.
+ *
+ * Si el logo no bajó (la web de la marca tardó o cayó), NO se guarda: antes se
+ * quedaba en memoria sin logo hasta reiniciar, con la misma versión, y Gmail
+ * además la guardaba un día. Ahora la siguiente petición lo vuelve a intentar,
+ * y `servir` la deja cachear solo unos minutos (#593).
+ */
 export async function cabeceraDe(projectId) {
   const marca = await marcaDe(projectId);
   if (!marca) return null;
   const clave = `${marca.id}:${versionDe({ ...marca, proyecto: marca.nombre })}`;
   if (!hechas.has(clave)) {
     if (hechas.size >= MAX_EN_MEMORIA) hechas.delete(hechas.keys().next().value);
-    hechas.set(clave, dibujar(marca).catch((err) => { hechas.delete(clave); throw err; }));
+    hechas.set(clave, dibujarCabecera(marca)
+      .then((r) => { if (r.faltaLogo) hechas.delete(clave); return r; })
+      .catch((err) => { hechas.delete(clave); throw err; }));
   }
   return hechas.get(clave);
 }
@@ -114,12 +134,13 @@ export async function servir(req, res, next) {
   try {
     const id = Number.parseInt(req.params.projectId, 10);
     if (!Number.isInteger(id) || id <= 0) return res.status(404).end();
-    const png = await cabeceraDe(id);
-    if (!png) return res.status(404).end();
+    const cabecera = await cabeceraDe(id);
+    if (!cabecera) return res.status(404).end();
     res.set('Content-Type', 'image/png');
     // La URL lleva la versión (?v=...): se puede guardar un día sin miedo.
-    res.set('Cache-Control', 'public, max-age=86400');
-    return res.send(png);
+    // Si le falta el logo, unos minutos: que se vuelva a pedir cuando baje.
+    res.set('Cache-Control', cabecera.faltaLogo ? 'public, max-age=300' : 'public, max-age=86400');
+    return res.send(cabecera.png);
   } catch (err) {
     return next(err);
   }

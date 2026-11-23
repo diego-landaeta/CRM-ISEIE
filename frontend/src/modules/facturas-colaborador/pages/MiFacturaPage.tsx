@@ -5,6 +5,8 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import SubirFactura from '../components/SubirFactura';
+// El recorrido guiado de la pantalla (#611): solo con el botón (#681).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   ESTADO, FORMA_PAGO_ES, avisoDelPdf, diaDelPago, euros, facturasColaboradorApi, primeraMayuscula, type FacturaDelColaborador, urlDelArchivo,
 } from '../api/facturasColaborador.api';
@@ -43,9 +45,12 @@ export default function MiFacturaPage() {
   }
 
   return (
-    <div className="p-4 sm:p-6 space-y-4 max-w-3xl mx-auto">
-      <PageHeader title="Mi factura" subtitle="Tus facturas del mes: súbelas aquí o desde el enlace del correo" />
+    // El margen de scroll de lo que señala el recorrido: que la barra fija no lo tape.
+    <div className="p-4 sm:p-6 space-y-4 max-w-3xl mx-auto [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+      <PageHeader title="Mi factura" subtitle="Tus facturas del mes: súbelas aquí o desde el enlace del correo"
+        actions={<VerRecorrido id="mi-factura" listo={!cargando} />} />
 
+      <div data-recorrido="mi-factura-meses">
       {meses.length === 0 ? (
         <EmptyState
           icon={Receipt}
@@ -70,12 +75,12 @@ export default function MiFacturaPage() {
                 </span>
                 {/* El pago, aparte del estado de la factura: «Pagada 05/10 · Transferencia» o «Por pagar». */}
                 {m.recibida && (m.pago ? (
-                  <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-success-soft text-success-soft-foreground">
+                  <span data-recorrido="mi-factura-pago" className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-success-soft text-success-soft-foreground">
                     Pagada {diaDelPago(m.pago.pagada_at)}{m.pago.forma_pago ? ` · ${FORMA_PAGO_ES[m.pago.forma_pago]}` : ''}
                   </span>
                 ) : (
                   // Primero la empresa la revisa y la valida; después la paga (CRM#710).
-                  <span className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground"
+                  <span data-recorrido="mi-factura-pago" className="rounded-full px-2.5 py-0.5 text-xs font-semibold bg-warning-soft text-warning-soft-foreground"
                     title={m.validada === false ? 'La empresa la está revisando. Cuando la valide, se paga.' : 'Validada por la empresa: se paga en cuanto se haga la transferencia.'}>
                     {m.validada === false ? 'En revisión' : 'Validada · por pagar'}
                   </span>
@@ -92,7 +97,7 @@ export default function MiFacturaPage() {
                   </a>
                 )}
                 {!m.recibida && m.estado !== 'sin_factura' && m.estado !== 'anulada' && m.estado !== 'caducado' && (
-                  <Button size="sm" variant={abierta === m.id ? 'outline' : 'default'} onClick={() => setAbierta(abierta === m.id ? null : m.id!)}>
+                  <Button data-recorrido="mi-factura-subir" size="sm" variant={abierta === m.id ? 'outline' : 'default'} onClick={() => setAbierta(abierta === m.id ? null : m.id!)}>
                     {abierta === m.id ? 'Cerrar' : 'Subir mi factura'}
                   </Button>
                 )}
@@ -126,6 +131,7 @@ export default function MiFacturaPage() {
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

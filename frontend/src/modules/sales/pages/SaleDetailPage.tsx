@@ -11,7 +11,10 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import RepartoVentaCard from '../components/RepartoVentaCard';
+import FechaInicioEditable from '@/modules/conversions/components/FechaInicioEditable';
+import usePermission from '@/shared/hooks/usePermission';
 import EnlazarStripeCard from '../components/EnlazarStripeCard';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
@@ -54,6 +57,8 @@ type Venta = {
   // viene aparte para avisar si no cuadra. Opcionales: un servidor anterior no los manda.
   importe_pagado_guardado?: string | number | null; cobrado_de_mas?: string | number | null;
   fecha_conversion: string; fecha_compromiso_pago: string | null; metodo_pago: string | null;
+  /** Inicio del curso pactado (#767). Opcional: un servidor anterior no lo manda. */
+  fecha_inicio?: string | null;
   notas_pago: string | null; lead_nombre: string; lead_email: string; proyecto_nombre: string;
   payments?: Pago[]; installments?: Cuota[]; items?: Array<{ id: number; descripcion: string; cantidad: number; precio_unitario: string | number }>;
 };
@@ -70,6 +75,7 @@ function Chip({ tone, children }: { tone: 'ok' | 'warn' | 'bad' | 'mute'; childr
 
 export default function SaleDetailPage() {
   const { id } = useParams();
+  const { can } = usePermission();
   const navigate = useNavigate();
   const [venta, setVenta] = useState<Venta | null>(null);
   const [loading, setLoading] = useState(true);
@@ -115,7 +121,9 @@ export default function SaleDetailPage() {
   const noCuadra = guardado != null && Math.abs(Number(guardado) - Number(venta.importe_pagado || 0)) > 0.005;
 
   return (
-    <div className="space-y-5 pb-8">
+    // El margen de scroll, como en Ventas (#619): la barra fija de arriba no
+    // tapa lo que señala el recorrido de las cuotas (#611).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -129,6 +137,8 @@ export default function SaleDetailPage() {
         subtitle={`${venta.producto_contratado || 'Sin programa'} · ${venta.proyecto_nombre || ''}`}
         actions={
           <span className="flex flex-wrap items-center gap-2">
+            {/* El recorrido de las cuotas y los cobros (#611): solo con el botón (#681). */}
+            <VerRecorrido id="venta-cuotas" />
             {/* «Crear link de pago» arriba (Diego, 19/11), con esta venta ya elegida. */}
             <BotonCrearLink leadId={venta.lead_id} conversionId={venta.id} />
             {/* «Generar plan de pago» (19/11): un link por cuota pendiente. */}
@@ -186,6 +196,9 @@ export default function SaleDetailPage() {
             <span className="text-muted-foreground">Fecha</span>
             <span className="font-medium">{fecha(venta.fecha_conversion)}</span>
           </div>
+          <FechaInicioEditable key={venta.id} conversionId={venta.id} value={venta.fecha_inicio}
+            canEdit={can('conversions.edit')}
+            onSaved={(nueva) => setVenta((v) => (v ? { ...v, fecha_inicio: nueva } : v))} />
           <div className="flex justify-between gap-3">
             <span className="text-muted-foreground">Email</span>
             <span className="font-medium truncate">{venta.lead_email || '—'}</span>
@@ -230,8 +243,8 @@ export default function SaleDetailPage() {
                     <th className="text-left py-2 font-bold">#</th>
                     <th className="text-left py-2 font-bold">Vence</th>
                     <th className="text-right py-2 font-bold">Importe</th>
-                    <th className="text-left py-2 font-bold pl-4">Estado</th>
-                    <th className="text-left py-2 font-bold">Factura</th>
+                    <th className="text-left py-2 font-bold pl-4" data-recorrido="venta-cuotas-estado">Estado</th>
+                    <th className="text-left py-2 font-bold" data-recorrido="venta-cuotas-factura">Factura</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -275,7 +288,7 @@ export default function SaleDetailPage() {
 
       <EnlazarStripeCard conversionId={venta.id} onEnlazado={() => setRecarga((n) => n + 1)} />
 
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" data-recorrido="venta-pagos">
         <h3 className="font-semibold mb-3">Pagos registrados ({pagos.length})</h3>
         {pagos.length === 0 ? (
           <EmptyState icon={CreditCard} title="Sin pagos" description="Todavía no se ha registrado ningún cobro." />

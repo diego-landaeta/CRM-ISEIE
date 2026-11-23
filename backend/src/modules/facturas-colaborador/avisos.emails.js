@@ -21,6 +21,14 @@ import {
 // (en MultiCRM, /finanzas).
 const RUTA_LISTA = 'accounting/facturas-colaboradores';
 export const urlDeLaLista = (vista) => enlace(`${RUTA_LISTA}?vista=${vista}`);
+/**
+ * Esa factura en la lista (CRM-ISEIE#348, gemela de CRM#613: «Ver en el CRM» lleva a la
+ * factura, no a la lista entera): el Historial filtrado por su colaborador y su mes.
+ * Sin colaborador, la lista de las enviadas.
+ */
+export const urlDeLaFactura = (f) => (f?.colaborador_id
+  ? enlace(`${RUTA_LISTA}?vista=historial&colaborador=${Number(f.colaborador_id)}${f.periodo ? `&periodo=${String(f.periodo).slice(0, 7)}` : ''}`)
+  : urlDeLaLista('enviadas'));
 
 const MESES = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio',
   'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
@@ -95,7 +103,7 @@ export function armarLlegadas({ empresa, facturas, marca = null, adjuntas = 0 })
         ]),
       ),
       nota(`Total: <strong>${esc(total)}</strong>${adjuntas ? `<br>Van adjuntas ${adjuntas === n ? (n === 1 ? 'la copia' : 'las copias') : `${adjuntas} de las ${n} copias (las demás, en el CRM)`}.` : ''}`),
-      boton({ texto: n === 1 ? 'Ver la factura en el CRM' : 'Ver las facturas en el CRM', url: urlDeLaLista('enviadas') }),
+      boton({ texto: n === 1 ? 'Ver la factura en el CRM' : 'Ver las facturas en el CRM', url: n === 1 ? urlDeLaFactura(una) : urlDeLaLista('enviadas') }),
     ],
   });
   return { asunto, htmlContent, textContent, fromName: `${corta} · Facturación` };

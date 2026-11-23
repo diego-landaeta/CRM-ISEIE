@@ -46,6 +46,10 @@ export const listar = accion(async (req, res) => {
   res.json({ success: true, data: await service.listar(req.user, filtros) });
 });
 
+export const redactorasSinFicha = accion(async (req, res) => {
+  res.json({ success: true, data: await service.redactorasSinFicha(req.user) });
+});
+
 export const ver = accion(async (req, res) => {
   res.json({ success: true, data: await service.ver(req.user, validarId(req.params.id)) });
 });

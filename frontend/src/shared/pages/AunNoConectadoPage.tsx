@@ -26,7 +26,7 @@ export default function AunNoConectadoPage({ titulo }: { titulo: string }) {
             to="/meta-ads"
             className="inline-flex items-center gap-2 h-9 px-4 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
           >
-            <ChartLineUp size={14} weight="bold" /> Ir a Publicidad › Meta Ads
+            <ChartLineUp size={14} weight="bold" /> Ir a Captación y publicidad › Meta Ads
           </Link>
         )}
       />

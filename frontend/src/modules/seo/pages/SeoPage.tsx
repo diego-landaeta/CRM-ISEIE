@@ -53,14 +53,14 @@ export default function SeoPage() {
       />
 
       {/* Banner: retraso GSC + ultima actualizacion */}
-      <div className="flex items-start gap-3 px-4 py-3 rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
-        <Info size={16} weight="regular" className="text-amber-600 mt-0.5 flex-shrink-0" />
+        <div className="flex items-start gap-3 px-4 py-3 rounded-md bg-warning-soft border border-warning/30">
+        <Info size={16} weight="regular" className="text-warning mt-0.5 flex-shrink-0" />
         <div className="text-sm">
-          <p className="text-amber-800 dark:text-amber-300">
+            <p className="text-warning-soft-foreground">
             Datos con retraso de 2-3 dias respecto a la actividad real (limitacion de Google Search Console).
           </p>
           {seo.metrics.lastUpdate && (
-            <p className="text-xs text-amber-700/80 dark:text-amber-400/80 mt-0.5">
+              <p className="text-xs text-warning-soft-foreground/80 mt-0.5">
               Ultima actualizacion: <span className="font-semibold">{fmtDate(seo.metrics.lastUpdate)}</span>
             </p>
           )}
@@ -94,8 +94,8 @@ export default function SeoPage() {
 
       {seo.error ? (
         <div className="p-8 text-center text-sm bg-card border border-border rounded-lg">
-          <WarningCircle size={28} className="text-red-500 mx-auto mb-2" weight="regular" />
-          <p className="text-red-600 font-semibold mb-1">No se pudieron cargar las metricas</p>
+          <WarningCircle size={28} className="text-destructive mx-auto mb-2" weight="regular" />
+          <p className="text-destructive font-semibold mb-1">No se pudieron cargar las metricas</p>
           <p className="text-xs text-muted-foreground">{seo.error}</p>
         </div>
       ) : seo.loading ? (
@@ -214,10 +214,10 @@ export default function SeoPage() {
 function PositionBadge({ value }: { value: number | null | undefined }) {
   const v = Number(value || 0);
   let color = 'bg-muted text-muted-foreground';
-  if (v > 0 && v <= 3) color = 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400';
-  else if (v <= 10) color = 'bg-blue-100 text-blue-700 dark:bg-blue-950/30 dark:text-blue-400';
-  else if (v <= 20) color = 'bg-amber-100 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400';
-  else color = 'bg-red-100 text-red-700 dark:bg-red-950/30 dark:text-red-400';
+    if (v > 0 && v <= 3) color = 'bg-success-soft text-success-soft-foreground';
+  else if (v <= 10) color = 'bg-info-soft text-info-soft-foreground';
+  else if (v <= 20) color = 'bg-warning-soft text-warning-soft-foreground';
+  else color = 'bg-destructive-soft text-destructive-soft-foreground';
   return (
     <span className={`inline-flex px-2 py-0.5 rounded text-[11px] font-semibold tabular-nums ${color}`}>
       {fmtPos(value)}

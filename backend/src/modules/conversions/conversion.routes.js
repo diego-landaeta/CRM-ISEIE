@@ -25,6 +25,10 @@ router.get('/cuotas', puede('conversions.view'), ctrl.cuotas);
 router.get('/filas', puede('conversions.view'), ctrl.filas);
 // Ventas del mismo alumno y programa, para revisar (CRM#898). Quien puede editar ventas.
 router.get('/posibles-repetidas', puede('conversions.edit'), ctrl.posiblesRepetidas);
+// Fecha de inicio del curso (CRM#1036): qué productos la exigen (los formularios
+// de venta) y las ventas ya hechas que la tienen pendiente (quien edita ventas).
+router.get('/productos-con-curso', puede('conversions.view'), ctrl.productosConCursoMoodle);
+router.get('/sin-fecha-inicio', puede('conversions.edit'), ctrl.sinFechaInicio);
 router.get('/by-lead/:leadId', puede('conversions.view'), ctrl.listByLead);
 router.get('/:id', puede('conversions.view'), ctrl.getById);
 

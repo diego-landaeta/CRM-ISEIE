@@ -1,4 +1,9 @@
--- 318 · Links de pago: un link por cuota del plan de la venta (#680; Diego, 19/11)
+-- 319 · Links de pago: un link por cuota del plan de la venta (#680; Diego, 19/11)
+--
+-- En main y en producción entró como 318_links_pago_por_cuota.sql (v2.8.0, #622),
+-- pero en staging la 318 ya era 318_instagram_y_atribucion_meta.sql. Aquí pasa
+-- a la 319. Ya aplicada en producción: no hace falta volver a pasarla; si se
+-- pasa, no cambia nada.
 --
 -- «Generar plan de pago»: desde una venta con plan de cuotas, un link de Stripe
 -- por cada cuota pendiente, con su importe y su fecha. Cuando el alumno paga el

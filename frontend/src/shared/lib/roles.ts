@@ -73,27 +73,40 @@ export function soloEsTutorRedactor(user: Quien | null | undefined): boolean {
 export const ROLES_DE_TUTOR: UserRole[] = ['tutor', 'tutor_redactor'];
 
 /**
- * Los permisos con los que el servidor contesta a los avisos de WhatsApp
+ * Los permisos con los que la RUTA deja pasar a los avisos de WhatsApp
  * (`usaOSupervisa` en whatsapp.routes.js: `/sin-leer` y `/respuesta-llamada`).
  * Una prueba comprueba que no se separan.
  */
 export const PERMISOS_DE_LOS_AVISOS = ['whatsapp.usar', 'whatsapp.supervisar'];
 
 /**
- * Si tiene WhatsApp, con el mismo criterio con el que el servidor contesta a los
- * avisos: «Usar su WhatsApp» o «Supervisar WhatsApp» en su mapa de permisos, el
- * que llega con el login y con /auth/me (#423). A quien no, le contesta 403, así
- * que los avisos de mensajes y de llamadas no deben preguntar por él (QA de
- * Diego, 22/10, punto 8: el tutor recibía un 403 cada pocos segundos en
- * `/api/whatsapp/sin-leer`). Ni más ni menos: a quien el servidor contesta, se
- * le pregunta.
+ * El que de verdad hace falta para el aviso de mensajes: «Usar su WhatsApp».
+ * La ruta deja pasar también a quien solo supervisa, pero `/sin-leer` sin
+ * `usuarioId` es la línea PROPIA y el controlador (`usuarioObjetivo`) pide
+ * `whatsapp.usar`; a quien solo supervisa le contestaba 403 `SIN_WHATSAPP`
+ * (errores de producción del 23/11).
+ */
+export const PERMISO_DEL_AVISO = 'whatsapp.usar';
+
+/**
+ * Si se le pregunta por sus avisos de WhatsApp (mensajes sin leer y llamadas):
+ * con «Usar su WhatsApp» en su mapa de permisos, el que llega con el login y con
+ * /auth/me (#423), y sin la casilla «usa WhatsApp» apagada en su ficha. A quien
+ * no, el servidor le contesta 403, así que no se le pregunta (QA de Diego,
+ * 22/10, punto 8: el tutor recibía un 403 cada pocos segundos en
+ * `/api/whatsapp/sin-leer`; 23/11: quien solo supervisa, o con la casilla apagada).
  *
  * El mapa tal cual, como `tienePermiso` en el servidor, y no `can()`: `can()` le
  * da todo al superadmin, y un superadmin puede tener su WhatsApp apagado (#503).
- * Sin mapa todavía, no se pregunta. Antes se miraba la casilla «usa WhatsApp» de
- * la ficha, pero desde #423 el servidor no la mira y nadie la actualiza.
+ * Sin mapa todavía, no se pregunta. La casilla (`usa_whatsapp === false`) ya
+ * apaga el permiso en el servidor (permissions/casillas.js); mirarla aquí cubre
+ * el mapa de antes de apagarla.
  */
-export function tieneWhatsapp(permissions: Record<string, boolean> | null | undefined): boolean {
+export function tieneWhatsapp(
+  permissions: Record<string, boolean> | null | undefined,
+  user?: { usa_whatsapp?: boolean | null } | null,
+): boolean {
   if (!permissions) return false;
-  return PERMISOS_DE_LOS_AVISOS.some((clave) => permissions[clave] === true);
+  if (user?.usa_whatsapp === false) return false;
+  return permissions[PERMISO_DEL_AVISO] === true;
 }

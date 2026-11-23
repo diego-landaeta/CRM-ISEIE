@@ -1,5 +1,5 @@
 import { query, getClient } from '../../shared/config/db.js';
-import { existeEquipos, existeTipos, sqlConTablero } from './tasks.equipos.model.js';
+import { existeEquipos, existeTipos, sqlConTablero, sqlVeLaDelEquipo, sqlDeTipoDeEquipo } from './tasks.equipos.model.js';
 
 // Quien tiene tablero de tareas: el equipo de desarrollo (Diego, 09/10: «las
 // tareas son del equipo de desarrollo, las gestoras no tienen tareas»). Ni
@@ -197,10 +197,11 @@ const JOIN_CIERRE = `
 export async function findTasks({
   assigned_to, project_id, external_project_id, area_id, status, priority, search, tag, vencidas, desde, hasta,
   periodo_desde, periodo_hasta, incluir_archivadas = false, orden = 'tablero', ambito = null, yo = null, supervisor_id = null, tambien_supervisa = null,
-  team_id, visibles_para = null, mias_de = null, de_la_cabecera = null,
+  team_id, team_tipo = null, visibles_para = null, mias_de = null, de_la_cabecera = null,
   cerradas_desde = null, cerradas_hasta = null, con_cierre = false, por_persona = false,
 }) {
   const { sup: hay, eq } = await extras();
+  const tipos = eq && await existeTipos();
   const conditions = [];
   const params = [];
   const add = (sql, value) => {
@@ -239,8 +240,9 @@ export async function findTasks({
   if (visibles_para) {
     params.push(visibles_para);
     const yoN = `$${params.length}`;
+    // En un equipo de redactoras, cada una lo suyo (23/11/2026): `sqlVeLaDelEquipo`.
     conditions.push(`(t.assigned_to = ${yoN} OR t.created_by = ${yoN}${hay ? ` OR t.supervisor_id = ${yoN}` : ''}${eq
-      ? ` OR EXISTS (SELECT 1 FROM task_team_members m_v WHERE m_v.team_id = t.team_id AND m_v.user_id = ${yoN})` : ''})`);
+      ? ` OR ${sqlVeLaDelEquipo('t', yoN, tipos)}` : ''})`);
   }
   // «Mi tablero» (Diego, 26/10/2026): lo que lleva, lo que supervisa y lo que creó.
   if (mias_de) {
@@ -252,6 +254,13 @@ export async function findTasks({
   if (team_id != null && eq) {
     if (Number(team_id) === 0) conditions.push('t.team_id IS NULL');
     else add('t.team_id = $?', team_id);
+  }
+  // El tipo de equipo (23/11/2026, CRM-ISEIE#687): «que el admin pueda filtrar por los
+  // dos equipos», desarrollo o tutoras redactoras, de todas sus empresas a la vez.
+  if (team_tipo) {
+    if (tipos) add(sqlDeTipoDeEquipo('t', '$?'), team_tipo);
+    else if (team_tipo !== 'colaboradores') conditions.push('FALSE');
+    else if (eq) conditions.push('t.team_id IS NOT NULL');
   }
   if (project_id != null) add('t.project_id = $?', project_id);
   if (external_project_id != null) add('t.external_project_id = $?', external_project_id);

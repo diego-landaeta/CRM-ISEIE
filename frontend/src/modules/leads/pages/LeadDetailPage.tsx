@@ -14,6 +14,7 @@ import LeadInfoCard from '../components/lead-detail/LeadInfoCard';
 import LeadProductsCard from '../components/lead-detail/LeadProductsCard';
 import AgendaDelProspecto from '@/modules/proceso/components/AgendaDelProspecto';
 import ConvocatoriasDelProspecto from '@/modules/convocatorias/components/ConvocatoriasDelProspecto';
+import FeedbackDeLaFicha from '@/modules/feedback/components/FeedbackDeLaFicha';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import LeadUtmsCard from '../components/lead-detail/LeadUtmsCard';
 import LeadInteractionsCard, { InteractionDialog } from '../components/lead-detail/LeadInteractionsCard';
@@ -208,7 +209,9 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    /* El margen de scroll de lo que señala el recorrido de la ficha (#619): la
+       barra fija de arriba le tapaba el principio al subir. */
+    <div className="space-y-5 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <LeadLossDialog
         open={lossOpen}
         onClose={() => setLossOpen(false)}
@@ -266,6 +269,10 @@ export default function LeadDetailPage() {
           <LeadInfoCard lead={lead} onUpdate={updateLead}
             onLlamada={(nota) => addInteraction('llamada', nota)}
             onWhatsapp={(nota) => addInteraction('whatsapp', nota)} />
+          {/* El correo de «¿por qué has desistido?» y lo que contestó (#169).
+              El aviso «Te han contestado al feedback» trae aquí, no al panel
+              lateral: sin esto, la gestora llegaba y no veía la respuesta (#593). */}
+          <FeedbackDeLaFicha leadId={lead.id} />
           {/* El proceso de ventas, fuera de produccion hasta aprobarlo (28/09). */}
           {PROCESO_EN_PRUEBAS && (
           <AgendaDelProspecto
@@ -304,7 +311,7 @@ export default function LeadDetailPage() {
             refreshKey={emailRefreshKey}
           />
           <LinksDePagoCard projectId={lead.project_id} leadId={lead.id} productoId={lead.producto_interes_id} />
-          <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
+          <div data-section="compras" data-recorrido="ficha-ventas" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <CurrencyEur size={16} weight="regular" /> Historial de compras
             </h3>

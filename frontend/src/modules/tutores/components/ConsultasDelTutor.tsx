@@ -7,9 +7,9 @@ import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import {
-  campusTutorApi, type CampusDelTutor, type EstadoMatricula, type PanelCampusTutor,
+  campusTutorApi, type CampusDelTutor, type CuentaMoodle, type EstadoMatricula, type PanelCampusTutor,
 } from '../api/campusTutor.api';
-import { consultasApi } from '@/modules/consultas/api/consultas.api';
+import { consultasApi, type TokenDelTutor } from '@/modules/consultas/api/consultas.api';
 
 /*
   Consultas de alumnos, fase 1 (#187), en la ficha del tutor:
@@ -52,7 +52,9 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
   const [empresaNueva, setEmpresaNueva] = useState<number | null>(null);
   const [motivo, setMotivo] = useState('');
   // #188: el token del tutor en cada campus, para que la respuesta salga en su nombre.
-  const [tokens, setTokens] = useState<Array<{ project_id: number; campus: string; estado: string | null; tiene_token: boolean }>>([]);
+  const [tokens, setTokens] = useState<TokenDelTutor[]>([]);
+  // Los campus donde su respuesta va con su token; donde va por el plugin (#850), no se pide.
+  const campusPorToken = tokens.filter((t) => t.estado === 'activa' && !t.por_plugin);
   const [campusToken, setCampusToken] = useState<number | null>(null);
   const [token, setToken] = useState('');
 
@@ -221,6 +223,17 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
                 <span className="text-xs text-muted-foreground">
                   {c.comprobado_at ? `Comprobado el ${fecha(c.comprobado_at)}` : ''}
                   {c.error && <span className="block text-destructive">{c.error}</span>}
+                  {/* Solo en los campus de quien mira: el vínculo de otra empresa no se toca (#689, punto 2). */}
+                  {puedeGestionar && c.gestionable !== false && c.campus_conectado && c.estado !== 'activa' && !c.error?.includes('Vincular de nuevo') && (
+                    <VincularAMano tutorId={tutorId} c={c} ocupado={ocupado}
+                      alVincular={(id) => hacer(() => campusTutorApi.vincular(tutorId, c.project_id, id), `Vinculada en ${c.campus}`)} />
+                  )}
+                  {puedeGestionar && c.gestionable !== false && c.error?.includes('Vincular de nuevo') && (
+                    <button type="button" className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                      onClick={() => hacer(() => campusTutorApi.vincularDeNuevo(tutorId, c.project_id), 'Vinculada con la cuenta de su correo actual')}>
+                      Vincular de nuevo
+                    </button>
+                  )}
                 </span>
               </li>
             ))}
@@ -252,11 +265,14 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
           <p className="text-sm font-semibold">Responder en su nombre</p>
           <ul className="flex flex-wrap gap-2 text-xs" aria-label="Token del tutor por campus">
             {tokens.filter((t) => t.estado === 'activa').map((t) => (
-              <li key={t.project_id} className={`rounded px-1.5 py-0.5 font-semibold ${t.tiene_token ? 'bg-success-soft text-success-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>
-                {t.campus}: {t.tiene_token ? 'token puesto' : 'falta su token'}
+              // #850: con el campus conectado por el plugin, la respuesta sale en su nombre por
+              // el plugin y su token no hace falta: no se avisa de que falta.
+              <li key={t.project_id} className={`rounded px-1.5 py-0.5 font-semibold ${t.por_plugin || t.tiene_token ? 'bg-success-soft text-success-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>
+                {t.campus}: {t.por_plugin ? 'responde por el plugin' : t.tiene_token ? 'token puesto' : 'falta su token'}
               </li>
             ))}
           </ul>
+          {campusPorToken.length > 0 && (<>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_1.4fr_auto] sm:items-end">
             <Field label="Campus">
               <Select<number | null>
@@ -264,7 +280,7 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
                 onChange={setCampusToken}
                 ariaLabel="Campus del token"
                 options={[{ value: null, label: 'Elige el campus…' },
-                  ...tokens.filter((t) => t.estado === 'activa').map((t) => ({ value: t.project_id, label: t.campus }))]}
+                  ...campusPorToken.map((t) => ({ value: t.project_id, label: t.campus }))]}
               />
             </Field>
             <Field label="Token del tutor en ese campus" htmlFor={`token-tutor-${tutorId}`}>
@@ -282,6 +298,7 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
             En el Moodle: <strong>Administración del sitio → Servidor → Servicios web → Administrar tokens → Crear token</strong>,
             para su usuario y el servicio del CRM (con <code>core_message_send_instant_messages</code>). Su rol necesita el permiso <code>webservice/rest:use</code>.
           </p>
+          </>)}
         </div>
       )}
 
@@ -326,5 +343,66 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
         </div>
       )}
     </section>
+  );
+}
+
+/**
+ * Su correo del CRM no es el de Moodle: se busca su cuenta por su correo de Moodle, se ve
+ * de quién es y se confirma. Así no hay que cambiarle el correo para que le lleguen
+ * las consultas del campus.
+ */
+function VincularAMano({ tutorId, c, ocupado, alVincular }: {
+  tutorId: number; c: CampusDelTutor; ocupado: boolean; alVincular: (moodleUserId: number) => void;
+}) {
+  const [abierto, setAbierto] = useState(false);
+  const [q, setQ] = useState('');
+  const [buscando, setBuscando] = useState(false);
+  const [cuenta, setCuenta] = useState<CuentaMoodle | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+
+  async function buscar(e: React.FormEvent) {
+    e.preventDefault();
+    setBuscando(true); setError(null); setCuenta(undefined);
+    try {
+      const r = await campusTutorApi.buscarCuenta(tutorId, c.project_id, q.trim());
+      setCuenta(r.data ?? null);
+    } catch (err) {
+      const x = err as { data?: { error?: string }; message?: string };
+      setError(x?.data?.error || x?.message || 'No se ha podido buscar.');
+    } finally { setBuscando(false); }
+  }
+
+  if (!abierto) {
+    return (
+      <button type="button" onClick={() => setAbierto(true)}
+        className="mt-1 rounded text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+        Vincular a mano
+      </button>
+    );
+  }
+  return (
+    <form onSubmit={buscar} className="mt-2 space-y-2 rounded-md border border-border bg-muted/30 p-2.5">
+      <label htmlFor={`vincular-${c.project_id}`} className="block text-xs font-medium text-foreground">Su correo en el Moodle de {c.campus}</label>
+      <p className="text-xs text-muted-foreground">Solo vale la cuenta con la que da clase: profesora de algún curso de este campus.</p>
+      <div className="flex gap-2">
+        <input id={`vincular-${c.project_id}`} value={q} onChange={(e) => setQ(e.target.value)} autoComplete="off"
+          type="email" placeholder="nombre@correo.com" className={`${inputClass} h-8 min-w-0 flex-1 text-xs`} />
+        <Button type="submit" size="sm" variant="outline" className="h-8 text-xs" disabled={buscando || !q.includes('@')}>
+          {buscando ? 'Buscando…' : 'Buscar'}
+        </Button>
+      </div>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      {cuenta === null && <p className="text-xs text-muted-foreground">No hay ninguna cuenta con ese correo en este campus.</p>}
+      {cuenta && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-card px-2.5 py-2">
+          <span className="min-w-0 text-xs">
+            <span className="font-medium text-foreground">{cuenta.nombre || 'Sin nombre'}</span>
+            <span className="text-muted-foreground"> · {cuenta.email || 'sin correo visible'}{cuenta.suspendido ? ' · suspendida' : ''}</span>
+          </span>
+          <Button type="button" size="sm" className="h-7 text-xs" disabled={ocupado} onClick={() => alVincular(cuenta.id)}>Es ella: vincular</Button>
+        </div>
+      )}
+      <button type="button" onClick={() => { setAbierto(false); setCuenta(undefined); setQ(''); }} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+    </form>
   );
 }

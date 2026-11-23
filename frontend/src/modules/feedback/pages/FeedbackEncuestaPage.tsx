@@ -67,7 +67,12 @@ export default function FeedbackEncuestaPage() {
 
   useEffect(() => {
     fetch(`${API_BASE}/f/${token}`)
-      .then((r) => r.json())
+      .then((r) => r.json().catch(() => ({
+        success: false,
+        error: r.status === 429
+          ? 'Has hecho demasiados intentos seguidos. Espera un minuto y vuelve a abrir el enlace.'
+          : 'No hemos podido cargar la encuesta. Vuelve a intentarlo en un rato.',
+      })))
       .then((r) => { if (r?.success) setDatos(r.data); else setError(r?.error || 'Este enlace no es válido.'); })
       .catch(() => setError('No hemos podido cargar la encuesta. Vuelve a intentarlo en un rato.'));
   }, [token]);
@@ -99,12 +104,20 @@ export default function FeedbackEncuestaPage() {
     setEnviando(true);
     setError(null);
     try {
+      // Quien contesta es un cliente, no alguien del equipo: si la red falla o
+      // el servidor no devuelve JSON (el límite de intentos), un mensaje que se
+      // entienda y no «Failed to fetch» o «… is not valid JSON» (#593).
       const r = await fetch(`${API_BASE}/f/${token}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ respuestas: resp }),
-      }).then((x) => x.json());
-      if (!r?.success) throw new Error(r?.error || 'No se ha podido guardar');
+      }).then((x) => x.json().catch(() => ({
+        success: false,
+        error: x.status === 429
+          ? 'Has hecho demasiados intentos seguidos. Espera un minuto y vuelve a enviarla.'
+          : 'No hemos podido guardar tu respuesta. Vuelve a intentarlo en un rato.',
+      }))).catch(() => ({ success: false, error: 'No hay conexión. Comprueba tu internet y vuelve a enviarla.' }));
+      if (!r?.success) throw new Error(r?.error || 'No hemos podido guardar tu respuesta. Vuelve a intentarlo en un rato.');
       // Ya estaba contestada (otra pestaña, o el enlace reenviado): no se ha
       // guardado nada nuevo, y se le dice así.
       if (r.data?.ya) setDatos((d) => (d ? { ...d, respondida: true } : d));
@@ -141,7 +154,7 @@ export default function FeedbackEncuestaPage() {
         </header>
         <div className="p-6 sm:p-8">
           {vista && (
-            <p className="mb-5 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <p className="mb-5 rounded-md border border-warning/30 bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
               Vista previa: así la verá la persona. Lo que marques aquí no se guarda.
             </p>
           )}
@@ -270,7 +283,7 @@ export default function FeedbackEncuestaPage() {
                 })}
               </div>
 
-              {error && <p className="mt-4 text-sm text-red-700">{error}</p>}
+              {error && <p className="mt-4 text-sm text-destructive">{error}</p>}
 
               <button type="button" onClick={enviar} disabled={faltaObligatoria || enviando || vista}
                 className="mt-7 w-full rounded-lg px-5 py-3 text-base font-bold transition-opacity disabled:cursor-not-allowed disabled:opacity-40"

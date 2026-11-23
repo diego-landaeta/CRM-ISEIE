@@ -145,7 +145,7 @@ export default function EmailTemplatesPage() {
                     </button>
                     <button
                       onClick={() => handleDelete(t)}
-                      className="inline-flex items-center gap-1 h-7 px-2 rounded border border-border bg-card text-[11px] text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40"
+                      className="inline-flex items-center gap-1 h-7 px-2 rounded border border-border bg-card text-[11px] text-destructive hover:bg-destructive-soft"
                     >
                       <Trash size={11} /> Eliminar
                     </button>

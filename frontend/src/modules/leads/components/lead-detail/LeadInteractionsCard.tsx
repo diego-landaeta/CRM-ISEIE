@@ -23,7 +23,8 @@ function defaultDateTimeLocal(): string {
 
 export default function LeadInteractionsCard({ interacciones, onOpen }: { interacciones: Interaction[]; onOpen: () => void }) {
   return (
-    <div className="bg-card p-5 rounded-lg border border-border">
+    // `data-recorrido`: el paso «Interacciones» del recorrido de la ficha (#619).
+    <div data-recorrido="ficha-interacciones" className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">Interacciones ({interacciones.length})</h3>
         <button onClick={onOpen} className="text-xs font-semibold text-primary hover:underline">

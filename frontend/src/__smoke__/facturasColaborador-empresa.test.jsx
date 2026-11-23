@@ -19,6 +19,8 @@ const { cabecera, api } = vi.hoisted(() => ({
   api: {
     empresas: vi.fn(), mes: vi.fn(), colaboradores: vi.fn(),
     vista: vi.fn(), costePorCampus: vi.fn(), bajarZip: vi.fn(),
+    // La página pide las redactoras sin ficha (CRM#1015).
+    redactorasSinFicha: vi.fn(),
   },
 }));
 
@@ -60,6 +62,7 @@ beforeEach(() => {
   api.vista.mockResolvedValue({ data: { vista: 'por_pagar', resumen: { total: 0, importe: 0, pendiente: 0 }, facturas: [] } });
   api.costePorCampus.mockResolvedValue({ data: { campus: [] } });
   api.bajarZip.mockResolvedValue(undefined);
+  api.redactorasSinFicha.mockResolvedValue({ data: [] });
 });
 
 describe('ISEIE · por empresa, no por el campus activo', () => {

@@ -8,14 +8,14 @@ import type { Conector } from '../api/connectors.api';
 export default function ParaQuien({ c }: { c: Pick<Conector, 'alcance' | 'empresa' | 'proyecto'> }) {
   if (c.alcance === 'sistema') {
     return (
-      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-violet-500/10 text-violet-700 dark:text-violet-300 whitespace-nowrap">
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap">
         Todo el sistema
       </span>
     );
   }
   if (c.alcance === 'empresa') {
     return (
-      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-700 dark:text-sky-300 whitespace-nowrap">
+      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-info-soft text-info whitespace-nowrap">
         Toda {c.empresa || 'la empresa'}
       </span>
     );

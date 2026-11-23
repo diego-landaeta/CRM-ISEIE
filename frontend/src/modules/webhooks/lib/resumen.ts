@@ -509,7 +509,7 @@ export const TIPOS: TipoWebhook[] = [
     direccion: 'entra',
     enlace: '/accounting/integrations',
     permisos: ['integrations.view'],
-    nota: 'No guarda por campus cuándo llegó el último aviso ni si falló (el último de todo el CRM está en Sistema › Status).',
+    nota: 'No guarda por campus cuándo llegó el último aviso ni si falló (el último de todo el CRM está en Configuración › Status).',
     // La de cada campus (`/integrations/stripe?projectId`, la que lee su
     // pantalla): si está encendida y si tiene la FIRMA del webhook
     // (`config_public.webhook_secret_preview`). Sin la firma, Stripe avisa y el

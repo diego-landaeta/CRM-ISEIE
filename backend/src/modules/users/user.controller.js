@@ -130,7 +130,22 @@ export async function create(req, res, next) {
     // Dar de alta con un rol es darle ese rol: nadie da lo que no tiene (QA de Diego, punto 7).
     const { exigirQueNoDeMasDeLoQueTiene } = await import('../permissions/permissions.editar.js');
     await exigirQueNoDeMasDeLoQueTiene(req.user, null, { role: parsed.data.role, roles_extra: parsed.data.roles_extra || [] });
-    const user = await userService.create(parsed.data, { porUserId: req.user?.userId ?? null });
+    // #694: sus excepciones, ya en el alta. Se comprueban antes de crear nada
+    // (mismas reglas que en su ficha) y se guardan en la misma operación.
+    const { excepciones = {}, ...datos } = parsed.data;
+    const hayExcepciones = Object.keys(excepciones).length > 0;
+    const editar = hayExcepciones ? await import('../permissions/permissions.editar.js') : null;
+    if (hayExcepciones) {
+      if (!(await tienePermiso(req, 'users.excepciones'))) {
+        throw new AppError('Poner excepciones de permisos es «Permisos de cada persona»', 403, 'FORBIDDEN');
+      }
+      await editar.exigirExcepcionesDeAlta(req.user,
+        { role: datos.role, roles_extra: datos.roles_extra || [], projectIds: editar.campusDelAlta(datos) }, excepciones);
+    }
+    const user = await userService.create(datos, {
+      porUserId: req.user?.userId ?? null,
+      alCrear: hayExcepciones ? (u) => editar.guardarExcepciones(u.id, excepciones, req.user, { origen: 'alta_usuario' }) : null,
+    });
     res.status(201).json({ success: true, data: user });
   } catch (err) { next(err); }
 }
@@ -175,17 +190,26 @@ export async function update(req, res, next) {
       // Y nada de lo que gane puede faltarle a quien lo cambia (QA, punto 7).
       await exigirQueNoDeMasDeLoQueTiene(req.user, id, { role: resto.role, roles_extra: resto.roles_extra });
     }
-    // El correo va primero: si choca con el de otro (409), no se guarda nada a medias.
+    // El correo se COMPRUEBA primero y se CAMBIA al final (#262). Si choca con el
+    // de otro (409), no se guarda nada; y si lo que falla es el resto, el correo
+    // tampoco ha cambiado. Antes iba primero entero: con un fallo después, la
+    // pantalla decía «error» y la persona ya entraba con otro correo, sin sus
+    // refresh tokens y con el aviso mandado a la dirección vieja.
+    if (email !== undefined) {
+      await userService.comprobarCambioDeCorreo(id, email, { porUserId: req.user.userId });
+    }
+    let user = Object.keys(resto).length
+      ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
+      : await userService.getById(id);
     const correo = email !== undefined
       ? await userService.cambiarCorreo(id, email, {
         reenviarEnlace: reenviarEnlace === true, porUserId: req.user.userId, ip: req.ip,
-        // El rol con el que se va a guardar, para el freno de tutores (#262).
-        rolFinal: resto.role ?? null,
+        // El freno de tutores mira el rol de antes y el de después (#262): aquí
+        // el rol nuevo ya está guardado.
+        rolFinal: resto.role ?? null, rolAntes: antes?.role ?? null,
       })
       : null;
-    const user = Object.keys(resto).length
-      ? await userService.update(id, resto, { porUserId: req.user?.userId ?? null })
-      : await userService.getById(id);
+    if (correo?.cambiado) user = { ...user, email: correo.email };
 
     // Si el cambio de rol le quita WhatsApp, se le desvincula el numero — pero
     // sus conversaciones se quedan. El numero es suyo y no puede seguir
@@ -375,6 +399,12 @@ const AVISOS = [
     detalle: 'Cuando cambia de estado una tarea que llevas, supervisas o creaste (si se mueve varias veces seguidas, un solo correo).' },
   { aviso: 'tareas_resumen', titulo: 'Tu resumen de tareas',
     detalle: 'De lunes a viernes por la tarde: lo que hiciste hoy en el tablero y lo que te falta.' },
+  // Consultas de alumnos (#769), en consultas.plazos.js. Solo administración.
+  { aviso: 'consulta_fuera_de_plazo', titulo: 'Consulta fuera de plazo',
+    detalle: 'Cuando la consulta de un alumno de tus campus pasa el plazo sin respuesta del tutor. Solo administración.' },
+  // Entregas sin corregir (#457), en tutores/tutor.entregasAdministracion.js. Solo administración.
+  { aviso: 'entregas_fuera_de_plazo', titulo: 'Entregas sin corregir fuera de plazo',
+    detalle: 'Cuando una entrega de un alumno de tus campus sigue sin corregir pasado el plazo, o es de un curso sin tutora en el CRM. Solo administración.' },
 ];
 
 export async function misAvisos(req, res, next) {

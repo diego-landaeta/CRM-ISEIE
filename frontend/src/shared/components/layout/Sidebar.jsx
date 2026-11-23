@@ -5,11 +5,12 @@ import {
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
-  Megaphone, Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
+  Robot, Sparkle, PlugsConnected, WebhooksLogo, CreditCard, WarningCircle, WhatsappLogo,
   ChatText,
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
-  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, ArrowsLeftRight, LinkSimple } from '@phosphor-icons/react';
+  GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond, ArrowsLeftRight,
+  CalendarCheck, ArrowCounterClockwise, LinkSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,6 +24,8 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+import { reagruparMenu } from './bloquesDelMenu';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
@@ -49,7 +52,13 @@ const ROLES_TAREAS = ['superadmin', 'admin', 'colaborador', 'tutor_redactor'];
 // __smoke__/webhooksJuntos755.test.jsx y el traslado de `trasladosDeMenu.js`.
 export const PERMISOS_WEBHOOKS = ['webhooks.view', 'make.view', 'webhooks_salientes.view'];
 
-export const NAV_SECTIONS = [
+/*
+  LAS SECCIONES DE ANTES, tal cual: cada entrada con sus permisos y sus roles.
+  El menú que se pinta (`NAV_SECTIONS`, abajo) sale de repartirlas por bloques
+  de uso (gemela de CRM#900, `bloquesDelMenu.js`): ahí se dice adónde va cada
+  una, y aquí sigue todo lo que decide quién la ve.
+*/
+export const SECCIONES_DE_ANTES = [
   {
     label: 'Principal',
     items: [
@@ -62,10 +71,12 @@ export const NAV_SECTIONS = [
         defaultOpen: true,
         children: [
           { to: '/leads', label: 'Lista', end: true, sectionPrefixes: ['/leads'], permiso: 'leads.view' },
-          { to: '/leads/cola', label: 'La cola del día', permiso: 'proceso.view' },
+          // La cola y el seguimiento salen del grupo, a «Hoy» (gemela de CRM#900):
+          // llevan su icono porque ahí se pintan sueltos.
+          { to: '/leads/cola', label: 'La cola del día', icon: CalendarCheck, permiso: 'proceso.view' },
           // El quinto paso no cabe en la cola: es toda la base que no compro.
           // Solo en pruebas hasta que se apruebe: ver shared/lib/enPruebas.js.
-          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', permiso: 'proceso.view' }] : []),
+          ...(PROCESO_EN_PRUEBAS ? [{ to: '/leads/seguimiento', label: 'Seguimiento de fin de mes', icon: ArrowCounterClockwise, permiso: 'proceso.view' }] : []),
           { to: '/leads/proceso', label: 'Proceso comercial', permiso: 'proceso.view' },
           // Las becas y su embudo (#86): a quién se le ofrecieron y en qué acabaron.
           // Sin aprobar para producción (07/10): solo en /staging.
@@ -100,8 +111,8 @@ export const NAV_SECTIONS = [
           // Vuelve cuando se rehaga sobre el chat nuevo.
         ],
       },
-      // Ventas vive en Principal (flujo diario) y también en Finanzas. Clientes
-      // y Revisión duplicados pasan a la sección Clientes al final.
+      // Ventas estaba en Principal y también en Finanzas: con los bloques de uso
+      // queda una sola, en Comercial (gemela de CRM#900).
       { to: '/ventas',      label: 'Ventas',     icon: Receipt, permiso: 'ventas.view' },
       // Links de pago de Stripe (#680, gemela de CRM#940; Diego, 19/11: «tampoco hay
       // una opción en el menú»). Quien los crea o los ve todos, y solo con los links
@@ -141,13 +152,10 @@ export const NAV_SECTIONS = [
       // Make y Webhooks estaban aquí: desde la gemela de CRM#755, en Conexión ›
       // Webhooks. Lo que Webhooks pedía además (`forms.view`) va con su parte y su pestaña.
       { to: '/captacion/whatsapp', label: 'Widget web', seguirPorRol: true, icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
-      // Próximamente (#226): no hay pantalla en ISEIE. La de MultiCRM enseña
-      // datos INVENTADOS —sus llamadas a Meta y Google van con `USE_MOCKS =
-      // true`— y traer cifras falsas a un CRM con dinero real es peor que no
-      // tenerla. Vuelve cuando haya datos de verdad detrás.
-      { to: '/campaigns',       label: 'Campañas',  icon: Megaphone, roles: ['admin', 'superadmin'], comingSoon: true },
-      // Lleva a «Aún no conectado» (#216): enseñaba datos de ejemplo de Search Console.
-      { to: '/seo',             label: 'Tráfico orgánico', icon: MagnifyingGlass, roles: ['admin', 'superadmin'] },
+      // Campañas («Próximamente», #226) y Tráfico orgánico (que llevaba a «Aún no
+      // conectado», #216) salen del menú hasta que tengan pantalla de verdad
+      // (gemela de CRM#900; `menu-sin-proximamente-534`). La dirección /seo sigue
+      // existiendo: solo se quita la entrada.
     ],
   },
   {
@@ -156,7 +164,8 @@ export const NAV_SECTIONS = [
       // Meta Ads: administración por su rol; y en solo lectura a quien se le da
       // `meta_ads.view` (26/10/2026: Jonathan, Gustavo, Ruth, Julián, Jesús), también si es solo colaborador.
       { to: '/meta-ads',   label: 'Meta Ads',   icon: ChartLineUp, roles: ['admin', 'superadmin'], permiso: 'meta_ads.view', oPermiso: 'meta_ads.view', colaboradorConPermiso: 'meta_ads.view' },
-      { to: '/google-ads', label: 'Google Ads', icon: ChartLineUp, roles: ['admin', 'superadmin'], comingSoon: true },
+      // Google Ads («Próximamente», #226) sale del menú hasta que tenga pantalla
+      // (gemela de CRM#900; `menu-sin-proximamente-534`).
     ],
   },
   {
@@ -164,9 +173,17 @@ export const NAV_SECTIONS = [
     items: [
       { to: '/products',   label: 'Productos',  icon: Package, sectionPrefixes: ['/products'], permiso: 'products.view' },
       // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view' },
+      // `oPermiso` (gemela de CRM#843): el tutor y el tutor redactor no tienen «Ver
+      // productos», pero sus avisos («Te han asignado un curso») llevan aquí. Con
+      // «Sus cursos» la pantalla se les abre (`rutaPermitida`); el menú no cambia,
+      // porque la entrada sigue pidiendo `products.view` para salir.
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
+      // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto; sin él, la
+      // matrícula automática no sabe dónde matricular. Admin y soporte de serie
+      // (`moodle.cursos_producto`). En MultiCRM es /productos/cursos-moodle.
+      { to: '/products/cursos-moodle', label: 'Cursos de Moodle', icon: GraduationCap, roles: ['superadmin', 'admin'], permiso: 'moodle.cursos_producto' },
       // «Certificados» (/documentos) fuera del menú: estaba vacío, y los títulos
       // ahora los emite Certifex desde Matrículas → Certificaciones (Diego, 30/09).
     ],
@@ -175,8 +192,10 @@ export const NAV_SECTIONS = [
     label: 'Tutores',
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
-      // Lo unico que ve un tutor: sus cursos y lo que le corresponde.
-      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], permiso: 'tutores.mis_cursos' },
+      // #408 (gemela de CRM#681): sus cursos en Moodle, con lo que tiene por corregir y contestar.
+      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Lo unico que ve un tutor: sus cursos y lo que le corresponde. `end`: no se marca en «Mi campus».
+      { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], end: true, permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
       { to: '/consultas', label: 'Consultas', icon: ChatCircleText, roles: ['admin', 'superadmin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', sectionPrefixes: ['/consultas'], permiso: ['consultas.view', 'consultas.atender'], oPermiso: 'consultas.view' },
       { to: '/tutores/sin-tutor', label: 'Sin tutor', icon: Warning, roles: ['admin', 'superadmin'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
@@ -206,7 +225,7 @@ export const NAV_SECTIONS = [
       // factura, y enlazarlos. Es de administración: admin y super admin, cada uno en
       // sus campus. Sus pestañas, cada una con su permiso en `SIN_ENTRADA`; la entrada,
       // con el de cualquiera de ellas (basta uno): los cargos de Stripe (CRM#906) piden `stripe.edit`.
-      { to: '/accounting/conciliacion', label: 'Conciliación', icon: ArrowsLeftRight, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: ['facturas.gestionar', 'stripe.edit'] },
+      { to: '/accounting/conciliacion', label: 'Conciliación', seguirPorRol: true, icon: ArrowsLeftRight, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: ['facturas.gestionar', 'stripe.edit'] },
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
@@ -290,6 +309,9 @@ export const NAV_SECTIONS = [
       // El tutor entra aqui: es donde cambia su contraseña.
       { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
+      // Incidencias (gemela de CRM#612), al lado de Soporte. Los mismos roles
+      // que traen `incidencias.view` de serie (la gestora ve las suyas).
+      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos
@@ -298,6 +320,20 @@ export const NAV_SECTIONS = [
     ],
   },
 ];
+
+// El menú por bloques de uso (gemela de CRM#900 y #903). Las secciones del menú
+// de ISEIE no llevan icono: solo el nombre.
+export const NAV_SECTIONS = reagruparMenu(SECCIONES_DE_ANTES);
+
+/**
+ * El `data-recorrido` de cada bloque del menú: «menu-» y su nombre sin tildes
+ * («Captación y publicidad» → `menu-captacion-y-publicidad`). Lo señalan el
+ * recorrido del menú (#611) y el recorrido general según el rol (#681, gemela
+ * de CRM#1012).
+ */
+export function anclaDelBloque(label) {
+  return `menu-${String(label).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
 
 // Interruptor de compilacion para dejar una parte fuera de una instalacion sin
 // borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
@@ -668,7 +704,7 @@ function NavGroup({ label, icon: Icon, items, defaultOpen, role, soloColab, perm
   );
 }
 
-// Decide qué sección debe estar abierta por defecto: Principal (siempre) +
+// Decide qué sección debe estar abierta por defecto: Hoy y Comercial (siempre) +
 // la que contenga la ruta actual. Devuelve un map { [section.label]: boolean }.
 function defaultOpenSections(sections, pathname) {
   const out = {};
@@ -683,12 +719,13 @@ function defaultOpenSections(sections, pathname) {
       if (it.to && it.to !== '/' && pathname.startsWith(it.to + '/')) return true;
       return false;
     });
-    out[s.label] = s.label === 'Principal' || containsActive;
+    // Abiertos de entrada, lo de cada día: Hoy y Comercial (gemela de CRM#900).
+    out[s.label] = s.label === 'Hoy' || s.label === 'Comercial' || containsActive;
   }
   return out;
 }
 
-function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, onNavigate, onExpandSidebar }) {
+function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, onNavigate, onExpandSidebar, anclas = false }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -764,7 +801,9 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
         // todos los items se ven como iconos en línea.
         if (collapsed) {
           return (
-            <div key={section.label} className="space-y-0.5">
+            // Plegado también lleva su anclaje: el recorrido general (#681) lo señala.
+            // Solo hay menú plegado en el PC (el del cajón nunca lo está).
+            <div key={section.label} className="space-y-0.5" data-recorrido={anclaDelBloque(section.label)}>
               {items.map(pintar)}
             </div>
           );
@@ -772,7 +811,19 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
 
         const open = !!openMap[section.label];
         return (
-          <div key={section.label}>
+          <div
+            key={section.label}
+            // Los bloques que señala el recorrido del menú (#611). Un bloque
+            // que esa persona no tiene no se pinta, y su paso se salta.
+            // Solo en el menú que se ve (`anclas`): el otro también está montado
+            // y el recorrido cogería el primero que encuentre, aunque esté oculto.
+            data-recorrido={!anclas ? undefined
+              : section.label === 'Hoy' ? 'menu-hoy'
+                : section.label === 'Comercial' ? 'menu-comercial'
+                  : section.label === 'Académico' ? 'menu-academico'
+                    : section.label === 'Finanzas' ? 'menu-finanzas'
+                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
+          >
             <button
               type="button"
               onClick={() => toggle(section.label)}
@@ -798,10 +849,31 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
   );
 }
 
-export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }) {
+/** ¿Se ve el menú fijo del PC (`lg`, 1024 px)? El mismo corte que AppLayout. */
+const PC = '(min-width: 1024px)';
+function useEsPC() {
+  const mq = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(PC) : null);
+  const [esPC, setEsPC] = useState(() => !!mq()?.matches);
+  useEffect(() => {
+    const m = mq();
+    if (!m?.addEventListener) return undefined;
+    const alCambiar = () => setEsPC(m.matches);
+    m.addEventListener('change', alCambiar);
+    return () => m.removeEventListener('change', alCambiar);
+  }, []);
+  return esPC;
+}
+
+export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate, visible = true }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  // El recorrido del menú (#611), solo en el menú que se ve: en el PC, el fijo;
+  // en el móvil, el del cajón (`onNavigate`). El fijo sigue montado (oculto)
+  // en el móvil, y su recorrido se abriría sobre nada. En ISEIE el cajón
+  // también sigue montado cerrado (para deslizarse): `visible` dice si está abierto.
+  const esPC = useEsPC();
+  const conRecorrido = !collapsed && visible && (onNavigate ? !esPC : esPC);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
 
@@ -874,26 +946,31 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
       {/* Trigger del CommandPalette (atajo Ctrl/Cmd + K). El render del modal
           vive en AppLayout; aquí solo disparamos el evento keydown sintético. */}
       {!collapsed && (
-        <button
-          type="button"
-          onClick={() => {
-            const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
-            window.dispatchEvent(ev);
-          }}
-          className="mb-3 relative w-full h-8 pl-8 pr-12 rounded-md bg-secondary/40 border border-border text-[12px] text-left text-muted-foreground/80 hover:bg-secondary/60 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-colors"
-          aria-label="Abrir búsqueda global"
-        >
-          <MagnifyingGlass size={13} weight="bold" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
-          Buscar…
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border bg-card text-muted-foreground">
-            Ctrl K
-          </kbd>
-        </button>
+        <div className="mb-3 space-y-2">
+          <button
+            type="button"
+            data-recorrido={conRecorrido ? 'menu-buscar' : undefined}
+            onClick={() => {
+              const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
+              window.dispatchEvent(ev);
+            }}
+            className="relative w-full h-8 pl-8 pr-12 rounded-md bg-secondary/40 border border-border text-[12px] text-left text-muted-foreground/80 hover:bg-secondary/60 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-colors"
+            aria-label="Abrir búsqueda global"
+          >
+            <MagnifyingGlass size={13} weight="bold" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+            Buscar…
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border bg-card text-muted-foreground">
+              Ctrl K
+            </kbd>
+          </button>
+          {/* El recorrido del menú por bloques (#611): solo con el botón (#681). */}
+          {conRecorrido && <VerRecorrido id="menu-bloques" compacto />}
+        </div>
       )}
 
       {/* Nav — secciones colapsables. El estado se persiste en localStorage por
           sección. Por defecto se abre la sección que contiene la ruta activa
-          (más "Principal" siempre como ancla). El usuario puede plegar/expandir
+          (más «Hoy» y «Comercial» siempre como ancla). El usuario puede plegar/expandir
           libremente con click en el header de sección. */}
       <CollapsibleNav
         sections={secciones}
@@ -904,6 +981,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         collapsed={collapsed}
         onNavigate={onNavigate}
         onExpandSidebar={onToggleCollapsed}
+        anclas={conRecorrido}
       />
 
       {/* User menu + notification bell */}

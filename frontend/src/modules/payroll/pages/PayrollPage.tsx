@@ -3,6 +3,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { ponerAmbito } from '@/shared/lib/ambitoInforme';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
@@ -75,9 +77,17 @@ export default function PayrollPage() {
   const [tab, setTab] = useState<TabId>('plans');
 
   return (
-    <div className="space-y-5 pb-8">
-      <PageHeader title="Nominas" subtitle={`Plantilla y pagos en ${activeProject?.nombre || 'este proyecto'}`} />
-      <div className="flex border-b border-border overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
+      <PageHeader
+        title="Nominas"
+        subtitle={`Plantilla y pagos en ${activeProject?.nombre || 'este proyecto'}`}
+        actions={<VerRecorrido id="nominas" />}
+      />
+      {/* De borde a borde en el móvil: -mx-3, el relleno del <main> (p-3). Con -mx-4
+          la página desbordaba 4 px a 375 (#619). */}
+      <div data-recorrido="nominas-pestanas" className="flex border-b border-border overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
         {TABS.map(t => (
           <button key={t.id} type="button" onClick={() => setTab(t.id)} className={`px-4 py-2 text-sm font-bold border-b-2 whitespace-nowrap ${tab === t.id ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}>
             {t.label}
@@ -143,6 +153,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
     <div className="space-y-3">
       <div className="flex justify-end gap-2">
         {usersWithoutPlan.length > 0 && (
+          <div data-recorrido="nominas-anadir">
           <Select<string>
             value=""
             onChange={(v) => { if (v) setEditing({ user_id: parseInt(v), modo_fijo: '', modo_horas: '', modo_comisiones: false, active: true }); }}
@@ -153,13 +164,16 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
             ariaLabel="Añadir plan a usuario"
             className="w-56"
           />
+          </div>
         )}
       </div>
 
       {loading ? <SkeletonTable rows={4} columns={5} /> : plans.length === 0 ? (
         <EmptyState icon={Coins} title="Sin planes" description="Configura cuanto cobra cada usuario" />
       ) : (
-        <>
+        // Envuelve la tabla (escritorio) y las tarjetas (móvil): el recorrido
+        // señala los planes en los dos (#619).
+        <div data-recorrido="nominas-planes">
           {/* Desktop table */}
           <div className="hidden md:block bg-card border border-border rounded-2xl overflow-x-auto">
             <table className="w-full text-sm">
@@ -179,7 +193,7 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 text-center">{p.modo_comisiones ? '✓' : '—'}</td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-xs font-bold mr-1">Editar</button>
-                      <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button>
+                      <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-xs font-bold">Eliminar</button>
                     </td>
                   </tr>
                 ))}
@@ -202,12 +216,12 @@ function PlansTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <button onClick={() => setEditing(p)} className="px-2 py-1 rounded bg-muted text-[11px] font-bold w-full">Editar</button>
-                  <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-[11px] font-bold w-full">Eliminar</button>
+                  <button onClick={() => handleDelete(p)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-[11px] font-bold w-full">Eliminar</button>
                 </div>
               </div>
             ))}
           </div>
-        </>
+        </div>
       )}
 
       {editing && <PlanEditor plan={editing} users={users} onSave={handleSave} onClose={() => setEditing(null)} />}
@@ -247,7 +261,7 @@ function PlanEditor({ plan, users, onSave, onClose }: PlanEditorProps) {
             Cobra comisiones (calculadas en modulo de comisiones)
           </label>
           {p.modo_fijo != null && p.modo_fijo !== '' && p.modo_horas != null && p.modo_horas !== '' && (
-            <p className="text-xs text-amber-600 bg-amber-50 dark:bg-amber-950/30 p-2 rounded">Combinacion fijo+horas es poco comun, asegurate de que es lo que quieres</p>
+          <p className="text-xs text-warning bg-warning-soft p-2 rounded">Combinacion fijo+horas es poco comun, asegurate de que es lo que quieres</p>
           )}
           <label className="block text-xs">
             <span className="font-bold uppercase text-muted-foreground">Notas</span>
@@ -337,13 +351,12 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 text-right tabular-nums">{Number(p.monto_comisiones).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{Number(p.ajustes).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right tabular-nums font-bold">{Number(p.total).toFixed(2)} €</td>
-                    <td className="px-4 py-3 text-center">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-emerald-100 text-emerald-700' : p.estado === 'cerrado' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{p.estado}</span>
+                    <td className="px-4 py-3 text-center"> 
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' : p.estado === 'cerrado' ? 'bg-info-soft text-info-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>{p.estado}</span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-xs font-bold mr-1">Cerrar</button>}
-                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-emerald-600 text-white text-xs font-bold">Pagar</button>}
-                    </td>
+                      {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-xs font-bold mr-1">Cerrar</button>}
+                      {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-xs font-bold">Pagar</button>} </td>
                   </tr>
                 ))}
               </tbody>
@@ -356,7 +369,7 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
               <div key={p.id} className="bg-card border border-border rounded-lg p-3 flex items-start gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1 flex-wrap">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-emerald-100 text-emerald-700' : p.estado === 'cerrado' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>{p.estado}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${p.estado === 'pagado' ? 'bg-success-soft text-success-soft-foreground' : p.estado === 'cerrado' ? 'bg-info-soft text-info-soft-foreground' : 'bg-warning-soft text-warning-soft-foreground'}`}>{p.estado}</span>
                     <span className="text-sm font-semibold truncate">{p.user_nombre}</span>
                   </div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[11px] mt-1">
@@ -368,8 +381,8 @@ function PeriodsTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-sm font-bold tabular-nums">{Number(p.total).toFixed(2)} €</span>
-                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-blue-600 text-white text-[11px] font-bold w-full">Cerrar</button>}
-                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-emerald-600 text-white text-[11px] font-bold w-full">Pagar</button>}
+                  {p.estado === 'abierto' && <button onClick={() => close(p)} className="px-2 py-1 rounded bg-info text-info-foreground text-[11px] font-bold w-full">Cerrar</button>}
+                  {p.estado === 'cerrado' && <button onClick={() => pay(p)} className="px-2 py-1 rounded bg-success text-success-foreground text-[11px] font-bold w-full">Pagar</button>}
                 </div>
               </div>
             ))}
@@ -452,8 +465,8 @@ function HoursTab({ project, ambito, deUnCampus }: TabProps) {
                     <td className="px-4 py-3 font-semibold">{h.user_nombre}</td>
                     <td className="px-4 py-3 text-right tabular-nums">{Number(h.horas).toFixed(2)}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{h.notas || ''}</td>
-                    <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-xs font-bold">Eliminar</button></td>
-                  </tr>
+                    <td className="px-4 py-3 text-right"><button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-xs font-bold">Eliminar</button></td>
+                    </tr>
                 ))}
               </tbody>
             </table>
@@ -472,7 +485,7 @@ function HoursTab({ project, ambito, deUnCampus }: TabProps) {
                 </div>
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   <span className="text-sm font-bold tabular-nums">{Number(h.horas).toFixed(2)} h</span>
-                  <button onClick={() => del(h)} className="px-2 py-1 rounded text-red-500 hover:bg-red-50 text-[11px] font-bold">Eliminar</button>
+                  <button onClick={() => del(h)} className="px-2 py-1 rounded text-destructive hover:bg-destructive-soft text-[11px] font-bold">Eliminar</button>
                 </div>
               </div>
             ))}

@@ -5,7 +5,7 @@ import {
   Users, Calendar, ShieldCheck, TextT, TreeStructure,
   Megaphone, FileText, PlugsConnected, Envelope, EnvelopeOpen, Lightning,
   ListNumbers, Key, Lock, ArrowSquareOut, Plus, WarningCircle,
-  Wrench, X, Palette,
+  Wrench, X, Palette, GlobeHemisphereWest,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
@@ -13,8 +13,10 @@ import { useConfirm } from '@/shared/components/ui/useConfirm';
 import usePermission from '@/shared/hooks/usePermission';
 import Select from '@/shared/components/ui/Select';
 import MarcaSection from './MarcaSection';
+import PaisesPorCampus from '@/modules/settings/components/PaisesPorCampus';
 import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmpresa';
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
+import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
@@ -22,6 +24,7 @@ import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } fro
 import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import BrevoBloqueoAviso from '@/modules/settings/components/BrevoBloqueoAviso';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { desbloquearBrevo, listBrevoBloqueos, porPersona, textoDelBloqueo } from '@/shared/lib/brevoBloqueo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -33,18 +36,20 @@ import { listRolesAsignables, mensajeNoLoTienes, motivoNoAsignable, NOMBRE_ROL, 
 const NAV = [
   { id: 'users',        label: 'Usuarios',          icon: Users,       embedded: true },
   { id: 'availability', label: 'Disponibilidad',    icon: Calendar,    embedded: true },
-  { label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
+  { id: 'roles',        label: 'Roles y permisos',     icon: ShieldCheck,    to: '/roles' },
   { label: 'Campos custom',        icon: TextT,          to: '/configuracion/campos' },
   { label: 'Árbol de categorías',  icon: TreeStructure,  to: '/configuracion/categorias-arbol' },
   { label: 'Canales',              icon: Megaphone,      to: '/configuracion/canales' },
   { label: 'Formularios',          icon: FileText,       to: '/forms' },
-  { label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
+  { id: 'webhooks',     label: 'Webhooks',             icon: PlugsConnected, to: '/conexion/webhooks' },
   { label: 'Email seguimiento',    icon: Envelope,       to: '/secuencias-email' },
   { label: 'Plantillas email',     icon: EnvelopeOpen,   to: '/email-templates' },
   { label: 'Atajos rápidos',       icon: Lightning,      to: '/configuracion/atajos' },
   { label: 'Numeración docs',      icon: ListNumbers,    to: '/documentos/config' },
   // La marca en correos y formularios: logo, colores, remitente y su Brevo.
   { id: 'marca',        label: 'Marca',         icon: Palette, embedded: true },
+  // País de entrada por subdominio de cada campus (#221).
+  { id: 'paises',       label: 'Países por subdominio', icon: GlobeHemisphereWest, embedded: true },
   { id: 'integrations', label: 'APIs globales', icon: Key, embedded: true },
   { id: 'security',     label: 'Seguridad',     icon: Lock, embedded: true },
 ];
@@ -66,13 +71,38 @@ const INTEGRATIONS = [
 const comoSeLlama = (u) =>
   (u?.gestor_colaboraciones ? 'colaboraciones' : u?.role);
 
+// Pestañas que piden un permiso para leerse (gemela de CRM#880). Sin él, el
+// servidor contesta 403: Usuarios y Disponibilidad leen `/users*` (users.view)
+// y APIs globales lee `/credentials` (credentials.view). Antes se pintaban
+// igual, y una gestora abría Configuración en Usuarios con tres peticiones
+// fallidas detrás (`users`, `users/brevo-bloqueos`, `users/availability`), o
+// veía las APIs «sin configurar» con un «Configurar» que acababa en 403.
+// Las que no salen aquí no piden permiso para leerse.
+// Diego, 21/11/2026 (gemela de CRM#979): la gestora tampoco ve «Roles y
+// permisos» ni «Webhooks»; las dos piden su permiso en el servidor.
+export const PERMISO_DE_PESTANA = {
+  users: 'users.view',
+  availability: 'users.view',
+  integrations: 'credentials.view',
+  roles: 'roles.view',
+  webhooks: 'webhooks.view',
+};
+
+// Adónde va quien no puede abrir Usuarios: Seguridad no pide nada al servidor.
+const PESTANA_SIN_PERMISO = 'security';
+
 export default function SettingsPage() {
   const { user } = useAuth();
-  const [tab, setTab] = useState('users');
+  const { can } = usePermission();
+  const permitida = (id) => !PERMISO_DE_PESTANA[id] || can(PERMISO_DE_PESTANA[id]);
+  const nav = NAV.filter((item) => !item.id || permitida(item.id));
+  const [elegida, setTab] = useState('users');
+  // Sin el permiso de la pestaña elegida (la de entrada es Usuarios), Seguridad.
+  // Se calcula en cada pintado: si el mapa de permisos llega un instante
+  // después, se pasa sola a Usuarios.
+  const tab = permitida(elegida) ? elegida : PESTANA_SIN_PERMISO;
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
-
-  const activeNav = NAV.find((n) => n.id === tab) || NAV[0];
 
   return (
     <div className="space-y-6">
@@ -100,7 +130,7 @@ export default function SettingsPage() {
           className="rounded-2xl border border-border bg-card p-2 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-3rem)] lg:overflow-y-auto"
         >
           <div className="flex lg:flex-col gap-1 overflow-x-auto lg:overflow-visible">
-            {NAV.map((item) => {
+            {nav.map((item) => {
               const Icon = item.icon;
               const isActive = item.id === tab;
 
@@ -147,6 +177,9 @@ export default function SettingsPage() {
           )}
           {tab === 'marca' && (
             <MarcaSection isAdmin={isAdmin} />
+          )}
+          {tab === 'paises' && (
+            <PaisesPorCampus />
           )}
           {tab === 'integrations' && (
             <IntegrationsSection isAdmin={isAdmin} />
@@ -201,10 +234,13 @@ function UsersSection({ isAdmin }) {
   // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin
   // marcas: la lista sigue igual.
   const [bloqueosBrevo, setBloqueosBrevo] = useState(() => new Map());
+  // Si la revisión de Brevo está encendida en este servidor («Ver cómo funciona»,
+  // gemela de CRM#856). null mientras no se sabe; si no contesta, apagada.
+  const [brevoActivo, setBrevoActivo] = useState(null);
   function cargarBloqueosBrevo() {
     listBrevoBloqueos()
-      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
-      .catch(() => setBloqueosBrevo(new Map()));
+      .then((r) => { setBloqueosBrevo(porPersona(r.bloqueos)); setBrevoActivo(r.activo); })
+      .catch(() => { setBloqueosBrevo(new Map()); setBrevoActivo(false); });
   }
   useEffect(() => { cargarBloqueosBrevo(); }, []);
   async function desbloquearEnBrevo(u) {
@@ -257,6 +293,9 @@ function UsersSection({ isAdmin }) {
         title="Usuarios"
         subtitle="Invita gestores, admins y soporte. Cada uno con su rol y disponibilidad."
         action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Probar los correos bloqueados en Brevo (gemela de CRM#856): solo al pulsarlo. */}
+          {brevoActivo !== null && <VerComoFunciona id="brevo-bloqueados" apagada={!brevoActivo} />}
           <button
             onClick={() => setShowInvite(true)}
             disabled={!isAdmin}
@@ -266,6 +305,7 @@ function UsersSection({ isAdmin }) {
             <Plus size={14} weight="bold" />
             Invitar usuario
           </button>
+          </div>
         }
       />
 
@@ -319,7 +359,7 @@ function UsersSection({ isAdmin }) {
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
                     {bloqueosBrevo.get(u.id) && (
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
+                      <span data-recorrido="brevo-marca" className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
                         <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
                         Correo bloqueado en Brevo
                       </span>
@@ -385,9 +425,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
   // Los roles de MAS. Solo suman permisos.
   const [rolesExtra, setRolesExtra] = useState(Array.isArray(user.roles_extra) ? user.roles_extra : []);
   // Facturación y fechas de facturas ya no son casillas de aquí (#230, gemela de
-  // CRM#423): son permisos del catálogo y se dan en «Ver permisos», con su
+  // CRM#423): son permisos del catálogo y se dan en el apartado «Permisos» de la ficha, con su
   // registro de quién y cuándo.
-  const [verPermisos, setVerPermisos] = useState(false);
   const [phone, setPhone] = useState(user.whatsapp_phone || '');
   const [assigned, setAssigned] = useState(() => {
     const m = {};
@@ -458,7 +497,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
         ...(puedeDarEmpresas ? { empresaIds: llevaEmpresa ? empresasEnteras : [] } : {}),
       });
       toast(cambiaCorreo
-        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Sus sesiones se han cerrado.` }
+        ? { title: '✓ Guardado', description: `${nombre.trim()} entra ahora con ${correoNuevo}. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` }
         : { title: '✓ Guardado' });
       onSaved();
     } catch (e) {
@@ -477,7 +516,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
     setSavingPass(true);
     try {
       await client.patch(`/users/${user.id}/password`, { password: newPass, confirmPassword: newPass2 });
-      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Sus sesiones se han cerrado.` });
+      toast({ title: '✓ Contraseña actualizada', description: `${user.nombre} deberá entrar con la nueva contraseña. Una sesión que ya tuviera abierta puede seguir hasta 8 horas.` });
       setNewPass('');
       setNewPass2('');
     } catch (e) {
@@ -509,7 +548,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
               className={`w-full h-9 px-3 rounded-md border border-border bg-background text-sm ${isSuperadmin ? '' : 'opacity-60 cursor-not-allowed'}`} />
             <p className="text-[10px] text-muted-foreground mt-1">
               {isSuperadmin
-                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá, y se cierran sus sesiones. Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
+                ? 'Es con lo que entra: al cambiarlo, con el viejo ya no podrá (una sesión que ya tuviera abierta puede seguir hasta 8 horas). Se le avisa por correo en la dirección vieja. Si recibe prospectos por Make, cámbialo también allí.'
                 : 'Solo un superadmin puede cambiar el correo.'}
             </p>
             {/* «Reenviar enlace de acceso» al correo nuevo (#246). A un tutor no le
@@ -599,19 +638,13 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           </div>
         </div>
 
-        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423): su
-            rol, su rol a medida o una excepción suya. Ahí mismo se le cambian. */}
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border p-3">
-          <span className="text-sm">
-            Permisos
-            <span className="block text-xs text-muted-foreground">Lo que puede hacer, de dónde le viene y sus excepciones.</span>
-          </span>
-          <button type="button" onClick={() => setVerPermisos(true)}
-            className="inline-flex h-9 flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-3 text-sm font-medium hover:bg-muted">
-            Ver permisos
-          </button>
+        {/* Todo lo que puede hacer y de dónde le viene (#230, gemela de CRM#423),
+            siempre a la vista en su ficha (gemela de CRM#698/#752): su rol, su rol
+            a medida o una excepción suya, y ahí mismo se le cambian (cada cambio
+            se guarda al momento). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDePersona userId={user.id} enLinea />
         </div>
-        {verPermisos && <PermisosDePersona userId={user.id} onClose={() => setVerPermisos(false)} />}
         <EquipoComercial userId={user.id} />
 
         <div className="flex justify-end gap-2">
@@ -631,7 +664,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                 {savingPass ? '…' : 'Cambiar'}
               </button>
             </div>
-            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, se cierran sus sesiones activas.</p>
+            <p className="text-[10px] text-muted-foreground">Mínimo 8 caracteres, con una mayúscula y un número. Se la comunicas tú al usuario. Al cambiarla, con la anterior ya no entra; una sesión que ya tuviera abierta puede seguir hasta 8 horas.</p>
           </div>
         )}
       </div>
@@ -654,6 +687,9 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
   const [role, setRole] = useState('gestor');
   const [assigned, setAssigned] = useState({}); // { [projectId]: recibeLeads }
   const [saving, setSaving] = useState(false);
+  // Las excepciones de permisos que van con el alta (gemela de CRM#698): se
+  // crean en la misma operación que el usuario.
+  const [excepciones, setExcepciones] = useState({});
   // Escape cierra, como los demás formularios (#106).
   useEscapeKey(onClose);
   // Qué roles puede dar quien invita (gemela de CRM#644: Tony, cinco altas
@@ -720,6 +756,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
       await client.post('/users', {
         nombre: nombre.trim(), email: email.trim().toLowerCase(), role, projects: projList,
         ...(conEmpresa ? { empresaIds: empresasEnteras } : {}),
+        ...(Object.keys(excepciones).length ? { excepciones } : {}),
       });
       toast({ title: '✓ Usuario invitado', description: 'Se le envió un email para crear su contraseña.' });
       onCreated();
@@ -792,6 +829,12 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
               esColaborador={role === 'colaborador'}
             />
           </div>
+        </div>
+        {/* Lo que trae el rol, con sus excepciones antes de crearla (gemela de CRM#698). */}
+        <div className="rounded-lg border border-border p-3">
+          <PermisosDelAlta role={role} rolesExtra={[]}
+            projectIds={Object.keys(assigned).map(Number)}
+            excepciones={excepciones} onCambiar={setExcepciones} />
         </div>
         <div className="flex justify-end gap-2 pt-1">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>
@@ -985,8 +1028,10 @@ function AvailabilitySection() {
   );
 }
 
-function IntegrationsSection({ isAdmin }) {
+export function IntegrationsSection({ isAdmin }) {
   const [creds, setCreds] = useState([]);
+  // Qué clave usa la IA de verdad: campus, global o servidor (CRM#893).
+  const [iaEnUso, setIaEnUso] = useState(null);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState(null); // {id, service, name, label} | null
   const [value, setValue] = useState('');
@@ -1004,6 +1049,9 @@ function IntegrationsSection({ isAdmin }) {
     try {
       const res = await client.get('/credentials');
       setCreds(res?.data || []);
+      client.get('/credentials/ia')
+        .then((r) => { if (r?.success) setIaEnUso(r.data); })
+        .catch(() => setIaEnUso(null));
     } catch (err) {
       // 403 si no eres admin — silencioso
       if (err?.status !== 403) {
@@ -1021,7 +1069,10 @@ function IntegrationsSection({ isAdmin }) {
     setSaving(true);
     try {
       await client.post('/credentials', {
-        service: editing.service,
+        // QA del 21/11/2026: las entradas de INTEGRATIONS llevan `id` (el
+        // `service` del backend), no `service`; se mandaba `undefined` y
+        // cualquier «Guardar y cifrar» de esta pantalla daba 400 «Required».
+        service: editing.id,
         value: value.trim(),
         project_id: null,
       });
@@ -1133,6 +1184,12 @@ function IntegrationsSection({ isAdmin }) {
                     </>
                   )}
                 </div>
+                {i.id === 'claude' && iaEnUso && (
+                  <p role="status" data-ia-en-uso={iaEnUso.origen || 'ninguna'}
+                    className={`text-xs mt-2 ${iaEnUso.origen ? 'text-muted-foreground' : 'text-warning-soft-foreground'}`}>
+                    {iaEnUso.texto}
+                  </p>
+                )}
               </div>
             );
           })}

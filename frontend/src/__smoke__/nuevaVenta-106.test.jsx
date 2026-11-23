@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render as renderBase, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
 /*
@@ -22,6 +22,16 @@ vi.mock('@/modules/conversions/api/conversions.api', () => ({ conversionsApi: { 
 vi.mock('@/shared/hooks/useToast', () => ({ toast: api.toast }));
 
 import ConversionDialog from '@/modules/conversions/components/ConversionDialog';
+
+// La fecha de inicio del curso es obligatoria desde el #767: estas pruebas
+// abren el diálogo con ella ya puesta, para que cada una siga diciendo lo que
+// defiende. Las de la fecha están en ConversionDialog.test.jsx.
+const render = (ui, opts) => {
+  const r = renderBase(ui, opts);
+  const campo = r.container.querySelector('#venta-fecha-inicio');
+  if (campo) fireEvent.change(campo, { target: { value: '2026-12-01' } });
+  return r;
+};
 
 // Las etiquetas de Field (#106) que no apuntan a ningún campo. Las de grupo
 // (varios controles juntos, como «IVA» o «Pago recibido hoy») no tienen a

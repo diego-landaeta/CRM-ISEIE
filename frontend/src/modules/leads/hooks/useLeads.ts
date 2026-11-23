@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectContext } from '@/contexts/ProjectContext';
+import { useSearchParams } from 'react-router-dom';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { qfDelServidor } from '../lib/filtrosRapidos';
 import client from '@/shared/api/client';
 import type { ApiResponse, Lead, LeadStatus, LeadOrigen, Interaction, Reminder, Utms } from '@/shared/types';
 
@@ -18,11 +20,12 @@ interface AuditLogEntry {
 
 const PAGE_SIZE = 20;
 
-const URL_DEFAULTS: { q: string; estado: string; paso: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
+const URL_DEFAULTS: { q: string; estado: string; paso: string; origen: string; pais: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string } = {
   q: '',
   estado: '',
   paso: '',  // en que paso del proceso comercial va (la clave del paso)
   origen: '',
+  pais: '',  // país de entrada (#221): código ISO o sin_pais
   resp: '',
   prod: '',
   from: '',
@@ -60,6 +63,8 @@ export interface UseLeadsResult {
   setFilterPaso: (v: string) => void;
   filterOrigen: string;
   setFilterOrigen: (v: string) => void;
+  filterPais: string;
+  setFilterPais: (v: string) => void;
   filterResponsable: string;
   setFilterResponsable: (v: string) => void;
   filterProducto: string;
@@ -98,17 +103,23 @@ export function useLeads(): UseLeadsResult {
   const pid = activeProject?.id;
 
   const [urlFilters, setUrlFilters] = useUrlFilters(URL_DEFAULTS);
-  const { q: search, estado: filterEstado, paso: filterPaso, origen: filterOrigen, resp: filterResponsable, prod: filterProducto, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
-    q: string; estado: string; paso: string; origen: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
+  const { q: search, estado: filterEstado, paso: filterPaso, origen: filterOrigen, pais: filterPais, resp: filterResponsable, prod: filterProducto, from: dateFrom, to: dateTo, sort: sortRaw, dir: dirRaw, page, dup: filterDup, rein: filterReincidente } = urlFilters as {
+    q: string; estado: string; paso: string; origen: string; pais: string; resp: string; prod: string; from: string; to: string; sort: string; dir: string; page: number; dup: string; rein: string;
   };
   // Default CRONOLOGICO ('recent') descendente = mas reciente primero.
   const sortMode = (['value', 'recent', 'urgency', 'recent_value'].includes(sortRaw) ? sortRaw : 'recent') as 'value' | 'recent' | 'urgency' | 'recent_value';
   const sortDir = (dirRaw === 'asc' ? 'asc' : 'desc') as 'asc' | 'desc';
+  // El filtro rápido lo maneja LeadsPage en la dirección (`?qf=`); solo los que
+  // filtra el servidor (las alertas del Dashboard, gemela de CRM#884) van en la petición.
+  const [searchParams] = useSearchParams();
+  const qfServidor = qfDelServidor(searchParams.get('qf'));
 
   const setSearch = useCallback((v: string) => setUrlFilters({ q: v, page: 1 }), [setUrlFilters]);
   const setFilterEstado = useCallback((v: string) => setUrlFilters({ estado: v, page: 1 }), [setUrlFilters]);
   const setFilterPaso = useCallback((v: string) => setUrlFilters({ paso: v, page: 1 }), [setUrlFilters]);
   const setFilterOrigen = useCallback((v: string) => setUrlFilters({ origen: v, page: 1 }), [setUrlFilters]);
+  // País de entrada (#221): el del subdominio por el que entró el prospecto.
+  const setFilterPais = useCallback((v: string) => setUrlFilters({ pais: v, page: 1 }), [setUrlFilters]);
   const setFilterResponsable = useCallback((v: string) => setUrlFilters({ resp: v, page: 1 }), [setUrlFilters]);
   const setFilterProducto = useCallback((v: string) => setUrlFilters({ prod: v, page: 1 }), [setUrlFilters]);
   const setDateRange = useCallback((from: string, to: string) => setUrlFilters({ from, to, page: 1 }), [setUrlFilters]);
@@ -159,6 +170,7 @@ export function useLeads(): UseLeadsResult {
       if (filterEstado) params.set('status', filterEstado);
       if (filterPaso) params.set('pasoProceso', filterPaso);
       if (filterOrigen) params.set('canal', filterOrigen);
+      if (filterPais) params.set('paisEntrada', filterPais);
       if (filterResponsable === 'unassigned') params.set('unassigned', 'true');
       else if (filterResponsable) params.set('responsableId', filterResponsable);
       if (filterProducto) params.set('productId', filterProducto);
@@ -168,6 +180,7 @@ export function useLeads(): UseLeadsResult {
       if (sortDir) params.set('dir', sortDir);
       if (filterDup === '1') params.set('duplicated', 'true');
       if (filterReincidente === '1') params.set('reincidente', 'true');
+      if (qfServidor) params.set('qf', qfServidor);
 
       const res = await client.get(`/leads?${params.toString()}`, { signal: controller.signal });
       if (controller.signal.aborted) return;
@@ -186,7 +199,7 @@ export function useLeads(): UseLeadsResult {
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
-  }, [pid, page, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, page, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, qfServidor]);
 
   // Trae TODOS los leads filtrados (sin paginar) para exportar. El listado va de
   // 20 en 20; el export debe llevarse todo lo filtrado. El backend limita el
@@ -203,6 +216,7 @@ export function useLeads(): UseLeadsResult {
         if (filterEstado) p.set('status', filterEstado);
         if (filterPaso) p.set('pasoProceso', filterPaso);
         if (filterOrigen) p.set('canal', filterOrigen);
+        if (filterPais) p.set('paisEntrada', filterPais);
         if (filterResponsable === 'unassigned') p.set('unassigned', 'true');
         else if (filterResponsable) p.set('responsableId', filterResponsable);
         if (filterProducto) p.set('productId', filterProducto);
@@ -210,6 +224,7 @@ export function useLeads(): UseLeadsResult {
         if (dateTo) p.set('dateTo', dateTo);
         if (filterDup === '1') p.set('duplicated', 'true');
         if (filterReincidente === '1') p.set('reincidente', 'true');
+        if (qfServidor) p.set('qf', qfServidor);
       }
       if (sortMode) p.set('sort', sortMode);
       if (sortDir) p.set('dir', sortDir);
@@ -231,7 +246,7 @@ export function useLeads(): UseLeadsResult {
       page += 1;
     }
     return all;
-  }, [pid, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente]);
+  }, [pid, debouncedSearch, filterEstado, filterPaso, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, sortMode, sortDir, filterDup, filterReincidente, qfServidor]);
 
   useEffect(() => () => {
     if (abortRef.current) abortRef.current.abort();
@@ -246,10 +261,12 @@ export function useLeads(): UseLeadsResult {
       p.set('projectId', String(pid));
       if (debouncedSearch) p.set('search', debouncedSearch);
       if (filterOrigen) p.set('canal', filterOrigen);
+      if (filterPais) p.set('paisEntrada', filterPais);
       if (filterResponsable && filterResponsable !== 'unassigned') p.set('responsableId', filterResponsable);
       if (filterProducto) p.set('productId', filterProducto);
       if (dateFrom) p.set('dateFrom', dateFrom);
       if (dateTo) p.set('dateTo', dateTo);
+      if (filterEstado) p.set('status', filterEstado);
       const res = await client.get<Record<string, number>>(`/leads/stats?${p.toString()}`);
       if (!res.success) return;
       const merged = res.data || {};
@@ -269,7 +286,7 @@ export function useLeads(): UseLeadsResult {
     } catch {
       // Stats son secundarios, no bloquear UI
     }
-  }, [pid, debouncedSearch, filterOrigen, filterResponsable, filterProducto, dateFrom, dateTo]);
+  }, [pid, debouncedSearch, filterOrigen, filterPais, filterResponsable, filterProducto, dateFrom, dateTo, filterEstado]);
 
   useEffect(() => {
     fetchLeads();
@@ -294,6 +311,8 @@ export function useLeads(): UseLeadsResult {
     setFilterPaso,
     filterOrigen,
     setFilterOrigen,
+    filterPais,
+    setFilterPais,
     filterResponsable,
     setFilterResponsable,
     filterProducto,

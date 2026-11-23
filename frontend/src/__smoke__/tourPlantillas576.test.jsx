@@ -35,6 +35,10 @@ beforeEach(() => { localStorage.clear(); });
 describe('El tutorial de Plantillas (#576)', () => {
   it('enseña los cuatro pasos, también el de los datos que se insertan', async () => {
     render(<MemoryRouter><PlantillasPage /></MemoryRouter>);
+    // Nunca se abre solo (#681, gemela de CRM#1012): solo con «Tutorial» (o «Recorrido» arriba).
+    await screen.findByText('Día 1 · Saludo', undefined, ESPERA);
+    expect(screen.queryByText('Tus plantillas, guardadas aquí')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Ver el tutorial' }));
     expect(await screen.findByText('Tus plantillas, guardadas aquí')).toBeInTheDocument();
     siguiente();
     expect(await screen.findByText('Consultar o editar')).toBeInTheDocument();

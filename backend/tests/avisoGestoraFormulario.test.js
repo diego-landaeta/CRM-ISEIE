@@ -78,7 +78,7 @@ const ELEMENTOR = {
 
 function avisoALaGestora() {
   expect(notifyUsers).toHaveBeenCalledWith(expect.objectContaining({
-    targetUserIds: [11], type: 'lead_asignado', link_path: '/prospectos/77',
+    targetUserIds: [11], type: 'lead_asignado', link_path: '/leads/77',
   }));
 }
 

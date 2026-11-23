@@ -141,7 +141,7 @@ export default function FormsPage() {
                 <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                   <button
                     onClick={() => toggleActive(f)}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold ${f.active ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-muted text-muted-foreground'}`}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold ${f.active ? 'bg-success-soft text-success-soft-foreground' : 'bg-muted text-muted-foreground'}`}
                     title={f.active ? 'Apagar form' : 'Encender form'}
                   >
                     <Power size={12} weight="bold" /> {f.active ? 'ON' : 'OFF'}
@@ -150,7 +150,7 @@ export default function FormsPage() {
                     <Code size={12} /> Embed
                   </button>
                   <button onClick={() => setEditing(f)} className="px-3 py-1.5 rounded bg-muted text-xs font-bold">Editar</button>
-                  <button onClick={() => handleDelete(f)} className="p-2 rounded hover:bg-red-50 dark:hover:bg-red-950/40 text-red-500" aria-label="Eliminar"><Trash size={14} /></button>
+                  <button onClick={() => handleDelete(f)} className="p-2 rounded hover:bg-destructive-soft text-destructive" aria-label="Eliminar"><Trash size={14} /></button>
                 </div>
               </div>
             ))}

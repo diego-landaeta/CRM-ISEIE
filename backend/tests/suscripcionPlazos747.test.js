@@ -185,7 +185,7 @@ describe('el aviso', () => {
     expect(c.asunto).toBe('Pago completado: suscripción cerrada · Campus de prueba');
     expect(c.htmlContent).toContain('Venta nº <strong>70</strong>');
     expect(c.htmlContent).toContain('sub_123');
-    expect(c.htmlContent).toMatch(/clientes\/9/);
+    expect(c.htmlContent).toMatch(/clients\/9/); // la ficha de ISEIE es /clients/:id
     expect(c.textContent).toMatch(/no se le cobrará ninguna cuota más/);
   });
 

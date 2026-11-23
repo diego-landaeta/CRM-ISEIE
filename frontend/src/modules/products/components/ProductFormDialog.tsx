@@ -66,6 +66,12 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
   const confirm = useConfirm();
   const [regimenes, setRegimenes] = useState<any[]>([]);
   const [regimenSel, setRegimenSel] = useState('');
+  // Curso vendido sin desarrollar (gemela de CRM#843): al venderlo, el CRM crea
+  // su «Curso pendiente», lo asigna al responsable y le avisa con la fecha límite.
+  const [sinDesarrollar, setSinDesarrollar] = useState(false);
+  const [responsableSel, setResponsableSel] = useState('');
+  const [plazoDias, setPlazoDias] = useState('');
+  const [responsables, setResponsables] = useState<{ id: number; nombre: string }[]>([]);
 
   const {
     register,
@@ -93,12 +99,20 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
         const rr = await client.get(`/invoices/regimenes?projectId=${activeProject.id}`);
         if (rr.success) setRegimenes(rr.data || []);
       } catch {}
+      // Tutores y tutores redactores del campus, para el responsable de desarrollarlo.
+      try {
+        const rt = await client.get('/tutores', { params: { projectId: activeProject.id } });
+        if (rt.success) setResponsables((rt.data || []).filter((t: any) => t.active !== false).map((t: any) => ({ id: t.id, nombre: t.nombre })));
+      } catch { setResponsables([]); }
     })();
   }, [open, activeProject?.id]);
 
   useEffect(() => {
     if (open) {
       setRegimenSel(product?.regimen_fiscal_id ? String(product.regimen_fiscal_id) : '');
+      setSinDesarrollar(!!product?.sin_desarrollar);
+      setResponsableSel(product?.responsable_desarrollo_id ? String(product.responsable_desarrollo_id) : '');
+      setPlazoDias(product?.plazo_desarrollo_dias ? String(product.plazo_desarrollo_dias) : '');
       reset(product ? {
         nombre: product.nombre || '',
         descripcion: product.descripcion || '',
@@ -198,12 +212,17 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
   async function handleFormSubmit(data: any, evento?: { target?: EventTarget | null }) {
     // Sin el globo del navegador (noValidate), «2-» en un número llega vacío:
     // se avisa aquí en vez de guardarlo como si no se hubiera escrito (#106).
-    const falta = avisoDeLoQueFalta(numerosMalEscritos(evento?.target as Element | null));
+    const plazoMal = plazoDias !== '' && !(/^\d+$/.test(plazoDias) && Number(plazoDias) >= 1 && Number(plazoDias) <= 365);
+    const falta = avisoDeLoQueFalta([...numerosMalEscritos(evento?.target as Element | null),
+      ...(plazoMal ? [{ title: 'Revisa «Plazo para desarrollarlo»', description: 'Va de 1 a 365 días, o en blanco.', que: 'un plazo de 1 a 365 días en «Plazo para desarrollarlo»' }] : [])]);
     if (falta) { toast(falta); return; }
     const payload = {
       ...data,
       precio: data.precio === '' || data.precio === null || Number.isNaN(data.precio) ? null : Number(data.precio),
       regimen_fiscal_id: regimenSel ? Number(regimenSel) : null,
+      sin_desarrollar: sinDesarrollar,
+      responsable_desarrollo_id: responsableSel ? Number(responsableSel) : null,
+      plazo_desarrollo_dias: plazoDias ? Number(plazoDias) : null,
     };
     // Normalizar vacios a null
     ['stripe_link', 'sku', 'duracion', 'url_info'].forEach(k => { if (!payload[k]) payload[k] = null; });
@@ -363,6 +382,37 @@ export default function ProductFormDialog({ open, onClose, product, onSubmit }: 
                 ariaLabel="Régimen fiscal"
               />
             </Field>
+          </div>
+
+          {/* === Sin desarrollar (gemela de CRM#843): vender crea el «Curso pendiente» solo === */}
+          <div className="p-3 bg-muted/20 rounded-md border border-border space-y-3">
+            <label className="flex items-start gap-2 text-sm">
+              <input type="checkbox" checked={sinDesarrollar} onChange={(e) => setSinDesarrollar(e.target.checked)} className="mt-0.5" />
+              <span>
+                <strong>Sin desarrollar</strong>
+                <span className="block text-xs text-muted-foreground">
+                  Se vende pero aún no está hecho. Al registrar una venta se crea su curso pendiente (o se suma la alumna) y se avisa al responsable con la fecha límite.
+                </span>
+              </span>
+            </label>
+            {sinDesarrollar && (
+              <FilaCampos columnas={2}>
+                <Field label="Responsable de desarrollarlo" htmlFor="producto-responsable-desarrollo">
+                  <select id="producto-responsable-desarrollo" value={responsableSel} onChange={(e) => setResponsableSel(e.target.value)} className={inputClass}>
+                    <option value="">Lo asigna administración tras la venta</option>
+                    {/* El que ya tiene siempre sale, aunque no esté en la lista del campus. */}
+                    {responsableSel && !responsables.some((t) => String(t.id) === responsableSel) && (
+                      <option value={responsableSel}>Responsable actual</option>
+                    )}
+                    {responsables.map((t) => <option key={t.id} value={String(t.id)}>{t.nombre}</option>)}
+                  </select>
+                </Field>
+                <Field label="Plazo para desarrollarlo (días)" htmlFor="producto-plazo-desarrollo">
+                  <input autoComplete="off" id="producto-plazo-desarrollo" value={plazoDias} onChange={(e) => setPlazoDias(e.target.value)}
+                    type="number" min="1" max="365" placeholder="en blanco: el de serie" className={inputClass} />
+                </Field>
+              </FilaCampos>
+            )}
           </div>
 
           {/* === Datos del programa (importados del scraper / WC) === */}

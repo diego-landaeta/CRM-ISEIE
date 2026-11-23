@@ -5,6 +5,7 @@ import { query } from '../../shared/config/db.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { refreshGoogleAdsAccessToken } from '../../shared/services/googleAds.service.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
+import { claveDeIA, ORIGENES, DONDE_SE_CONFIGURA, probarClaveDeIA } from './clave-ia.js';
 
 /**
  * Lo que ve de las claves quien no ve todo el CRM (CRM#632 / ISEIE#359).
@@ -21,6 +22,30 @@ async function recortar(req, filas) {
   return filas
     .filter((c) => c.project_id == null || mios.includes(Number(c.project_id)))
     .map((c) => (c.project_id == null ? { ...c, masked_value: '••••••••' } : c));
+}
+
+/**
+ * GET /api/credentials/ia[?projectId=N] — qué clave de IA se usa DE VERDAD
+ * (CRM#893): la del campus, la global de la web o la del servidor. Nunca la
+ * clave: solo de dónde sale. Con un campus que no es suyo, la global.
+ */
+export async function iaEnUso(req, res, next) {
+  try {
+    let projectId = req.query.projectId ? Number(req.query.projectId) : null;
+    if (!Number.isInteger(projectId) || projectId <= 0) projectId = null;
+    if (projectId && !veTodoElCrm(req.user)) {
+      const mios = await campusDeLaPersona(req.user?.userId);
+      if (!mios.includes(projectId)) projectId = null;
+    }
+    const { origen } = await claveDeIA(projectId, { soloMirar: true });
+    res.json({
+      success: true,
+      data: {
+        origen,
+        texto: origen ? `La IA usa ${ORIGENES[origen]}.` : `No hay ninguna clave de Claude: la IA no funciona. Se pone en ${DONDE_SE_CONFIGURA}.`,
+      },
+    });
+  } catch (err) { next(err); }
 }
 
 export async function list(req, res, next) {
@@ -88,7 +113,21 @@ export async function test(req, res, next) {
       });
     }
 
-    // Resto de servicios: stub (solo verifica que decrypta bien).
+    if (row.service === 'claude') {
+      // CRM#893: la clave de IA se prueba contra Anthropic, sin gastar tokens.
+      let clave;
+      try {
+        clave = decrypt(row.encrypted_value, row.iv, row.auth_tag);
+      } catch (err) {
+        await model.recordTestResult(id, 'failed');
+        return res.json({ success: true, data: { result: 'failed', message: `Decrypt fallo: ${err.message}` } });
+      }
+      const r = await probarClaveDeIA(clave);
+      await model.recordTestResult(id, r.result);
+      return res.json({ success: true, data: r });
+    }
+
+    // Resto de servicios: stub (no prueba la clave contra su servicio).
     await model.recordTestResult(id, 'ok');
     res.json({ success: true, data: { result: 'ok', message: 'Credencial decrypted correctamente. Test real disponible solo para google_ads (F2-014).' } });
   } catch (err) {

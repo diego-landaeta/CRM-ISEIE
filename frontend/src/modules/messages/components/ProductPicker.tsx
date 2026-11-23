@@ -82,8 +82,8 @@ export default function ProductPicker({ open, onSelect, onClose }: Props) {
             onClick={() => onSelect(p)}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-muted/50 text-left transition-colors"
           >
-            <div className="w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-              <Package size={16} weight="fill" className="text-amber-500" />
+            <div className="w-8 h-8 rounded-full bg-warning-soft flex items-center justify-center flex-shrink-0">
+              <Package size={16} weight="fill" className="text-warning" />
             </div>
             <div className="flex-1 min-w-0">
               <span className="text-xs font-medium truncate block">{p.nombre}</span>

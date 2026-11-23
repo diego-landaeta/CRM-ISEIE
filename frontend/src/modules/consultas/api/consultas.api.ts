@@ -33,6 +33,19 @@ export interface ConsultaFila {
   sin_enviar: number;
 }
 
+/** La ficha del alumno junto a la conversación (#679). */
+export interface ContextoConsulta {
+  campusUrl: string | null;
+  perfilUrl: string | null;
+  conversacionUrl: string | null;
+  cursos: Array<{ id: number; nombre: string | null; ultimoAcceso: string | null; url: string }>;
+  entregas: Array<{ tareaId: number; tarea: string | null; cursoId: number; curso: string | null; entregadaAt: string | null; corregirUrl: string;
+    /** Si la tutora que mira puede corregirla desde el CRM (da clase en ese curso y se califica con número). */
+    enElCrm: boolean }>;
+  anteriores: Array<{ id: number; estado: EstadoConsulta; entradaAt: string; resumen: string }>;
+  error: string | null;
+}
+
 export interface AdjuntoConsulta { id: number; mensaje_id: number; nombre: string; tipo: string | null; tamano: number | null }
 
 export interface MensajeConsulta {
@@ -49,15 +62,33 @@ export interface MensajeConsulta {
 
 export interface EventoConsulta { tipo: string; at: string; quien: string | null; detalle: Record<string, unknown> | null }
 
+/** Nota interna (#679): solo del personal; el alumno no la ve nunca. */
+export interface NotaInterna { id: number; texto: string; at: string; autor_user_id: number | null; autor_nombre: string | null }
+/** Respuesta guardada: personal (la sigue a cualquier equipo) o del campus (la define coordinación). */
+export interface RespuestaGuardada { id: number; titulo: string; texto: string; project_id: number | null; campus: string | null; personal: boolean }
+
+/** Quién está en el chat de grupo de la consulta (plugin 1.9.0), con su id de Moodle. */
+export interface ParticipanteChat { id: number; nombre: string | null; tutora: boolean; alumno: boolean }
+/** 'plugin': el chat del alumno con las tutoras de su curso · 'curso': la conversación de un grupo del curso (la leen todos sus alumnos). */
+export type TipoDeGrupo = 'plugin' | 'curso';
+
 export interface ConsultaDetalle extends ConsultaFila {
+  /** El chat de grupo del alumno con las tutoras del curso (#679, plugin 1.9.0); null = conversación privada. */
+  conversacion_grupo_id?: number | string | null;
+  /** Quién estaba en ese chat en el último mensaje. */
+  participantes?: ParticipanteChat[] | null;
+  /** De qué chat de grupo es (null en las privadas). */
+  grupo_tipo?: TipoDeGrupo | null;
   mensajes: MensajeConsulta[];
   eventos: EventoConsulta[];
+  notas?: NotaInterna[];
   plazoHoras: number;
   /** 'tutor' = es la suya (responde y cierra) · 'admin' = la ve administración (cierra y reasigna). */
   puedes: 'tutor' | 'admin';
 }
 
-export interface ListaConsultas { consultas: ConsultaFila[]; plazoHoras: number }
+/** `total`: cuántas encajan con el filtro aunque la lista venga recortada por su tope. */
+export interface ListaConsultas { consultas: ConsultaFila[]; total?: number; plazoHoras: number }
 
 export interface FiltrosConsultas {
   estado?: 'pendientes' | EstadoConsulta;
@@ -137,6 +168,12 @@ export interface Metricas {
 
 export interface Ambito { projectId?: number | null; issuerId?: number | null }
 
+/**
+ * El token del tutor en cada campus (#188). Con `por_plugin` (#850), la respuesta desde el
+ * CRM sale por el plugin del campus en su nombre y su token no hace falta.
+ */
+export interface TokenDelTutor { project_id: number; campus: string; estado: string | null; tiene_token: boolean; por_plugin?: boolean }
+
 const qs = (o: Record<string, string | number | boolean | null | undefined>) => {
   const p = new URLSearchParams();
   for (const [k, v] of Object.entries(o)) if (v !== undefined && v !== null && v !== '' && v !== false) p.set(k, String(v));
@@ -145,6 +182,16 @@ const qs = (o: Record<string, string | number | boolean | null | undefined>) => 
 };
 
 export const consultasApi = {
+  anotar: (id: number, texto: string) =>
+    client.post(`/consultas/${id}/notas`, { texto }) as Promise<ApiResponse<NotaInterna[]>>,
+  respuestas: () => client.get('/consultas/respuestas') as Promise<ApiResponse<RespuestaGuardada[]>>,
+  crearRespuesta: (datos: { titulo: string; texto: string; projectId?: number | null }) =>
+    client.post('/consultas/respuestas', datos) as Promise<ApiResponse<RespuestaGuardada[]>>,
+  cambiarRespuesta: (rid: number, datos: { titulo: string; texto: string }) =>
+    client.put(`/consultas/respuestas/${rid}`, datos) as Promise<ApiResponse<RespuestaGuardada[]>>,
+  borrarRespuesta: (rid: number) => client.delete(`/consultas/respuestas/${rid}`) as Promise<ApiResponse<RespuestaGuardada[]>>,
+  importarRespuestas: (respuestas: Array<{ titulo: string; texto: string }>) =>
+    client.post('/consultas/respuestas/importar', { respuestas }) as Promise<ApiResponse<{ importadas: number; respuestas: RespuestaGuardada[] }>>,
   mias: (f: FiltrosConsultas = {}) =>
     client.get(`/consultas/mias${qs({ estado: f.estado, buscar: f.buscar })}`) as Promise<ApiResponse<ListaConsultas>>,
   panel: (ambito: { projectId?: number | null; issuerId?: number | null }, f: FiltrosConsultas = {}) =>
@@ -154,6 +201,7 @@ export const consultasApi = {
       estado: f.estado, sinTutor: f.sinTutor ? 1 : undefined, buscar: f.buscar,
     })}`) as Promise<ApiResponse<ListaConsultas>>,
   ver: (id: number) => client.get(`/consultas/${id}`) as Promise<ApiResponse<ConsultaDetalle>>,
+  contexto: (id: number) => client.get(`/consultas/${id}/contexto`) as Promise<ApiResponse<ContextoConsulta>>,
   responder: (id: number, texto: string, adjuntos: File[]) => {
     const fd = new FormData();
     fd.append('texto', texto);
@@ -173,7 +221,7 @@ export const consultasApi = {
       issuerId: ambito.issuerId || undefined,
     })}`, {}) as Promise<ApiResponse<Array<{ projectId: number; nuevos?: number; errores?: string[] }>>>,
   tokensDelTutor: (tutorId: number) =>
-    client.get(`/consultas/tutores/${tutorId}/tokens`) as Promise<ApiResponse<Array<{ project_id: number; campus: string; estado: string | null; tiene_token: boolean }>>>,
+    client.get(`/consultas/tutores/${tutorId}/tokens`) as Promise<ApiResponse<Array<TokenDelTutor>>>,
   guardarToken: (tutorId: number, projectId: number, token: string | null) =>
     client.put(`/consultas/tutores/${tutorId}/token`, { projectId, token }) as Promise<ApiResponse<{ project_id: number; tiene_token: boolean }>>,
 
@@ -181,7 +229,7 @@ export const consultasApi = {
   alumnosSinMensajes: (ambito?: Ambito) =>
     client.get(`/consultas/alumnos-sin-mensajes${qs(ambito ? {
       todas: 1, projectId: ambito.projectId && ambito.projectId > 0 ? ambito.projectId : undefined, issuerId: ambito.issuerId || undefined,
-    } : {})}`) as Promise<ApiResponse<{ alumnos: AlumnoSinMensajes[]; diasAmbar: number; diasRojo: number }>>,
+    } : {})}`) as Promise<ApiResponse<{ alumnos: AlumnoSinMensajes[]; total?: number; diasAmbar: number; diasRojo: number }>>,
   escribirAlAlumno: (id: number, texto: string) =>
     client.post(`/consultas/alumnos/${id}/escribir`, { texto }) as Promise<ApiResponse<{ consultaId: number; enviado: boolean; error: string | null }>>,
   miCarga: () => client.get('/consultas/carga') as Promise<ApiResponse<MiCarga>>,

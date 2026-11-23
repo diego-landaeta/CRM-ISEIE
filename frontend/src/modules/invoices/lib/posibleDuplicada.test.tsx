@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest';
 import { act } from '@testing-library/react';
-import { posibleDuplicada, textoDuplicada, fechaLegible, preguntarSiEmitirDuplicada, type OtraFactura } from './posibleDuplicada';
+import { posibleDuplicada, textoDuplicada, tituloDuplicada, fechaLegible, preguntarSiEmitirDuplicada, type OtraFactura } from './posibleDuplicada';
 import { emitirPreguntandoSiPasa } from './masQueLoCobrado';
 
 /*
@@ -34,7 +34,19 @@ describe('reconocer el aviso', () => {
   it('el texto del diálogo', () => {
     expect(fechaLegible('2026-11-17')).toBe('17/11/2026');
     expect(textoDuplicada(otra)).toBe(
-      'Ya existe la factura 2026/0123 de este cliente por el mismo importe el día 17/11/2026. ¿Emitir otra igualmente?');
+      'Posible duplicada de la factura 2026/0123 de Cliente de prueba (125,50 €, 17/11/2026): '
+      + 'mismo importe, a 7 días o menos, y parece del mismo cliente.');
+  });
+
+  // Ana (CEDIA), 20/11/2026: leyó «ya existe la factura 2026/0296 de este
+  // cliente» como «el número 296 está ocupado». La otra era de otra clienta.
+  it('dice de quién es la otra y en qué se parece', () => {
+    const alba: OtraFactura = { numero: '2026/0296', fecha: '2026-11-16', importe: 784, cliente: 'Alba Santos Ruescas', nif: '0000', coincide: 'nif' };
+    expect(tituloDuplicada(alba)).toBe('Posible duplicada de la factura 2026/0296 de Alba Santos Ruescas');
+    expect(textoDuplicada(alba)).toContain('mismo NIF (0000)');
+    expect(textoDuplicada({ ...alba, coincide: 'venta' })).toContain('es de la misma venta');
+    expect(textoDuplicada({ ...alba, coincide: 'nombre' })).toContain('mismo nombre de cliente');
+    expect(textoDuplicada(alba)).not.toMatch(/ya existe/i);
   });
 });
 
@@ -46,12 +58,13 @@ describe('el diálogo', () => {
     expect(document.querySelector('[role="dialog"]')).toBeNull();
   };
 
-  it('sale con el texto y los dos botones; «Emitir igualmente» → sí', async () => {
+  it('sale con quién es la otra y los dos botones; «Es otra, emitir igualmente» → sí', async () => {
     let respuesta!: Promise<boolean>;
     await act(async () => { respuesta = preguntarSiEmitirDuplicada(otra); });
-    expect(document.body.textContent).toContain(textoDuplicada(otra));
-    expect(boton('Cancelar')).toBeTruthy();
-    await act(async () => { boton('Emitir igualmente').click(); });
+    expect(document.body.textContent).toContain(tituloDuplicada(otra));
+    expect(document.body.textContent).toContain('Cliente de prueba');
+    expect(boton('Cancelar, es la misma')).toBeTruthy();
+    await act(async () => { boton('Es otra, emitir igualmente').click(); });
     await expect(respuesta).resolves.toBe(true);
     await seCierra();
   });
@@ -59,7 +72,7 @@ describe('el diálogo', () => {
   it('«Cancelar» → no', async () => {
     let respuesta!: Promise<boolean>;
     await act(async () => { respuesta = preguntarSiEmitirDuplicada(otra); });
-    await act(async () => { boton('Cancelar').click(); });
+    await act(async () => { boton('Cancelar, es la misma').click(); });
     await expect(respuesta).resolves.toBe(false);
     await seCierra();
   });

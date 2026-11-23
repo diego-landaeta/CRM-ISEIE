@@ -415,6 +415,7 @@ export function motivoDelError(ultimoError) {
   if (m) return { codigo: m[1], texto: t.slice(m[0].length) };
   const porTexto = [
     [/^Ya existe la factura .*confírmalo/s, 'POSIBLE_DUPLICADA'],
+    [/^Posible duplicada de la factura /, 'POSIBLE_DUPLICADA'],
     [/facturación está pausada/i, 'FACTURACION_PAUSADA'],
     [/^Espera su turno/, 'HAY_ANTERIORES'],
     [/no tiene el CIF/, 'EMISOR_SIN_CIF'],
@@ -482,7 +483,7 @@ async function avisarGestora(conversionId, mensaje) {
       type: 'factura_automatica',
       title: 'Una factura espera revisión en la cola',
       message: mensaje,
-      link_path: v.lead_id ? `/clientes/${v.lead_id}` : null,
+      link_path: v.lead_id ? `/clients/${v.lead_id}` : null,
       metadata: { conversion_id: conversionId },
     });
   } catch (err) {

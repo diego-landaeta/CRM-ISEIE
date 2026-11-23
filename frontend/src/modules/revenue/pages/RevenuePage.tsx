@@ -7,6 +7,8 @@ import { CurrencyEur, TrendUp, Receipt, CheckCircle } from '@phosphor-icons/reac
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { formatNumber, formatDate } from '@/shared/lib/format';
 import { soloFecha } from '@/shared/lib/fechas';
+// El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type TipoPago = 'pago_completo' | 'abono_parcial' | string;
 
@@ -26,8 +28,8 @@ interface MonthlyPoint {
 }
 
 const TIPO_STYLES: Record<string, string> = {
-  pago_completo: 'bg-emerald-50 text-emerald-600',
-  abono_parcial: 'bg-amber-50 text-amber-600',
+  pago_completo: 'bg-success-soft text-success-soft-foreground',
+  abono_parcial: 'bg-warning-soft text-warning-soft-foreground',
 };
 
 function fmt(n: number | string | null | undefined): string {
@@ -51,9 +53,9 @@ interface CustomTooltipProps {
 function CustomTooltip({ active, payload, label }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   return (
-    <div className="bg-zinc-900 text-white text-xs font-semibold px-3 py-2 rounded-lg">
-      {label}: <span className="text-emerald-300">{fmt(payload[0].value)} €</span>
-    </div>
+        <div className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-semibold text-foreground shadow-lg">
+      {label}: <span className="text-success">{fmt(payload[0].value)} €</span>
+     </div>
   );
 }
 
@@ -107,38 +109,41 @@ export default function RevenuePage() {
   const recent = conversions.slice(0, 20);
 
   return (
-    <div className="space-y-6">
+    // El recorrido trae cada parte a la vista: en el móvil, por debajo de la barra
+    // fija de arriba (h-14), no escondida detrás (#619).
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-20 lg:[&_[data-recorrido]]:scroll-mt-4">
       <PageHeader
         title="Ingresos"
         subtitle={`Conversiones, pagos y evolución${activeProject?.nombre ? ' — ' + activeProject.nombre : ''}`}
+        actions={<VerRecorrido id="conversiones" listo={!loading} />}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div data-recorrido="conversiones-tarjetas" className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-card p-6 rounded-lg border border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-md bg-emerald-50 flex items-center justify-center text-emerald-600"><CurrencyEur size={20} weight="regular" /></div>
-            <span className="text-[10px] font-bold bg-emerald-50 text-emerald-600 px-2 py-1 rounded-full flex items-center gap-1"><TrendUp size={12} weight="bold" />Este mes</span>
+                        <div className="w-10 h-10 rounded-md bg-success-soft flex items-center justify-center text-success-soft-foreground"><CurrencyEur size={20} weight="regular" /></div>
+            <span className="text-[10px] font-bold bg-success-soft text-success-soft-foreground px-2 py-1 rounded-full flex items-center gap-1"><TrendUp size={12} weight="bold" />Este mes</span>
           </div>
           <p className="text-xs text-muted-foreground">Ingresos del mes</p>
           <h3 className="text-3xl font-semibold mt-1">{fmt(stats.ingresosMes)} &euro;</h3>
         </div>
         <div className="bg-card p-6 rounded-lg border border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-md bg-violet-50 flex items-center justify-center text-violet-600"><CheckCircle size={20} weight="regular" /></div>
+          <div className="w-10 h-10 rounded-md bg-primary/10 flex items-center justify-center text-primary"><CheckCircle size={20} weight="regular" /></div>
           </div>
           <p className="text-xs text-muted-foreground">Conversiones del mes</p>
           <h3 className="text-3xl font-semibold mt-1">{stats.convertidoMes}</h3>
         </div>
         <div className="bg-card p-6 rounded-lg border border-border">
           <div className="flex items-center justify-between mb-4">
-            <div className="w-10 h-10 rounded-md bg-blue-50 flex items-center justify-center text-blue-600"><Receipt size={20} weight="regular" /></div>
+          <div className="w-10 h-10 rounded-md bg-info-soft flex items-center justify-center text-info-soft-foreground"><Receipt size={20} weight="regular" /></div>
           </div>
           <p className="text-xs text-muted-foreground">Ticket medio</p>
           <h3 className="text-3xl font-semibold mt-1">{fmt(stats.ticketMedio)} &euro;</h3>
         </div>
       </div>
 
-      <div className="bg-card p-6 rounded-lg border border-border">
+      <div data-recorrido="conversiones-evolucion" className="bg-card p-6 rounded-lg border border-border">
         <div className="mb-6">
           <h3 className="font-semibold">Evolucion de Ingresos</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">Últimos 6 meses</p>
@@ -160,7 +165,7 @@ export default function RevenuePage() {
         </ResponsiveContainer>
       </div>
 
-      <div className="bg-card rounded-lg border border-border overflow-x-auto">
+      <div data-recorrido="conversiones-lista" className="bg-card rounded-lg border border-border overflow-x-auto">
         <div className="p-5">
           <h3 className="font-semibold">Conversiones Recientes</h3>
           <p className="text-[11px] text-muted-foreground mt-0.5">Últimos pagos registrados</p>

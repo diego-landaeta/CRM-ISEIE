@@ -32,7 +32,7 @@ deploy atómico via `scripts/deploy-frontend.sh`.
 | Capa | Tecnología | Estado |
 |---|---|---|
 | Frontend | React 18 + Vite + TypeScript + Tailwind + shadcn/ui | Producción |
-| Backend | Node 20 + Express + ES modules + pg + Zod + bcrypt + JWT + pino | Producción |
+| Backend | Node 24 (mínimo 22; `.nvmrc`) + Express + ES modules + pg + Zod + bcrypt + JWT + pino | Producción |
 | DB | PostgreSQL 14 (en VPS) | `crm_iseie` |
 | Process manager | PM2 fork mode, puerto 3005 | `crm-iseie-api` |
 | Reverse proxy | nginx con HTTP/2 + SSL + cache 1 año immutable para /assets | Configurado |

@@ -70,8 +70,9 @@ beforeAll(() => {
     }
     // Secuencias de correo (ruta en español desde la paridad con MultiCRM): una lista.
     if (u.includes('/secuencias-email')) return forma([]);
+    // Las convocatorias de la ficha del prospecto (#86) también son listas.
     // Endpoints que devuelven array en la app real (mayoría son listas o catálogos).
-    const isList = /\/(leads|products|conversions|notifications|matriculas|forms|expenses|payments|email-sequences|email-templates|reports|status|commissions|payroll|accounts-payable|shortcuts|categories|field-definitions|make-webhooks|woocommerce|wc|credentials|users|availability|deliveries|sync-runs|rules|periods|spam-reports|sales|interactions|reminders)(\/|\?|$)/.test(u)
+    const isList = /\/(leads|products|conversions|notifications|matriculas|forms|expenses|payments|email-sequences|email-templates|reports|status|commissions|payroll|accounts-payable|shortcuts|categories|field-definitions|make-webhooks|woocommerce|wc|credentials|users|availability|deliveries|sync-runs|rules|periods|spam-reports|sales|interactions|reminders|convocatorias)(\/|\?|$)/.test(u)
       || u.includes('/by-lead/') || u.includes('/dashboard-summary') || u.includes('/stats')
       || u.includes('/today') || u.includes('/tree') || u.includes('/runs');
     return Promise.resolve({

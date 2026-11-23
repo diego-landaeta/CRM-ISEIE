@@ -86,8 +86,25 @@ export function condicionParecida({ nombre, nif, total, fecha, conversionId = 'N
      )`;
 }
 
-const COLUMNAS = `i.id, i.codigo, i.fecha_emision::date::text AS fecha,
-       i.total::float8 AS total, i.cliente_nombre`;
+/*
+  EN QUE SE PARECEN. Ana (CEDIA), 20/11/2026: el aviso decia «ya existe la
+  factura 2026/0296 de este cliente» y lo leyo como «el numero 296 esta
+  ocupado»; la clienta era otra, solo coincidia el importe del mismo diplomado.
+  Ahora se dice de QUIEN es la otra y POR QUE se parecen, para que se pueda
+  decidir mirando la pantalla. Mismas expresiones que `condicionParecida`.
+*/
+export function coincidenciaSql({ nombre, nif, conversionId = 'NULL' }) {
+  const n = NOMBRE_NORMALIZADO(nombre);
+  const f = NIF_NORMALIZADO(nif);
+  return `CASE
+      WHEN ${conversionId}::int IS NOT NULL AND i.conversion_id = ${conversionId}::int THEN 'venta'
+      WHEN ${f} IS NOT NULL AND ${NIF_NORMALIZADO('i.cliente_nif')} = ${f} THEN 'nif'
+      ELSE 'nombre' END`;
+}
+
+const columnas = (coincide) => `i.id, i.codigo, i.fecha_emision::date::text AS fecha,
+       i.total::float8 AS total, i.cliente_nombre, i.cliente_nif,
+       ${coincide} AS coincide`;
 
 /** Lo que viaja al frontal: numero, fecha e importe de la otra factura. */
 export function comoOtra(r) {
@@ -98,6 +115,9 @@ export function comoOtra(r) {
     fecha: r.fecha,
     importe: Number(r.total),
     cliente: r.cliente_nombre || null,
+    nif: r.cliente_nif || null,
+    // 'venta' | 'nif' | 'nombre': en que se parece a la que se va a emitir.
+    coincide: r.coincide || null,
   };
 }
 
@@ -111,7 +131,7 @@ export async function buscarPosibleDuplicada(
 ) {
   if (total == null || !Number.isFinite(Number(total))) return null;
   const { rows } = await exec(
-    `SELECT ${COLUMNAS}
+    `SELECT ${columnas(coincidenciaSql({ nombre: '$1::text', nif: '$2::text', conversionId: '$5' }))}
        FROM invoices i
       WHERE ${condicionParecida({
         nombre: '$1::text', nif: '$2::text', total: '$3', fecha: '$4',
@@ -130,12 +150,23 @@ function fechaLegible(iso) {
 }
 
 /** El 409 que para la emision. Lleva la otra factura en `data.otra`. */
-export function errorPosibleDuplicada(otra) {
+/** Por que se parecen, en una frase corta. */
+export function porQueSeParece(otra) {
+  if (otra?.coincide === 'venta') return 'es de la misma venta';
+  if (otra?.coincide === 'nif') return `tiene el mismo NIF${otra.nif ? ` (${otra.nif})` : ''}`;
+  return 'tiene el mismo nombre de cliente';
+}
+
+/** El texto del aviso: de quien es la otra factura y por que se parece. */
+export function textoPosibleDuplicada(otra) {
   const importe = Number(otra.importe).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  return new AppError(
-    `Ya existe la factura ${otra.numero} de este cliente por el mismo importe (${importe} €) `
-    + `el día ${fechaLegible(otra.fecha)}. Si de verdad es otra factura, confírmalo para emitirla igualmente.`,
-    409, CODIGO, { otra });
+  return `Posible duplicada de la factura ${otra.numero} de ${otra.cliente || 'sin nombre'} `
+    + `(${importe} €, ${fechaLegible(otra.fecha)}): mismo importe, a 7 días o menos, y ${porQueSeParece(otra)}. `
+    + 'Si es otra (por ejemplo, otra cuota), emítela igualmente.';
+}
+
+export function errorPosibleDuplicada(otra) {
+  return new AppError(textoPosibleDuplicada(otra), 409, CODIGO, { otra });
 }
 
 /**
@@ -182,7 +213,9 @@ export async function duplicadasDeLaCola(paymentIds, exec = query) {
           ORDER BY f.id DESC LIMIT 1
        ) fd ON true
        CROSS JOIN LATERAL (
-         SELECT ${COLUMNAS}
+         SELECT ${columnas(coincidenciaSql({
+           nombre: nombreFactura, nif: 'COALESCE(fd.nif, l.identificacion_fiscal)', conversionId: 'c.id',
+         }))}
            FROM invoices i
           WHERE ${condicionParecida({
             nombre: nombreFactura, nif: 'COALESCE(fd.nif, l.identificacion_fiscal)', total: 'cp.importe',

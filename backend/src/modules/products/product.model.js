@@ -44,6 +44,7 @@ const LIST_COLS = [
   'p.source_type', 'p.wc_product_id',
   'p.categoria_id', 'p.subcategoria_id', 'p.regimen_fiscal_id',
   'p.plazas_totales', 'p.plazas_ocupadas_previas', 'p.fecha_cierre_convocatoria',
+  'p.sin_desarrollar', 'p.responsable_desarrollo_id', 'p.plazo_desarrollo_dias',
   'p.active', 'p.created_at', 'p.updated_at',
   // descripcion va recortada (los textos largos rompen perf)
   "LEFT(p.descripcion, 280) AS descripcion",
@@ -90,13 +91,16 @@ export async function findById(id) {
   return rows[0] || null;
 }
 
-export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id }) {
+export async function create({ projectId, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id,
+  sin_desarrollar = false, responsable_desarrollo_id = null, plazo_desarrollo_dias = null }) {
   const { rows } = await query(
-    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id)
-     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'EUR'), $8, $9, $10, $11, $12)
+    `INSERT INTO products (project_id, nombre, descripcion, categoria_id, subcategoria_id, precio, moneda, stripe_link, sku, duracion, url_info, regimen_fiscal_id,
+                           sin_desarrollar, responsable_desarrollo_id, plazo_desarrollo_dias)
+     VALUES ($1, $2, $3, $4, $5, $6, COALESCE($7, 'EUR'), $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [projectId, nombre, descripcion, categoria_id || null, subcategoria_id || null,
-     precio ?? null, moneda || null, stripe_link || null, sku || null, duracion || null, url_info || null, regimen_fiscal_id || null]
+     precio ?? null, moneda || null, stripe_link || null, sku || null, duracion || null, url_info || null, regimen_fiscal_id || null,
+     !!sin_desarrollar, responsable_desarrollo_id || null, plazo_desarrollo_dias || null]
   );
   return rows[0];
 }
@@ -109,7 +113,9 @@ export async function update(id, data) {
                    'plazas_totales', 'plazas_ocupadas_previas', 'fecha_cierre_convocatoria',
                    'presentacion_texto', 'objetivos_texto', 'beneficios_texto',
                    'dirigido_a_texto', 'para_que_te_prepara_texto', 'por_que_estudiar_texto',
-                   'modulos_texto', 'metodologia_texto', 'faqs_texto', 'profesores_texto'];
+                   'modulos_texto', 'metodologia_texto', 'faqs_texto', 'profesores_texto',
+                   // #770 · cursos vendidos sin desarrollar
+                   'sin_desarrollar', 'responsable_desarrollo_id', 'plazo_desarrollo_dias'];
   const fields = [];
   const values = [];
   let idx = 1;

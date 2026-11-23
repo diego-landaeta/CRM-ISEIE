@@ -12,7 +12,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
-import { posibleDuplicada, preguntarSiEmitirDuplicada, fechaLegible, type OtraFactura } from '../lib/posibleDuplicada';
+import { posibleDuplicada, preguntarSiEmitirDuplicada, textoDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
 import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
 
 type ColaItem = {
@@ -36,7 +36,7 @@ function EstadoDatosFiscales({ d }: { d: ColaItem['datos_fiscales'] }) {
   if (!texto) return null;
   const tono = necesitaPersona(d) ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground';
   return (
-    <span className={`block whitespace-normal text-[10px] ${tono}`} title={d.detalle || d.motivo || undefined}>
+    <span className={`block whitespace-normal text-[10px] ${tono}`} title={d.detalle || d.motivo || undefined} data-recorrido="cola-datos-fiscales">
       {texto}
     </span>
   );
@@ -182,7 +182,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <div className="bg-card border border-border rounded-lg p-4" data-recorrido="cola-facturacion">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
@@ -275,9 +275,10 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                       {c.cliente || '—'}
                       {c.motivo && (
                         <span
+                          data-recorrido="cola-motivo"
                           className="block w-fit mt-0.5 px-1.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] font-semibold"
                           title={c.posible_duplicada
-                            ? `Ya existe la factura ${c.posible_duplicada.numero} de este cliente por el mismo importe el día ${fechaLegible(c.posible_duplicada.fecha)}.`
+                            ? textoDuplicada(c.posible_duplicada)
                             : undefined}
                         >
                           {c.motivo}
@@ -287,7 +288,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                     </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>
                     <td className="px-2 py-1.5">
-                      <span className="inline-flex items-center gap-1 text-muted-foreground">
+                      <span className="inline-flex items-center gap-1 text-muted-foreground" data-recorrido="cola-origen">
                         {c.origen === 'stripe'
                           ? <><CreditCard size={11} weight="bold" /> Stripe</>
                           : <><User size={11} weight="bold" /> Manual</>}
@@ -299,6 +300,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                         <button
                           type="button"
                           onClick={() => generarDeLaFila(c.payment_id, c.posible_duplicada || null)}
+                          data-recorrido="cola-generar"
                           disabled={generando === c.payment_id}
                           className={`h-6 px-2 rounded font-semibold whitespace-nowrap disabled:opacity-40 ${
                             c.es_el_siguiente

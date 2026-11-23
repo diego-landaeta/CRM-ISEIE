@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, lazy, Suspense } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useLeads } from '../hooks/useLeads';
 import { useWhatsappTemplates } from '../hooks/useWhatsappTemplates';
 import LeadFormDialog from '../components/LeadFormDialog';
@@ -17,7 +17,7 @@ import SiguientesAcciones from '../components/SiguientesAcciones';
 import UltimoLeadAsignado from '../components/UltimoLeadAsignado';
 import AccesosClave from '@/shared/components/ui/AccesosClave';
 import BloquePlegable from '@/shared/components/ui/BloquePlegable';
-import { Gear, ArrowCounterClockwise, ListChecks,
+import {
   MagnifyingGlass,
   Plus,
   Kanban,
@@ -74,12 +74,15 @@ import AtajosDeFicha from '../components/AtajosDeFicha';
 import ReminderQuickDialog from '../components/ReminderQuickDialog';
 import BulkActionBar from '../components/BulkActionBar';
 import usePermission from '@/shared/hooks/usePermission';
+import { etiquetaCampusPais, nombreDelPais } from '@/shared/lib/paises';
 import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import { yaPaso } from '@/shared/lib/fechas';
-import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
+import LoQueTocaHoyYManana from '../components/LoQueTocaHoyYManana';
+// El recorrido guiado de la pantalla (#611, gemela de CRM#928): señala, paso a paso, cada parte.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
-import { entroEnElProceso } from '@/shared/lib/enElProceso';
+import { qfDelServidor } from '../lib/filtrosRapidos';
 import {
   getInitials,
   getAvatarColor,
@@ -160,6 +163,7 @@ export default function LeadsPage() {
     filterEstado, setFilterEstado,
     filterPaso, setFilterPaso,
     filterOrigen, setFilterOrigen,
+    filterPais, setFilterPais,
     filterResponsable, setFilterResponsable,
     filterProducto, setFilterProducto,
     dateFrom, dateTo, setDateRange,
@@ -265,7 +269,8 @@ export default function LeadsPage() {
       const ignoreFilters = scope === 'todos';
       const todos = await fetchAllForExport({ ignoreFilters });
       if (exportReqRef.current !== myReq) return;
-      setExportRows(ignoreFilters ? todos : aplicarQuickFilter(todos));
+      // El filtro rápido ya lo aplica el servidor (`qf` en la petición).
+      setExportRows(todos);
     } catch (err) {
       if (exportReqRef.current === myReq) toast({ title: 'No se pudo preparar el export', description: err?.message, variant: 'destructive' });
     } finally { if (exportReqRef.current === myReq) setExportLoading(false); }
@@ -297,6 +302,8 @@ export default function LeadsPage() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       if (v) next.set('qf', v); else next.delete('qf');
+      // Un filtro del servidor cambia lo que hay en cada página: se vuelve a la primera.
+      if (qfDelServidor(v) || qfDelServidor(prev.get('qf'))) next.delete('page');
       if (clearEstado) next.delete('estado');
       return next;
     }, { replace: true, preventScrollReset: true });
@@ -316,6 +323,34 @@ export default function LeadsPage() {
     setFilterEstado(v);
   }
 
+  // PROSPECTOS ABRE CON LA LISTA (#534, parte 4; gemela de CRM#883). Manuel,
+  // 29/10: antes de llegar a la lista salían el último lead de cada gestora, el
+  // ranking, «Lo que toca» y las cifras. Esos paneles van a la pestaña «Equipo».
+  // Se recuerda en la URL (?vista=equipo) para poder enlazarla; la lista no
+  // lleva nada.
+  //
+  // Los filtros rápidos también escriben en la URL, a veces en el mismo clic
+  // (una cifra de «Equipo» filtra Y cambia de pestaña). Por eso la vista se
+  // escribe partiendo de la dirección real (`window.location`), que ya lleva
+  // lo que acaba de escribir el filtro, y no del `prev` del router, que aún no.
+  const [vista, setVistaState] = useState<'lista' | 'equipo'>(
+    searchParams.get('vista') === 'equipo' ? 'equipo' : 'lista',
+  );
+  function setVista(v: 'lista' | 'equipo') {
+    setVistaState(v);
+    setSearchParams(() => {
+      const n = new URLSearchParams(window.location.search);
+      if (v === 'equipo') n.set('vista', 'equipo'); else n.delete('vista');
+      return n;
+    }, { replace: true, preventScrollReset: true });
+  }
+  // Desde «Equipo», una cifra o un estado pulsado lleva a la lista ya filtrada.
+  function irALaLista() {
+    setVista('lista');
+    requestAnimationFrame(() => document.getElementById('lista-de-prospectos')
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
   // CRM-147: quick-add via ?new=1 (lo dispara el FAB de atajos).
   useEffect(() => {
     if (searchParams.get('new') === '1') {
@@ -330,87 +365,33 @@ export default function LeadsPage() {
   // Si usamos new Date(str) directamente, JS lo interpreta como UTC midnight, que
   // desde TZ negativas (Caracas UTC-4, México UTC-6) cae en el día anterior LOCAL.
   // Extraemos solo la parte YYYY-MM-DD y la construimos como fecha local 00:00.
-  function parseLocalDateOnly(dateStr: string | null | undefined): Date | null {
-    if (!dateStr) return null;
-    const s = String(dateStr).slice(0, 10);
-    const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (!m) return null;
-    return new Date(parseInt(m[1]), parseInt(m[2]) - 1, parseInt(m[3]));
-  }
-
-  // Filtros rapidos client-side (sobre los leads ya cargados)
-  // Filtros rápidos (client-side). Extraído para aplicarlo también al export.
-  function aplicarQuickFilter(lista) {
-    if (!quickFilter) return lista;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return lista.filter(l => {
-      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
-      if (!entroEnElProceso(l)) return false;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }
-
-  const filteredLeads = useMemo(() => {
-    if (!quickFilter) return leads;
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    return leads.filter(l => {
-      // La barra de vencidos cuenta desde el 01/09 (ver enElProceso.ts).
-      if (!entroEnElProceso(l)) return false;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (quickFilter === 'overdue') return next && next < today;
-      if (quickFilter === 'today') return next && next.getTime() === today.getTime();
-      if (quickFilter === 'tomorrow') return next && next.getTime() === tomorrow.getTime();
-      if (quickFilter === 'week') return next && next >= today && next <= inWeek;
-      if (quickFilter === 'no-reminder') return !next;
-      if (quickFilter === 'no-contact') return !last && ['nuevo', 'por_contactar'].includes(l.estado);
-      if (quickFilter === 'urgent') {
-        if (next && next <= today) return true;
-        if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) return true;
-        return false;
-      }
-      return true;
-    });
-  }, [leads, quickFilter]);
-
-  const quickCounts = useMemo(() => {
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const tomorrow = new Date(today.getTime() + 86400000);
-    const inWeek = new Date(today.getTime() + 7 * 86400000);
-    let overdue = 0, todayCount = 0, tomorrowCount = 0, weekCount = 0, noReminder = 0, noContact = 0;
-    leads.forEach(l => {
-      if (!entroEnElProceso(l)) return;
-      const next = parseLocalDateOnly(l.next_reminder_at);
-      const last = l.last_interaction_at ? new Date(l.last_interaction_at) : null;
-      if (next && next < today) overdue++;
-      if (next && next.getTime() === today.getTime()) todayCount++;
-      if (next && next.getTime() === tomorrow.getTime()) tomorrowCount++;
-      if (next && next >= today && next <= inWeek) weekCount++;
-      if (!next) noReminder++;
-      if (!last && ['nuevo', 'por_contactar'].includes(l.estado)) noContact++;
-    });
-    return { overdue, today: todayCount, tomorrow: tomorrowCount, week: weekCount, noReminder, noContact, urgent: overdue + todayCount + noContact };
-  }, [leads]);
+  // Los filtros rápidos los filtra y los cuenta el SERVIDOR (gemela de la #132 del
+  // 360): antes se aplicaban aquí sobre la página cargada (20 de `total`), así
+  // que «mañana» enseñaba los de mañana que cayeran en esta página, y las
+  // pestañas contaban solo lo cargado. La lista llega ya filtrada (`?qf=`, en
+  // useLeads) y los contadores salen de `/leads/quick-counts`, con la misma
+  // condición (`FILTROS_RAPIDOS` en lead.model.js).
+  const filteredLeads = leads;
+  const [quickCounts, setQuickCounts] = useState({ overdue: 0, today: 0, tomorrow: 0, week: 0, noReminder: 0, noContact: 0, urgent: 0 });
+  useEffect(() => {
+    const pidCuenta = activeProject?.id && activeProject.id > 0 ? activeProject.id : null;
+    if (!pidCuenta) return;
+    let vivo = true;
+    const p = new URLSearchParams({ projectId: String(pidCuenta) });
+    if (filterResponsable && filterResponsable !== 'unassigned') p.set('responsableId', String(filterResponsable));
+    client.get(`/leads/quick-counts?${p.toString()}`)
+      .then((r) => {
+        const d = r?.data as Record<string, number> | undefined;
+        if (!vivo || !r?.success || !d) return;
+        setQuickCounts({
+          overdue: d.overdue || 0, today: d.today || 0, tomorrow: d.tomorrow || 0, week: d.week || 0,
+          noReminder: d.no_reminder || 0, noContact: d.no_contact || 0, urgent: d.urgent || 0,
+        });
+      })
+      .catch(() => {});
+    return () => { vivo = false; };
+    // `leads`: se vuelve a contar cuando cambia la lista (un recordatorio nuevo, un alta).
+  }, [activeProject?.id, filterResponsable, leads]);
 
   // Cargar lista de responsables para el filtro (solo admin/superadmin).
   // Con un proyecto activo, solo los gestores de ESE proyecto.
@@ -660,7 +641,9 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido: la barra fija de
+       arriba no le tapa el principio. */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} lead={null} />
       {configTab && activeProject && (
         <Suspense fallback={null}>
@@ -673,65 +656,6 @@ export default function LeadsPage() {
         </Suspense>
       )}
 
-      {/* Lo que ha recibido cada gestora y quién está activa ahora (#11 del 360;
-          sombreado: CRM#524 / ISEIE #293). Solo para quien manda: es una vista
-          del reparto de todo el equipo, no algo que una gestora necesite. */}
-      {(user?.role === 'admin' || user?.role === 'superadmin') && (
-        <UltimoLeadAsignado projectId={activeProject?.id} />
-      )}
-
-      {/* Como va quien mira: su puesto en ventas y su tasa de conversion del
-          mes. Va aqui porque esta es la pantalla donde pasa el dia. */}
-      {/* El ranking de gestoras no es el proceso comercial: sin PROCESO_EN_PRUEBAS
-          (Diego, 22/10/2026; ver DashboardPage). */}
-      <ComoVoy compacto />
-
-      {/* LA COLA DEL DÍA, AQUÍ TAMBIÉN. Diego, 23/09: «la cola del día debe
-          de estar en prospectos también con atajos y todo».
-
-          Es el mismo bloque del dashboard, no una copia: los cuatro números
-          salen de `GET /proceso/cola/resumen`, que ya recorta por rol. Contar
-          aquí por mi cuenta sería una segunda contabilidad de la misma cola, y
-          el día que discrepen nadie sabría cuál creer.
-
-          Cada número abre la cola con ese tramo ya puesto, y debajo van los
-          atajos a las tres pantallas del proceso. */}
-      <div className="space-y-2">
-        {/* Los contadores --atrasados, hoy, manana, semana-- son del proceso de
-            ventas y todavia no esta al 100 %: fuera de produccion. Diego, 28/09. */}
-        {PROCESO_EN_PRUEBAS && (
-          <ParaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} />
-        )}
-        <div className="flex flex-wrap items-center gap-2">
-          {/* En ISEIE las rutas son /leads/...: con /prospectos/... (copiadas
-              de MultiCRM) estos tres atajos no llevaban a ninguna parte. */}
-          <Link
-            to="/leads/cola"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
-          >
-            <ListChecks size={14} weight="bold" className="text-primary" />
-            La cola del día
-          </Link>
-          {PROCESO_EN_PRUEBAS && (
-          <Link
-            to="/leads/seguimiento"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold hover:bg-muted"
-          >
-            <ArrowCounterClockwise size={14} weight="bold" className="text-primary" />
-            Seguimiento de fin de mes
-          </Link>
-          )}
-          <Link
-            to="/leads/proceso"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-2.5 py-1.5 text-normal font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <Gear size={14} weight="bold" />
-            Proceso comercial
-          </Link>
-        </div>
-      </div>
-
-
       {/* Header compacto: titulo + acciones en la misma fila, todo h-9 */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="min-w-0">
@@ -739,6 +663,8 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Es el recorrido de la lista: en «Equipo» sus partes están escondidas. */}
+          {vista === 'lista' && <VerRecorrido id="prospectos" listo={!loading} />}
           <button
             onClick={() => { setNewCount(0); refetch(); }}
             title="Refrescar lista de prospectos"
@@ -830,6 +756,7 @@ export default function LeadsPage() {
             </div>
           )}
           <button
+            data-recorrido="prospectos-nuevo"
             onClick={() => setFormOpen(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
           >
@@ -840,78 +767,105 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      {/* Los tres bloques de arriba, como en MultiCRM: qué pasa, qué toca hacer,
-          y a dónde se va desde aquí. Los números ya venían del servidor
-          (`/leads/stats`); solo se usaban para unas píldoras dentro del
-          desplegable de filtros, donde no los ve nadie.
 
-          «Piden atención» sale de los mismos contadores que los filtros rápidos
-          (`quickCounts`, sobre la página cargada y solo desde el 01/09), así que
-          pulsarla y filtrar por «urgentes» dicen lo mismo. */}
-      <CifrasProspectos
-        stats={stats}
-        urgencias={quickCounts}
-        filtroRapido={quickFilter}
-        onFiltroRapido={(clave) => setQuickFilter(clave || '')}
-      />
+      {/* Lista / Equipo (#534, parte 4). La lista, primero y sin nada delante. */}
+      <div className="inline-flex rounded-md border border-border overflow-hidden" role="tablist" aria-label="Vista de prospectos" data-recorrido="prospectos-vistas">
+        {([['lista', 'Lista'], ['equipo', 'Equipo']] as const).map(([v, texto]) => (
+          <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
+            className={'px-4 py-1.5 text-sm font-medium transition-colors '
+              + (vista === v ? 'bg-primary text-primary-foreground' : 'hover:bg-muted')}>
+            {texto}
+          </button>
+        ))}
+      </div>
 
-      {/* Plegable y con memoria (#125): «está súper bien, pero que se pueda
-          desplegar». Ocupa la primera pantalla entera y empuja la tabla abajo
-          del todo — a quien viene a mirar la tabla le sobra, y a quien viene a
-          organizarse el día le hace falta. */}
-      <BloquePlegable
-        clave="prospectos-resumen"
-        // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado».
-        // Quien ya lo dejó abierto lo sigue viendo abierto: lo guardado manda
-        // sobre el arranque.
-        abiertoPorDefecto={false}
-        titulo="Resumen del dia"
-        resumen={
-          quickCounts.urgent > 0
-            ? `${quickCounts.urgent} piden atención`
-            : 'Nada urgente'
-        }
-      >
-      <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
-        <SaludComercial
-          stats={stats}
-          onFiltroEstado={setFilterEstadoSafe}
-          onVerPipeline={() => navigate('/leads/pipeline')}
-        />
-        <SiguientesAcciones
-          leads={leads}
-          // El PANEL, no la ficha entera. Diego, 24/09: «y abra el panel, no la
-          // ficha completa». Desde aquí se entra a ver qué toca con alguien y
-          // se vuelve a la lista.
-          onAbrir={(id) => setDrawerLeadId(id)}
-          // Quita el filtro rápido —se ven todos, los vencidos arriba— y baja
-          // a la lista.
-          onVerTodos={() => {
-            setQuickFilter('');
-            document.getElementById('lista-de-prospectos')
-              ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-          }}
-        />
-        {/* Los accesos de MultiCRM son cuatro. «Audiencias» no viene: ISEIE no
-            tiene esa pantalla. Y Duplicados y Reportes solo para admin y
-            superadmin, que son los únicos que los ven en el menú y a los que el
-            servidor deja entrar; a una gestora la llevarían a un «sin permiso». */}
-        <AccesosClave
-          accesos={[
-            { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/leads/pipeline' },
-            ...(user?.role === 'admin' || user?.role === 'superadmin'
-              ? [
-                { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/leads/revision-duplicados' },
-                { label: 'Reportes', detail: 'Números descargables', icon: ChartLineUp, to: '/informes' },
-              ]
-              : []),
-          ]}
-        />
-      </section>
-      </BloquePlegable>
+      {vista === 'equipo' && (
+        <div className="space-y-6" role="tabpanel" aria-label="Equipo">
+          {/* Lo que ha recibido cada gestora y quién está activa ahora (#11 del
+              360; sombreado: CRM#524 / ISEIE #293). Solo para quien manda: es
+              una vista del reparto de todo el equipo, no algo que una gestora
+              necesite. */}
+          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+            <UltimoLeadAsignado projectId={activeProject?.id} />
+          )}
+
+          {/* Cómo va quien está mirando: su puesto en ventas y su tasa de
+              conversión del mes. El ranking de gestoras no es el proceso
+              comercial: sin PROCESO_EN_PRUEBAS (Diego, 22/10/2026). */}
+          <ComoVoy compacto />
+
+          {/* «Lo que toca hoy y mañana» no va aquí: se queda en la pestaña
+              «Lista», debajo de la tabla (Diego, 18/11, PR CRM#883). */}
+
+          {/* Las cifras: qué pasa. Pulsar una filtra la lista y lleva a ella.
+              «Piden atención» sale de los mismos contadores que los filtros
+              rápidos (`/leads/quick-counts`), así que dicen lo mismo. */}
+          <CifrasProspectos
+            stats={stats}
+            urgencias={quickCounts}
+            filtroRapido={quickFilter}
+            onFiltroRapido={(clave) => { setQuickFilter(clave || ''); irALaLista(); }}
+          />
+
+          {/* Plegable y con memoria (#125): «está súper bien, pero que se pueda
+              desplegar». */}
+          <BloquePlegable
+            clave="prospectos-resumen"
+            // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado».
+            // Quien ya lo dejó abierto lo sigue viendo abierto: lo guardado manda
+            // sobre el arranque.
+            abiertoPorDefecto={false}
+            titulo="Resumen del día"
+            resumen={
+              quickCounts.urgent > 0
+                ? `${quickCounts.urgent} piden atención`
+                : 'Nada urgente'
+            }
+          >
+          <section className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(300px,0.9fr)_minmax(260px,0.7fr)]">
+            <SaludComercial
+              stats={stats}
+              onFiltroEstado={(v) => { setFilterEstadoSafe(v); irALaLista(); }}
+              onVerPipeline={() => navigate('/leads/pipeline')}
+            />
+            <SiguientesAcciones
+              leads={leads}
+              // El PANEL, no la ficha entera. Diego, 24/09: «y abra el panel, no la
+              // ficha completa».
+              onAbrir={(id) => setDrawerLeadId(id)}
+              // Quita el filtro rápido —se ven todos, los vencidos arriba— y
+              // lleva a la lista.
+              onVerTodos={() => { setQuickFilter(''); irALaLista(); }}
+            />
+            {/* Los accesos de MultiCRM son cuatro. «Audiencias» no viene: ISEIE no
+                tiene esa pantalla. Y Duplicados y Reportes solo para admin y
+                superadmin, que son los únicos que los ven en el menú y a los que el
+                servidor deja entrar; a una gestora la llevarían a un «sin permiso». */}
+            <AccesosClave
+              accesos={[
+                { label: 'Pipeline', detail: 'Arrastrar por estados', icon: Kanban, to: '/leads/pipeline' },
+                ...(user?.role === 'admin' || user?.role === 'superadmin'
+                  ? [
+                    { label: 'Duplicados', detail: 'Repetidos por webhook', icon: GitMerge, to: '/leads/revision-duplicados' },
+                    { label: 'Reportes', detail: 'Números descargables', icon: ChartLineUp, to: '/informes' },
+                  ]
+                  : []),
+              ]}
+            />
+          </section>
+          </BloquePlegable>
+        </div>
+      )}
+
+      {/* LA LISTA. Se esconde (no se desmonta) en «Equipo», para no perder la
+          página, la selección ni los filtros al volver. */}
+      <div hidden={vista !== 'lista'} className="space-y-6" role="tabpanel" aria-label="Lista">
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
+      {/* El paso «Buscar y filtrar» del recorrido (#611): en ISEIE el buscador va
+          dentro de «Filtros», así que el anclaje es la barra entera. */}
+      <div data-recorrido="prospectos-filtros">
       <LeadsFiltersBar
         activeProject={activeProject}
         gestores={gestores}
@@ -922,6 +876,8 @@ export default function LeadsPage() {
         filterPaso={filterPaso} setFilterPaso={setFilterPaso}
         pasosDelProceso={pasosDelProceso}
         filterOrigen={filterOrigen} setFilterOrigen={setFilterOrigen}
+        filterPais={filterPais} setFilterPais={setFilterPais}
+        campusDePaises={projects}
         filterResponsable={filterResponsable} setFilterResponsable={setFilterResponsable}
         filterProducto={filterProducto} setFilterProducto={setFilterProducto}
         dateFrom={dateFrom} dateTo={dateTo} setDateRange={setDateRange}
@@ -952,6 +908,7 @@ export default function LeadsPage() {
           }
         }}
       />
+      </div>
 
       {/* Error state */}
       {error && (
@@ -963,6 +920,9 @@ export default function LeadsPage() {
 
       {/* Table. El id es adonde baja «Ver todos» de Siguientes acciones: en
           MultiCRM va en la fila de tramos de encima, que ISEIE no tiene. */}
+      {/* El anclaje del recorrido (#611), en un envoltorio: así su margen de
+          scroll no pisa el `scroll-mt-4` adonde baja «Ver todos». */}
+      <div data-recorrido="prospectos-lista">
       <div id="lista-de-prospectos" className="bg-card rounded-lg border border-border scroll-mt-4">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
@@ -1070,10 +1030,14 @@ export default function LeadsPage() {
                     {!lead.valor_oportunidad && <span className="text-muted-foreground/60">—</span>}
                   </td>
                   {showProjectColumn && (
-                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{lead.proyecto_nombre || '—'}</td>
+                    <td className="px-5 py-3.5 text-xs text-muted-foreground">{etiquetaCampusPais(lead.proyecto_nombre, lead.pais_origen) || '—'}</td>
                   )}
                   <td className="px-5 py-3.5">
                     <ChannelBadge channel={lead.origen} />
+                    {/* Con un solo campus no hay columna de campus: el país va aquí (#221). */}
+                    {!showProjectColumn && lead.pais_origen && (
+                      <span className="block mt-0.5 text-xs text-muted-foreground">{nombreDelPais(lead.pais_origen)}</span>
+                    )}
                   </td>
                   <td className="px-5 py-3.5">
                     <QuickStatusChange
@@ -1188,7 +1152,9 @@ export default function LeadsPage() {
 
         {/* Pagination */}
         {total > 0 && (
-          <div className="px-5 py-3 border-t flex items-center justify-between text-[13px] text-muted-foreground">
+          // En el móvil la fila no cabe (se salía 22 px a 375): salta de línea y
+          // «Anterior»/«Siguiente» se quedan en la flecha.
+          <div className="px-5 py-3 border-t flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-[13px] text-muted-foreground">
             <span>
               Mostrando <strong className="text-foreground">{Math.min((page - 1) * 20 + 1, total)}&ndash;{Math.min(page * 20, total)}</strong> de {total}
             </span>
@@ -1196,9 +1162,10 @@ export default function LeadsPage() {
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
+                aria-label="Página anterior"
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
-                <CaretLeft size={12} weight="bold" /> Anterior
+                <CaretLeft size={12} weight="bold" /> <span className="hidden sm:inline">Anterior</span>
               </button>
               {getVisiblePages().map((p) => (
                 <button
@@ -1216,14 +1183,30 @@ export default function LeadsPage() {
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
+                aria-label="Página siguiente"
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
-                Siguiente <CaretRight size={12} weight="bold" />
+                <span className="hidden sm:inline">Siguiente</span> <CaretRight size={12} weight="bold" />
               </button>
             </div>
           </div>
         )}
       </div>
+      </div>
+
+      {/* LO QUE TOCA, HOY Y MAÑANA. Diego, 18/11 (PR CRM#883): se queda en
+          Prospectos, debajo de la lista, que ahora abre primero; y separado en
+          «Hoy» y «Mañana», cada uno con su número. Es la misma cola del
+          Dashboard: los números y las personas salen del servidor. En ISEIE
+          los contadores del proceso siguen fuera de producción (Diego, 28/09):
+          detrás de PROCESO_EN_PRUEBAS, como antes; la cola y el proceso
+          comercial siguen en el menú de Prospectos. */}
+      {PROCESO_EN_PRUEBAS && (
+        <LoQueTocaHoyYManana projectId={proyectoDeLaCola} projectIds={campusCsv} onAbrir={(id) => setDrawerLeadId(id)} />
+      )}
+
+      </div>
+      {/* /LA LISTA */}
 
       {/* Convertir prospecto — dialog inline.
           Importante: en modo "Todos los proyectos" activeProject.id es -1 (sentinel),

@@ -13,7 +13,8 @@ import { MemoryRouter } from 'react-router-dom';
  * NO_LO_TIENES, se dice qué rol quitar.
  */
 
-const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] } };
+// Sin users.view la pestaña Usuarios no sale (gemela de CRM#880); el admin la trae.
+const ADMIN = { isAuthenticated: true, loading: false, projects: [], user: { id: 1, role: 'admin', roles_extra: [] }, permissions: { 'users.view': true } };
 const si = { puede: true, faltan: [], cuantos: 0 };
 const no = { puede: false, faltan: ['Recuperar prospectos borrados', 'Forma de los avisos', 'Ver las credenciales'], cuantos: 6 };
 const LISTA = ['superadmin', 'admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'].map((rol) => ({
@@ -26,6 +27,9 @@ vi.mock('@/shared/hooks/useToast', () => ({ toast: avisos.toast }));
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ADMIN }));
 vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => async () => true }));
 vi.mock('@/shared/api/client', () => ({ default: { get: api.get, post: api.post, patch: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
+// Los permisos del alta (#413) piden el catálogo con su forma; aquí solo se miran
+// los roles, como en usuario-106.
+vi.mock('@/modules/permissions/components/PermisosDelAlta', () => ({ default: () => null }));
 
 import SettingsPage from '@/shared/pages/SettingsPage';
 import { mensajeNoLoTienes } from '@/shared/lib/rolesAsignables';

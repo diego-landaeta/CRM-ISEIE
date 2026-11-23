@@ -4,6 +4,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query, getClient } from '../../shared/config/db.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
+// El país de entrada del prospecto de cada venta (#221).
+import { sqlPaisDeLaVenta, sqlPaisDelLead } from '../leads/pais.js';
 // Lo facturado tiene UNA definición y vive en los informes (#224).
 import { IMPORTE_FACTURADO, FACTURA_QUE_CUENTA } from '../reports/report.model.js';
 import { buscarVentaRepetida, errorVentaYaExiste } from '../conversions/venta-repetida.js';
@@ -167,6 +169,8 @@ export async function createSale(data, requestUser, { comprobarRepetida: mirarRe
       fecha_conversion: data.fecha_pago,
       fecha_compromiso_pago: importePagado < data.importe_total ? data.fecha_pago : null,
       notas_pago: data.notas || null,
+      // Inicio del curso (#767): con ella se programa la matrícula en Moodle.
+      ...(data.fecha_inicio ? { fecha_inicio: data.fecha_inicio } : {}),
       // En ISEIE, sin decirlo, el 21 % se suma ENCIMA del importe. El formulario no
       // lo manda (no está en createSaleSchema) y sigue igual; lo pide quien sabe que
       // el importe ya es el precio final, como la compra directa de la web (puerta 6).
@@ -330,12 +334,14 @@ const SIN_ASIGNAR = `(c.producto_contratado_id IS NULL
  *   (`facturado` aquí es lo VENDIDO, el importe de la venta: el nombre se
  *   queda por no romper a quien ya lo lee.)
  */
-export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null } = {}) {
+export async function getTopProducts({ projectId, projectIds = null, limit = 10, days = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
   const params = [];
   const where = [];
   const listaTop = comoLista(projectId, projectIds);
   if (listaTop) { params.push(listaTop); where.push(`c.project_id = ANY($${params.length}::int[])`); }
   else where.push(SIN_PRUEBAS('c.project_id'));
+  // País de entrada del prospecto de la venta (#221).
+  if (paisEntrada) { params.push(paisEntrada); where.push(`${sqlPaisDeLaVenta('c')} = $${params.length}`); }
   // Por gestora, mirando el reparto —igual que las tarjetas—, y con SU parte
   // del importe: una venta atendida entre dos es media para cada una.
   let PESO = '1';
@@ -470,12 +476,13 @@ export async function getTopProducts({ projectId, projectIds = null, limit = 10,
  * @param {{ projectId?, projectIds?, from?, to?, responsableId? }} opts
  *   `responsableId`: solo la parte de esa gestora (una gestora ve lo suyo).
  */
-export async function getFacturado({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
+export async function getFacturado({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
   const params = [];
   const w = [FACTURA_QUE_CUENTA];
   const lista = comoLista(projectId, projectIds);
   if (lista) { params.push(lista); w.push(`c.project_id = ANY($${params.length}::int[])`); }
   else w.push(SIN_PRUEBAS('c.project_id'));
+  if (paisEntrada) { params.push(paisEntrada); w.push(`${sqlPaisDeLaVenta('c')} = $${params.length}`); }
   if (from) { params.push(from); w.push(`i.fecha_emision >= $${params.length}::date`); }
   if (to) { params.push(to); w.push(`i.fecha_emision <= $${params.length}::date`); }
   let soloGestora = '';
@@ -584,13 +591,15 @@ const SIN_TILDES = (expr) =>
 // `sinCobro = true` da lo contrario de la segunda regla: las ventas del mismo
 // filtro que aún NO tienen ningún cobro. Es la cifra que va al lado de las
 // tarjetas como «sin cobro (en proformas)» (#225).
-function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search }, startIdx = 1, { sinCobro = false } = {}) {
+function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, search, paisEntrada = null }, startIdx = 1, { sinCobro = false, todas = false } = {}) {
   const cond = [];
   const params = [];
   let idx = startIdx;
   // Un campus o la lista de los de quien pide (CRM#245): sin lista, como antes.
   const lista = comoLista(projectId, projectIds);
   if (lista) { cond.push(`cv.project_id = ANY($${idx++}::int[])`); params.push(lista); }
+  // País de entrada del prospecto de la venta (#221).
+  if (paisEntrada) { cond.push(`${sqlPaisDeLaVenta('cv')} = $${idx++}`); params.push(paisEntrada); }
   if (from) { cond.push(`cv.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { cond.push(`cv.fecha_conversion <= $${idx++}`); params.push(to); }
   // Por gestora, mirando el reparto y no una sola vendedora.
@@ -618,7 +627,11 @@ function filtrosVentas({ projectId, projectIds = null, from, to, responsableId, 
   // una ficha marcada como mensualidad no es una venta nueva, y una venta sin
   // ningun cobro es una proforma que el cliente no llego a pagar.
   cond.push('NOT cv.es_mensualidad');
-  cond.push(`${sinCobro ? 'NOT ' : ''}EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = cv.id)`);
+        // #901: el resumen de Ventas quiere las mismas cifras que Reportes, que no
+      // filtra por si hay cobro o no. `todas` deja pasar cualquier venta, tenga o
+      // no algún pago; solo lo usa getResumenVentas.
+
+   if (!todas) cond.push(`${sinCobro ? 'NOT ' : ''}EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = cv.id)`);
   return { where: 'WHERE ' + cond.join(' AND '), params, idx };
 }
 
@@ -690,7 +703,7 @@ async function ventasSinCobro(filtros = {}) {
 
 // Resumen consolidado que acompana a la vista general de Ventas.
 export async function getResumenVentas(filtros = {}) {
-  const { where, params, idx } = filtrosVentas(filtros);
+  const { where, params, idx } = filtrosVentas(filtros, 1, { todas: true });
   const { PESO, params: conPeso } = pesoDe(filtros.responsableId, params, idx);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS ventas,
@@ -740,8 +753,9 @@ export async function getResumenVentas(filtros = {}) {
     asesoras: r.asesoras,
     importe: Number(r.importe),
     cobrado: Number(r.cobrado),
-    // Las que aún no tienen ningún cobro, aparte (#225). NO entran en las
-    // cifras de arriba: cuando se cobran, pasan a contar como venta.
+           //#901: ya están sumadas en las cifras de arriba, igual que en Reportes.
+    // Esto es solo el desglose: cuántas de esas ventas (y cuánto) siguen sin
+    // ningún cobro todavía (proformas).
     sin_cobro: sinCobro,
     pendiente: Number(r.pendiente),
     // Lo que se cobró por encima del importe de la venta (#692): duplicados,
@@ -860,7 +874,7 @@ export async function ventasSinFormacion({ projectId, projectIds = null, from = 
 
 // Ventas agrupadas por asesora.
 export async function getVentasPorAsesora(filtros = {}) {
-  const { where, params } = filtrosVentas(filtros);
+  const { where, params } = filtrosVentas(filtros, 1, { todas: true });
   const { rows } = await query(
     `SELECT ${VENDEDORA} AS user_id,
             COALESCE(u.nombre, '— sin asignar —') AS nombre,
@@ -894,7 +908,7 @@ export async function getVentasPorAsesora(filtros = {}) {
 export async function getVentasPorCliente(filtros = {}) {
   const page = Math.max(1, parseInt(filtros.page) || 1);
   const limit = Math.min(200, Math.max(1, parseInt(filtros.limit) || 50));
-  const { where, params: delFiltro, idx: idx0 } = filtrosVentas(filtros);
+  const { where, params: delFiltro, idx: idx0 } = filtrosVentas(filtros, 1, { todas: true });
   const { PESO, params, idx } = pesoDe(filtros.responsableId, delFiltro, idx0);
 
   // Las ventas del filtro se aislan en una CTE para poder contar sus cuotas
@@ -993,17 +1007,18 @@ const ES_MATRICULA = `(NOT c.es_mensualidad AND NOT EXISTS (
      WHERE p0.conversion_id = cp.conversion_id
        AND (p0.fecha < cp.fecha OR (p0.fecha = cp.fecha AND p0.id < cp.id))))`;
 
-export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
+export async function getDesglose({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
   const lista = comoLista(projectId, projectIds);
   const pv = [];
   const wv = [];
   if (lista) { pv.push(lista); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
   if (responsableId) { pv.push(idsDe(responsableId)); wv.push(`${VENDEDORA_C} = ANY($${pv.length}::int[])`); }
   if (from) { pv.push(from); wv.push(`c.fecha_conversion >= $${pv.length}::date`); }
   if (to) { pv.push(to); wv.push(`c.fecha_conversion <= $${pv.length}::date`); }
   wv.push('NOT c.es_mensualidad');
-  // Una venta sin ningun cobro es una proforma que no se pago: no cuenta.
-  wv.push('EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)');
+  // Gemela de CRM#901: cuenta igual que el resumen y que Reportes, ventas
+  // sin ningun cobro todavia incluidas (revision de Diego, 21/11).
 
   const { rows: porFormacion } = await query(
     `SELECT ${TIPO_FORMACION} AS tipo,
@@ -1016,6 +1031,7 @@ export async function getDesglose({ projectId = null, projectIds = null, from = 
   const pc = [];
   const wc = [];
   if (lista) { pc.push(lista); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
   if (responsableId) { pc.push(idsDe(responsableId)); wc.push(`${VENDEDORA_C} = ANY($${pc.length}::int[])`); }
   if (from) { pc.push(from); wc.push(`cp.fecha >= $${pc.length}::date`); }
   if (to) { pc.push(to); wc.push(`cp.fecha <= $${pc.length}::date`); }
@@ -1069,16 +1085,17 @@ function restarDias(fecha, dias) {
 }
 
 // Un tramo: ventas, dinero y leads agrupados por dia o por mes.
-async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes }) {
+async function tramo({ projectId, projectIds = null, from, to, responsableId, porMes, paisEntrada = null }) {
   const lista = comoLista(projectId, projectIds);
   const corte = porMes ? "to_char(date_trunc('month', %s), 'YYYY-MM')"
     : "to_char(%s, 'YYYY-MM-DD')";
 
   const pv = [];
-  const wv = ['NOT c.es_mensualidad',
-    // Una venta sin ningun cobro es una proforma que no se pago.
-    'EXISTS (SELECT 1 FROM conversion_payments cpx WHERE cpx.conversion_id = c.id)'];
+  // Gemela de CRM#901: cuenta igual que el resumen y que Reportes, ventas
+  // sin ningun cobro todavia incluidas (revision de Diego, 21/11).
+  const wv = ['NOT c.es_mensualidad'];
   if (lista) { pv.push(lista); wv.push(`c.project_id = ANY($${pv.length}::int[])`); }
+  if (paisEntrada) { pv.push(paisEntrada); wv.push(`${sqlPaisDeLaVenta('c')} = $${pv.length}`); }
   if (responsableId) {
     pv.push(idsDe(responsableId));
     wv.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pv.length}::int[])`);
@@ -1098,6 +1115,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   const pc = [];
   const wc = [];
   if (lista) { pc.push(lista); wc.push(`c.project_id = ANY($${pc.length}::int[])`); }
+  if (paisEntrada) { pc.push(paisEntrada); wc.push(`${sqlPaisDeLaVenta('c')} = $${pc.length}`); }
   if (responsableId) {
     pc.push(idsDe(responsableId));
     wc.push(`COALESCE(c.vendedora_id, (SELECT responsable_id FROM leads WHERE id = c.lead_id)) = ANY($${pc.length}::int[])`);
@@ -1116,6 +1134,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   const pl = [];
   const wl = ['l.deleted_at IS NULL'];
   if (lista) { pl.push(lista); wl.push(`l.project_id = ANY($${pl.length}::int[])`); }
+  if (paisEntrada) { pl.push(paisEntrada); wl.push(`${sqlPaisDelLead('l')} = $${pl.length}`); }
   if (responsableId) { pl.push(idsDe(responsableId)); wl.push(`l.responsable_id = ANY($${pl.length}::int[])`); }
   pl.push(from); const lFrom = pl.length;
   pl.push(to); const lTo = pl.length;
@@ -1168,7 +1187,7 @@ async function tramo({ projectId, projectIds = null, from, to, responsableId, po
   };
 }
 
-export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null } = {}) {
+export async function getSerieVentas({ projectId = null, projectIds = null, from = null, to = null, responsableId = null, paisEntrada = null } = {}) {
   const hoy = new Date().toISOString().slice(0, 10);
   const desde = from || `${new Date().getFullYear()}-01-01`;
   const hasta = to || hoy;
@@ -1176,15 +1195,15 @@ export async function getSerieVentas({ projectId = null, projectIds = null, from
   // Hasta dos meses se ve por dias; a partir de ahi, por meses.
   const porMes = dias > 62;
 
-  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes });
+  const actual = await tramo({ projectId, projectIds, from: desde, to: hasta, responsableId, porMes, paisEntrada });
 
   // El periodo justo anterior, del mismo tamaño.
   const finAnterior = restarDias(desde, 1);
   const iniAnterior = restarDias(desde, dias);
-  const previo = await tramo({ projectId, projectIds, from: iniAnterior, to: finAnterior, responsableId, porMes });
+  const previo = await tramo({ projectId, projectIds, from: iniAnterior, to: finAnterior, responsableId, porMes, paisEntrada });
 
   // Y el historial completo mes a mes, desde que hay datos.
-  const historial = await tramo({ projectId, projectIds, from: '2026-01-01', to: hoy, responsableId, porMes: true });
+  const historial = await tramo({ projectId, projectIds, from: '2026-01-01', to: hoy, responsableId, porMes: true, paisEntrada });
 
   const varia = (a, b) => (b ? Math.round(((a - b) / b) * 1000) / 10 : (a ? 100 : 0));
 

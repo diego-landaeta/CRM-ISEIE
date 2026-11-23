@@ -77,6 +77,20 @@ export async function anotarEmisiones(emitidas) {
   }
 }
 
+/**
+ * Un diploma revertido (#351, gemela de CRM#624): suelta su número anulado, para que la nueva
+ * emisión se apunte. No mira el interruptor: si estuvo encendido, puede haber filas con ese
+ * número aunque hoy esté apagado. Tampoco para nada: la reversión ya está hecha en Certifex.
+ */
+export async function soltarEmisionRevertida(nexpediente) {
+  if (!nexpediente) return;
+  try {
+    await model.soltarEmision(nexpediente);
+  } catch (err) {
+    logger.warn({ err: err.message, nexpediente }, 'Confirmación de diploma: no se pudo soltar el número revertido');
+  }
+}
+
 /** Apunta cuándo se le mandó el diploma al alumno. Tampoco para nada. */
 export async function anotarEnvios(nexpedientes) {
   if (!cfg.activa() || !nexpedientes.length) return;

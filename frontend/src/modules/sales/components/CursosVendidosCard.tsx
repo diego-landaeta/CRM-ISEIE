@@ -24,6 +24,8 @@ interface Props {
   projectId?: number | null;
   issuerId?: number | null;
   responsableId?: number | null;
+  /** País de entrada del prospecto de cada venta (#221): código ISO o sin_pais. */
+  paisEntrada?: string | null;
   className?: string;
   title?: string;
   /** Rango que manda desde la pantalla. Si viene, la tarjeta no pinta su
@@ -85,7 +87,10 @@ function fmtNum(n: number) {
   return new Intl.NumberFormat('es-ES', { maximumFractionDigits: 1 }).format(n || 0);
 }
 
-export default function CursosVendidosCard({ projectId, issuerId = null, responsableId = null, className = '', title, from: fromProp = null, to: toProp = null, medida = 'ventas' }: Props) {
+/** Cuántos productos se ven antes de «Ver todos» (gemela de CRM#884). */
+const TOP = 10;
+
+export default function CursosVendidosCard({ projectId, issuerId = null, responsableId = null, paisEntrada = null, className = '', title, from: fromProp = null, to: toProp = null, medida = 'ventas' }: Props) {
   const mandaFuera = !!(fromProp && toProp);
   // Arranca en el mes: al entrar interesa como va el mes, no si se ha vendido
   // algo en las ultimas horas. Con 'hoy' la tarjeta salia en blanco casi
@@ -104,6 +109,9 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
   // lo facturado y los abonos van en su fila. El total de arriba no cambia.
   const [rectificativas, setRectificativas] = useState<Rectificativas | null>(null);
   const [loading, setLoading] = useState(true);
+  // TOP 10 Y «VER TODOS» (gemela de CRM#884; Manuel: «hoy son unas 60 filas»).
+  // El total de arriba sigue siendo el del servidor: solo se acorta la lista que se ve.
+  const [verTodos, setVerTodos] = useState(false);
 
   const propio = useMemo(() => rangeFor(period, customFrom, customTo), [period, customFrom, customTo]);
   const { from, to } = mandaFuera ? { from: fromProp as string, to: toProp as string } : propio;
@@ -119,6 +127,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
     if (projectId) params.projectId = projectId;
     if (issuerId) params.issuerId = issuerId;
     if (responsableId) params.responsableId = responsableId;
+    if (paisEntrada) params.paisEntrada = paisEntrada;
     const peticion = esFacturado
       // LO FACTURADO (#224): la misma consulta que el bloque del equipo.
       ? client.get('/ventas/facturado', { params }).then((r: any) => {
@@ -146,7 +155,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
       .catch(() => { if (!cancelled) limpiar(); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, issuerId, responsableId, from, to, customIncompleto, esFacturado]);
+  }, [projectId, issuerId, responsableId, paisEntrada, from, to, customIncompleto, esFacturado]);
 
   // En ISEIE todo lo que se vende son formaciones: se llaman cursos.
   const etiqueta = { singular: 'Curso', plural: 'Cursos' };
@@ -238,7 +247,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
         </p>
       ) : (
         <ul className="divide-y divide-border max-h-64 overflow-y-auto">
-          {rows.map((r, i) => (
+          {(verTodos ? rows : rows.slice(0, TOP)).map((r, i) => (
             <li key={`${r.product_id ?? 'np'}-${i}`} className="py-2 flex items-center gap-3">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium truncate" title={r.producto}>{r.producto}</p>
@@ -251,6 +260,14 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
               </span>
             </li>
           ))}
+          {rows.length > TOP && (
+            <li className="py-1.5 text-center">
+              <button type="button" onClick={() => setVerTodos((v) => !v)}
+                className="text-[11px] font-semibold text-primary hover:underline">
+                {verTodos ? `Ver solo los ${TOP} primeros` : `Ver todos (${fmtNum(rows.length)})`}
+              </button>
+            </li>
+          )}
           {/* Dentro de la lista y del total: si no, la lista no suma lo que dice
               arriba. Es un agujero de registro y se dice como tal. */}
           {sinPrograma && (

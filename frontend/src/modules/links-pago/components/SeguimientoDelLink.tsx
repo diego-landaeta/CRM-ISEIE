@@ -26,7 +26,7 @@ export function DatosDeSeguimiento({ link }: { link: LinkDePago }) {
   if (link.renovado_de) partes.push(`renueva el n.º ${link.renovado_de}`);
   if (link.renovado_por) partes.push(`renovado en el n.º ${link.renovado_por}`);
   if (!partes.length) return null;
-  return <span className="text-xs text-muted-foreground basis-full" data-seguimiento={link.id}>{partes.join(' · ')}</span>;
+  return <span className="text-xs text-muted-foreground basis-full" data-seguimiento={link.id} data-recorrido="links-seguimiento-fila">{partes.join(' · ')}</span>;
 }
 
 /** «Renovar» un caducado: crea uno nuevo igual y lo copia para mandarlo. */
@@ -50,7 +50,7 @@ export function BotonRenovar({ link, onRenovado }: { link: LinkDePago; onRenovad
   }
 
   return (
-    <button type="button" onClick={renovar} disabled={busy}
+    <button type="button" onClick={renovar} disabled={busy} data-recorrido="links-renovar"
       className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted disabled:opacity-50">
       <ArrowClockwise size={13} weight="bold" aria-hidden="true" /> {busy ? 'Renovando…' : 'Renovar'}
     </button>

@@ -71,9 +71,9 @@ export default function SpamReportsSection() {
   if (loading) return <div className="text-sm text-muted-foreground p-4">Cargando reportes…</div>;
 
   return (
-    <section className="border border-orange-200 dark:border-orange-900 bg-orange-50/40 dark:bg-orange-950/20 rounded-2xl p-5">
+    <section className="border border-warning/30 bg-warning-soft rounded-2xl p-5">
       <div className="flex items-center gap-3 mb-3">
-        <div className="w-10 h-10 rounded-lg bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-lg bg-warning-soft text-warning-soft-foreground flex items-center justify-center">
           <Flag size={18} weight="duotone" />
         </div>
         <div className="flex-1">
@@ -115,8 +115,8 @@ export default function SpamReportsSection() {
                     onClick={() => resolve(r.id, 'confirm')}
                     disabled={resolvingId === r.id}
                     title="Confirmar — elimina el lead como spam"
-                    className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-red-600 text-white text-[11px] font-semibold hover:bg-red-700 disabled:opacity-50"
-                  >
+                    className="inline-flex items-center gap-1 px-2.5 h-7 rounded-md bg-destructive text-destructive-foreground text-[11px] font-semibold hover:bg-destructive/90 disabled:opacity-50">
+                
                     <CheckCircle size={12} weight="bold" />
                     Confirmar
                   </button>

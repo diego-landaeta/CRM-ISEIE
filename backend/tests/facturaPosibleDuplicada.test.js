@@ -203,7 +203,7 @@ describe('la cola y la emision automatica', () => {
   it('«Emitir hasta» (la emision sin nadie delante) no la emite: queda en la cola', async () => {
     const r = await SRV.emitirColaHasta(P, await dia(0));
     expect(r.detalle.map((d) => d.payment_id)).not.toContain(COBRO);
-    expect(r.fallidas.find((f) => f.payment_id === COBRO)?.error).toMatch(/Ya existe la factura/);
+    expect(r.fallidas.find((f) => f.payment_id === COBRO)?.error).toMatch(/Posible duplicada de la factura/);
     const cola = await INV.listPagosSinFactura(P);
     expect(cola.map((c) => c.payment_id)).toContain(COBRO);
   });

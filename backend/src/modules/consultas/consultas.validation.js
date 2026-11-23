@@ -46,3 +46,70 @@ export const metricasSchema = z.object({
   hasta: fecha.optional(),
   tutorId: z.coerce.number().int().positive().optional(),
 });
+
+// ─── El plugin del CRM en cada Moodle (#679) ─────────────────────────────────
+// Lo que llega del campus, sin sesión: la puerta es el código (al conectar) o la firma
+// (cada aviso). Aun con la firma buena, el cuerpo se valida entero y con topes: que un
+// campus con un plugin viejo o roto no meta cualquier cosa (revisión de la #689, 8e).
+
+/** Un id de Moodle (número o texto con número, como lo manda PHP), mayor que 0. */
+const idMoodle = z.coerce.number().int().positive();
+const textoOpcional = (max) => z.string().max(max).nullish();
+
+/** Una persona del campus, tal como la cuenta el plugin (classes/aviso.php, `usuario`). */
+const personaDelCampus = z.object({
+  id: idMoodle,
+  nombre: textoOpcional(500),
+  email: textoOpcional(320),
+  personal: z.boolean().optional(),
+  tutora: z.boolean().optional(),
+}).passthrough();
+
+/**
+ * El aviso de un mensaje (classes/aviso.php, `del_mensaje`). Lo mismo llega por el aviso
+ * firmado y por el repaso de cada 15 minutos (`local_crm_mensajes_desde`). En un privado
+ * hace falta a quién va (`para`); en un chat de grupo del plugin, su alumno; en la
+ * conversación de un grupo del curso (`grupo.tipo = 'curso'`), ninguno de los dos: ahí
+ * escribe cualquiera y, si es una tutora, no hay «alumno».
+ */
+export const avisoSchema = z.object({
+  evento: z.literal('mensaje'),
+  sitio: textoOpcional(500),
+  mensaje: z.object({
+    id: idMoodle,
+    conversacion_id: idMoodle,
+    curso_id: z.coerce.number().int().nonnegative().nullish(),
+    html: textoOpcional(1_000_000),
+    fecha: z.coerce.number().int().nonnegative().nullish(),
+    tipo: textoOpcional(50),
+  }).passthrough(),
+  de: personaDelCampus,
+  para: z.array(personaDelCampus).max(500).nullish(),
+  grupo: z.object({
+    tipo: textoOpcional(50),
+    nombre: textoOpcional(500),
+    alumno: personaDelCampus.nullish(),
+    curso: z.object({ id: idMoodle.nullish(), nombre: textoOpcional(500) }).passthrough().nullish(),
+    // Cada miembro se vuelve a filtrar al guardarlo (consultas.avisos.js, `participantesDe`).
+    miembros: z.array(z.object({}).passthrough()).max(500).nullish(),
+  }).passthrough().nullish(),
+}).passthrough().superRefine((a, ctx) => {
+  if (a.grupo) {
+    if (a.grupo.tipo !== 'curso' && !a.grupo.alumno) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['grupo', 'alumno'], message: 'Aviso incompleto: falta el alumno del chat de grupo' });
+    }
+  } else if (!a.para?.length) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['para'], message: 'Aviso incompleto: falta a quién va el mensaje' });
+  }
+});
+
+/** Lo que manda el plugin al conectar con el código (classes/conexion.php, `conectar`). */
+const FALTAN_DATOS = 'Faltan datos: código, dirección del campus o token.';
+export const conectarSchema = z.object({
+  codigo: z.string({ required_error: FALTAN_DATOS, invalid_type_error: FALTAN_DATOS }).trim()
+    .min(1, FALTAN_DATOS).max(200, 'El código no es válido. Genera otro en el CRM.'),
+  sitio: z.string({ required_error: FALTAN_DATOS, invalid_type_error: FALTAN_DATOS }).trim()
+    .min(1, FALTAN_DATOS).max(500, 'La dirección del campus es demasiado larga.'),
+  token: z.string({ required_error: FALTAN_DATOS, invalid_type_error: FALTAN_DATOS }).trim()
+    .min(1, FALTAN_DATOS).max(200, 'El token del campus no es válido.'),
+});

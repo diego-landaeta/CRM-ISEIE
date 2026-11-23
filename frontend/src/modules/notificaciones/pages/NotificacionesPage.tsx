@@ -113,17 +113,17 @@ export default function NotificacionesPage() {
       <section
         className={`border rounded-2xl p-5 flex items-start gap-4 ${
           permission === 'granted'
-            ? 'bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-900'
+          ? 'bg-success-soft border-success/30'
             : permission === 'denied'
-              ? 'bg-red-50/40 dark:bg-red-950/20 border-red-200 dark:border-red-900'
+              ? 'bg-destructive-soft border-destructive/30'
               : 'bg-card border-border'
         }`}
       >
         <div className={`w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 ${
           permission === 'granted'
-            ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+          ? 'bg-success-soft text-success-soft-foreground'
             : permission === 'denied'
-              ? 'bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-300'
+              ? 'bg-destructive-soft text-destructive-soft-foreground'
               : 'bg-primary/15 text-primary'
         }`}>
           {permission === 'granted' && isSubscribed

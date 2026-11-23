@@ -332,7 +332,7 @@ export function armarAviso(v, tipo, detalle = null) {
       { etiqueta: 'Cobros', valor: String(v.cobros ?? '') },
     ]),
     P.nota(`Venta nº <strong>${P.esc(String(v.id))}</strong> · suscripción <strong>${P.esc(String(v.stripe_subscription_id))}</strong>${detalle ? `<br>Stripe respondió: ${P.esc(String(detalle).slice(0, 200))}` : ''}`),
-    v.lead_id ? P.boton({ texto: 'Abrir la ficha', url: P.enlace(`clientes/${encodeURIComponent(v.lead_id)}`) }) : '',
+    v.lead_id ? P.boton({ texto: 'Abrir la ficha', url: P.enlace(`clients/${encodeURIComponent(v.lead_id)}`) }) : '',
     P.parrafo('<span style="font-size:13px;color:#71717a">Por protección de datos este aviso no lleva el nombre de la alumna: está en su ficha, en el CRM.</span>'),
   ];
   const { htmlContent, textContent } = P.correo({

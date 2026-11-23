@@ -115,7 +115,7 @@ export default function ChatInput({ onSend, onTyping, disabled }: Props) {
           onClick={handleSend}
           disabled={!text.trim() || sending || disabled}
           title="Enviar (Enter)"
-          className="flex-shrink-0 w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-muted disabled:text-muted-foreground text-white flex items-center justify-center transition-colors"
+          className="flex-shrink-0 w-9 h-9 rounded-full bg-success hover:bg-success/90 disabled:bg-muted disabled:text-muted-foreground text-success-foreground flex items-center justify-center transition-colors"
         >
           <PaperPlaneRight size={18} weight="fill" />
         </button>

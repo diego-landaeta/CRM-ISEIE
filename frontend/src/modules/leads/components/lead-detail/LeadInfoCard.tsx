@@ -143,7 +143,8 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
   }
 
   return (
-    <div className="bg-card p-5 rounded-lg border border-border">
+    // `data-recorrido`: el paso «Sus datos» del recorrido de la ficha (#619).
+    <div data-recorrido="ficha-datos" className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">Información del lead</h3>
         {!editMode ? (
@@ -175,7 +176,8 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
           <InfoField label="Email">{lead.email}</InfoField>
           <InfoField label="Teléfono">
             {lead.telefono ? (
-              <span className="inline-flex items-center gap-2">
+              // Gemela de CRM#917: a 320 px «WhatsApp» se salía por la derecha.
+              <span className="inline-flex flex-wrap items-center gap-2">
                 {lead.telefono}
                 {/* Llamar desde la ficha. El CRM prepara, el telefono llama:
                     por WhatsApp no hay canal de audio y por la linea normal el

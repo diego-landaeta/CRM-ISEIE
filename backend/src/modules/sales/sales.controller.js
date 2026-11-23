@@ -2,10 +2,12 @@ import * as salesService from './sales.service.js';
 import * as reportModel from '../reports/report.model.js';
 import * as goalsService from './sales.goals.js';
 import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
+import { exigirFechaSiTieneCurso } from '../conversions/fecha-inicio.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
+import { leerFiltroPais } from '../leads/pais.js';
 
 export async function create(req, res, next) {
   try {
@@ -13,6 +15,16 @@ export async function create(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // LA FECHA DE INICIO DEL CURSO, OBLIGATORIA AL CERRAR LA VENTA DE UN
+    // PRODUCTO CON CURSO DE MOODLE (#767, CRM#1036). Esta ruta es la del
+    // formulario «Registrar venta». Conciliación, la compra directa y los links
+    // de pago crean la venta por el servicio y no pasan por aquí: siguen sin
+    // ella, y entonces la matrícula va con el pago.
+    await exigirFechaSiTieneCurso({
+      project_id: parsed.data.project_id,
+      producto_contratado_id: parsed.data.producto_interes_id,
+      fecha_inicio: parsed.data.fecha_inicio,
+    });
     // EL CANDADO DE «SIN GESTORA», EN EL SERVIDOR.
     //
     // La pantalla esconde el boton a quien no puede, pero esconder no es
@@ -44,7 +56,9 @@ export async function topProducts(req, res, next) {
     // Con equipo comercial (09/11/2026), el suyo y el de sus gestoras.
     const alcance = await alcanceComercial(req.user);
     if (alcance) responsableId = personasDentro(alcance, responsableId);
-    const result = await salesService.getTopProducts({ projectId, projectIds, limit, days, from, to, responsableId });
+    const result = await salesService.getTopProducts({
+      projectId, projectIds, limit, days, from, to, responsableId, paisEntrada: leerFiltroPais(req.query.paisEntrada),
+    });
     // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
     // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
     // totales y las ventas sin cobro también (#225): el total lo da el
@@ -80,6 +94,7 @@ export async function facturado(req, res, next) {
       from: parsed.data.from ?? null,
       to: parsed.data.to ?? null,
       responsableId,
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -160,6 +175,8 @@ async function filtrosDeQuery(req) {
     from: dateRe2.test(req.query.from || '') ? req.query.from : null,
     to: dateRe2.test(req.query.to || '') ? req.query.to : null,
     responsableId,
+    // País de entrada del prospecto de cada venta (#221): un código o `sin_pais`.
+    paisEntrada: leerFiltroPais(req.query.paisEntrada),
     search: (req.query.search || '').trim() || null,
     page: req.query.page,
     limit: req.query.limit,
@@ -228,6 +245,7 @@ export async function desglose(req, res, next) {
         const alcance = await alcanceComercial(req.user);
         return alcance ? personasDentro(alcance, pedido) : pedido;
       })(),
+      paisEntrada: leerFiltroPais(req.query.paisEntrada),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -246,6 +264,7 @@ export async function paises(req, res, next) {
       from: f.from || `${new Date().getFullYear()}-01-01`,
       to: f.to || hoy,
       asesoraId: f.responsableId,
+      paisEntrada: f.paisEntrada,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
