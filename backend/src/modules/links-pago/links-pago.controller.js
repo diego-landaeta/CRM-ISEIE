@@ -3,11 +3,13 @@ import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
   ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
+  embudoSchema,
   totalConDescuento,
 } from './links-pago.validation.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
 import * as seguimiento from './links-pago.seguimiento.js';
+import { embudo as embudoDe } from './links-pago.embudo.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
@@ -62,6 +64,32 @@ export async function listar(req, res, next) {
       data: rows,
       pagination: { total, page, limit, totalPages: Math.max(1, Math.ceil(total / limit)) },
     });
+  } catch (err) { next(err); }
+}
+
+/** Hoy en Madrid, AAAA-MM-DD. */
+const hoyEnMadrid = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+
+// GET /api/links-pago/embudo?desde=&hasta= (CRM#987)
+// Creados, abiertos y pagados, con su % y lo cobrado, y las cuotas del cobro
+// automático, por gestora y por campus. Con el ámbito de siempre: los campus de
+// quien mira (`campusParaRecortar`) y, sin «ver todos», solo lo suyo.
+export async function embudo(req, res, next) {
+  try {
+    const parsed = embudoSchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const hoy = hoyEnMadrid();
+    const hasta = parsed.data.hasta || hoy;
+    const desde = parsed.data.desde || `${hasta.slice(0, 7)}-01`;
+    if (desde > hasta) throw new AppError('La fecha de inicio no puede ir después de la del final', 400, 'VALIDATION_ERROR');
+
+    let projectIds = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    const campus = await campusParaRecortar(req);
+    if (campus) projectIds = projectIds.filter((p) => campus.includes(Number(p)));
+    if (!projectIds.length) projectIds = [-1];
+    const creadores = await personasQueVe(req);
+    const data = await embudoDe({ projectIds, creadores, desde, hasta });
+    res.json({ success: true, data: { desde, hasta, ...data } });
   } catch (err) { next(err); }
 }
 

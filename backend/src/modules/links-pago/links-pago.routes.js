@@ -58,6 +58,8 @@ router.put('/cobro-automatico', puede('links_pago.cobro_automatico'), ctrl.cambi
 
 // Quien crea links ve los suyos; con «ver todos», los de su alcance. El
 // recorte lo hace el controlador con la sesión.
+// El embudo por gestora y campus (CRM#987). Antes de `/:id`. El recorte, en el controlador.
+router.get('/embudo', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.embudo);
 router.get('/', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.listar);
 router.get('/:id', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.detalle);
 
