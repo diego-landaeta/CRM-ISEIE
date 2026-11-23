@@ -75,7 +75,7 @@ describe('CRM#764 · «Generar factura» de una posible duplicada', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Generar factura' }));
     // Primero la pregunta de la duplicada, con la otra factura.
-    fireEvent.click(await screen.findByRole('button', { name: 'Emitir igualmente' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Es otra, emitir igualmente' }));
 
     await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
     expect(post).toHaveBeenCalledWith('/invoices/cola/generar',
@@ -85,7 +85,7 @@ describe('CRM#764 · «Generar factura» de una posible duplicada', () => {
   it('si se cancela la pregunta, no se emite nada', async () => {
     render(<FacturacionAlDiaCard projectId={9} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Generar factura' }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar, es la misma' }));
     await new Promise((r) => setTimeout(r, 20));
     expect(post).not.toHaveBeenCalled();
   });
