@@ -34,7 +34,7 @@ function useQuienMira(): { id?: number | string } | null {
   }
 }
 
-export default function VerComoFunciona({ id, apagada = false, alAbrir, compacto = false }: {
+export default function VerComoFunciona({ id, apagada = false, alAbrir, compacto = false, texto }: {
   id: IdRecorridoDePrueba;
   /** La función está apagada en este servidor (su interruptor). */
   apagada?: boolean;
@@ -42,6 +42,8 @@ export default function VerComoFunciona({ id, apagada = false, alAbrir, compacto
   alAbrir?: () => void;
   /** Dentro de una tarjeta: el botón, pequeño. */
   compacto?: boolean;
+  /** Varios botones juntos en una pantalla (Facturas): el nombre de cada uno en vez de «Ver cómo funciona». */
+  texto?: string;
 }) {
   const user = useQuienMira();
   const { can } = usePermission();
@@ -80,7 +82,7 @@ export default function VerComoFunciona({ id, apagada = false, alAbrir, compacto
           ? 'inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted'
           : 'inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted'}
       >
-        <Compass size={compacto ? 13 : 14} weight="bold" aria-hidden="true" /> Ver cómo funciona
+        <Compass size={compacto ? 13 : 14} weight="bold" aria-hidden="true" /> {texto || 'Ver cómo funciona'}
       </button>
       {abierto && createPortal(
         <RecorridoGuiado
