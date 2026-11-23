@@ -18,6 +18,9 @@ export type OtraFactura = {
   fecha: string;
   importe: number;
   cliente?: string | null;
+  nif?: string | null;
+  /** En qué se parece a la que se va a emitir: misma venta, mismo NIF o mismo nombre. */
+  coincide?: 'venta' | 'nif' | 'nombre' | null;
 };
 
 type Cuerpo = { code?: string; data?: { otra?: OtraFactura } };
@@ -37,14 +40,35 @@ export function fechaLegible(iso: string): string {
   return m ? `${m[3]}/${m[2]}/${m[1]}` : String(iso || '');
 }
 
-/** La pregunta, con las palabras de la pantalla. */
-export function textoDuplicada(otra: OtraFactura): string {
-  return `Ya existe la factura ${otra.numero} de este cliente por el mismo importe el día `
-    + `${fechaLegible(otra.fecha)}. ¿Emitir otra igualmente?`;
-}
-
 function importeLegible(n: number): string {
   return `${Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+}
+
+/*
+  Ana (CEDIA), 20/11/2026: «me salía que el número 296 ya estaba asignado». Era
+  este aviso, contra la factura de OTRA clienta del mismo diplomado, y decía
+  «ya existe la factura 2026/0296 de este cliente». Ahora dice de quién es la
+  otra y en qué se parece, y el botón dice lo que hace. Sigue frenando: puede
+  ser una cuota legítima, pero mejor mirarlo (Diego, 23/11).
+*/
+
+/** De quién es la otra factura. */
+export function tituloDuplicada(otra: OtraFactura): string {
+  return `Posible duplicada de la factura ${otra.numero}${otra.cliente ? ` de ${otra.cliente}` : ''}`;
+}
+
+/** En qué se parece. */
+export function porQueSeParece(otra: OtraFactura): string {
+  if (otra.coincide === 'venta') return 'es de la misma venta';
+  if (otra.coincide === 'nif') return `tiene el mismo NIF${otra.nif ? ` (${otra.nif})` : ''}`;
+  if (otra.coincide === 'nombre') return 'tiene el mismo nombre de cliente';
+  return 'parece del mismo cliente';
+}
+
+/** La explicación entera, en una frase. */
+export function textoDuplicada(otra: OtraFactura): string {
+  return `${tituloDuplicada(otra)} (${importeLegible(otra.importe)}, ${fechaLegible(otra.fecha)}): `
+    + `mismo importe, a 7 días o menos, y ${porQueSeParece(otra)}.`;
 }
 
 /**
@@ -69,17 +93,23 @@ export function preguntarSiEmitirDuplicada(otra: OtraFactura): Promise<boolean> 
       <ConfirmDialog
         open
         tone="warning"
-        title="Posible factura duplicada"
+        title={tituloDuplicada(otra)}
         message={(
           <>
-            <p>{textoDuplicada(otra)}</p>
+            <p>
+              La factura {otra.numero} es de <strong>{otra.cliente || 'sin nombre'}</strong>,
+              por {importeLegible(otra.importe)}, del {fechaLegible(otra.fecha)}.
+            </p>
+            <p className="mt-2">
+              La que vas a emitir tiene el mismo importe, va a 7 días o menos y {porQueSeParece(otra)}.
+            </p>
             <p className="mt-2 text-xs">
-              {otra.cliente ? `${otra.cliente} · ` : ''}{importeLegible(otra.importe)}
+              Si es otra (otra venta u otra cuota), emítela. Si es la misma, cancela.
             </p>
           </>
         )}
-        cancelLabel="Cancelar"
-        confirmLabel="Emitir igualmente"
+        cancelLabel="Cancelar, es la misma"
+        confirmLabel="Es otra, emitir igualmente"
         onCancel={() => cerrar(false)}
         onConfirm={() => cerrar(true)}
       />,

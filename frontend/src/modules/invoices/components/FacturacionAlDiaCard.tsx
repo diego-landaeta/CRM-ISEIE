@@ -12,7 +12,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
-import { posibleDuplicada, preguntarSiEmitirDuplicada, fechaLegible, type OtraFactura } from '../lib/posibleDuplicada';
+import { posibleDuplicada, preguntarSiEmitirDuplicada, textoDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
 import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
 
 type ColaItem = {
@@ -250,7 +250,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                         <span
                           className="block w-fit mt-0.5 px-1.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] font-semibold"
                           title={c.posible_duplicada
-                            ? `Ya existe la factura ${c.posible_duplicada.numero} de este cliente por el mismo importe el día ${fechaLegible(c.posible_duplicada.fecha)}.`
+                            ? textoDuplicada(c.posible_duplicada)
                             : undefined}
                         >
                           {c.motivo}

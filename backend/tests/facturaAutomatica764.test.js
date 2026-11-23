@@ -315,7 +315,7 @@ describe('CRM#764 · si la automática se para, la cola dice por qué y factura 
     expect(r.facturas).toBe(0);
     const fila = await filaDe(v);
     expect(fila.estado).toBe('respondido');
-    expect(fila.ultimo_error).toMatch(/^\[POSIBLE_DUPLICADA\] Ya existe la factura/);
+    expect(fila.ultimo_error).toMatch(/^\[POSIBLE_DUPLICADA\] Posible duplicada de la factura/);
 
     // Sus datos, en la ficha aunque la factura no saliera.
     const [lead] = await q('SELECT identificacion_fiscal, ciudad_fiscal FROM leads WHERE id = $1', [v.lead_id]);
