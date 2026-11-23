@@ -13,6 +13,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import ComoVoy from '@/modules/reports/components/ComoVoy';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
@@ -374,12 +376,15 @@ export default function ClientsPage() {
   const totalPages = Math.max(1, Math.ceil(totalBackend / PAGE_SIZE));
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619): que la barra
+       fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Clientes"
         subtitle={`Lista de clientes en ${activeProject?.nombre || 'el proyecto'} — ${
           hasActiveFilters ? `${totalBackend} encontrados` : `${totalBackend} clientes`
         }`}
+        actions={<VerRecorrido id="clientes" listo={!loading} />}
       />
 
       {/* Como va quien mira: su puesto en ventas y su tasa de
@@ -388,7 +393,8 @@ export default function ClientsPage() {
           (Diego, 22/10/2026; ver DashboardPage). */}
       <ComoVoy compacto />
 
-      <div className="flex items-center justify-between gap-2 flex-wrap">
+      {/* El buscador, los filtros y el CSV: un solo paso del recorrido (#619). */}
+      <div data-recorrido="clientes-filtros" className="flex items-center justify-between gap-2 flex-wrap">
         <ClientsFiltersBar
           user={user}
           search={search}
@@ -422,7 +428,7 @@ export default function ClientsPage() {
         )}
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="clientes-lista" className="bg-card border border-border rounded-lg overflow-hidden">
         {loading ? (
           <SkeletonTable rows={8} columns={8} className="border-0 rounded-none" />
         ) : sortedClients.length === 0 ? (

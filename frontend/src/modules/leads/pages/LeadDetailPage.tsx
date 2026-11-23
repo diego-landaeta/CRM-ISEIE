@@ -209,7 +209,9 @@ export default function LeadDetailPage() {
   }
 
   return (
-    <div className="space-y-5">
+    /* El margen de scroll de lo que señala el recorrido de la ficha (#619): la
+       barra fija de arriba le tapaba el principio al subir. */
+    <div className="space-y-5 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <LeadLossDialog
         open={lossOpen}
         onClose={() => setLossOpen(false)}
@@ -309,7 +311,7 @@ export default function LeadDetailPage() {
             refreshKey={emailRefreshKey}
           />
           <LinksDePagoCard projectId={lead.project_id} leadId={lead.id} productoId={lead.producto_interes_id} />
-          <div data-section="compras" className="bg-card p-5 rounded-lg border border-border">
+          <div data-section="compras" data-recorrido="ficha-ventas" className="bg-card p-5 rounded-lg border border-border">
             <h3 className="font-semibold mb-3 flex items-center gap-2">
               <CurrencyEur size={16} weight="regular" /> Historial de compras
             </h3>
