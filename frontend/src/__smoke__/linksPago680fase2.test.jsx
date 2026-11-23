@@ -66,7 +66,7 @@ describe('la tarjeta de la ficha', () => {
     render(<LinksDePagoCard projectId={1} leadId={3} />);
     expect(await screen.findByText('Pendiente')).toBeTruthy();
     expect(get).toHaveBeenCalledWith('/links-pago', { params: { leadId: 3, limit: 50 } });
-    expect(screen.getByRole('button', { name: /Copiar/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: /^\s*Copiar\s*$/ })).toBeTruthy();
     expect(screen.getByRole('button', { name: /Anular/ })).toBeTruthy();
   });
 

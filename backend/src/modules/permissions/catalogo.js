@@ -369,8 +369,8 @@ export const SECCIONES = [
         // y los de las demás de sus campus con `ver_todos`. Siempre en SUS campus.
         clave: 'links_pago', nombre: 'Links de pago', acciones: [
           a('crear', 'Crear links de pago', 'Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos.', COMERCIAL),
-          a('ver_todos', 'Ver los links de todos', 'Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno).', ADMIN),
-          a('configurar', 'Configurar los links de pago', 'Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe.', ADMIN),
+          a('ver_todos', 'Ver los links de todos', 'Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno), los creados directamente en Stripe y vincular sus cobros a una venta.', ADMIN),
+          a('configurar', 'Configurar los links de pago', 'Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas, monedas y códigos promocionales de campaña) y el webhook de su cuenta de Stripe.', ADMIN),
           a('cobro_automatico', 'Cobro automático de cuotas', 'Activar o quitar en una venta que Stripe cobre solas sus cuotas, en sus fechas, con la tarjeta que guarda el alumno al pagar la primera.', COMERCIAL),
         ],
       },

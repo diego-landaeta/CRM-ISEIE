@@ -1,5 +1,5 @@
 import * as model from './links-pago.model.js';
-import { entorno, planDeCuotas } from './links-pago.service.js';
+import { entorno, planDelLink } from './links-pago.service.js';
 import { normalizePhone } from '../../shared/utils/normalizePhone.js';
 import { linksPagoActivos } from '../../shared/config/soloEnPruebas.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -90,6 +90,12 @@ export async function linkDelCargo(projectId, payment, dbRow, { env = process.en
 /**
  * La venta del link desde un prospecto, creada a nombre de quien creó el link.
  * Devuelve el id de la venta, o null si no se pudo (queda sin asociar y se dice).
+ *
+ * CON INICIAL (CRM-ISEIE#657, gemela de CRM#982): la cuota 1 es la inicial (lo
+ * que cobró el link) y el resto va en N cuotas iguales, una al mes, la última con
+ * los céntimos. Stripe programa cada cuota como una fase con su importe, así que
+ * una inicial distinta de las cuotas no cambia nada del cobro automático. Con
+ * descuento, la venta lleva también el precio original y el descuento.
  */
 async function crearVentaDelLink(projectId, payment, link, leadId) {
   const fecha = new Date(Number(payment.stripe_created_at) * 1000).toISOString().slice(0, 10);
@@ -97,9 +103,8 @@ async function crearVentaDelLink(projectId, payment, link, leadId) {
   // (el CRM guarda euros).
   const importe = String(link.moneda).toUpperCase() === 'EUR' ? Number(link.importe) : Number(payment.amount);
   // En cuotas (link sencillo, 20/11): la venta por el total con N cuotas mensuales desde el pago.
-  const cuotas = link.modalidad === 'cuotas' && Number(link.num_cuotas) >= 2
-    ? planDeCuotas({ total: Number(link.importe), n: Number(link.num_cuotas), desde: fecha })
-    : null;
+  // Con inicial (CRM-ISEIE#657): la inicial es la cuota 1 y el resto, N cuotas iguales.
+  const cuotas = planDelLink(link, fecha);
   try {
     const { createSale } = await import('../sales/sales.service.js');
     const venta = await createSale({
@@ -122,6 +127,10 @@ async function crearVentaDelLink(projectId, payment, link, leadId) {
       // sale en Ventas · «Posibles repetidas».
       comprobarRepetida: false,
     });
+    // El precio original y el descuento del link (CRM#982), en la venta. Si no se
+    // pudiera apuntar, la venta sigue bien: su total es el del link.
+    await model.descuentoEnLaVenta(venta.conversion_id, link).catch((e) => logger.warn({ err: e.message, linkId: link.id },
+      'links de pago: no se pudo apuntar el descuento del link en la venta'));
     logger.info({ projectId, linkId: link.id, conversionId: venta.conversion_id, vendedoraId: link.created_by, stripeId: payment.stripe_id,
       cuotas: cuotas?.length || null }, 'links de pago: venta creada al pagarse el link');
     return venta.conversion_id;
@@ -218,10 +227,13 @@ async function ventaNueva(projectId, payment, link) {
   if (!conversionId) return null;
   await model.ponerVenta(link.id, conversionId, leadId);
   if (link.modalidad !== 'cuotas') return { conversionId, cuotaId: null };
-  // El cobro automático, activo en la venta ANTES de apuntar el cobro: al pagarse
-  // el link (`trasCobrar`) se guarda la tarjeta y Stripe programa las demás cuotas.
-  const cobroAutoModel = await import('./links-pago.cobro-auto.model.js');
-  await cobroAutoModel.poner(conversionId, { projectId: Number(projectId), activo: true, userId: link.created_by ?? null });
+  // Con cobro automático (el link guarda la tarjeta), activo en la venta ANTES de
+  // apuntar el cobro: al pagarse el link (`trasCobrar`) se guarda la tarjeta y
+  // Stripe programa las demás cuotas. Sin él (23/11), cada cuota tendrá su link.
+  if (link.guarda_tarjeta) {
+    const cobroAutoModel = await import('./links-pago.cobro-auto.model.js');
+    await cobroAutoModel.poner(conversionId, { projectId: Number(projectId), activo: true, userId: link.created_by ?? null });
+  }
   return { conversionId, cuotaId: await model.primeraCuotaPendiente(conversionId) };
 }
 
@@ -253,6 +265,42 @@ export async function ventaDelLink(projectId, payment, link) {
   };
 }
 
+/**
+ * CUOTAS SIN COBRO AUTOMÁTICO (Diego, 23/11/2026: «crear cuotas sí o sí»). Un
+ * link en cuotas que no guarda la tarjeta cobra solo la inicial; al pagarse, la
+ * venta ya tiene su plan (con las fechas que eligió la gestora) y aquí se crea un
+ * link por cada cuota pendiente, con su importe y su vencimiento. Al pagarlos,
+ * cada cobro salda su cuota, como los del plan de pago (19/11). La gestora los ve
+ * en la venta («Plan de pago») y en «Links de pago», y los manda cuando toca.
+ * Una cuota que ya tiene link vivo no se repite. Nunca lanza: si Stripe falla, se
+ * apunta en el historial del link y se generan desde «Generar plan de pago».
+ */
+export async function linksDeLasCuotas(link, conversionId) {
+  if (link?.modalidad !== 'cuotas' || link.guarda_tarjeta || link.installment_id || !conversionId) return [];
+  try {
+    const [prod, cfg, venta, pendientes] = await Promise.all([
+      model.producto(link.product_id), model.config(link.project_id),
+      model.ventaConFicha(conversionId), model.cuotasPendientes(conversionId),
+    ]);
+    // La 1 es la inicial: la cobra este link, aunque aún no figure cobrada.
+    const cuotas = pendientes.filter((c) => Number(c.numero) > 1);
+    if (!prod || !cfg || !venta || !cuotas.length) return [];
+    // Al llamarlo, no arriba: el servicio importa stripe-payments, que importa este fichero.
+    const { crearLinksDeCuotas } = await import('./links-pago.service.js');
+    const creados = await crearLinksDeCuotas({
+      projectId: Number(link.project_id), leadId: venta.lead_id, conversionId: Number(conversionId),
+      prod, cfg, userId: Number(link.created_by), cuotas,
+    });
+    await model.anotarEvento(link.id, 'links_de_las_cuotas', { conversion_id: Number(conversionId), links: creados });
+    logger.info({ linkId: link.id, conversionId, links: creados.length }, 'links de pago: un link por cuota tras pagarse la inicial');
+    return creados;
+  } catch (err) {
+    logger.warn({ linkId: link.id, conversionId, err: err.message }, 'links de pago: no se pudieron crear los links de las cuotas');
+    await model.anotarEvento(link.id, 'links_de_las_cuotas_fallidos', { conversion_id: Number(conversionId), motivo: err.message }).catch(() => {});
+    return [];
+  }
+}
+
 /** Tras apuntar (o encontrar) el cobro: el link, pagado, y su historial. */
 export async function trasCobrar(link, { payment, conversionId, conversionPaymentId }) {
   const pagadoEl = new Date(Number(payment.stripe_created_at) * 1000).toISOString();
@@ -263,6 +311,8 @@ export async function trasCobrar(link, { payment, conversionId, conversionPaymen
   if (link.guarda_tarjeta) {
     const { trasPagarseUnLink } = await import('./links-pago.cobro-auto.js');
     await trasPagarseUnLink(link, payment, conversionId);
+  } else {
+    await linksDeLasCuotas(link, conversionId);
   }
   await model.anotarEventoDelCargo(link.id, 'pagado', {
     stripe_id: payment.stripe_id, importe: payment.amount, metodo: payment.payment_method || null,
@@ -292,8 +342,13 @@ export async function desdeLaSesion(projectId, event, { env = process.env } = {}
   if (!linksPagoActivos(env)) return { skipped: 'links de pago apagados' };
   const s = event.data?.object || {};
   const marca = marcaDe(s.metadata);
-  // Un checkout que no salió de un link del CRM (la web, una plataforma): no es nuestro.
-  if (!marca) return { skipped: 'sin marca del CRM' };
+  // Sin la marca del CRM: si viene de un link creado directamente en Stripe
+  // (CRM#1019), su link y lo que dijo la sesión, para cobrarlo por el mismo
+  // camino; si no (la web, una plataforma), no es nuestro.
+  if (!marca) {
+    const { desdeLaSesion: desdeLaSesionDeStripe } = await import('./links-pago.externos.js');
+    return desdeLaSesionDeStripe(projectId, event);
+  }
   const ajena = motivoAjena(marca, projectId, env);
   if (ajena) return { skipped: ajena };
   const link = await model.paraCobro(marca.linkId);

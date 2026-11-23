@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './links-pago.controller.js';
+import * as externos from './links-pago.externos.controller.js';
 
 /*
   Links de pago (CRM#680). Fase 1: lectura y el tope de descuento del campus.
@@ -32,9 +33,20 @@ router.put('/config', puede('links_pago.configurar'), projectAccess, ctrl.guarda
 router.get('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.verWebhook);
 router.put('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.cambiarWebhook);
 
+// Códigos promocionales de campaña (CRM#986): verlos, quien crea links (los
+// vigentes) o quien configura (todos); crearlos y desactivarlos, quien configura.
+router.get('/codigos', puede('links_pago.configurar', 'links_pago.crear'), projectAccess, ctrl.listarCodigos);
+router.post('/codigos', puede('links_pago.configurar'), projectAccess, ctrl.crearCodigo);
+router.post('/codigos/:id/desactivar', puede('links_pago.configurar'), projectAccess, ctrl.desactivarCodigo);
+
 // El asistente de crear link (20/11): si «Cuotas» se puede en este campus y, si
 // no, por qué. Quien crea links; el campus, `projectAccess`.
 router.get('/cuotas-disponibles', puede('links_pago.crear'), projectAccess, ctrl.cuotasDisponibles);
+
+// El aviso «Conectar Stripe para cobros automáticos» de la pantalla (CRM#992): los
+// campus del ámbito de quien mira a los que les falta la clave o su permiso de
+// suscripciones. El ámbito lo recorta el controlador, como la lista.
+router.get('/conectar-stripe', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.conectarStripe);
 
 // El asistente de crear link: las ventas del prospecto, para elegir a cuál va
 // (o ninguna). El controlador mira que el prospecto sea de su campus y alcance.
@@ -51,8 +63,20 @@ router.post('/plan', puede('links_pago.crear'), ctrl.generarPlan);
 router.get('/cobro-automatico', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.verCobroAutomatico);
 router.put('/cobro-automatico', puede('links_pago.cobro_automatico'), ctrl.cambiarCobroAutomatico);
 
+// ─── Links creados directamente en Stripe y sus cobros (CRM#1019) ───────────
+// Verlos, traerlos de Stripe y vincular sus cobros: «ver todos», siempre en sus
+// campus (el controlador). Antes de `/:id`.
+router.get('/externos', puede('links_pago.ver_todos'), externos.listar);
+router.post('/externos/sincronizar', puede('links_pago.ver_todos'), projectAccess, externos.sincronizar);
+router.get('/por-vincular', puede('links_pago.ver_todos'), externos.porVincular);
+router.get('/por-vincular/ventas', puede('links_pago.ver_todos'), externos.buscarVentas);
+router.post('/por-vincular/:id/vincular', puede('links_pago.ver_todos'), externos.vincular);
+// ────────────────────────────────────────────────────────────────────────────
+
 // Quien crea links ve los suyos; con «ver todos», los de su alcance. El
 // recorte lo hace el controlador con la sesión.
+// El embudo por gestora y campus (CRM#987). Antes de `/:id`. El recorte, en el controlador.
+router.get('/embudo', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.embudo);
 router.get('/', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.listar);
 router.get('/:id', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.detalle);
 
@@ -60,5 +84,8 @@ router.get('/:id', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.detal
 // el controlador mira que el link sea de su campus y de su alcance.
 router.post('/', puede('links_pago.crear'), ctrl.crear);
 router.post('/:id/anular', puede('links_pago.crear', 'links_pago.ver_todos'), ctrl.anular);
+// Renovar un caducado con un clic (gemela de CRM#984): un link nuevo igual, con la
+// caducidad de serie. Quien crea links, sobre uno de su campus y su alcance.
+router.post('/:id/renovar', puede('links_pago.crear'), ctrl.renovar);
 
 export default router;

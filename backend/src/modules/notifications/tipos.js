@@ -258,6 +258,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Conectar Claude una vez', agrupa: false,
     descripcion: 'Tu Claude intenta consultar con tu URL del MCP sin haber iniciado sesión y hay que conectarlo una vez',
   },
+  // Gemela de CRM#984 (Diego, 21/11): el alumno abrió el link de pago y no pagó en
+  // las horas que diga el campus. Es para llamarle: pide acción. Uno por link
+  // (links-pago.seguimiento.js).
+  link_pago_abierto: {
+    clase: ACCION, etiqueta: 'Link de pago abierto sin pagar', agrupa: false,
+    descripcion: 'Tu alumno abrió el link de pago y no lo ha pagado',
+  },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
     descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',

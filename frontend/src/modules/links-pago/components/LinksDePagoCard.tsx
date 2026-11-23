@@ -8,6 +8,8 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import CrearLinkAsistente, { copiarLink as copiar, errorDe } from './CrearLinkAsistente';
+import { DatosDeSeguimiento, BotonRenovar } from './SeguimientoDelLink';
+import EnviarLink from './EnviarLink';
 import {
   listarLinks, anularLink,
   type LinkDePago, type EstadoLink,
@@ -31,7 +33,8 @@ import {
 
 export const ESTADOS: Record<EstadoLink, { texto: string; tono: string }> = {
   creado: { texto: 'Pendiente', tono: 'bg-info-soft text-info-soft-foreground' },
-  abierto: { texto: 'Abierto', tono: 'bg-info-soft text-info-soft-foreground' },
+  // Abierto (gemela de CRM#984): el alumno llegó a la página de pago y no pagó. Se distingue de «Pendiente».
+  abierto: { texto: 'Abierto', tono: 'bg-warning-soft text-warning-soft-foreground' },
   pagado: { texto: 'Pagado', tono: 'bg-success-soft text-success-soft-foreground' },
   pagado_parcial: { texto: 'Pagado en parte', tono: 'bg-warning-soft text-warning-soft-foreground' },
   caducado: { texto: 'Caducado', tono: 'bg-muted text-muted-foreground' },
@@ -158,7 +161,13 @@ export default function LinksDePagoCard({ leadId, conversionId, conRecorrido = f
                   {l.estado === 'caducado' && l.caduca_el && <> · caducó {cuando(l.caduca_el)} sin pagar</>}
                   {l.estado === 'anulado' && <> · anulado{l.anulado_por_nombre ? ` por ${l.anulado_por_nombre}` : ''}: {l.motivo_anulacion}</>}
                 </span>
-                <span className="ml-auto flex items-center gap-1.5">
+                <DatosDeSeguimiento link={l} />
+                <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                  {vivo && l.url && (
+                    <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]" title={l.url}>{l.url.replace(/^https?:\/\//, '')}</span>
+                  )}
+                  <BotonRenovar link={l} onRenovado={() => cargar()} />
+                  <EnviarLink link={l} />
                   {vivo && l.url && (
                     <button type="button" onClick={() => copiar(l.url!)}
                       className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted">

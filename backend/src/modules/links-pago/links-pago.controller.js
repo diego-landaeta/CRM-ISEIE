@@ -3,13 +3,20 @@ import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
   ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
+  embudoSchema, codigosQuerySchema, codigoBodySchema, codigoDesactivarSchema,
+  totalConDescuento,
 } from './links-pago.validation.js';
+import * as codigos from './links-pago.codigos.js';
+import * as codigosModel from './links-pago.codigos.model.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
+import * as seguimiento from './links-pago.seguimiento.js';
+import { embudo as embudoDe } from './links-pago.embudo.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { cobroAutomaticoActivo } from '../../shared/config/soloEnPruebas.js';
 import { listaDelAmbito, campusDeTodos, campusParaRecortar, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { alcanceComercial, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
 
@@ -62,6 +69,32 @@ export async function listar(req, res, next) {
   } catch (err) { next(err); }
 }
 
+/** Hoy en Madrid, AAAA-MM-DD. */
+const hoyEnMadrid = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Madrid' }).format(new Date());
+
+// GET /api/links-pago/embudo?desde=&hasta= (CRM#987)
+// Creados, abiertos y pagados, con su % y lo cobrado, y las cuotas del cobro
+// automático, por gestora y por campus. Con el ámbito de siempre: los campus de
+// quien mira (`campusParaRecortar`) y, sin «ver todos», solo lo suyo.
+export async function embudo(req, res, next) {
+  try {
+    const parsed = embudoSchema.safeParse(req.query);
+    if (!parsed.success) throw fallo(parsed);
+    const hoy = hoyEnMadrid();
+    const hasta = parsed.data.hasta || hoy;
+    const desde = parsed.data.desde || `${hasta.slice(0, 7)}-01`;
+    if (desde > hasta) throw new AppError('La fecha de inicio no puede ir después de la del final', 400, 'VALIDATION_ERROR');
+
+    let projectIds = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    const campus = await campusParaRecortar(req);
+    if (campus) projectIds = projectIds.filter((p) => campus.includes(Number(p)));
+    if (!projectIds.length) projectIds = [-1];
+    const creadores = await personasQueVe(req);
+    const data = await embudoDe({ projectIds, creadores, desde, hasta });
+    res.json({ success: true, data: { desde, hasta, ...data } });
+  } catch (err) { next(err); }
+}
+
 // GET /api/links-pago/:id
 // Fuera de su campus o de su alcance es un 404, como si no existiera: no se
 // confirma que haya un link de otra empresa o de otra gestora con ese id.
@@ -91,13 +124,17 @@ export async function detalle(req, res, next) {
 // GET /api/links-pago/config?projectId=N
 // El campus ya lo ha comprobado `projectAccess` (req.projectId). Lo lee también
 // quien crea links: la pantalla de crear necesita las monedas y la caducidad.
+// `aviso_clave`: si el campus no puede crear links por la clave (no la tiene, o
+// es live en pruebas), lo que diría «Crear link»; así el diálogo lo dice al
+// abrirse y no al final. Nunca la clave.
 export async function verConfig(req, res, next) {
   try {
     const parsed = configQuerySchema.safeParse({ projectId: req.projectId });
     if (!parsed.success) throw fallo(parsed);
     const cfg = await model.config(parsed.data.projectId);
     if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
-    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg } });
+    const aviso_clave = await service.avisoDeClave(parsed.data.projectId);
+    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg, aviso_clave } });
   } catch (err) { next(err); }
 }
 
@@ -209,37 +246,116 @@ export async function crear(req, res, next) {
     const enCuotas = b.modalidad === 'cuotas';
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
-      modalidad: b.modalidad, numCuotas: b.num_cuotas, esAdmin: await tienePermiso(req, 'links_pago.configurar'),
+      modalidad: b.modalidad, numCuotas: b.num_cuotas, inicial: b.inicial, plan: b.cuotas,
+      esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
       pendiente,
     });
 
     /*
-      EN CUOTAS (20/11): es el cobro automático. Se comprueba ANTES de crear nada
-      (campus, permiso y clave de Stripe); el link cobra la cuota 1 y guarda la
-      tarjeta, con el consentimiento de las demás junto al botón de pagar.
+      EN CUOTAS. Desde el 23/11 (Diego: «crear cuotas y elegir las fechas sí o
+      sí») se pueden siempre que el campus las admita en euros; lo que cambia es
+      cómo se cobran:
+        · CON cobro automático (campus que lo permite, permiso de la persona y
+          clave de Stripe que puede programar cobros): el link cobra la inicial y
+          guarda la tarjeta, con el consentimiento de las demás junto al botón de
+          pagar, y Stripe cobra cada cuota en su fecha;
+        · SIN él: el link cobra la inicial y, al pagarse, se crea un link por cada
+          cuota, con su importe y su fecha de vencimiento (links-pago.cobro.js).
+      CON INICIAL (CRM#982): en la venta serán N + 1 pagos (`num`). Con `cuotas`
+      (23/11), cada una con el importe y la fecha que eligió la gestora.
     */
     let guardaTarjeta = null;
     let cuotas = null;
+    let automatico = false;
     if (enCuotas) {
       const disp = await cobroAuto.paraUnLinkEnCuotas(destino.projectId, {
         cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
       });
       if (!disp.disponible) throw new AppError(disp.motivo, 409, 'CUOTAS_NO_DISPONIBLES');
-      const importes = service.repartirEnCuotas(b.importe, b.num_cuotas);
-      cuotas = { num: b.num_cuotas, importeCuota: importes[0] };
-      guardaTarjeta = {
-        consentimiento: cobroAuto.textoConsentimiento({
-          campus: await model.nombreDelCampus(destino.projectId),
-          cuotas: importes.slice(1).map((importe) => ({ importe })),
-        }),
+      automatico = disp.automatico === true;
+      const conInicial = b.inicial !== undefined;
+      const plan = b.cuotas ? b.cuotas.map((c) => ({ importe: c.importe, vence: c.vence })) : null;
+      const importes = plan
+        ? [b.inicial, ...plan.map((c) => c.importe)]
+        : conInicial
+          ? [b.inicial, ...service.repartirEnCuotas(service.restaCentimos(b.importe, b.inicial), b.num_cuotas)]
+          : service.repartirEnCuotas(b.importe, b.num_cuotas);
+      cuotas = {
+        num: importes.length, importeCuota: importes[0],
+        ...(conInicial ? { inicial: b.inicial } : {}), ...(plan ? { plan } : {}),
+      };
+      if (automatico) {
+        guardaTarjeta = {
+          consentimiento: cobroAuto.textoConsentimiento({
+            campus: await model.nombreDelCampus(destino.projectId),
+            cuotas: importes.slice(1).map((importe) => ({ importe })),
+          }),
+        };
+      }
+    }
+    // El precio antes del descuento y el descuento (CRM#982): Zod ya ha comprobado
+    // que el total cuadra; aquí se calcula lo que se guarda.
+    let descuento = null;
+    if (b.precio_original !== undefined) {
+      const t = totalConDescuento({ precio: b.precio_original, tipo: b.descuento_tipo, valor: b.descuento_valor });
+      descuento = {
+        precioOriginal: b.precio_original, tipo: b.descuento_tipo ?? null,
+        valor: b.descuento_tipo ? b.descuento_valor : null, importe: b.descuento_tipo ? t.descuento : 0,
       };
     }
+    const codigosPromo = codigos.codigosDelLink({ pedido: b.codigos_promo, cfg, enCuotas, desdeVenta: !!destino.conversionId });
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas,
+      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento, codigosPromo,
     });
     res.status(201).json({ success: true, data: link });
+  } catch (err) { next(err); }
+}
+
+// ─── Códigos promocionales de campaña (CRM#986) ─────────────────────────────
+
+// GET /api/links-pago/codigos?projectId=N — los del campus. Quien crea links ve los
+// vigentes (para decírselos al alumno); quien configura, todos.
+export async function listarCodigos(req, res, next) {
+  try {
+    const parsed = codigosQuerySchema.safeParse({ projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const todos = await tienePermiso(req, 'links_pago.configurar');
+    const data = await codigosModel.listar(parsed.data.projectId, { soloVigentes: !todos });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/codigos { projectId, codigo, tipo, valor, moneda?, caduca_el, max_usos?, campana? }
+export async function crearCodigo(req, res, next) {
+  try {
+    const parsed = codigoBodySchema.safeParse({ ...req.body, projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const b = parsed.data;
+    const cfg = await model.config(b.projectId);
+    if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
+    const userId = Number(req.user.userId);
+    const hecho = await codigos.crearCodigo({
+      projectId: b.projectId, userId, cfg, codigo: b.codigo, campana: b.campana, tipo: b.tipo, valor: b.valor,
+      moneda: b.moneda, caducaEl: b.caduca_el, maxUsos: b.max_usos,
+    });
+    await anotar(req, 'links_pago.codigo_creado', {
+      project_id: b.projectId, codigo_id: hecho.id, codigo: hecho.codigo, tipo: hecho.tipo, valor: hecho.valor,
+      moneda: hecho.moneda, caduca_el: hecho.caduca_el,
+    });
+    res.status(201).json({ success: true, data: hecho });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/codigos/:id/desactivar { projectId }
+export async function desactivarCodigo(req, res, next) {
+  try {
+    const parsed = codigoDesactivarSchema.safeParse({ id: req.params.id, projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const hecho = await codigos.desactivarCodigo({ projectId: parsed.data.projectId, id: parsed.data.id, userId: Number(req.user.userId) });
+    await anotar(req, 'links_pago.codigo_desactivado', { project_id: parsed.data.projectId, codigo_id: hecho.id, codigo: hecho.codigo });
+    res.json({ success: true, data: hecho });
   } catch (err) { next(err); }
 }
 
@@ -255,6 +371,22 @@ export async function cuotasDisponibles(req, res, next) {
       cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
     });
     res.json({ success: true, data: { project_id: parsed.data.projectId, ...data } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/conectar-stripe (con el ámbito de la pantalla: ?projectId / ?issuerId)
+// El aviso de arriba de «Links de pago» (CRM#992): los campus del ámbito de quien
+// mira que no pueden cobrar cuotas solas por la clave de Stripe (no la tienen, o
+// no tiene permiso de suscripciones). Con el interruptor del servidor apagado no
+// se mira ningún campus: `activo: false` y el motivo.
+export async function conectarStripe(req, res, next) {
+  try {
+    if (!cobroAutomaticoActivo()) {
+      return res.json({ success: true, data: { activo: false, codigo: 'apagado_entorno', motivo: cobroAuto.MOTIVO_APAGADO, campus: [] } });
+    }
+    const projectIds = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    const campus = await cobroAuto.campusPorConectar(projectIds);
+    res.json({ success: true, data: { activo: true, codigo: null, motivo: null, campus } });
   } catch (err) { next(err); }
 }
 
@@ -355,14 +487,10 @@ export async function generarPlan(req, res, next) {
     const nuevas = elegidas.filter((c) => !c.link_id);
     // Con el cobro automático activo (de antes), los links que se creen guardan la tarjeta.
     const guardaTarjeta = await cobroAuto.guardaTarjetaPara(destino.conversionId);
-    for (const c of nuevas) {
-      const reglas = service.reglasDeCuota({ cfg, prod, vence: c.vence });
-      const link = await service.crear({
-        projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-        prod, reglas, importe: Number(c.importe), userId, cuota: { id: c.id, numero: c.numero, vence: c.vence }, guardaTarjeta,
-      });
-      creados.push(Number(link.id));
-    }
+    creados.push(...await service.crearLinksDeCuotas({
+      projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
+      prod, cfg, userId, cuotas: nuevas, guardaTarjeta,
+    }));
     creados = [...new Set(creados)];
     // El plan tal como queda: cada cuota con su link (el nuevo o el que ya tenía).
     const ahora = await model.cuotasPendientes(destino.conversionId);
@@ -415,6 +543,19 @@ export async function anular(req, res, next) {
     if (!parsed.success) throw fallo(parsed);
     const hecho = await service.anular(link, { userId: Number(req.user.userId), motivo: parsed.data.motivo });
     res.json({ success: true, data: hecho });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/:id/renovar (gemela de CRM#984)
+// Un caducado de su campus y su alcance (lo ajeno, 404): un link nuevo igual.
+export async function renovar(req, res, next) {
+  try {
+    const link = await linkSuyo(req);
+    const nuevo = await seguimiento.renovar(Number(link.id), {
+      userId: Number(req.user.userId),
+      puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
+    });
+    res.status(201).json({ success: true, data: nuevo });
   } catch (err) { next(err); }
 }
 

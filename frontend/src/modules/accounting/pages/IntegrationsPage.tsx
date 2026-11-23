@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -11,6 +11,7 @@ import { apiPublicUrl } from '@/shared/lib/direccionesPublicas';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { ReglasDeLosLinks, WebhookDeLaCuentaBloque } from '@/modules/links-pago/components/ConfigLinksPago';
+import CodigosPromocionales from '@/modules/links-pago/components/CodigosPromocionales';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   CreditCard, EnvelopeSimple, CheckCircle, WarningCircle, Eye, EyeSlash,
@@ -61,13 +62,16 @@ const EVENTOS_DEL_WEBHOOK = [
   'charge.succeeded', 'charge.updated', 'charge.refunded', 'charge.failed',
   'charge.dispute.created', 'charge.dispute.updated', 'charge.dispute.closed',
   'payment_intent.succeeded', 'payment_intent.payment_failed',
-  // Los links de pago (CRM#680, fase 3): el pago del link y sus intentos. Fuera de
-  // ellos el CRM no hace nada con un checkout (sin la marca del CRM, se descarta).
+  // Los links de pago (CRM#680, fase 3): el pago del link y sus intentos. Un checkout
+  // sin la marca del CRM solo se mira si es de un link creado en Stripe (gemela de CRM#1019).
   'checkout.session.completed', 'checkout.session.async_payment_succeeded',
   'checkout.session.async_payment_failed', 'checkout.session.expired',
   // El cobro automático de las cuotas (gemela de CRM 309): Stripe cobra cada cuota con una
   // factura de su calendario; pagada, salda su cuota; fallida, se avisa y se manda su link.
   'invoice.paid', 'invoice.payment_failed',
+  // Los links creados directamente en Stripe (gemela de CRM#1019): salen en Links de
+  // pago como «Creado en Stripe» y su cobro se busca por el correo o el móvil.
+  'payment_link.created', 'payment_link.updated',
 ] as const;
 
 const EMPTY = (provider: Provider): Integration => ({
@@ -83,6 +87,18 @@ function fmt(d: string | null): string {
 export default function IntegrationsPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
+  /*
+    ABRIR EN SU CLAVE DE LINKS (CRM-ISEIE#667, gemela de CRM#992): el aviso «Conectar
+    Stripe para cobros automáticos» trae aquí con `?seccion=links-pago`. ISEIE es un
+    solo campus: no hay que cambiar de campus, solo bajar a la tarjeta y marcarla.
+  */
+  const [irALinks] = useState(() => typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('seccion') === 'links-pago');
+  useEffect(() => {
+    if (!irALinks) return undefined;
+    const t = setTimeout(() => document.getElementById('integracion-links-pago')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
+    return () => clearTimeout(t);
+  }, [irALinks]);
   // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
@@ -145,7 +161,12 @@ export default function IntegrationsPage() {
               producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
           {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
               enseñaba un momento el descuento del campus anterior. */}
-          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
+          {linksPago && (
+            <div id="integracion-links-pago" data-testid="integracion-links-pago"
+              className={`scroll-mt-4 rounded-lg ${irALinks ? 'ring-2 ring-primary' : ''}`}>
+              <StripeLinksCard key={pid} projectId={pid} />
+            </div>
+          )}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>
@@ -615,6 +636,8 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
         {/* Las reglas del campus y el webhook de la cuenta (CRM#680, fase 2): solo quien configura. */}
         {puedeConfigurar && <ReglasDeLosLinks key={`reglas-${projectId}`} projectId={projectId} />}
         {puedeConfigurar && data?.has_secret && <WebhookDeLaCuentaBloque key={`webhook-${projectId}`} projectId={projectId} />}
+        {/* Códigos promocionales de campaña (CRM#986): se crean en Stripe con la clave de arriba. */}
+        {puedeConfigurar && data?.has_secret && <CodigosPromocionales key={`codigos-${projectId}`} projectId={projectId} />}
 
         <TestStatus data={data} />
 

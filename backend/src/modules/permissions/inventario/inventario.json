@@ -2009,6 +2009,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conciliacion/facturas-cobros",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "GET",
+  "ruta": "/api/conciliacion/facturas-cobros",
+  "relativa": "GET /facturas-cobros",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar",
+  "relativa": "POST /facturas-cobros/enlazar",
+  "controlador": "enlazar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/conciliacion/facturas-cobros/enlazar-seguras",
+  "tipo": "ruta",
+  "modulo": "conciliacion",
+  "metodo": "POST",
+  "ruta": "/api/conciliacion/facturas-cobros/enlazar-seguras",
+  "relativa": "POST /facturas-cobros/enlazar-seguras",
+  "controlador": "enlazarSeguras",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.gestionar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/connectors/",
   "tipo": "ruta",
   "modulo": "connectors",
@@ -6337,6 +6403,28 @@
   ]
  },
  {
+  "id": "GET /api/invoices/cola/venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "GET",
+  "ruta": "/api/invoices/cola/venta/:conversionId",
+  "relativa": "GET /cola/venta/:conversionId",
+  "controlador": "cobrosDeVentaEnCola",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/invoices/cola/emitir-hasta",
   "tipo": "ruta",
   "modulo": "invoices",
@@ -8284,6 +8372,85 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/codigos",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/codigos",
+  "relativa": "GET /codigos",
+  "controlador": "listarCodigos",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar",
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/codigos",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/codigos",
+  "relativa": "POST /codigos",
+  "controlador": "crearCodigo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/codigos/:id/desactivar",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/codigos/:id/desactivar",
+  "relativa": "POST /codigos/:id/desactivar",
+  "controlador": "desactivarCodigo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.configurar"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/cuotas-disponibles",
   "tipo": "ruta",
   "modulo": "links-pago",
@@ -8305,6 +8472,29 @@
    {
     "tipo": "alcance",
     "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/conectar-stripe",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/conectar-stripe",
+  "relativa": "GET /conectar-stripe",
+  "controlador": "conectarStripe",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
    }
   ],
   "puertas": []
@@ -8421,6 +8611,143 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/externos",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/externos",
+  "relativa": "GET /externos",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/externos/sincronizar",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/externos/sincronizar",
+  "relativa": "POST /externos/sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/por-vincular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/por-vincular",
+  "relativa": "GET /por-vincular",
+  "controlador": "porVincular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/por-vincular/ventas",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/por-vincular/ventas",
+  "relativa": "GET /por-vincular/ventas",
+  "controlador": "buscarVentas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/por-vincular/:id/vincular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/por-vincular/:id/vincular",
+  "relativa": "POST /por-vincular/:id/vincular",
+  "controlador": "vincular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/embudo",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/embudo",
+  "relativa": "GET /embudo",
+  "controlador": "embudo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/",
   "tipo": "ruta",
   "modulo": "links-pago",
@@ -8506,6 +8833,28 @@
     "claves": [
      "links_pago.crear",
      "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/:id/renovar",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/:id/renovar",
+  "relativa": "POST /:id/renovar",
+  "controlador": "renovar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
     ]
    }
   ],
@@ -13963,6 +14312,80 @@
   "puertas": []
  },
  {
+  "id": "GET /api/stripe-payments/conciliacion",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion",
+  "relativa": "GET /conciliacion",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/stripe-payments/conciliacion/opciones",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "GET",
+  "ruta": "/api/stripe-payments/conciliacion/opciones",
+  "relativa": "GET /conciliacion/opciones",
+  "controlador": "opciones",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/conciliacion/enlazar-seguros",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/conciliacion/enlazar-seguros",
+  "relativa": "POST /conciliacion/enlazar-seguros",
+  "controlador": "enlazarSeguros",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/stripe-payments/:id",
   "tipo": "ruta",
   "modulo": "stripe-payments",
@@ -14014,6 +14437,28 @@
   "ruta": "/api/stripe-payments/:id/link",
   "relativa": "DELETE /:id/link",
   "controlador": "unlink",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "stripe.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/stripe-payments/:id/crear-venta",
+  "tipo": "ruta",
+  "modulo": "stripe-payments",
+  "metodo": "POST",
+  "ruta": "/api/stripe-payments/:id/crear-venta",
+  "relativa": "POST /:id/crear-venta",
+  "controlador": "crearVenta",
   "publica": false,
   "guardias": [
    {

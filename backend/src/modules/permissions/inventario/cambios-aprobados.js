@@ -478,6 +478,32 @@ export const CAMBIOS_DE_MENU = [
     // La escribe Claude principal con el sí de Diego.
     aprobadoPor: 'Pendiente de Diego',
   },
+  {
+    id: 'menu-conciliacion-905',
+    que: '«Finanzas › Conciliación»: facturas emitidas sin cobro y cobros sin factura, por campus y por mes, con «Enlazar» y «Enlazar todas las seguras» (CRM#905). La ve quien tiene `facturas.gestionar` («asociar a una venta»), admin y super admin de serie, cada uno en sus campus. Una gestora con el permiso por excepción no la ve ni concilia: es de administración.',
+    motivo: 'Diego (18/11): enlazó a mano en producción 89 facturas sin cobro; quedan unas 56 y unos 400 cobros sin factura, y tiene que poder hacerlo administración desde el CRM. No cambia el acceso: `facturas.gestionar` ya asociaba una factura a una venta. La pestaña de los cargos de Stripe (CRM#906) irá dentro de esta misma entrada.',
+    perfiles: {
+      superadmin: ['+ Finanzas › Conciliación'],
+      admin: ['+ Finanzas › Conciliación'],
+      'gestora+admin': ['+ Finanzas › Conciliación'],
+    },
+    rutas: {
+      'Finanzas › Conciliación': 'GET /api/conciliacion/facturas-cobros',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#905)',
+  },
+  {
+    id: 'menu-conciliacion-cargos-stripe-906',
+    que: '«Finanzas › Conciliación › Cargos de Stripe»: los cargos de Stripe cobrados que no están en ningún cobro del CRM, por campus y por mes, con su cobro candidato para enlazarlo, apuntarlo en la venta del alumno o crear la venta (CRM#906). La pestaña la ve quien tiene `stripe.edit`, cada uno en sus campus; por eso la entrada «Conciliación» le sale también a soporte, que tiene `stripe.edit` y no `facturas.gestionar` (solo verá esta pestaña).',
+    motivo: 'Diego (18/11): quedaban cargos sin enlazar y se enlazaban a mano en la base. No cambia el acceso: `stripe.edit` ya asociaba cargos en Pagos Stripe.',
+    perfiles: {
+      soporte: ['+ Finanzas › Conciliación'],
+    },
+    rutas: {
+      'Finanzas › Conciliación': 'GET /api/stripe-payments/conciliacion',
+    },
+    aprobadoPor: 'Pendiente de Diego (CRM#906)',
+  },
 ];
 
 /**

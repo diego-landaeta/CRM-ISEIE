@@ -10,9 +10,15 @@ import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
-import CrearLinkAsistente, { copiarLink, errorDe } from '../components/CrearLinkAsistente';
+import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
+import { DatosDeSeguimiento, BotonRenovar } from '../components/SeguimientoDelLink';
+import EnviarLink from '../components/EnviarLink';
+import EmbudoLinks from '../components/EmbudoLinks';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
-import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
+import { listarTodos, anularLink, conectarStripe, type LinkDePago, type EstadoLink, type ConectarStripe } from '../api/linksPago.api';
+import AvisoConectarStripe, { AvisoCobroAutoApagado } from '../components/AvisoConectarStripe';
+// Los links creados directamente en Stripe y sus cobros por vincular (CRM#1019).
+import LinksDeStripe from '../components/LinksDeStripe';
 
 /*
   LA PANTALLA «LINKS DE PAGO» (Comercial › Links de pago; Diego, 19/11).
@@ -48,10 +54,13 @@ export default function LinksDePagoPage() {
   const [total, setTotal] = useState(0);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creando, setCreando] = useState(false);
+  // Abierto, y cómo sale elegido el pago (los dos atajos, CRM#982).
+  const [creando, setCreando] = useState<false | 'unico' | 'cuotas'>(false);
   const [anulando, setAnulando] = useState<LinkDePago | null>(null);
   const [anulandoBusy, setAnulandoBusy] = useState(false);
   const [errorAnular, setErrorAnular] = useState<string | null>(null);
+  // CRM#992: los campus del ámbito que no pueden cobrar cuotas solas por su clave de Stripe.
+  const [conectar, setConectar] = useState<ConectarStripe | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -69,6 +78,18 @@ export default function LinksDePagoPage() {
   }, [estado, pagina, limite, activeIssuerId, proyectoId]);
 
   useEffect(() => { if (encendidos) cargar(); }, [cargar, encendidos]);
+
+  // El aviso «Conectar Stripe para cobros automáticos» (CRM#992), con el mismo
+  // ámbito que la lista. Si no se puede saber, no se dice nada: no es la lista.
+  useEffect(() => {
+    if (!encendidos) return undefined;
+    let vigente = true;
+    setConectar(null);
+    conectarStripe(ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } }))
+      .then((r) => { if (vigente) setConectar(r.data || null); })
+      .catch(() => { if (vigente) setConectar(null); });
+    return () => { vigente = false; };
+  }, [encendidos, activeIssuerId, proyectoId]);
 
   async function confirmarAnular(motivo: string) {
     if (!anulando) return;
@@ -102,7 +123,7 @@ export default function LinksDePagoPage() {
           <span className="flex flex-wrap items-center gap-2">
             <VerRecorrido id="links-pago" listo={!cargando} compacto />
             {puedeCrear && (
-              <button type="button" onClick={() => setCreando(true)} data-recorrido="links-pantalla-crear"
+              <button type="button" onClick={() => setCreando('unico')} data-recorrido="links-pantalla-crear"
                 className="inline-flex items-center gap-1.5 h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 <Plus size={16} weight="bold" aria-hidden="true" /> Crear link de pago
               </button>
@@ -110,6 +131,33 @@ export default function LinksDePagoPage() {
           </span>
         )}
       />
+
+      {conectar?.activo === false && <AvisoCobroAutoApagado motivo={conectar.motivo} />}
+      {conectar?.activo === true && Array.isArray(conectar.campus) && conectar.campus.length > 0 && (
+        <AvisoConectarStripe campus={conectar.campus} />
+      )}
+
+      {/*
+        LOS DOS RECORRIDOS (CRM#982, Diego 21/11: «son dos recorridos, hay que
+        hacerlos»): abren el asistente con el pago ya elegido.
+      */}
+      {puedeCrear && (
+        <div className="grid gap-2 sm:grid-cols-2" role="group" aria-label="Formas de cobrar con un link">
+          <button type="button" onClick={() => setCreando('unico')} data-recorrido="links-pantalla-unico"
+            className="text-left rounded-lg border border-border bg-card p-3 hover:bg-muted">
+            <span className="block text-sm font-semibold">Pago único, con otro importe o descuento</span>
+            <span className="block text-xs text-muted-foreground">Sale el precio del curso: cámbialo o descuenta en € o en %. El link cobra el total.</span>
+          </button>
+          <button type="button" onClick={() => setCreando('cuotas')} data-recorrido="links-pantalla-inicial"
+            className="text-left rounded-lg border border-border bg-card p-3 hover:bg-muted">
+            <span className="block text-sm font-semibold">Inicial + cuotas</span>
+            <span className="block text-xs text-muted-foreground">El link cobra la inicial y Stripe cobra lo que queda en cuotas iguales, una al mes.</span>
+          </button>
+        </div>
+      )}
+
+      {/* El resumen por gestora y por campus (CRM#987). */}
+      <EmbudoLinks ambito={ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } })} />
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado" data-recorrido="links-pantalla-filtros">
         {FILTROS.map((f) => (
@@ -132,7 +180,7 @@ export default function LinksDePagoPage() {
               {estado ? 'No hay links con ese estado.' : 'Todavía no se ha creado ningún link de pago.'}
             </p>
             {puedeCrear && !estado && (
-              <button type="button" onClick={() => setCreando(true)}
+              <button type="button" onClick={() => setCreando('unico')}
                 className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90">
                 <Plus size={14} weight="bold" aria-hidden="true" /> Crear el primero
               </button>
@@ -149,10 +197,25 @@ export default function LinksDePagoPage() {
                   <span className={`px-2 py-0.5 rounded text-[10px] font-semibold whitespace-nowrap ${est.tono}`}>{est.texto}</span>
                   <span className="font-semibold tabular-nums">
                     {dinero(l.importe, l.moneda)}
+                    {/* Con descuento (CRM#982), el precio de antes, tachado. */}
+                    {l.descuento_tipo && Number(l.descuento_importe) > 0 && l.precio_original != null && (
+                      <s className="font-normal text-xs text-muted-foreground ml-1" title="Precio antes del descuento">{dinero(l.precio_original, l.moneda)}</s>
+                    )}
                     {l.modalidad === 'cuotas' && l.num_cuotas
-                      ? <span className="font-normal text-xs text-muted-foreground"> en {l.num_cuotas} cuotas ({dinero(l.importe_cuota, l.moneda)} con el link)</span>
+                      ? <span className="font-normal text-xs text-muted-foreground">
+                        {l.importe_inicial != null ? ` · ${resumenDelPlan(l)}` : ` en ${l.num_cuotas} cuotas (${dinero(l.importe_cuota, l.moneda)} con el link)`}
+                      </span>
                       : null}
                   </span>
+                  {/* ── CRM#986 · códigos promocionales: el que usó el alumno, o que el link los admite ── */}
+                  {l.promo_codigo || Number(l.promo_descuento) > 0 ? (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold whitespace-nowrap" title="Código promocional que usó el alumno">
+                      {l.promo_codigo || 'Código'} −{dinero(l.promo_descuento, l.moneda)}
+                    </span>
+                  ) : l.codigos_promo && vivo ? (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">admite códigos</span>
+                  ) : null}
+                  {/* ── fin CRM#986 ── */}
                   {/* Un link sin prospecto (20/11): al pagarse, el CRM le pone el prospecto y la venta que crea. */}
                   {l.lead_id
                     ? <Link to={`/leads/${l.lead_id}`} className="font-medium underline-offset-2 hover:underline truncate max-w-[200px]">{l.lead_nombre || `Prospecto ${l.lead_id}`}</Link>
@@ -168,7 +231,13 @@ export default function LinksDePagoPage() {
                     {l.estado === 'caducado' && l.caduca_el && <> · caducó {cuando(l.caduca_el)}</>}
                     {l.estado === 'anulado' && <> · anulado: {l.motivo_anulacion}</>}
                   </span>
-                  <span className="ml-auto flex items-center gap-1.5">
+                  <DatosDeSeguimiento link={l} />
+                  <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                    {vivo && l.url && (
+                      <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]" title={l.url}>{l.url.replace(/^https?:\/\//, '')}</span>
+                    )}
+                    <BotonRenovar link={l} onRenovado={() => cargar()} />
+                    <EnviarLink link={l} />
                     {vivo && l.url && (
                       <>
                         <button type="button" onClick={() => copiarLink(l.url!)}
@@ -198,8 +267,12 @@ export default function LinksDePagoPage() {
           onLimite={(n) => { setLimite(n); setPagina(1); }} unidad="links" />
       )}
 
+      {/* ─── CRM#1019: los links creados directamente en Stripe y sus cobros por vincular ─── */}
+      <LinksDeStripe ambito={ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } })} />
+      {/* ─── fin CRM#1019 ─── */}
+
       {creando && (
-        <CrearLinkAsistente onClose={() => setCreando(false)} onCreado={() => cargar()} />
+        <CrearLinkAsistente formaInicial={creando} onClose={() => setCreando(false)} onCreado={() => cargar()} />
       )}
 
       <PromptDialog

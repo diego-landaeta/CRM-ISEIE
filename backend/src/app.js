@@ -27,6 +27,8 @@ import stripePaymentsModule from './modules/stripe-payments/index.js';
 import invoicesModule from './modules/invoices/index.js';
 // Auditoría de facturación cada 2 horas y pausa de la emisión (#765).
 import facturacionAuditoriaModule from './modules/facturacion-auditoria/index.js';
+// Finanzas › Conciliación: facturas sin cobro y cobros sin factura (gemela de CRM#949 / CRM#905).
+import conciliacionModule from './modules/conciliacion/index.js';
 // Facturas de colaboradores (#202, como en MultiCRM): solo en pruebas hasta que
 // Diego lo apruebe con FACTURAS_COLABORADOR_EN_PRODUCCION=1.
 import facturasColaboradorModule from './modules/facturas-colaborador/index.js';
@@ -122,7 +124,9 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
+import { startLinksPagoExternosScheduler } from './jobs/linksPagoExternosScheduler.js';
 import { startCobroAutomaticoScheduler } from './jobs/cobroAutomaticoScheduler.js';
+import { startLinksPagoSeguimientoScheduler } from './jobs/linksPagoSeguimientoScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
 import { startResumenDiarioScheduler } from './jobs/resumenDiarioScheduler.js';
 import { startReporteSemanalScheduler } from './jobs/reporteSemanalScheduler.js';
@@ -135,7 +139,7 @@ import { startTasksDailySummaryScheduler } from './jobs/tasksDailySummaryJob.js'
 import { startTareasResumenScheduler } from './jobs/tareasResumenJob.js';
 // Lo que aún no está aprobado para producción: el tablero (#210), las facturas de colaboradores (#202),
 // el aviso de entregas sin corregir (#457) y el plugin del CRM en cada Moodle (#406).
-import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, cobroAutomaticoActivo } from './shared/config/soloEnPruebas.js';
+import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, cobroAutomaticoActivo, seguimientoLinksActivo } from './shared/config/soloEnPruebas.js';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas también en el servidor, hasta que Diego lo apruebe.
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
@@ -334,6 +338,7 @@ const MODULES = [
   stripePaymentsModule,
   invoicesModule,
   facturacionAuditoriaModule,
+  conciliacionModule,
   // Facturas de colaboradores (#202): la lista, el enlace del mes y «Mi factura».
   // Solo en pruebas también en el servidor: en producción ni la API ni la tarea del mes.
   ...(facturasColaboradorActivas() ? [facturasColaboradorModule] : []),
@@ -624,9 +629,17 @@ if (process.env.NODE_ENV !== 'test') {
       } catch (err) {
         logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
       }
+      // Los links creados directamente en Stripe (gemela de CRM#1019): recogerlos y, si su aviso no llegó, su cobro.
+      try {
+        startLinksPagoExternosScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Links de pago: los links de Stripe fallaron al arrancar');
+      }
     }
     // Cobro automático de las cuotas (gemela de CRM 309): el reintento y el repaso del plan en Stripe.
     if (cobroAutomaticoActivo()) startCobroAutomaticoScheduler();
+    // Seguimiento de los links sin pagar (gemela de CRM#984): aperturas, aviso a la gestora y recordatorios.
+    if (seguimientoLinksActivo()) startLinksPagoSeguimientoScheduler();
     if (process.env.MCP_VIGILANCIA_DISABLED !== '1') {
       try {
         startMcpVigilanciaScheduler();   // alertas de uso raro

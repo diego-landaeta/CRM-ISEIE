@@ -51,8 +51,11 @@ export class ErrorDeStripe extends Error {
   }
 }
 
-async function llamar(apiKey, metodo, ruta, { cuerpo = null, idempotencia = null } = {}) {
+async function llamar(apiKey, metodo, ruta, { cuerpo = null, idempotencia = null, version = null } = {}) {
   const headers = { Authorization: `Bearer ${apiKey}` };
+  // Solo donde la forma de la petición cambia entre versiones de la API (los
+  // códigos promocionales, CRM#986). El resto, la versión de cada cuenta.
+  if (version) headers['Stripe-Version'] = version;
   const opciones = { method: metodo, headers };
   if (cuerpo) {
     headers['Content-Type'] = 'application/x-www-form-urlencoded';
@@ -80,11 +83,29 @@ async function llamar(apiKey, metodo, ruta, { cuerpo = null, idempotencia = null
 const SIN_DECIMALES = new Set(['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KMF', 'KRW', 'MGA', 'PYG',
   'RWF', 'UGX', 'VND', 'VUV', 'XAF', 'XOF', 'XPF']);
 
+/** ¿La moneda va sin decimales en Stripe (CLP, JPY…)? (CRM#986) */
+export function esSinDecimales(moneda) {
+  return SIN_DECIMALES.has(String(moneda || '').toUpperCase());
+}
+
 /** 123.45 EUR → 12345; 1500 CLP → 1500. Redondeado, sin coma flotante colada. */
 export function enUnidadesMinimas(importe, moneda) {
   const n = Number(importe);
-  if (SIN_DECIMALES.has(String(moneda).toUpperCase())) return Math.round(n);
+  if (esSinDecimales(moneda)) return Math.round(n);
   return Math.round(n * 100);
+}
+
+/** Al revés (CRM#1019): 12345 EUR → 123.45; 1500 CLP → 1500. null si no es un número. */
+export function desdeUnidadesMinimas(unidades, moneda) {
+  if (typeof unidades !== 'number' || !Number.isFinite(unidades)) return null;
+  if (SIN_DECIMALES.has(String(moneda || '').toUpperCase())) return unidades;
+  return Math.round(unidades) / 100;
+}
+
+/** Lo contrario: 12345 EUR → 123.45; 1500 CLP → 1500. */
+export function deUnidadesMinimas(unidades, moneda) {
+  const n = Number(unidades) || 0;
+  return esSinDecimales(moneda) ? n : n / 100;
 }
 
 export const MENSAJE_INACTIVO = 'Este link de pago ya no está disponible. Pide uno nuevo a la persona que te atiende.';
@@ -112,7 +133,11 @@ export function crearPrecio(apiKey, { importe, moneda, nombre, metadata, idempot
  * Con el correo y el nombre, es lo que usa el CRM para encontrar o crear el
  * prospecto al pagarse.
  */
-export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarjeta = null, pedirTelefono = false }) {
+/*
+ * `codigosPromo` (CRM-ISEIE#661): el alumno puede escribir en Checkout un código
+ * promocional de la cuenta (`allow_promotion_codes`). Solo en pago único.
+ */
+export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarjeta = null, pedirTelefono = false, codigosPromo = false }) {
   return llamar(apiKey, 'POST', '/v1/payment_links', {
     idempotencia,
     cuerpo: {
@@ -131,10 +156,121 @@ export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarje
         custom_text: { submit: { message: String(guardaTarjeta.consentimiento).slice(0, 1200) } },
       } : {}),
       ...(pedirTelefono ? { phone_number_collection: { enabled: true } } : {}),
+      ...(codigosPromo ? { allow_promotion_codes: true } : {}),
       restrictions: { completed_sessions: { limit: 1 } },
       inactive_message: MENSAJE_INACTIVO,
     },
   });
+}
+
+/**
+ * Las sesiones de Checkout de un link (CRM#984). Un Payment Link no avisa al
+ * abrirse, pero cada visita del alumno crea una sesión: si hay alguna, lo abrió.
+ * Solo lee (la clave de los links tiene Checkout Sessions de lectura).
+ */
+export function sesionesDelLink(apiKey, paymentLinkId, { limite = 10 } = {}) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?payment_link=${encodeURIComponent(paymentLinkId)}&limit=${Number(limite) || 10}`);
+}
+
+// ─── Los links creados directamente en Stripe (CRM#1019): solo lectura ──────
+
+/**
+ * Los Payment Links de la cuenta, con sus líneas (lo que se cobra), de 100 en
+ * 100 y hasta `maxPaginas`. Solo lee: el CRM no cambia un link que no creó.
+ */
+export async function listarLinks(apiKey, { maxPaginas = 5 } = {}) {
+  const todos = [];
+  let despues = null;
+  for (let i = 0; i < maxPaginas; i += 1) {
+    const pagina = await llamar(apiKey, 'GET',
+      `/v1/payment_links?limit=100&expand[]=data.line_items${despues ? `&starting_after=${encodeURIComponent(despues)}` : ''}`);
+    const datos = Array.isArray(pagina?.data) ? pagina.data : [];
+    todos.push(...datos);
+    if (!pagina?.has_more || !datos.length) break;
+    despues = datos[datos.length - 1].id;
+  }
+  return todos;
+}
+
+/** Un Payment Link con sus líneas. */
+export function verLink(apiKey, paymentLinkId) {
+  return llamar(apiKey, 'GET', `/v1/payment_links/${encodeURIComponent(paymentLinkId)}?expand[]=line_items`);
+}
+
+/**
+ * Las sesiones de Checkout completadas desde `desde` (segundos), de toda la
+ * cuenta: con ellas se recogen los cobros de un link de Stripe cuyo aviso no
+ * llegó. Una página de 100: la vuelta siguiente coge las que falten.
+ */
+export function sesionesCompletadas(apiKey, { desde }) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?status=complete&limit=100&created[gte]=${Math.floor(Number(desde) || 0)}`);
+}
+
+// ─── Códigos promocionales de campaña (CRM#986) ─────────────────────────────
+
+/*
+  Un código de campaña son dos objetos de Stripe: el CUPÓN (cuánto descuenta, una
+  vez, hasta la fecha límite) y el CÓDIGO PROMOCIONAL (lo que escribe el alumno,
+  con la misma fecha límite y, si se quiere, un máximo de usos).
+
+  La forma de crear el código cambió en la versión 2025-09-30 de la API
+  (`promotion[coupon]` en vez de `coupon`). El CRM no fija versión y cada cuenta
+  tiene la suya, así que ESTA llamada va con una versión fija en la que `coupon`
+  vale: funciona igual en todas las cuentas.
+*/
+export const VERSION_CODIGOS = '2024-06-20';
+
+export function crearCupon(apiKey, { tipo, valor, moneda, nombre, hasta, metadata, idempotencia }) {
+  return llamar(apiKey, 'POST', '/v1/coupons', {
+    idempotencia,
+    cuerpo: {
+      ...(tipo === 'pct'
+        ? { percent_off: Number(valor) }
+        : { amount_off: enUnidadesMinimas(valor, moneda), currency: String(moneda).toLowerCase() }),
+      duration: 'once',
+      name: String(nombre).slice(0, 40),
+      redeem_by: hasta,
+      metadata,
+    },
+  });
+}
+
+export function crearCodigoPromocional(apiKey, { cuponId, codigo, hasta, maxUsos, metadata, idempotencia }) {
+  return llamar(apiKey, 'POST', '/v1/promotion_codes', {
+    idempotencia,
+    version: VERSION_CODIGOS,
+    cuerpo: {
+      coupon: cuponId,
+      code: codigo,
+      expires_at: hasta,
+      ...(maxUsos ? { max_redemptions: Number(maxUsos) } : {}),
+      metadata,
+    },
+  });
+}
+
+/** Apagar un código: ya no se puede usar en ningún link. Un código de Stripe no se borra. */
+export function desactivarCodigoPromocional(apiKey, promotionCodeId) {
+  return llamar(apiKey, 'POST', `/v1/promotion_codes/${encodeURIComponent(promotionCodeId)}`, {
+    cuerpo: { active: false },
+  });
+}
+
+/** Un cupón que se creó pero cuyo código no: se borra para no dejarlo suelto. */
+export function borrarCupon(apiKey, couponId) {
+  return llamar(apiKey, 'DELETE', `/v1/coupons/${encodeURIComponent(couponId)}`);
+}
+
+/**
+ * La sesión de Checkout de un pago (por su PaymentIntent), con el código
+ * promocional que usó el alumno. Solo lectura (Checkout Sessions, que la clave de
+ * los links ya tiene).
+ */
+export function sesionDelPago(apiKey, paymentIntentId) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?payment_intent=${encodeURIComponent(paymentIntentId)}&limit=1&expand[]=data.discounts.promotion_code`);
 }
 
 /** Desactivar un link (caducado o anulado). Un link de Stripe no se borra. */

@@ -23,9 +23,13 @@ const COLUMNAS = `
   pl.product_id, pr.nombre AS product_nombre,
   pl.created_by, cr.nombre AS creado_por_nombre,
   pl.precio_catalogo, pl.importe, pl.descuento_pct, pl.moneda,
-  pl.modalidad, pl.num_cuotas, pl.importe_cuota,
+  pl.modalidad, pl.num_cuotas, pl.importe_cuota, pl.importe_inicial, pl.plan_cuotas,
+  pl.precio_original, pl.descuento_tipo, pl.descuento_valor, pl.descuento_importe,
   pl.estado, pl.url, pl.caduca_el, pl.pagado_el, pl.guarda_tarjeta,
+  pl.codigos_promo, pl.promo_codigo, pl.promo_descuento,
   pl.anulado_por, an.nombre AS anulado_por_nombre, pl.anulado_el, pl.motivo_anulacion,
+  pl.abierto_el, pl.aviso_gestora_el, pl.recordatorio_24h_el, pl.recordatorio_72h_el,
+  pl.renovado_de, pl.renovado_por,
   pl.created_at, pl.updated_at`;
 
 const UNIONES = `
@@ -112,7 +116,10 @@ const COLUMNAS_CONFIG = `
   links_pago_monedas::text[] AS monedas,
   links_pago_moneda_defecto AS moneda_defecto,
   links_pago_cobro_auto AS cobro_auto,
-  links_pago_cobro_auto_reintento_dias AS cobro_auto_reintento_dias`;
+  links_pago_cobro_auto_reintento_dias AS cobro_auto_reintento_dias,
+  links_pago_aviso_abierto_horas AS aviso_abierto_horas,
+  links_pago_recordatorios AS recordatorios,
+  links_pago_codigos_promo AS codigos_promo`;
 
 function configDeFila(r) {
   if (!r) return null;
@@ -127,6 +134,11 @@ function configDeFila(r) {
     // Cobro automático de las cuotas (309).
     cobro_auto: r.cobro_auto === true,
     cobro_auto_reintento_dias: Number(r.cobro_auto_reintento_dias),
+    // Seguimiento de los que no se pagan (gemela de CRM#984).
+    aviso_abierto_horas: Number(r.aviso_abierto_horas),
+    recordatorios: r.recordatorios === true,
+    // Códigos promocionales de Stripe en los links (CRM-ISEIE#661, 327).
+    codigos_promo: r.codigos_promo === true,
   };
 }
 
@@ -146,6 +158,9 @@ const COLUMNA_DE = {
   moneda_defecto: 'links_pago_moneda_defecto',
   cobro_auto: 'links_pago_cobro_auto',
   cobro_auto_reintento_dias: 'links_pago_cobro_auto_reintento_dias',
+  aviso_abierto_horas: 'links_pago_aviso_abierto_horas',
+  recordatorios: 'links_pago_recordatorios',
+  codigos_promo: 'links_pago_codigos_promo',
 };
 
 /** Guarda solo lo que venga. Las columnas salen de una lista fija, nunca del cuerpo. */
@@ -217,14 +232,25 @@ export async function insertar(l) {
   const { rows } = await query(
     `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
         precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta,
-        num_cuotas, importe_cuota)
+        num_cuotas, importe_cuota, importe_inicial, precio_original, descuento_tipo, descuento_valor, descuento_importe,
+        plan_cuotas, codigos_promo)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $13::int IS NULL THEN 'unico' ELSE 'cuotas' END, 'creado',
-             NOW() + make_interval(days => $10), $11, $12, $13, $14)
+             NOW() + make_interval(days => $10), $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19::numeric, 0),
+             $20::jsonb, $21)
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
       l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true,
       // Link sencillo en cuotas (20/11): `importe` es el total; `importe_cuota`, lo que cobra el link.
-      l.numCuotas ?? null, l.importeCuota ?? null]);
+      l.numCuotas ?? null, l.importeCuota ?? null,
+      // Sin el ::numeric de arriba, COALESCE($19, 0) tipaba el descuento como entero y
+      // 44,50 € daba un 500 (QA de staging, 21/11).
+      // CRM-ISEIE#657 (321): la inicial, y el precio antes del descuento con su descuento.
+      l.importeInicial ?? null, l.precioOriginal ?? null, l.descuentoTipo ?? null, l.descuentoValor ?? null,
+      l.descuentoImporte ?? null,
+      // 326 (23/11): las cuotas de después de la inicial con su importe y su fecha.
+      l.planCuotas ? JSON.stringify(l.planCuotas) : null,
+      // 327 (CRM-ISEIE#661): si el link admite códigos promocionales de Stripe.
+      l.codigosPromo === true]);
   return rows[0];
 }
 
@@ -301,10 +327,40 @@ export async function campusDelWebhook(endpointId, projectIds) {
 export async function paraCobro(id) {
   const { rows } = await query(
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
-            estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota
+            estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota,
+            importe_inicial, plan_cuotas, precio_original, descuento_tipo, descuento_valor, descuento_importe,
+            codigos_promo, promo_codigo
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;
+}
+
+/*
+  EL DESCUENTO DEL LINK, EN SU VENTA (CRM#982). La venta se crea por el total del
+  link (lo que paga el alumno); aquí se le apunta de dónde sale: el precio antes
+  del descuento (subtotal_bruto) y el descuento, con las columnas de siempre de la
+  venta (093). El total, la base y el IVA no cambian: ya son los del total.
+  Solo una venta que creó el link y sin descuento todavía; en euros, que es como
+  guarda el CRM la venta.
+*/
+/*
+  CON CÓDIGO PROMOCIONAL, O EN OTRA MONEDA (CRM#986): el descuento del link más el
+  del código, pasado a euros si hace falta (`links-pago.codigos.js`).
+*/
+export async function descuentoEnLaVenta(conversionId, link) {
+  if (link?.promo || (link && String(link.moneda || 'EUR').toUpperCase() !== 'EUR')) {
+    const codigos = await import('./links-pago.codigos.js');
+    return codigos.descuentoEnLaVenta(conversionId, link);
+  }
+  if (!link?.descuento_tipo || !(Number(link.descuento_importe) > 0) || link.precio_original == null) return false;
+  if (String(link.moneda || 'EUR').toUpperCase() !== 'EUR') return false;
+  const { rowCount } = await query(
+    `UPDATE conversions
+        SET subtotal_bruto = $2, descuento_tipo = $3, descuento_valor = $4, descuento_importe = $5, updated_at = NOW()
+      WHERE id = $1 AND descuento_tipo = 'none'
+        AND ROUND(importe_total * 100) = ROUND(($2::numeric - $5::numeric) * 100)`,
+    [conversionId, link.precio_original, link.descuento_tipo, link.descuento_valor, link.descuento_importe]);
+  return rowCount > 0;
 }
 
 /*
@@ -475,7 +531,8 @@ export async function marcarPagado(linkId, { pagadoEl, conversionId }) {
 /** Abierto: el cliente llegó a la página de pago (un intento fallido o una sesión que caducó). */
 export async function marcarAbierto(linkId) {
   await query(
-    `UPDATE payment_links SET estado = 'abierto', updated_at = NOW() WHERE id = $1 AND estado = 'creado'`,
+    `UPDATE payment_links SET estado = 'abierto', abierto_el = COALESCE(abierto_el, NOW()), updated_at = NOW()
+      WHERE id = $1 AND estado = 'creado'`,
     [linkId]);
 }
 
