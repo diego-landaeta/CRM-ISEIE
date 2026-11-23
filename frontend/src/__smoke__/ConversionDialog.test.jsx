@@ -27,6 +27,14 @@ vi.mock('@/modules/products/hooks/useProducts', () => ({
   useProducts: () => productsState,
 }));
 
+// Los productos del campus con curso de Moodle (CRM#1036): solo con ellos la fecha
+// de inicio es obligatoria. De serie, ninguno (no se sabe: no se exige).
+const conCursoState = vi.hoisted(() => ({ ids: null }));
+vi.mock('@/modules/conversions/hooks/useProductosConCurso', async (original) => ({
+  ...(await original()),
+  useProductosConCurso: () => conCursoState.ids,
+}));
+
 const createMock = vi.fn();
 vi.mock('@/modules/conversions/api/conversions.api', () => ({
   conversionsApi: {
@@ -534,19 +542,39 @@ describe('ConversionDialog — hay que decir si ha pagado', () => {
  * Con ella se programa la matrícula en Moodle: el día anterior.
  */
 describe('ConversionDialog — fecha de inicio del curso (#767)', () => {
-  const rellenarLoDemas = (container) => {
-    fireEvent.change(container.querySelector('input[placeholder*="producto"]'), { target: { value: 'Master IA' } });
+  // «Master IA» (77) tiene curso de Moodle en el campus; «Taller suelto» (78), no (CRM#1036).
+  beforeEach(() => {
+    productsState.products = [{ id: 77, nombre: 'Master IA' }, { id: 78, nombre: 'Taller suelto' }];
+    conCursoState.ids = new Set([77]);
+  });
+  afterEach(() => {
+    productsState.products = [];
+    conCursoState.ids = null;
+  });
+  const rellenarLoDemas = (container, producto = 'Master IA') => {
+    fireEvent.change(container.querySelector('#venta-producto-contratado'), { target: { value: producto } });
     fireEvent.change(precioBase(container), { target: { value: '1200' } });
     pagoTotal();
   };
 
-  it('el campo está, marcado como obligatorio y enlazado a su etiqueta', () => {
-    renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+  it('con un producto con curso, el campo es obligatorio y está enlazado a su etiqueta', () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    fireEvent.change(container.querySelector('#venta-producto-contratado'), { target: { value: 'Master IA' } });
     const campo = screen.getByLabelText(/Fecha de inicio del curso/);
     expect(campo).toHaveAttribute('type', 'date');
     expect(campo).toHaveValue('');
     expect(campo).toHaveAttribute('aria-required', 'true');
     expect(screen.getByText(/día anterior a esta fecha/)).toBeInTheDocument();
+  });
+
+  it('con un producto sin curso es opcional y la venta se registra sin ella (CRM#1036)', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} onCreated={vi.fn()} />);
+    rellenarLoDemas(container, 'Taller suelto');
+    const campo = screen.getByLabelText(/Fecha de inicio del curso/);
+    expect(campo).not.toHaveAttribute('aria-required');
+    expect(screen.getByText(/Opcional: el producto elegido no tiene curso de Moodle/)).toBeInTheDocument();
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
   });
 
   it('sin ella no registra: lo dice el aviso y el propio campo', async () => {
@@ -561,12 +589,20 @@ describe('ConversionDialog — fecha de inicio del curso (#767)', () => {
     expect(screen.getByLabelText(/Fecha de inicio del curso/)).toHaveAttribute('aria-invalid', 'true');
   });
 
-  it('con todo vacío, la fecha va en la misma lista que lo demás', async () => {
+  it('con un producto con curso y lo demás vacío, la fecha va en la misma lista que lo demás', async () => {
     const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    fireEvent.change(container.querySelector('#venta-producto-contratado'), { target: { value: 'Master IA' } });
     fireEvent.submit(container.querySelector('form'));
     await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
       title: 'Faltan datos', description: expect.stringContaining('la fecha en «Fecha de inicio del curso»'),
     })));
+  });
+
+  it('sin producto elegido no la pide: no se sabe si hará falta', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(toastMock).toHaveBeenCalled());
+    expect(JSON.stringify(toastMock.mock.calls)).not.toContain('Fecha de inicio del curso');
   });
 
   it('con ella, la manda en la venta', async () => {

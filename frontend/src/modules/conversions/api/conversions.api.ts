@@ -38,6 +38,7 @@ export interface Conversion {
   lead_id?: number;
   project_id?: number;
   producto_contratado: string;
+  producto_contratado_id?: number | null;
   importe_total: number | string;
   importe_pagado: number | string;
   metodo_pago?: MetodoPago | null;
@@ -123,6 +124,20 @@ export interface AddPaymentInput {
   permitir_duplicado?: boolean;
 }
 
+/** Una venta de un producto con curso de Moodle que no tiene fecha de inicio (CRM#1036). */
+export interface VentaSinFechaInicio {
+  id: number;
+  project_id: number;
+  campus: string;
+  lead_id: number;
+  alumno: string;
+  programa: string | null;
+  fecha: string;
+  total: number;
+  cobrado: number;
+  gestora: string | null;
+}
+
 type ListParams = Record<string, string | number | undefined> | undefined;
 
 export const conversionsApi = {
@@ -141,6 +156,9 @@ export const conversionsApi = {
     client.post('/conversions', data),
   update: (id: number, data: Partial<Conversion>): Promise<ApiResponse<Conversion>> =>
     client.patch(`/conversions/${id}`, data),
+  // Las ventas ya hechas de productos con curso de Moodle sin fecha de inicio (CRM#1036).
+  sinFechaInicio: (projectId: number): Promise<ApiResponse<VentaSinFechaInicio[]>> =>
+    client.get('/conversions/sin-fecha-inicio', { params: { projectId } }),
   remove: (id: number, data: { reason: string; motivo?: string | null }): Promise<ApiResponse<void>> =>
     client.delete(`/conversions/${id}`, { data } as any),
   addPayment: (id: number, data: AddPaymentInput): Promise<ApiResponse<Payment>> =>

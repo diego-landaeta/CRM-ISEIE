@@ -5,6 +5,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { formatCurrency } from '@/shared/lib/format';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import FechaInicioCurso from './FechaInicioCurso';
+import { useProductosConCurso, algunoConCurso } from '../hooks/useProductosConCurso';
 
 interface Props {
   conversion: Conversion | null;
@@ -39,6 +40,13 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
   const [saving, setSaving] = useState(false);
   // Catálogo del proyecto para resolver el FK del programa por nombre.
   const { products } = useProducts((conversion as any)?.project_id, true);
+  // Obligatoria si el producto (o una línea) tiene curso de Moodle (CRM#1036).
+  const conCurso = useProductosConCurso((conversion as any)?.project_id);
+  const elegido = products.find((p) => (p.nombre || '').trim().toLowerCase() === producto.trim().toLowerCase());
+  const exigeFechaInicio = algunoConCurso(conCurso, [
+    elegido?.id ?? conversion?.producto_contratado_id ?? null,
+    ...(conversion?.items || []).map((it) => it.product_id ?? null),
+  ]);
 
   useEffect(() => {
     if (!conversion) return;
@@ -72,6 +80,10 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
       return;
     }
     const inicioAntes = (conversion.fecha_inicio || '').slice(0, 10);
+    if (exigeFechaInicio && !fechaInicio) {
+      toast({ title: 'Falta la fecha de inicio del curso', description: 'Este producto tiene curso de Moodle: pon la fecha de inicio pactada con el alumno, que con ella se programa su matrícula.', variant: 'destructive' });
+      return;
+    }
     if (inicioAntes && !fechaInicio) {
       toast({ title: 'Falta la fecha de inicio del curso', description: 'Esta venta ya la tenía: cámbiala por otra, pero no la dejes en blanco.', variant: 'destructive' });
       return;
@@ -177,8 +189,8 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
           </div>
 
           <FechaInicioCurso id="editar-venta-fecha-inicio" value={fechaInicio} onChange={setFechaInicio}
-            required={Boolean((conversion.fecha_inicio || '').slice(0, 10))}
-            hint="Sin fecha, el alumno se matricula en Moodle al confirmarse el pago." />
+            required={exigeFechaInicio || Boolean((conversion.fecha_inicio || '').slice(0, 10))}
+            hint="Opcional: el producto no tiene curso de Moodle." />
 
           <div>
             <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notas</label>

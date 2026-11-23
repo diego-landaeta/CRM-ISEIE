@@ -16,7 +16,10 @@ export const fechaReal = (requerida) => z
 /*
  * La fecha de inicio del curso (#767, paso 1). Con ella se programa la
  * matrícula en Moodle: el día anterior. OBLIGATORIA en las dos rutas del
- * formulario que cierra una venta (POST /api/conversions y POST /api/ventas).
+ * formulario que cierra una venta (POST /api/conversions y POST /api/ventas)
+ * CUANDO EL PRODUCTO TIENE CURSO DE MOODLE en su campus (CRM#1036): eso lo mira
+ * el controlador con `exigirFechaSiTieneCurso` (fecha-inicio.js); el esquema
+ * solo comprueba que, si llega, sea una fecha que existe.
  * Los caminos sin nadie delante (compra directa, links de pago, Conciliación,
  * plataformas de IA) crean la venta por el servicio, sin pasar por aquí, y
  * siguen sin ella: entonces la matrícula va con el pago.
@@ -50,8 +53,9 @@ export const createConversionSchema = z.object({
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
   // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el
-  // día anterior. Obligatoria: esta ruta es la del formulario «Nueva venta».
-  fecha_inicio: fechaInicioCurso(),
+  // día anterior. Obligatoria si el producto tiene curso de Moodle (lo mira el
+  // controlador, que es el de «Nueva venta»).
+  fecha_inicio: fechaInicioCurso().optional().nullable(),
   // Multi-item + IVA + descuento
   items: z.array(conversionItemSchema).optional(),
   iva_pct: z.number().min(0).max(100).optional(),

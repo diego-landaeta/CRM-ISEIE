@@ -26,7 +26,8 @@ export const createSaleSchema = z.object({
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
   // Inicio del curso pactado (#767). Aquí opcional: este esquema lo usa también
   // Conciliación, que crea la venta de un cargo de Stripe ya cobrado. La exige
-  // el controlador de POST /api/ventas, que es el formulario «Registrar venta».
+  // el controlador de POST /api/ventas («Registrar venta») si el producto tiene
+  // curso de Moodle (CRM#1036).
   fecha_inicio: fechaInicioCurso().optional().nullable(),
   notas: z.string().max(2000).optional().nullable(),
   // VENTA SIN GESTORA: se crea de cero y no es de nadie. Quien puede pedirlo lo

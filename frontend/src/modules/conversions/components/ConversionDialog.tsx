@@ -5,6 +5,7 @@ import Portal from '@/shared/components/ui/portal';
 import Select from '@/shared/components/ui/Select';
 import Field from '@/shared/components/ui/Field';
 import FechaInicioCurso, { faltaFechaInicio } from './FechaInicioCurso';
+import { useProductosConCurso, algunoConCurso } from '../hooks/useProductosConCurso';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
@@ -256,6 +257,14 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
     () => products.find((p: { nombre?: string }) => p.nombre === form.producto_contratado),
     [products, form.producto_contratado]
   );
+  // ¿La fecha de inicio es obligatoria? Solo si el producto (o una línea)
+  // tiene curso de Moodle en el campus (CRM#1036).
+  const conCurso = useProductosConCurso(projectId);
+  const productosDeLaVenta = useMultiItem
+    ? items.map((it) => it.product_id)
+    : [selectedProduct?.id ?? null];
+  const exigeFechaInicio = algunoConCurso(conCurso, productosDeLaVenta);
+  const sinProductoElegido = !productosDeLaVenta.some((id) => id != null);
   const productLinks = useMemo<PaymentLink[]>(() => {
     if (!selectedProduct) return [];
     if (Array.isArray(selectedProduct.payment_links) && selectedProduct.payment_links.length > 0) {
@@ -468,7 +477,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
         ? { title: 'Falta el precio', description: 'El total tiene que ser mayor que 0: pon el precio de cada producto en «Productos contratados».', que: 'el precio de cada producto' }
         : { title: 'Falta el precio', description: 'El total tiene que ser mayor que 0: escribe el precio en «Precio base (EUR)».', que: 'el precio en «Precio base (EUR)»' });
     }
-    const sinFechaInicio = faltaFechaInicio(form.fecha_inicio);
+    const sinFechaInicio = faltaFechaInicio(form.fecha_inicio, exigeFechaInicio);
     if (sinFechaInicio) faltan.push(sinFechaInicio);
     setIntentado(true);
     const falta = avisoDeLoQueFalta(faltan);
@@ -529,7 +538,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       metodo_pago_inicial: form.metodo_pago === 'fraccionado' ? metodoInicial : form.metodo_pago,
       fecha_compromiso_pago: form.fecha_compromiso_pago || null,
       fecha_conversion: form.fecha_conversion,
-      fecha_inicio: form.fecha_inicio,
+      fecha_inicio: form.fecha_inicio || null,
       notas_pago: form.notas_pago || null,
       items: useMultiItem ? items.map(it => ({
         product_id: it.product_id,
@@ -803,7 +812,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
 
             {/* Fecha de inicio del curso (#767): con ella se programa la matrícula en Moodle. */}
             <FechaInicioCurso id="venta-fecha-inicio" value={form.fecha_inicio}
-              onChange={(v) => update('fecha_inicio', v)} intentado={intentado} />
+              onChange={(v) => update('fecha_inicio', v)} intentado={intentado}
+              required={exigeFechaInicio} sinProducto={sinProductoElegido} />
 
             {/* DESCUENTO */}
             <div className="border border-border rounded-md p-3 bg-muted/10">

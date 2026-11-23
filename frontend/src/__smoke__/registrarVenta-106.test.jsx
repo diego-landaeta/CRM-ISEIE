@@ -15,6 +15,13 @@ import { render, screen, fireEvent, act, cleanup } from '@testing-library/react'
 
 const avisos = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: avisos.toast }));
+// Los productos del campus con curso de Moodle (CRM#1036): solo con ellos la
+// fecha de inicio es obligatoria. De serie, ninguno.
+const conCurso = vi.hoisted(() => ({ ids: null }));
+vi.mock('@/modules/conversions/hooks/useProductosConCurso', async (original) => ({
+  ...(await original()),
+  useProductosConCurso: () => conCurso.ids,
+}));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true }) }));
 vi.mock('@/shared/api/client', () => ({
   default: {
@@ -25,6 +32,7 @@ vi.mock('@/shared/api/client', () => ({
 vi.mock('@/shared/components/ui/portal', () => ({ default: ({ children }) => children }));
 
 import RegisterSaleDialog from '@/modules/sales/components/RegisterSaleDialog';
+import client from '@/shared/api/client';
 
 // Las etiquetas de Field (#106) que no apuntan a ningún campo.
 const etiquetasSueltas = (raiz, deGrupo = []) => [...raiz.querySelectorAll('label.mb-1\\.5.block.px-1')]
@@ -39,7 +47,11 @@ const abrir = async (props = {}) => {
 };
 
 describe('Registrar venta (#106, #134)', () => {
-  beforeEach(() => { vi.clearAllMocks(); });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    client.get.mockImplementation(() => Promise.resolve({ success: true, data: [] }));
+    conCurso.ids = null;
+  });
   // Sin `globals` en vitest, Testing Library no limpia sola entre pruebas.
   afterEach(cleanup);
 
@@ -67,16 +79,15 @@ describe('Registrar venta (#106, #134)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
     expect(avisos.toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Faltan datos', variant: 'destructive' }));
     const { description } = avisos.toast.mock.calls.at(-1)[0];
-    for (const que of ['el nombre en «Nombre del cliente»', 'el email o el teléfono', 'la formación en «Producto»', 'el importe en «Importe total»',
-      // #767: la fecha de inicio del curso, obligatoria al cerrar la venta.
-      'la fecha en «Fecha de inicio del curso»']) {
+    for (const que of ['el nombre en «Nombre del cliente»', 'el email o el teléfono', 'la formación en «Producto»', 'el importe en «Importe total»']) {
       expect(description).toContain(que);
     }
+    // Sin producto elegido no se sabe si hará falta la fecha de inicio (CRM#1036): no se pide.
+    expect(description).not.toContain('Fecha de inicio del curso');
     // Si solo falta una cosa, su aviso de siempre.
     fireEvent.change(screen.getByLabelText(/^Nombre del cliente/), { target: { value: 'Ana' } });
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@prueba.local' } });
     fireEvent.change(screen.getByLabelText(/^Importe total/), { target: { value: '500' } });
-    fireEvent.change(screen.getByLabelText(/^Fecha de inicio del curso/), { target: { value: '2026-12-01' } });
     fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
     expect(avisos.toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Falta la formación', description: expect.stringMatching(/Producto/) }));
   });
@@ -88,8 +99,14 @@ describe('Registrar venta (#106, #134)', () => {
     expect(description).toContain('el proyecto');
   });
 
-  it('la fecha de inicio del curso (#767): obligatoria, y si falta lo dice su campo', async () => {
+  it('la fecha de inicio del curso (#767, CRM#1036): obligatoria con un producto con curso, y si falta lo dice su campo', async () => {
+    client.get.mockImplementation((url) => Promise.resolve(url === '/products'
+      ? { success: true, data: [{ id: 77, nombre: 'Master IA', precio: 500 }] }
+      : { success: true, data: [] }));
+    conCurso.ids = new Set([77]);
     await abrir({ modoInicial: 'new' });
+    fireEvent.change(screen.getByLabelText('Buscar producto'), { target: { value: 'Master IA' } });
+    await act(async () => { await Promise.resolve(); });
     const campo = screen.getByLabelText(/^Fecha de inicio del curso/);
     expect(campo).toHaveAttribute('type', 'date');
     expect(campo).toHaveAttribute('aria-required', 'true');

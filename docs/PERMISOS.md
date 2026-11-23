@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-906 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+908 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -237,6 +237,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | cuotas | `GET /api/conversions/cuotas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | filas | `GET /api/conversions/filas` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | posiblesRepetidas | `GET /api/conversions/posibles-repetidas` | (no existía) | (ruta nueva) | `conversions.edit` |
+| productosConCursoMoodle | `GET /api/conversions/productos-con-curso` | (no existía) | (ruta nueva) | `conversions.view` |
+| sinFechaInicio | `GET /api/conversions/sin-fecha-inicio` | (no existía) | (ruta nueva) | `conversions.edit` |
 | listByLead | `GET /api/conversions/by-lead/:leadId` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | getById | `GET /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.create` |
