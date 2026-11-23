@@ -37,6 +37,15 @@ function useQuienMira(): { id?: number | string } | null {
     return null;
   }
 }
+/** Lo que puede hacer. Fuera de la sesión, nada (#611: «Mi factura» y «Mi campus»
+ *  no usaban permisos y sus pruebas las montan sin sesión). */
+function usePuede(): (p: string) => boolean {
+  try {
+    return usePermission().can;
+  } catch {
+    return () => false;
+  }
+}
 const hayUnRecorrido = () => typeof document !== 'undefined' && !!document.querySelector(UN_RECORRIDO);
 /** El recorrido que tiene la pantalla ahora (dos a la vez, nunca). */
 let enPantalla: IdRecorridoCobros | null = null;
@@ -49,7 +58,7 @@ export default function VerRecorrido({ id, listo = true, compacto = false }: {
   compacto?: boolean;
 }) {
   const user = useQuienMira();
-  const { can } = usePermission();
+  const can = usePuede();
   const recorrido = RECORRIDOS_COBROS[id];
   const permitido = !!user && tienePermiso(recorrido.permiso, can);
   const clave = claveRecorrido(id, user?.id);

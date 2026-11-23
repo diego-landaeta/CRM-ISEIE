@@ -8,6 +8,7 @@ import { RECORRIDOS_COBROS, pasosPara } from '@/shared/lib/recorridosCobros';
 import { RECORRIDOS_DE_PRUEBA, pasosDePruebaPara, pasosApagada } from '@/shared/lib/recorridosDePrueba';
 import { RECORRIDOS_FINANZAS } from '@/shared/lib/recorridosFinanzas';
 import { RECORRIDOS_NOVEDADES } from '@/shared/lib/recorridosNovedades';
+import { RECORRIDOS_NOVEDADES_B } from '@/shared/lib/recorridosNovedadesB';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -163,6 +164,15 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   it('entre ellos, los cuatro de las novedades del 18/11 (#611, tanda A), con todos sus pasos', () => {
     expect(Object.keys(RECORRIDOS_NOVEDADES)).toEqual(['menu-bloques', 'hoy-dashboard', 'ventas-repetidas', 'venta-cuotas']);
     for (const r of Object.values(RECORRIDOS_NOVEDADES)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los de las novedades del 18/11, tanda B (#611, gemela de CRM#928), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_NOVEDADES_B)).toEqual(['mi-factura', 'facturas-colaboradores', 'mi-campus', 'incidencias', 'prospectos']);
+    for (const r of Object.values(RECORRIDOS_NOVEDADES_B)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();
       expect(fila[1]).toHaveLength(r.pasos.length);
