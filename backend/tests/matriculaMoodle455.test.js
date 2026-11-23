@@ -276,6 +276,22 @@ describe('#455 · alumno que ya tenía cuenta', () => {
 });
 
 describe('#455 · lo que no se reintenta', () => {
+  it('prospecto borrado (deleted_at): no se llama a Moodle ni se le escribe; reintento con su motivo', async () => {
+    encender();
+    const v = await venta();
+    await q('UPDATE leads SET deleted_at = NOW() WHERE id = $1', [v.lead_id]);
+    const { moodle, pedidas } = moodleQueContesta(ok([[41, 'matriculado'], [42, 'matriculado']]));
+    const b = buzon();
+    const r = await vueltaCon(moodle, b);
+    expect(r.reintento).toBe(1);
+    expect(pedidas).toHaveLength(0);
+    expect(b.enviados).toHaveLength(0);
+    const m = await matriculaDe(v);
+    expect(m.estado).toBe('programada');
+    expect(m.motivo).toBe('La ficha del alumno ya no existe');
+    expect(await notasDe(v)).toHaveLength(0);
+  });
+
   it('cuenta suspendida: «fallo» a la primera, aviso a administración y nota en la ficha', async () => {
     encender();
     const v = await venta();

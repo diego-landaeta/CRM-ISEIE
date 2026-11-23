@@ -7,8 +7,9 @@ import { vigilar } from './latido.js';
  * Matrícula automática en Moodle (#767) · el trabajo de cada hora.
  *
  * Coge las matrículas cuyo momento ya llegó (el día anterior al inicio, o al
- * pagar si no hay fecha) y las deja «listas» avisando a administración, o las
- * reintenta si falta algo. En la fase 1 no llama a Moodle.
+ * pagar si no hay fecha) y, desde la fase 2 (#455), las hace en Moodle con el
+ * plugin del campus. Sin el plugin conectado, las deja «listas» avisando a
+ * administración, como en la fase 1; si falta algo, las reintenta.
  *
  * No arranca si MATRICULA_MOODLE_ACTIVA está apagado.
  */

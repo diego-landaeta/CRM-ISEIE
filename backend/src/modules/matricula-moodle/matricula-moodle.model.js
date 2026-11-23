@@ -95,6 +95,8 @@ export async function pendientes(limite = 200) {
     `SELECT m.*, c.id AS venta_id, c.fecha_inicio, c.producto_contratado_id,
             CASE WHEN c.id IS NULL THEN 0 ELSE ${COBRADO_DE('c')} END AS cobrado,
             l.nombre AS alumno_nombre, l.email AS alumno_email,
+            -- Prospecto borrado (borrado suave, 058): ni se matricula ni se le escribe (como en el 360, CRM#767).
+            (l.deleted_at IS NOT NULL) AS alumno_borrado,
             p.nombre AS campus_nombre
        FROM matriculas_moodle m
        JOIN projects p ON p.id = m.project_id

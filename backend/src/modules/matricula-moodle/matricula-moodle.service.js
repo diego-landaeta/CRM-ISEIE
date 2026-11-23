@@ -83,7 +83,7 @@ export async function alBorrarLaVenta(conversionId, db = { query }) {
  */
 export async function comprobar(fila) {
   const email = String(fila.alumno_email || '').trim();
-  if (!fila.lead_id) return { motivo: 'La ficha del alumno ya no existe' };
+  if (!fila.lead_id || fila.alumno_borrado) return { motivo: 'La ficha del alumno ya no existe' };
   if (!CORREO.test(email)) return { motivo: 'El alumno no tiene un correo válido en su ficha' };
 
   const productos = await model.productosConCursos(fila.conversion_id);
