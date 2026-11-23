@@ -113,4 +113,17 @@ UPDATE projects p
    AND u.moneda <> 'EUR'
    AND p.links_pago_moneda_defecto = 'EUR';
 
+-- Permisos para el usuario del CRM (como en la 317): sin esto la tabla queda de
+-- postgres y los códigos dan 500 (lo vio el despliegue de staging del 23/11).
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON links_pago_codigos TO %I', r);
+      EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE links_pago_codigos_id_seq TO %I', r);
+    END IF;
+  END LOOP;
+END $$;
+
 COMMIT;
