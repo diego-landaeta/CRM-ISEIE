@@ -3,9 +3,11 @@ import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
   ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
-  embudoSchema,
+  embudoSchema, codigosQuerySchema, codigoBodySchema, codigoDesactivarSchema,
   totalConDescuento,
 } from './links-pago.validation.js';
+import * as codigos from './links-pago.codigos.js';
+import * as codigosModel from './links-pago.codigos.model.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
 import * as seguimiento from './links-pago.seguimiento.js';
@@ -302,11 +304,58 @@ export async function crear(req, res, next) {
         valor: b.descuento_tipo ? b.descuento_valor : null, importe: b.descuento_tipo ? t.descuento : 0,
       };
     }
+    const codigosPromo = codigos.codigosDelLink({ pedido: b.codigos_promo, cfg, enCuotas, desdeVenta: !!destino.conversionId });
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento,
+      prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento, codigosPromo,
     });
     res.status(201).json({ success: true, data: link });
+  } catch (err) { next(err); }
+}
+
+// ─── Códigos promocionales de campaña (CRM#986) ─────────────────────────────
+
+// GET /api/links-pago/codigos?projectId=N — los del campus. Quien crea links ve los
+// vigentes (para decírselos al alumno); quien configura, todos.
+export async function listarCodigos(req, res, next) {
+  try {
+    const parsed = codigosQuerySchema.safeParse({ projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const todos = await tienePermiso(req, 'links_pago.configurar');
+    const data = await codigosModel.listar(parsed.data.projectId, { soloVigentes: !todos });
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/codigos { projectId, codigo, tipo, valor, moneda?, caduca_el, max_usos?, campana? }
+export async function crearCodigo(req, res, next) {
+  try {
+    const parsed = codigoBodySchema.safeParse({ ...req.body, projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const b = parsed.data;
+    const cfg = await model.config(b.projectId);
+    if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
+    const userId = Number(req.user.userId);
+    const hecho = await codigos.crearCodigo({
+      projectId: b.projectId, userId, cfg, codigo: b.codigo, campana: b.campana, tipo: b.tipo, valor: b.valor,
+      moneda: b.moneda, caducaEl: b.caduca_el, maxUsos: b.max_usos,
+    });
+    await anotar(req, 'links_pago.codigo_creado', {
+      project_id: b.projectId, codigo_id: hecho.id, codigo: hecho.codigo, tipo: hecho.tipo, valor: hecho.valor,
+      moneda: hecho.moneda, caduca_el: hecho.caduca_el,
+    });
+    res.status(201).json({ success: true, data: hecho });
+  } catch (err) { next(err); }
+}
+
+// POST /api/links-pago/codigos/:id/desactivar { projectId }
+export async function desactivarCodigo(req, res, next) {
+  try {
+    const parsed = codigoDesactivarSchema.safeParse({ id: req.params.id, projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const hecho = await codigos.desactivarCodigo({ projectId: parsed.data.projectId, id: parsed.data.id, userId: Number(req.user.userId) });
+    await anotar(req, 'links_pago.codigo_desactivado', { project_id: parsed.data.projectId, codigo_id: hecho.id, codigo: hecho.codigo });
+    res.json({ success: true, data: hecho });
   } catch (err) { next(err); }
 }
 
