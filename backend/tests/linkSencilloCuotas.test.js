@@ -10,8 +10,12 @@ import jwt from 'jsonwebtoken';
  *
  *   · crear un link sin persona: solo el campus (uno de los suyos) y el curso;
  *     Checkout pide el teléfono; un campus ajeno es un 404;
- *   · «cuotas» dice ANTES de crear el link si no se puede (campus sin cobro
- *     automático, clave sin permisos) y no crea nada;
+ *   · «cuotas» se puede siempre que el campus las admita (23/11, Diego: «crear
+ *     cuotas y elegir las fechas sí o sí»): sin cobro automático (campus que no
+ *     lo permite, clave sin permisos) el link no guarda la tarjeta y, al pagarse
+ *     la inicial, se crea un link por cuota con su fecha; solo un campus que no
+ *     admite cuotas las para (400 CUOTAS_NO_ADMITIDAS) sin tocar Stripe;
+ *   · las fechas que elige la gestora: la venta nace con ellas;
  *   · pago único sin persona: al pagarse se crea el prospecto (para quien creó
  *     el link, con origen «link de pago») y la venta; Stripe avisa dos veces y
  *     hay una sola venta;
@@ -30,7 +34,7 @@ const { encrypt } = await import('../src/shared/utils/crypto.js');
 const integrationsModel = await import('../src/modules/integrations/integrations.model.js');
 const { default: linksPago } = await import('../src/modules/links-pago/index.js');
 const servicio = await import('../src/modules/stripe-payments/stripe-payments.service.js');
-const { repartirEnCuotas, fechasMensuales, planDeCuotas } = await import('../src/modules/links-pago/links-pago.service.js');
+const { repartirEnCuotas, fechasMensuales, planDeCuotas, hoyEnMadrid } = await import('../src/modules/links-pago/links-pago.service.js');
 
 // ─── Stripe de mentira ──────────────────────────────────────────────────────
 let llamadas = [];
@@ -187,28 +191,61 @@ describe('crear un link sin prospecto', { timeout: 60_000 }, () => {
   });
 });
 
-describe('«cuotas» dice antes si no se puede', { timeout: 60_000 }, () => {
-  it('campus sin cobro automático: lo dice al elegir campus y, al crear, 409 sin tocar Stripe', async () => {
+describe('«cuotas»: siempre que el campus las admita; lo que cambia es si se cobran solas', { timeout: 60_000 }, () => {
+  it('campus sin cobro automático: lo dice al elegir campus y, al crear, el link NO guarda la tarjeta', async () => {
     const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: B }).set(como(p.gestora));
     expect(ver.status).toBe(200);
-    expect(ver.body.data).toMatchObject({ disponible: false });
+    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false, codigo: 'campus_no_permitido' });
     expect(ver.body.data.motivo).toMatch(/no tiene permitido el cobro automático/);
-    const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 3 });
-    expect(r.status).toBe(409);
-    expect(r.body.code).toBe('CUOTAS_NO_DISPONIBLES');
-    expect(de('POST', '/v1/payment_links')).toHaveLength(0);
+    const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 2, inicial: 300 });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.data).toMatchObject({ modalidad: 'cuotas', guarda_tarjeta: false });
+    const pl = de('POST', '/v1/payment_links')[0].cuerpo;
+    expect(pl['payment_intent_data[setup_future_usage]']).toBeUndefined();
+    expect(pl['custom_text[submit][message]']).toBeUndefined();
   });
 
-  it('clave sin permisos de schedules: lo dice, con los permisos que faltan', async () => {
+  it('campus que no admite cuotas: no se crea, sin tocar Stripe (lo único que apaga las cuotas)', async () => {
+    await q('UPDATE projects SET links_pago_cuotas_admitidas = FALSE WHERE id = $1', [B]);
+    try {
+      const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: B }).set(como(p.gestora));
+      expect(ver.body.data).toMatchObject({ disponible: false, codigo: 'cuotas_no_admitidas' });
+      const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 3 });
+      // Lo para la regla del campus antes de mirar el cobro automático.
+      expect([r.status, r.body.code]).toEqual([400, 'CUOTAS_NO_ADMITIDAS']);
+      expect(de('POST', '/v1/payment_links')).toHaveLength(0);
+    } finally {
+      await q('UPDATE projects SET links_pago_cuotas_admitidas = TRUE WHERE id = $1', [B]);
+    }
+  });
+
+  it('clave sin permisos de schedules: cuotas sí, no automáticas, con los permisos que faltan', async () => {
     respuestas = [['GET', '/v1/subscription_schedules', 403, { error: { message: 'The provided key does not have the required permissions' } }]];
     const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: A }).set(como(p.gestora));
-    expect(ver.body.data.disponible).toBe(false);
+    expect(ver.body.data).toMatchObject({ disponible: true, automatico: false, codigo: 'clave_sin_permiso' });
     expect(ver.body.data.motivo).toMatch(/Subscription Schedules/);
   });
 
-  it('campus que lo permite: disponible, con su máximo de cuotas', async () => {
+  it('campus que lo permite: disponible y automático, con su máximo de cuotas', async () => {
     const ver = await api.get('/api/links-pago/cuotas-disponibles').query({ projectId: A }).set(como(p.gestora));
-    expect(ver.body.data).toMatchObject({ disponible: true, motivo: null, cuotas_max: 12 });
+    expect(ver.body.data).toMatchObject({ disponible: true, automatico: true, motivo: null, cuotas_max: 12 });
+  });
+
+  it('las fechas que se mandan tienen que cuadrar: suma, orden y de mañana en adelante', async () => {
+    const base = { projectId: A, productId: prod[A], importe: 900, modalidad: 'cuotas', num_cuotas: 2, inicial: 300 };
+    const [, f1, f2] = fechasMensuales(hoyEnMadrid(), 3);
+    const mal = async (cuotas, code = 'VALIDATION_ERROR') => {
+      const r = await crear(p.gestora, { ...base, cuotas });
+      expect(r.status, JSON.stringify(r.body)).toBe(400);
+      expect(r.body.code).toBe(code);
+      return r.body.error;
+    };
+    expect(await mal([{ importe: 300, vence: f1 }, { importe: 200, vence: f2 }])).toMatch(/no suman/);
+    expect(await mal([{ importe: 300, vence: f2 }, { importe: 300, vence: f1 }])).toMatch(/después de la anterior/);
+    expect(await mal([{ importe: 600, vence: f1 }])).toMatch(/una fecha por cuota/);
+    expect(await mal([{ importe: 300, vence: hoyEnMadrid() }, { importe: 300, vence: f2 }], 'FECHA_NO_VALIDA')).toMatch(/de mañana en adelante/);
+    expect(await mal([{ importe: 300, vence: '2027-02-30' }, { importe: 300, vence: f2 }])).toMatch(/no existe/);
+    expect(de('POST', '/v1/payment_links')).toHaveLength(0);
   });
 
   it('más cuotas que el máximo del campus: 400', async () => {
@@ -337,5 +374,55 @@ describe('al pagarse un link sin prospecto', { timeout: 60_000 }, () => {
     // Y el aviso repetido del pago de la cuota 1 no crea otra venta.
     await servicio.handleWebhookEvent(A, { id: `evt_${cargo.id}_otra`, type: 'charge.succeeded', data: { object: cargo } });
     expect(await q('SELECT id FROM conversions WHERE lead_id = $1', [lead.id])).toHaveLength(1);
+  });
+
+  it('con fechas elegidas y SIN cobro automático: la venta con esas fechas y un link por cuota, que salda la suya', async () => {
+    // Campus B: no permite el cobro automático. La gestora elige importes y fechas.
+    const [, f1, , f3] = fechasMensuales(hoyEnMadrid(), 4);
+    const plan = [{ importe: 250, vence: f1 }, { importe: 350, vence: f3 }];
+    const r = await crear(p.gestora, { projectId: B, productId: prod[B], importe: 900, modalidad: 'cuotas', num_cuotas: 2, inicial: 300, cuotas: plan });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    const link = r.body.data;
+    expect(link).toMatchObject({ modalidad: 'cuotas', num_cuotas: 3, guarda_tarjeta: false, plan_cuotas: plan });
+    expect(Number(link.importe_cuota)).toBe(300);
+    expect(de('POST', '/v1/prices')[0].cuerpo.unit_amount).toBe('30000');
+
+    const email = `fechas${Math.random().toString(36).slice(2, 8)}@${m}.test`;
+    llamadas = [];
+    const cargo = await pagar(link, { email, importe: 300, nombre: `${MARCA} Alumna Fechas`, telefono: '+34611777666' });
+    const fecha = new Date(cargo.created * 1000).toISOString().slice(0, 10);
+
+    const lead = await one('SELECT id FROM leads WHERE project_id = $1 AND LOWER(email) = $2', [B, email]);
+    const venta = await one('SELECT id, importe_total FROM conversions WHERE lead_id = $1', [lead.id]);
+    expect(Number(venta.importe_total)).toBe(900);
+    const cuotas = await q(
+      `SELECT id, numero, importe_previsto::float8 AS importe, fecha_vencimiento::text AS vence, fecha_cobro IS NOT NULL AS cobrada
+         FROM conversion_installments WHERE conversion_id = $1 ORDER BY numero`, [venta.id]);
+    expect(cuotas.map((c) => [c.numero, c.importe, c.vence, c.cobrada])).toEqual([
+      [1, 300, fecha, true], [2, 250, f1, false], [3, 350, f3, false]]);
+
+    // Sin cobro automático: nada en Stripe de calendarios, y un link por cuota pendiente.
+    expect(await one('SELECT activo FROM conversion_cobro_auto WHERE conversion_id = $1', [venta.id])).toBeUndefined();
+    expect(de('POST', '/v1/subscription_schedules')).toHaveLength(0);
+    const deCuotas = await q(
+      `SELECT id, installment_id, importe::float8 AS importe, estado, guarda_tarjeta, conversion_id, lead_id, caduca_el
+         FROM payment_links WHERE conversion_id = $1 AND installment_id IS NOT NULL ORDER BY installment_id`, [venta.id]);
+    expect(deCuotas.map((l) => [l.installment_id, l.importe, l.estado, l.guarda_tarjeta, l.lead_id]))
+      .toEqual([[cuotas[1].id, 250, 'creado', false, lead.id], [cuotas[2].id, 350, 'creado', false, lead.id]]);
+    // Cada uno caduca después de su fecha (vencimiento + la caducidad de serie, con el tope del campus).
+    expect(new Date(deCuotas[0].caduca_el).toISOString().slice(0, 10) > f1).toBe(true);
+    const ev = await one(`SELECT datos FROM payment_link_eventos WHERE link_id = $1 AND tipo = 'links_de_las_cuotas'`, [link.id]);
+    expect(ev.datos.links).toEqual(deCuotas.map((l) => l.id));
+    expect((await linkDe(link.id))).toMatchObject({ estado: 'pagado', conversion_id: venta.id });
+
+    // El alumno paga el link de la cuota 2: salda la 2.
+    const l2 = await linkDe(deCuotas[0].id);
+    await pagar(l2, { email, importe: 250, nombre: `${MARCA} Alumna Fechas`, telefono: '+34611777666' });
+    const ahora = await q('SELECT numero, fecha_cobro IS NOT NULL AS cobrada FROM conversion_installments WHERE conversion_id = $1 ORDER BY numero', [venta.id]);
+    expect(ahora).toEqual([{ numero: 1, cobrada: true }, { numero: 2, cobrada: true }, { numero: 3, cobrada: false }]);
+    expect(await q('SELECT id FROM conversions WHERE lead_id = $1', [lead.id])).toHaveLength(1);
+    // Y el aviso repetido de la inicial no repite los links de las cuotas.
+    await servicio.handleWebhookEvent(B, { id: `evt_${cargo.id}_otra`, type: 'charge.succeeded', data: { object: cargo } });
+    expect(await q('SELECT id FROM payment_links WHERE conversion_id = $1 AND installment_id IS NOT NULL', [venta.id])).toHaveLength(2);
   });
 });

@@ -244,38 +244,53 @@ export async function crear(req, res, next) {
     const enCuotas = b.modalidad === 'cuotas';
     const reglas = service.comprobarReglas({
       cfg, prod, importe: b.importe, moneda: b.moneda, caducidadDias: b.caducidad_dias,
-      modalidad: b.modalidad, numCuotas: b.num_cuotas, inicial: b.inicial,
+      modalidad: b.modalidad, numCuotas: b.num_cuotas, inicial: b.inicial, plan: b.cuotas,
       esAdmin: await tienePermiso(req, 'links_pago.configurar'),
       // Desde una venta, el tope de descuento se mide contra lo pendiente (fase 3).
       pendiente,
     });
 
     /*
-      EN CUOTAS (20/11): es el cobro automático. Se comprueba ANTES de crear nada
-      (campus, permiso y clave de Stripe); el link cobra la cuota 1 y guarda la
-      tarjeta, con el consentimiento de las demás junto al botón de pagar.
-
-      CON INICIAL (CRM#982): el link cobra la inicial y las N cuotas iguales de lo
-      que queda las cobra Stripe. En la venta serán N + 1 pagos (`num`).
+      EN CUOTAS. Desde el 23/11 (Diego: «crear cuotas y elegir las fechas sí o
+      sí») se pueden siempre que el campus las admita en euros; lo que cambia es
+      cómo se cobran:
+        · CON cobro automático (campus que lo permite, permiso de la persona y
+          clave de Stripe que puede programar cobros): el link cobra la inicial y
+          guarda la tarjeta, con el consentimiento de las demás junto al botón de
+          pagar, y Stripe cobra cada cuota en su fecha;
+        · SIN él: el link cobra la inicial y, al pagarse, se crea un link por cada
+          cuota, con su importe y su fecha de vencimiento (links-pago.cobro.js).
+      CON INICIAL (CRM#982): en la venta serán N + 1 pagos (`num`). Con `cuotas`
+      (23/11), cada una con el importe y la fecha que eligió la gestora.
     */
     let guardaTarjeta = null;
     let cuotas = null;
+    let automatico = false;
     if (enCuotas) {
       const disp = await cobroAuto.paraUnLinkEnCuotas(destino.projectId, {
         cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
       });
       if (!disp.disponible) throw new AppError(disp.motivo, 409, 'CUOTAS_NO_DISPONIBLES');
+      automatico = disp.automatico === true;
       const conInicial = b.inicial !== undefined;
-      const importes = conInicial
-        ? [b.inicial, ...service.repartirEnCuotas(service.restaCentimos(b.importe, b.inicial), b.num_cuotas)]
-        : service.repartirEnCuotas(b.importe, b.num_cuotas);
-      cuotas = { num: importes.length, importeCuota: importes[0], ...(conInicial ? { inicial: b.inicial } : {}) };
-      guardaTarjeta = {
-        consentimiento: cobroAuto.textoConsentimiento({
-          campus: await model.nombreDelCampus(destino.projectId),
-          cuotas: importes.slice(1).map((importe) => ({ importe })),
-        }),
+      const plan = b.cuotas ? b.cuotas.map((c) => ({ importe: c.importe, vence: c.vence })) : null;
+      const importes = plan
+        ? [b.inicial, ...plan.map((c) => c.importe)]
+        : conInicial
+          ? [b.inicial, ...service.repartirEnCuotas(service.restaCentimos(b.importe, b.inicial), b.num_cuotas)]
+          : service.repartirEnCuotas(b.importe, b.num_cuotas);
+      cuotas = {
+        num: importes.length, importeCuota: importes[0],
+        ...(conInicial ? { inicial: b.inicial } : {}), ...(plan ? { plan } : {}),
       };
+      if (automatico) {
+        guardaTarjeta = {
+          consentimiento: cobroAuto.textoConsentimiento({
+            campus: await model.nombreDelCampus(destino.projectId),
+            cuotas: importes.slice(1).map((importe) => ({ importe })),
+          }),
+        };
+      }
     }
     // El precio antes del descuento y el descuento (CRM#982): Zod ya ha comprobado
     // que el total cuadra; aquí se calcula lo que se guarda.
@@ -423,14 +438,10 @@ export async function generarPlan(req, res, next) {
     const nuevas = elegidas.filter((c) => !c.link_id);
     // Con el cobro automático activo (de antes), los links que se creen guardan la tarjeta.
     const guardaTarjeta = await cobroAuto.guardaTarjetaPara(destino.conversionId);
-    for (const c of nuevas) {
-      const reglas = service.reglasDeCuota({ cfg, prod, vence: c.vence });
-      const link = await service.crear({
-        projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
-        prod, reglas, importe: Number(c.importe), userId, cuota: { id: c.id, numero: c.numero, vence: c.vence }, guardaTarjeta,
-      });
-      creados.push(Number(link.id));
-    }
+    creados.push(...await service.crearLinksDeCuotas({
+      projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
+      prod, cfg, userId, cuotas: nuevas, guardaTarjeta,
+    }));
     creados = [...new Set(creados)];
     // El plan tal como queda: cada cuota con su link (el nuevo o el que ya tenía).
     const ahora = await model.cuotasPendientes(destino.conversionId);

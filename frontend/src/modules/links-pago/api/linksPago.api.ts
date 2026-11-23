@@ -33,6 +33,8 @@ export interface LinkDePago {
    * cuenta la inicial y las cuotas, y estas son iguales sobre lo que queda.
    */
   importe_inicial?: string | number | null;
+  /** 23/11: las cuotas de después de la inicial con su importe y su fecha. */
+  plan_cuotas?: { importe: number | string; vence: string }[] | null;
   /** El precio antes del descuento y el descuento (CRM#982). `importe` es el total. */
   precio_original?: string | number | null;
   descuento_tipo?: 'monto' | 'pct' | null;
@@ -134,6 +136,8 @@ export function crearLink(cuerpo: {
   modalidad?: 'unico' | 'cuotas'; num_cuotas?: number;
   // CRM#982: con `inicial`, el link cobra la inicial y `num_cuotas` son las de después.
   inicial?: number;
+  // 23/11: con inicial, cada cuota de después con su importe y su fecha (AAAA-MM-DD).
+  cuotas?: { importe: number; vence: string }[];
   // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
 }) {
@@ -146,7 +150,15 @@ export function crearLink(cuerpo: {
   Integraciones › Links de pago (aviso «Conectar Stripe para cobros automáticos»);
   `apagado_entorno`, en ningún sitio de la pantalla. El resto, solo el texto.
 */
-export interface CuotasDisponibles { disponible: boolean; codigo?: string | null; motivo: string | null; cuotas_max: number | null }
+/*
+  23/11 (Diego: «crear cuotas sí o sí»): `disponible` dice si se pueden crear cuotas
+  (solo no si el campus no las admite en euros) y `automatico`, si Stripe las cobra
+  solas. Sin cobro automático, cada cuota tiene su propio link; `codigo` y `motivo`
+  dicen por qué no es automático.
+*/
+export interface CuotasDisponibles {
+  disponible: boolean; automatico?: boolean; codigo?: string | null; motivo: string | null; cuotas_max: number | null;
+}
 
 export function cuotasDisponibles(projectId: number) {
   return client.get<CuotasDisponibles>('/links-pago/cuotas-disponibles', { params: { projectId } });
