@@ -116,19 +116,32 @@ async function ventasDelAlumno(ids) {
               NULLIF(lower(btrim(sp.customer_email)), '') AS email,
               ${NORMALIZADO('sp.customer_name')} AS nombre
          FROM stripe_payments sp WHERE sp.id = ANY($1::int[])
+     ),
+     -- Cada venta del campus con su alumno, el correo y el nombre ya normalizados
+     -- UNA vez (#656). Antes se normalizaban en cada pareja cargo × venta: con
+     -- «Todos los meses» en ISEIE eran 924 × 489 = 452.000 normalizaciones y
+     -- 37 s; Cloudflare cortaba con 504. MATERIALIZED para que Postgres no lo
+     -- vuelva a meter dentro del cruce.
+     cl AS MATERIALIZED (
+       SELECT c.id, c.project_id, c.lead_id, l.nombre AS alumno, l.email,
+              c.producto_contratado AS programa, c.fecha_conversion, c.importe_total,
+              lower(btrim(l.email)) AS email_n,
+              ${NORMALIZADO('l.nombre')} AS nombre_n
+         FROM conversions c
+         JOIN leads l ON l.id = c.lead_id AND l.deleted_at IS NULL
+        WHERE c.project_id IN (SELECT DISTINCT project_id FROM k)
      ), v AS (
-       SELECT k.id AS cargo_id, c.id, c.lead_id, l.nombre AS alumno, l.email,
-              c.producto_contratado AS programa, c.fecha_conversion::text AS fecha,
-              c.importe_total::float8 AS total, ${COBRADO_DE('c')}::float8 AS cobrado,
-              CASE WHEN k.conversion_id = c.id THEN 'venta'
-                   WHEN k.email IS NOT NULL AND lower(btrim(l.email)) = k.email THEN 'correo'
+       SELECT k.id AS cargo_id, cl.id, cl.lead_id, cl.alumno, cl.email,
+              cl.programa, cl.fecha_conversion::text AS fecha,
+              cl.importe_total::float8 AS total, ${COBRADO_DE('cl')}::float8 AS cobrado,
+              CASE WHEN k.conversion_id = cl.id THEN 'venta'
+                   WHEN k.email IS NOT NULL AND cl.email_n = k.email THEN 'correo'
                    ELSE 'nombre' END AS por
          FROM k
-         JOIN conversions c ON c.project_id = k.project_id
-         JOIN leads l ON l.id = c.lead_id AND l.deleted_at IS NULL
-        WHERE k.conversion_id = c.id
-           OR (k.email IS NOT NULL AND lower(btrim(l.email)) = k.email)
-           OR ${MISMO_NOMBRE(NORMALIZADO('l.nombre'), 'k.nombre')}
+         JOIN cl ON cl.project_id = k.project_id
+        WHERE k.conversion_id = cl.id
+           OR (k.email IS NOT NULL AND cl.email_n = k.email)
+           OR ${MISMO_NOMBRE('cl.nombre_n', 'k.nombre')}
      )
      SELECT * FROM (
        SELECT v.*, GREATEST(v.total - v.cobrado, 0)::float8 AS pendiente,
