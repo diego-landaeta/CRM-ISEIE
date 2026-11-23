@@ -494,7 +494,7 @@ export default function CrearLinkAsistente({
   if (paraAlguien && consulta && cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (paraAlguien && !consulta && !campusElegido) motivos.push('Elige el campus, o busca el prospecto.');
   else if (!projectId) motivos.push('Elige el campus.');
-  else if (sinClave) motivos.push('Todavía no se pueden crear links en este campus.');
+  else if (sinClave) motivos.push('Falta conectar Stripe en este campus.');
   else {
     if (!cfg) motivos.push('Cargando las reglas del campus…');
     if (cursosCargados && cursos.length === 0) motivos.push('Este campus no tiene cursos en el catálogo: sin curso no se puede crear el link.');
@@ -678,7 +678,7 @@ export default function CrearLinkAsistente({
                 <div role="alert" className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground">
                   <WarningCircle size={18} weight="fill" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
                   <p>
-                    <span className="font-semibold block">Todavía no se pueden crear links en este campus</span>
+                    <span className="font-semibold block">FALTA CONECTAR STRIPE</span>
                     {sinClave.error}
                   </p>
                 </div>
