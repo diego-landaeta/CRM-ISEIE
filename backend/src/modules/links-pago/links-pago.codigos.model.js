@@ -108,11 +108,11 @@ export async function ponerDescuentoEnLaVenta(conversionId, { subtotal, tipo, va
   return rowCount > 0;
 }
 
-/** Una línea más en las notas de la venta (el código que se usó). */
+/** Una línea más en las notas de la venta (`notas_pago`): el código que se usó. */
 export async function anadirNotaALaVenta(conversionId, texto) {
   await query(
     `UPDATE conversions
-        SET notas = CASE WHEN COALESCE(notas, '') = '' THEN $2 ELSE notas || E'\\n' || $2 END, updated_at = NOW()
+        SET notas_pago = CASE WHEN COALESCE(notas_pago, '') = '' THEN $2 ELSE notas_pago || E'\\n' || $2 END, updated_at = NOW()
       WHERE id = $1`,
     [conversionId, texto]);
 }

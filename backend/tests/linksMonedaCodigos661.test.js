@@ -402,7 +402,7 @@ describe('el link con códigos y su venta, contra la base', { timeout: 60_000 },
     const lead = await one('SELECT id FROM leads WHERE project_id = $1 AND LOWER(email) = $2', [A, email]);
     const venta = await one(
       `SELECT id, importe_total::float8 AS total, subtotal_bruto::float8 AS bruto, descuento_tipo,
-              descuento_importe::float8 AS descuento, notas FROM conversions WHERE lead_id = $1`, [lead.id]);
+              descuento_importe::float8 AS descuento, notas_pago AS notas FROM conversions WHERE lead_id = $1`, [lead.id]);
     expect(venta).toMatchObject({ total: 800, bruto: 1000, descuento_tipo: 'monto', descuento: 200 });
     expect(venta.notas).toMatch(/Código promocional BF20: 200\.00 EUR de descuento/);
     const pagos = await q('SELECT importe::float8 AS importe FROM conversion_payments WHERE conversion_id = $1', [venta.id]);
