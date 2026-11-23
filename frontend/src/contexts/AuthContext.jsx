@@ -33,6 +33,13 @@ export function AuthProvider({ children }) {
         if (!me.success) return;
         setPermissions(me.data.permissions || null);
         setAlcanceComercial(me.data.alcance_comercial || null);
+        // Lo que el login y el refresh no traen y /auth/me sí: `funciones` (lo que el
+        // servidor tiene encendido: links de pago, plugin de Moodle), `lleva_equipo`…
+        // Diego, 23/11/2026: en producción nadie veía «Links de pago» aunque el
+        // servidor los tuviera encendidos (LINKS_PAGO_EN_PRODUCCION=1) y la persona
+        // tuviera los permisos: sin `user.funciones`, `linksPagoEncendidos()` caía a
+        // «solo en pruebas» (falso en producción). Se suma al usuario que ya había.
+        if (me.data.user) setUser((u) => (u ? { ...u, ...me.data.user } : u));
       })
       .catch(() => {});
   }, []);
