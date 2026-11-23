@@ -10,11 +10,11 @@ import { MemoryRouter } from 'react-router-dom';
  * conectar Stripe para cobros automáticos, y al tocarlo que los mande al sitio de
  * edición».
  *
- *   · El asistente «Crear link»: si «Inicial + cuotas» no se puede por la clave
- *     (sin clave, o sin permiso de suscripciones), en lugar del texto apagado sale
- *     el aviso con su motivo y el botón a Integraciones › Links de pago de ese
- *     campus; si es el interruptor del servidor, solo que no está activo aquí; si
- *     es otra cosa, el texto de siempre.
+ *   · El asistente «Crear link»: si las cuotas no se pueden cobrar solas por la
+ *     clave (sin clave, o sin permiso de suscripciones), «Inicial + cuotas» sigue
+ *     (desde el 23/11, cada cuota con su link) y sale el aviso con su motivo y el
+ *     botón a Integraciones › Links de pago de ese campus; si es el interruptor
+ *     del servidor, solo que no está activo aquí; si es otra cosa, el motivo.
  *   · La pantalla «Links de pago»: arriba, los campus del ámbito en esa situación.
  *   · Sin `integrations.edit` (el permiso de la clave) no hay botón: «Pídeselo a
  *     un administrador».
@@ -121,14 +121,24 @@ describe('el aviso, solo', () => {
   });
 });
 
+// Las cuotas sin cobro automático (23/11) se eligen igual: el aviso sale al elegirlas.
+const elegirCuotas = async (dialogo) => {
+  const radio = await within(dialogo).findByRole('radio', { name: /Inicial \+ cuotas/ });
+  await vi.waitFor(() => expect(within(dialogo).getByText(/cada cuota, con su link/)).toBeTruthy());
+  expect(radio.disabled).toBe(false);
+  fireEvent.click(radio);
+};
+const sinAuto = (codigo, motivo) => ({ disponible: true, automatico: false, codigo, motivo, cuotas_max: 6 });
+
 describe('el asistente «Crear link»', () => {
-  it('clave sin permiso de suscripciones: el aviso en lugar del texto apagado, y el botón lleva a la clave (y cierra)', async () => {
-    cuotas = { disponible: false, codigo: 'clave_sin_permiso', motivo: SIN_PERMISO, cuotas_max: 6 };
+  it('clave sin permiso de suscripciones: las cuotas siguen, con el aviso, y el botón lleva a la clave (y cierra)', async () => {
+    cuotas = sinAuto('clave_sin_permiso', SIN_PERMISO);
     const { dialogo, onClose } = await abrir();
+    await elegirCuotas(dialogo);
     const aviso = await within(dialogo).findByTestId('aviso-conectar-stripe');
     expect(aviso.textContent).toContain(SIN_PERMISO);
+    expect(within(dialogo).getByTestId('aviso-cuotas-sin-auto').textContent).toMatch(/El cobro no será automático: cada cuota tendrá su propio link/);
     expect(within(dialogo).queryByText(/Cuotas no disponibles/)).toBeNull();
-    expect(within(dialogo).getByRole('radio', { name: /Inicial \+ cuotas/ }).disabled).toBe(true);
     const ir = within(aviso).getByRole('link', { name: /Cambiar la clave de Stripe/ });
     expect(ir.getAttribute('href')).toBe(RUTA);
     fireEvent.click(ir);
@@ -136,7 +146,7 @@ describe('el asistente «Crear link»', () => {
   });
 
   it('campus sin clave de links: el aviso una vez, fuera de lo apagado, con su botón', async () => {
-    cuotas = { disponible: false, codigo: 'sin_clave', motivo: SIN_CLAVE, cuotas_max: 6 };
+    cuotas = sinAuto('sin_clave', SIN_CLAVE);
     config = { ...CONFIG, aviso_clave: { code: 'SIN_CLAVE_DE_LINKS', error: 'Este campus no tiene la clave de links de pago.' } };
     const { dialogo } = await abrir({ conCurso: false });
     await within(dialogo).findByTestId('aviso-conectar-stripe');
@@ -147,26 +157,30 @@ describe('el asistente «Crear link»', () => {
 
   it('sin el permiso de la clave: el aviso con «Pídeselo a un administrador», sin botón', async () => {
     permisos.mapa = { 'links_pago.crear': true, 'links_pago.cobro_automatico': true };
-    cuotas = { disponible: false, codigo: 'sin_clave', motivo: SIN_CLAVE, cuotas_max: 6 };
+    cuotas = sinAuto('sin_clave', SIN_CLAVE);
     const { dialogo } = await abrir();
+    await elegirCuotas(dialogo);
     const aviso = await within(dialogo).findByTestId('aviso-conectar-stripe');
     expect(aviso.textContent).toMatch(/Pídeselo a un administrador/);
     expect(within(aviso).queryByRole('link')).toBeNull();
   });
 
   it('el interruptor del servidor apagado: solo que no está activo en este entorno, sin mandar a editar', async () => {
-    cuotas = { disponible: false, codigo: 'apagado_entorno', motivo: 'El cobro automático de cuotas no está activo en este entorno.', cuotas_max: 6 };
+    cuotas = sinAuto('apagado_entorno', 'El cobro automático de cuotas no está activo en este entorno.');
     const { dialogo } = await abrir();
+    await elegirCuotas(dialogo);
     const aviso = await within(dialogo).findByTestId('aviso-cobro-auto-apagado');
     expect(aviso.textContent).toMatch(/no está activo en este entorno/);
     expect(within(dialogo).queryByTestId('aviso-conectar-stripe')).toBeNull();
     expect(within(dialogo).queryByRole('link', { name: /Conectar Stripe|Cambiar la clave/ })).toBeNull();
   });
 
-  it('otro motivo (sin el permiso de cobro automático): el texto de siempre', async () => {
-    cuotas = { disponible: false, codigo: 'sin_permiso', motivo: 'No tienes el permiso «Cobro automático de cuotas»: pídeselo a un admin.', cuotas_max: 6 };
+  it('otro motivo (sin el permiso de cobro automático): las cuotas siguen, con el motivo', async () => {
+    cuotas = sinAuto('sin_permiso', 'No tienes el permiso «Cobro automático de cuotas».');
     const { dialogo } = await abrir();
-    expect((await within(dialogo).findByText(/Cuotas no disponibles/)).textContent).toMatch(/No tienes el permiso/);
+    await elegirCuotas(dialogo);
+    expect((await within(dialogo).findByTestId('aviso-cuotas-sin-auto')).textContent).toMatch(/No tienes el permiso/);
+    expect(within(dialogo).queryByText(/Cuotas no disponibles/)).toBeNull();
     expect(within(dialogo).queryByTestId('aviso-conectar-stripe')).toBeNull();
   });
 });

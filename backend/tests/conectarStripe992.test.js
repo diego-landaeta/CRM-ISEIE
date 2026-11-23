@@ -76,14 +76,15 @@ describe('la migración 324', () => {
 describe('los motivos de «Inicial + cuotas», con su código', () => {
   const para = (o = {}) => cobroAuto.paraUnLinkEnCuotas(1, { cfg: CFG, puedeCobroAuto: true, ...o });
 
-  it('todo en orden: disponible, sin código', async () => {
-    expect(await para()).toEqual({ disponible: true, codigo: null, motivo: null, cuotas_max: 12 });
+  it('todo en orden: disponible y automático, sin código', async () => {
+    expect(await para()).toEqual({ disponible: true, automatico: true, codigo: null, motivo: null, cuotas_max: 12 });
   });
 
   it('sin clave de links: `sin_clave`, sin preguntar a Stripe', async () => {
     claveDeEscritura.mockResolvedValue(null);
     const r = await para();
-    expect(r).toMatchObject({ disponible: false, codigo: 'sin_clave' });
+    // Desde el 23/11 las cuotas siguen (cada una con su link): solo no son automáticas.
+    expect(r).toMatchObject({ disponible: true, automatico: false, codigo: 'sin_clave' });
     expect(r.motivo).toMatch(/no tiene la clave de links de pago de Stripe/);
     expect(comprobarPermisosDeCobro).not.toHaveBeenCalled();
   });
@@ -92,7 +93,7 @@ describe('los motivos de «Inicial + cuotas», con su código', () => {
     for (const status of [403, 401]) {
       comprobarPermisosDeCobro.mockRejectedValueOnce(new ErrorDeStripe(status, 'The provided key does not have the required permissions'));
       const r = await para();
-      expect(r).toMatchObject({ disponible: false, codigo: 'clave_sin_permiso' });
+      expect(r).toMatchObject({ disponible: true, automatico: false, codigo: 'clave_sin_permiso' });
       expect(r.motivo).toMatch(/no tiene permiso de suscripciones/);
       expect(r.motivo).toMatch(/Subscription Schedules/);
     }
@@ -102,20 +103,23 @@ describe('los motivos de «Inicial + cuotas», con su código', () => {
     Object.assign(process.env, { NODE_ENV: 'production', LINKS_PAGO_EN_PRODUCCION: '1', CRM_BASE_URL: 'https://360crm.tech/crm' });
     delete process.env.COBRO_AUTOMATICO_EN_PRODUCCION;
     const r = await para();
-    expect(r).toMatchObject({ disponible: false, codigo: 'apagado_entorno', motivo: cobroAuto.MOTIVO_APAGADO });
+    expect(r).toMatchObject({ disponible: true, automatico: false, codigo: 'apagado_entorno', motivo: cobroAuto.MOTIVO_APAGADO });
     expect(r.motivo).toMatch(/no está activo en este entorno/);
     expect(delCampus).not.toHaveBeenCalled();
     expect(claveDeEscritura).not.toHaveBeenCalled();
     // Con el interruptor, sí.
     process.env.COBRO_AUTOMATICO_EN_PRODUCCION = '1';
-    expect((await para()).disponible).toBe(true);
+    expect((await para()).automatico).toBe(true);
   });
 
   it('los demás motivos, con el suyo (no son del aviso)', async () => {
-    expect((await para({ cfg: null })).codigo).toBe('campus_no_encontrado');
-    expect((await para({ cfg: { ...CFG, cuotas_admitidas: false } })).codigo).toBe('cuotas_no_admitidas');
-    expect((await para({ cfg: { ...CFG, monedas: ['USD'] } })).codigo).toBe('sin_euros');
-    expect((await para({ puedeCobroAuto: false })).codigo).toBe('sin_permiso');
+    // Sin cuotas: solo lo que decide el campus.
+    for (const [o, codigo] of [[{ cfg: null }, 'campus_no_encontrado'], [{ cfg: { ...CFG, cuotas_admitidas: false } }, 'cuotas_no_admitidas'],
+      [{ cfg: { ...CFG, monedas: ['USD'] } }, 'sin_euros']]) {
+      expect(await para(o)).toMatchObject({ disponible: false, automatico: false, codigo });
+    }
+    // Con cuotas pero sin cobro automático (23/11): cada cuota, con su link.
+    expect(await para({ puedeCobroAuto: false })).toMatchObject({ disponible: true, automatico: false, codigo: 'sin_permiso' });
     delCampus.mockResolvedValueOnce({ permitido: false, reintento_dias: 3 });
     expect((await para()).codigo).toBe('campus_no_permitido');
     claveObligatoria.mockRejectedValueOnce(new AppError('En pruebas solo se crean links con una clave de test (rk_test_…).', 409, 'CLAVE_LIVE_EN_PRUEBAS'));
