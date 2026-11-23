@@ -393,7 +393,9 @@ export async function lineasDe(facturaId) {
 /** Para administración: una factura, si es de una empresa que se ve. */
 export async function porId(id, issuerIds, db = pool) {
   const { rows } = await db.query(
-    `SELECT ${CAMPOS_ENLACE}, f.archivo_key, f.tamano
+    // colaborador_user_id: para que nadie valide ni pague su propia factura (CRM#710).
+    // Solo aquí (administración), no en CAMPOS_ENLACE, que llega a la página del enlace.
+    `SELECT ${CAMPOS_ENLACE}, f.archivo_key, f.tamano, c.user_id AS colaborador_user_id
        FROM facturas_colaborador f
        JOIN colaboradores c ON c.id = f.colaborador_id
        JOIN invoice_issuers ii ON ii.id = f.issuer_id
