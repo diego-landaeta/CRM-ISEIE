@@ -13,6 +13,14 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.6",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.6",
+    "intro": "Los links de pago, a la vista.",
+    "grupos": [],
+    "arreglos": ["«Links de pago» vuelve a salir en el menú, y sus botones en la ficha de la venta, para quien tiene permiso: el CRM no le pasaba a la pantalla que los links están encendidos."]
+  },
+  {
     "version": "2.9.5",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.5",
