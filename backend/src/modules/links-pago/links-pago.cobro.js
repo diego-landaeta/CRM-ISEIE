@@ -342,8 +342,13 @@ export async function desdeLaSesion(projectId, event, { env = process.env } = {}
   if (!linksPagoActivos(env)) return { skipped: 'links de pago apagados' };
   const s = event.data?.object || {};
   const marca = marcaDe(s.metadata);
-  // Un checkout que no salió de un link del CRM (la web, una plataforma): no es nuestro.
-  if (!marca) return { skipped: 'sin marca del CRM' };
+  // Sin la marca del CRM: si viene de un link creado directamente en Stripe
+  // (CRM#1019), su link y lo que dijo la sesión, para cobrarlo por el mismo
+  // camino; si no (la web, una plataforma), no es nuestro.
+  if (!marca) {
+    const { desdeLaSesion: desdeLaSesionDeStripe } = await import('./links-pago.externos.js');
+    return desdeLaSesionDeStripe(projectId, event);
+  }
   const ajena = motivoAjena(marca, projectId, env);
   if (ajena) return { skipped: ajena };
   const link = await model.paraCobro(marca.linkId);

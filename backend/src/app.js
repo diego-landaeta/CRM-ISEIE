@@ -124,6 +124,7 @@ import { startVigilanteCatalogoScheduler } from './jobs/vigilanteCatalogoSchedul
 import { startLeadSinTocarScheduler } from './jobs/leadSinTocarScheduler.js';
 import { startSuscripcionesPlazosScheduler } from './jobs/suscripcionesPlazosScheduler.js';
 import { startLinksPagoCaducidadScheduler } from './jobs/linksPagoCaducidadScheduler.js';
+import { startLinksPagoExternosScheduler } from './jobs/linksPagoExternosScheduler.js';
 import { startCobroAutomaticoScheduler } from './jobs/cobroAutomaticoScheduler.js';
 import { startLinksPagoSeguimientoScheduler } from './jobs/linksPagoSeguimientoScheduler.js';
 import { startCursosPendientesScheduler } from './jobs/cursosPendientesScheduler.js';
@@ -627,6 +628,12 @@ if (process.env.NODE_ENV !== 'test') {
         startLinksPagoCaducidadScheduler();
       } catch (err) {
         logger.error({ err }, 'Links de pago: la caducidad falló al arrancar');
+      }
+      // Los links creados directamente en Stripe (gemela de CRM#1019): recogerlos y, si su aviso no llegó, su cobro.
+      try {
+        startLinksPagoExternosScheduler();
+      } catch (err) {
+        logger.error({ err }, 'Links de pago: los links de Stripe fallaron al arrancar');
       }
     }
     // Cobro automático de las cuotas (gemela de CRM 309): el reintento y el repaso del plan en Stripe.

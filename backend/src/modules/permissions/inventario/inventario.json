@@ -8589,6 +8589,120 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/externos",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/externos",
+  "relativa": "GET /externos",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/externos/sincronizar",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/externos/sincronizar",
+  "relativa": "POST /externos/sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/por-vincular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/por-vincular",
+  "relativa": "GET /por-vincular",
+  "controlador": "porVincular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/por-vincular/ventas",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/por-vincular/ventas",
+  "relativa": "GET /por-vincular/ventas",
+  "controlador": "buscarVentas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/links-pago/por-vincular/:id/vincular",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "POST",
+  "ruta": "/api/links-pago/por-vincular/:id/vincular",
+  "relativa": "POST /por-vincular/:id/vincular",
+  "controlador": "vincular",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/embudo",
   "tipo": "ruta",
   "modulo": "links-pago",

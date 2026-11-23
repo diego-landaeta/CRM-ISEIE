@@ -343,11 +343,15 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   // COBRO AUTOMÁTICO DE LAS CUOTAS (309): una cuota que Stripe cobra sola llega
   // como factura de su calendario, sin la marca del link. Su precio dice de qué
   // cuota es: va a esa venta y salda ESA cuota, sin mirar el correo.
-  const delPlan = !delLink && payment.status === 'succeeded' ? await cobroAuto.cuotaDelCargo(projectId, payment) : null;
+  // LINKS CREADOS DIRECTAMENTE EN STRIPE (CRM#1019): el aviso de su sesión ató
+  // el cargo a su link (`stripe_link_externo_id`). Se busca a quién es por el
+  // correo o el móvil; sin una venta clara, a la bandeja «por vincular».
+  const delExterno = !delLink && !!dbRow.stripe_link_externo_id;
+  const delPlan = !delLink && !delExterno && payment.status === 'succeeded' ? await cobroAuto.cuotaDelCargo(projectId, payment) : null;
   if (delPlan?.aplazado) return { aplazado: true };
   // Apagado el interruptor, como siempre: sin correo en el cargo no se hace nada.
   const v2 = asociacionV2Activa();
-  if (payment.status !== 'succeeded' || (!delLink && !delPlan && !v2 && !payment.customer_email)) return;
+  if (payment.status !== 'succeeded' || (!delLink && !delPlan && !delExterno && !v2 && !payment.customer_email)) return;
   // Un cargo en otra moneda solo vale si su importe ya viene liquidado en euros.
   // Los importados sin el balance_transaction guardaron el importe en la moneda
   // del cargo: asociarlos meteria 270.000 pesos colombianos como 270.000 euros.
@@ -363,11 +367,12 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   if (delLink?.link) delLink.link = await conElCodigo(delLink.link, payment);
   const destino = delLink
     ? await cobroDelLink.ventaDelLink(projectId, payment, delLink.link)
+    : delExterno ? await (await import('../links-pago/links-pago.externos.js')).ventaDelCargo(projectId, payment, dbRow)
     : delPlan || (v2
       ? await ventaConLasReglasNuevas(projectId, payment, dbRow, { compraDirecta, sinEsperarALaTienda })
       : await ventaComoSiempre(projectId, payment, dbRow));
   if (destino?.aplazado) return { aplazado: true };
-  if (!destino) return;
+  if (!destino || destino.porVincular) return;
   const { conv, ficha, metodoAuto } = destino;
   const fecha = new Date(payment.stripe_created_at * 1000).toISOString().slice(0, 10);
   // ¿Es realmente un duplicado? Lo es cuando la asesora ya registró ESE MISMO cobro a mano:
@@ -378,6 +383,7 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   if (dup) {
     // Se vincula al pago que ya existe (y a su factura, si la tiene) SIN volver a sumar.
     await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: dup.id, userId: null, method: 'auto_dedup' });
+    if (destino.externo) await (await import('../links-pago/links-pago.externos.model.js')).fueraDeLaBandeja(dbRow.id);
     if (destino.link) await cobroDelLink.trasCobrar(destino.link, { payment, conversionId: conv.id, conversionPaymentId: dup.id });
     if (destino.cobroAuto) await cobroAuto.trasCobrarCuota({ cuotaId: destino.cuotaId, invoiceId: destino.cobroAuto.invoiceId, conversionId: conv.id });
     return;
@@ -389,13 +395,16 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
   const res = await convModel.addPayment(conv.id, {
     importe: payment.amount, fecha, metodo: 'tarjeta',
     notas: destino.link ? `Auto-Stripe ${payment.stripe_id} (link de pago n.º ${destino.link.id})`
-      : destino.cobroAuto ? `Auto-Stripe ${payment.stripe_id} (cuota cobrada sola por Stripe)` : `Auto-Stripe ${payment.stripe_id}`,
+      : destino.cobroAuto ? `Auto-Stripe ${payment.stripe_id} (cuota cobrada sola por Stripe)`
+        : destino.externo ? (await import('../links-pago/links-pago.externos.js')).notaDelCobro(payment.stripe_id, destino.externo)
+          : `Auto-Stripe ${payment.stripe_id}`,
   }, { allowOverpay: true, allowDuplicate: true,
     // El link de una cuota (plan de pago) o la cuota que cobra Stripe sola: el cobro salda esa cuota.
     cuotaId: destino.cuotaId || destino.link?.installment_id || null });
   if (res?.error || !res?.payment) return;
   const cpId = res.payment.id;
   await model.linkPayment(dbRow.id, { leadId: ficha.id, conversionId: conv.id, conversionPaymentId: cpId, userId: null, method: metodoAuto });
+  if (destino.externo) await (await import('../links-pago/links-pago.externos.model.js')).fueraDeLaBandeja(dbRow.id);
   if (destino.link) await cobroDelLink.trasCobrar(destino.link, { payment, conversionId: conv.id, conversionPaymentId: cpId });
   if (destino.cobroAuto) await cobroAuto.trasCobrarCuota({ cuotaId: destino.cuotaId, invoiceId: destino.cobroAuto.invoiceId, conversionId: conv.id });
   // El cobro queda registrado en la venta y espera EN LA COLA de facturacion.
@@ -923,13 +932,34 @@ export async function handleWebhookEvent(projectId, event) {
           });
           for (const ch of cargos.data || []) {
             const payment = chargeToPayment(ch, projectId);
-            const dbRow = await model.upsertPayment(payment);
+            let dbRow = await model.upsertPayment(payment);
+            // Un link creado directamente en Stripe (CRM#1019): el cargo, a su link,
+            // con lo que dijo la sesión (correo, móvil, descuento); se busca a quién
+            // es al enlazarlo, o queda en «Cobros de Stripe por vincular».
+            if (r.externo) {
+              const externos = await import('../links-pago/links-pago.externos.js');
+              dbRow = await externos.atarCargo(dbRow, r.externo, r.checkout);
+              if (!payment.customer_email && r.checkout?.email) payment.customer_email = r.checkout.email;
+              if (!payment.customer_phone && r.checkout?.telefono) payment.customer_phone = r.checkout.telefono;
+            }
             try { await enlazarDesdeElAviso(projectId, payment, dbRow); }
             catch (e) { logger.error({ err: e.message, projectId, stripeId: payment.stripe_id }, 'stripe: el cargo de un link de pago no se pudo enlazar (checkout)'); }
             if (payment.status === 'succeeded') await trasAsociarCargo(dbRow.id);
           }
         } catch (e) { logger.warn({ err: e.message, projectId, linkId: r.link?.id }, 'links de pago: no se pudo traer el cargo de la sesión; lo traerá el sondeo'); }
+      } else if (r.externo && r.cobrar && !apiKey) {
+        logger.warn({ projectId, sessionId: obj.id },
+          'links de Stripe: sin la clave de lectura no se trae el cargo; lo recogerá la vuelta de los links de Stripe');
       }
+      return { processed: event.type, stripeId: obj.id };
+    }
+    case 'payment_link.created':
+    case 'payment_link.updated': {
+      // Los links creados directamente en Stripe (CRM#1019): salen en Links de
+      // pago como «Creado en Stripe». Los del CRM no se tocan.
+      const { desdeElAvisoDelLink } = await import('../links-pago/links-pago.externos.js');
+      const r = await desdeElAvisoDelLink(projectId, event);
+      if (r?.skipped) return { skipped: r.skipped, stripeId: obj.id };
       return { processed: event.type, stripeId: obj.id };
     }
     case 'invoice.paid':
