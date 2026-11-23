@@ -7,6 +7,8 @@ import { avatarColor, getInitials } from './InfoField';
 import type { Lead } from '@/shared/types';
 import { etiquetaCampusPais } from '@/shared/lib/paises';
 import usePermission from '@/shared/hooks/usePermission';
+// El recorrido guiado de la ficha (#619).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 // Repartir la venta de este prospecto entre dos gestoras. Se carga aparte
 // porque solo lo ven admin y superadmin.
@@ -60,9 +62,12 @@ export default function LeadHeaderCard({ lead, isAdmin, onReassign, onBack }: Le
         </Link>
         <CaretRight size={10} weight="bold" className="opacity-50" />
         <span className="text-foreground font-medium truncate max-w-[200px]">{lead.nombre}</span>
+        {/* «Ver recorrido» a la derecha de la miga de pan: entre los botones de la
+            cabecera no cabía (a 1280 px se salía de la pantalla). */}
+        <span className="ml-auto flex-shrink-0"><VerRecorrido id="prospecto-ficha" compacto /></span>
       </nav>
 
-      <div className={`bg-card border border-border border-l-4 ${getPriorityStyle(getLeadPriority(lead)).borderClass} rounded-xl p-4`}>
+      <div data-recorrido="ficha-cabecera" className={`bg-card border border-border border-l-4 ${getPriorityStyle(getLeadPriority(lead)).borderClass} rounded-xl p-4`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div className={`w-12 h-12 rounded-full flex items-center justify-center text-base font-semibold flex-shrink-0 ${avatarColor(lead.id)}`}>

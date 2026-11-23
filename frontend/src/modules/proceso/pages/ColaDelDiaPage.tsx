@@ -17,6 +17,8 @@ import {
   CalendarCheck, Warning, ArrowRight, CaretRight, User, ClockCounterClockwise,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#619, gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -303,7 +305,9 @@ export default function ColaDelDiaPage() {
   const hayFiltros = Boolean(busca || producto || estado || desdeFecha || hastaFecha);
 
   return (
-    <div className="space-y-5 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#619): al ir hasta lo
+    // señalado, la barra fija de arriba no le tapa el principio.
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-72">
       <PageHeader
         title={titulo}
         subtitle="A quién le toca hoy, y quién viene arrastrado. Una fila por persona."
@@ -311,6 +315,7 @@ export default function ColaDelDiaPage() {
           <div className="flex flex-wrap items-center gap-2">
             {esAdmin && gestoras.length > 0 && (
               <select
+                data-recorrido="cola-equipo"
                 value={gestoraId ?? ''}
                 onChange={(e) => setGestoraId(e.target.value ? Number(e.target.value) : null)}
                 className="h-9 px-3 rounded-md border border-border bg-card text-sm focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -320,6 +325,8 @@ export default function ColaDelDiaPage() {
                 {gestoras.map((g) => <option key={g.id} value={g.id}>{g.nombre}</option>)}
               </select>
             )}
+            {/* «Ver recorrido» (#619, gemela de CRM#941). */}
+            <VerRecorrido id="cola-del-dia" listo={!cargando} />
           </div>
         )}
       />
@@ -331,7 +338,7 @@ export default function ColaDelDiaPage() {
           (En ISEIE no existen `text-normal` ni `text-secundario`: aquí van
           `text-sm` y `text-xs`, que son su mismo tamaño en MultiCRM.) */}
       {resumen && totalDeLaCola(resumen) > 0 && (
-        <section aria-label="Cómo va la cola" className="rounded-lg border border-border bg-card p-3">
+        <section aria-label="Cómo va la cola" data-recorrido="cola-salud" className="rounded-lg border border-border bg-card p-3">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className={`text-sm font-semibold ${fraseDeSalud(resumen).alerta ? 'text-destructive' : 'text-success'}`}>
               {fraseDeSalud(resumen).texto}
@@ -375,7 +382,7 @@ export default function ColaDelDiaPage() {
       )}
 
       {resumen && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div data-recorrido="cola-tramos" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <Contador icon={Warning} etiqueta="Atrasados" valor={resumen.atrasados}
             tono="text-destructive"
             activo={tramo === 'atrasados'}
@@ -409,7 +416,7 @@ export default function ColaDelDiaPage() {
 
           Todos los hace el SERVIDOR. Filtrar las 100 filas que se ven diría
           «no hay nadie» teniendo a la persona en la página cuatro. */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-recorrido="cola-filtros" className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
           <MagnifyingGlass size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -495,7 +502,7 @@ export default function ColaDelDiaPage() {
       )}
 
       {!cargando && grupos.length > 1 && (
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div data-recorrido="cola-por-paso" className="flex flex-wrap items-center gap-1.5">
           <span className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground/60">
             Por paso
           </span>
@@ -555,7 +562,7 @@ export default function ColaDelDiaPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div data-recorrido="cola-lista" className="space-y-2">
           {visibles.map((p, i) => {
             const c = cuando(p.fecha_prevista, p.dias_de_retraso);
             return (

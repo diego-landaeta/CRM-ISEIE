@@ -41,6 +41,8 @@ const { RECORRIDOS_FINANZAS } = await import('@/shared/lib/recorridosFinanzas');
 // Los de las novedades del 18/11 (#611): se cuentan en recorridosNovedades611.
 const { RECORRIDOS_NOVEDADES } = await import('@/shared/lib/recorridosNovedades');
 const { RECORRIDOS_NOVEDADES_B } = await import('@/shared/lib/recorridosNovedadesB');
+// Los del día a día de una gestora (#619, tanda C): se cuentan en recorridosGestora619.
+const { RECORRIDOS_GESTORA } = await import('@/shared/lib/recorridosGestora');
 const { default: VerRecorrido } = await import('@/shared/components/ui/VerRecorrido');
 const { CLAVES } = await import('../../../backend/src/modules/permissions/catalogo.js');
 
@@ -74,7 +76,7 @@ describe('cada recorrido tiene sus pasos', () => {
   it('son los cinco del encargo (Pagos Stripe y Disputas, cada uno en su pantalla), la de Ventas (#619), la de «Links de pago» (19/11) y la de «Cursos de Moodle» (CRM#957)', () => {
     // Los del bloque Finanzas (#619) y los de las novedades (#611, tandas A y B) se cuentan en su propia prueba.
     expect(Object.keys(RECORRIDOS_COBROS).filter((k) => !(k in RECORRIDOS_FINANZAS) && !(k in RECORRIDOS_NOVEDADES))
-      .filter((k) => !(k in RECORRIDOS_NOVEDADES_B)).sort()).toEqual([
+      .filter((k) => !(k in RECORRIDOS_NOVEDADES_B) && !(k in RECORRIDOS_GESTORA)).sort()).toEqual([
       'anular-factura', 'cargos-sin-enlazar', 'cursos-producto', 'disputas-stripe', 'integraciones-stripe', 'link-de-pago', 'links-pago', 'pagos-stripe', 'ventas',
     ]);
   });

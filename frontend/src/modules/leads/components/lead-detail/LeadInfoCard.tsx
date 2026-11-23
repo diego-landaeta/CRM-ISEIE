@@ -143,7 +143,8 @@ export default function LeadInfoCard({ lead, onUpdate, onLlamada, onWhatsapp }: 
   }
 
   return (
-    <div className="bg-card p-5 rounded-lg border border-border">
+    // `data-recorrido`: el paso «Sus datos» del recorrido de la ficha (#619).
+    <div data-recorrido="ficha-datos" className="bg-card p-5 rounded-lg border border-border">
       <div className="flex items-center justify-between mb-4">
         <h3 className="font-semibold">Información del lead</h3>
         {!editMode ? (
