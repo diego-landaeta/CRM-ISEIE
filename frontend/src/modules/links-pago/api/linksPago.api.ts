@@ -41,6 +41,10 @@ export interface LinkDePago {
   descuento_valor?: string | number | null;
   descuento_importe?: string | number | null;
   guarda_tarjeta?: boolean;
+  /** Códigos promocionales (CRM#986): si el link los admite y, pagado, el que usó el alumno y lo que descontó. */
+  codigos_promo?: boolean;
+  promo_codigo?: string | null;
+  promo_descuento?: string | number | null;
   estado: EstadoLink;
   url: string | null;
   caduca_el: string | null;
@@ -79,6 +83,8 @@ export interface ConfigLinks {
   /** Seguimiento (gemela de CRM#984): a las cuántas horas de abrirlo sin pagar se avisa, y los recordatorios al alumno. */
   aviso_abierto_horas?: number;
   recordatorios?: boolean;
+  /** Si los links del campus admiten códigos promocionales de Stripe (CRM#986). */
+  codigos_promo?: boolean;
 }
 
 export interface WebhookDeLaCuenta {
@@ -140,8 +146,52 @@ export function crearLink(cuerpo: {
   cuotas?: { importe: number; vence: string }[];
   // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
+  // CRM#986: si el link admite códigos promocionales (sin decirlo, lo que diga el campus).
+  codigos_promo?: boolean;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
+}
+
+/** Un código promocional de campaña (CRM#986): un cupón y un código de Stripe con su fecha límite. */
+export interface CodigoPromocional {
+  id: number;
+  project_id: number;
+  codigo: string;
+  campana: string | null;
+  tipo: 'pct' | 'monto';
+  valor: number;
+  moneda: string | null;
+  caduca_el: string;
+  max_usos: number | null;
+  activo: boolean;
+  estado: 'vigente' | 'caducado' | 'desactivado';
+  creado_por_nombre?: string | null;
+  created_at: string;
+}
+
+/** Los códigos del campus: quien crea links ve los vigentes; quien configura, todos. */
+export function listarCodigos(projectId: number) {
+  return client.get<CodigoPromocional[]>('/links-pago/codigos', { params: { projectId } });
+}
+
+export function crearCodigo(projectId: number, cuerpo: {
+  codigo: string; tipo: 'pct' | 'monto'; valor: number; moneda?: string; caduca_el: string; max_usos?: number; campana?: string;
+}) {
+  return client.post<CodigoPromocional>('/links-pago/codigos', { projectId, ...cuerpo });
+}
+
+export function desactivarCodigo(projectId: number, id: number) {
+  return client.post<CodigoPromocional>(`/links-pago/codigos/${id}/desactivar`, { projectId });
+}
+
+/** «20 %» o «50,00 €»: lo que descuenta un código. */
+export function textoDelCodigo(c: Pick<CodigoPromocional, 'tipo' | 'valor' | 'moneda'>) {
+  if (c.tipo === 'pct') return `${String(c.valor).replace('.', ',')} %`;
+  try {
+    return new Intl.NumberFormat('es-ES', { style: 'currency', currency: c.moneda || 'EUR' }).format(Number(c.valor));
+  } catch {
+    return `${c.valor} ${c.moneda || ''}`.trim();
+  }
 }
 
 /** Si «Cuotas» se puede en el campus y, si no, por qué (20/11). */

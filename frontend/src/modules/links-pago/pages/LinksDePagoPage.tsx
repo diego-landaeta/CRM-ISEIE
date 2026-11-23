@@ -205,6 +205,15 @@ export default function LinksDePagoPage() {
                       </span>
                       : null}
                   </span>
+                  {/* ── CRM#986 · códigos promocionales: el que usó el alumno, o que el link los admite ── */}
+                  {l.promo_codigo || Number(l.promo_descuento) > 0 ? (
+                    <span className="text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-semibold whitespace-nowrap" title="Código promocional que usó el alumno">
+                      {l.promo_codigo || 'Código'} −{dinero(l.promo_descuento, l.moneda)}
+                    </span>
+                  ) : l.codigos_promo && vivo ? (
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">admite códigos</span>
+                  ) : null}
+                  {/* ── fin CRM#986 ── */}
                   {/* Un link sin prospecto (20/11): al pagarse, el CRM le pone el prospecto y la venta que crea. */}
                   {l.lead_id
                     ? <Link to={`/leads/${l.lead_id}`} className="font-medium underline-offset-2 hover:underline truncate max-w-[200px]">{l.lead_nombre || `Prospecto ${l.lead_id}`}</Link>

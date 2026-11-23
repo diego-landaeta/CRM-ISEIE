@@ -71,7 +71,7 @@ export async function avisoDeClave(projectId) {
   }
 }
 
-function errorDeStripe(err, que) {
+export function errorDeStripe(err, que) {
   if (err instanceof stripe.ErrorDeStripe) {
     const sinPermiso = err.status === 401 || err.status === 403;
     return new AppError(
@@ -137,6 +137,13 @@ export function importeMinimo(precioCatalogo, maxPct) {
  * queda. La inicial, como cualquier cobro de Stripe, de al menos 0,50 €, y menor
  * que el total. Sin `inicial`, como antes: el total entre `numCuotas` (de 2).
  */
+/*
+ * LA MONEDA DEL CAMPUS (CRM#986, Diego 21/11): «el link sale en la moneda del
+ * campus (MXN, COP, CLP…), con el precio del curso en esa moneda cuando lo haya».
+ * Sin moneda pedida, la que se propone (`monedaPropuesta`). En una moneda sin
+ * decimales en Stripe (CLP…), el importe va en unidades enteras: 1.500,50 CLP se
+ * cobraría como 1.501 sin decirlo.
+ */
 export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, modalidad, numCuotas, inicial, plan, hoy, esAdmin, pendiente }) {
   if (modalidad === 'cuotas') {
     if (pendiente !== undefined && pendiente !== null) {
@@ -170,9 +177,14 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
     }
     if (plan?.length) comprobarFechasDelPlan(plan, hoy);
   }
-  const mon = modalidad === 'cuotas' ? 'EUR' : (moneda || cfg.moneda_defecto);
+  const mon = modalidad === 'cuotas'
+    ? 'EUR'
+    : (moneda || monedaPropuesta({ cfg, prod, desdeVenta: pendiente !== undefined && pendiente !== null }));
   if (!cfg.monedas.includes(mon)) {
     throw new AppError(`Este campus no cobra en ${mon}. Monedas admitidas: ${cfg.monedas.join(', ')}.`, 400, 'MONEDA_NO_ADMITIDA');
+  }
+  if (stripe.esSinDecimales(mon) && !Number.isInteger(Math.round(Number(importe) * 100) / 100)) {
+    throw new AppError(`En ${mon} el importe va sin decimales.`, 400, 'IMPORTE_SIN_DECIMALES');
   }
   const dias = caducidadDias ?? cfg.caducidad_dias;
   if (dias > cfg.caducidad_max_dias) {
@@ -217,6 +229,22 @@ export function comprobarReglas({ cfg, prod, importe, moneda, caducidadDias, mod
     moneda: mon, caducidadDias: dias, precioCatalogo: precio, descuentoPct: descuento ?? 0,
     referencia: desdeVenta ? 'pendiente' : 'catalogo', ...(desdeVenta ? { pendiente: Number(pendiente) } : {}),
   };
+}
+
+/**
+ * La moneda en que sale un link si no se pide otra (CRM#986):
+ *   · desde una venta, EUR si el campus lo admite: lo pendiente está en euros y
+ *     es contra lo que se mide el link;
+ *   · si el curso tiene precio en una moneda que el campus admite, esa: así el
+ *     link sale con el precio del curso (y la gestora puede crearlo sin admin);
+ *   · si no, la del campus (`moneda_defecto`).
+ */
+export function monedaPropuesta({ cfg, prod, desdeVenta = false }) {
+  const monedas = cfg?.monedas || [];
+  if (desdeVenta && monedas.includes('EUR')) return 'EUR';
+  const delCurso = prod?.moneda ? String(prod.moneda).trim().toUpperCase() : null;
+  if (delCurso && prod.precio != null && Number(prod.precio) > 0 && monedas.includes(delCurso)) return delCurso;
+  return cfg?.moneda_defecto || 'EUR';
 }
 
 /*
@@ -425,13 +453,19 @@ function nombreDeCuotas(enCuotas) {
   nace con ellas. `descuento`: `{ precioOriginal, tipo, valor, importe }`, o null.
   Se guarda en el link y, al pagarse, en la venta.
 */
-export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null, enCuotas = null, descuento = null }) {
+/*
+  `codigosPromo` (CRM#986): el alumno puede escribir un código promocional de
+  Stripe al pagar. Lo decide el controlador (solo pago único y si el campus lo
+  admite); lo que descontó se apunta al pagarse (links-pago.codigos.js).
+*/
+export async function crear({ projectId, leadId, conversionId, prod, reglas, importe, userId, cuota = null, guardaTarjeta = null, enCuotas = null, descuento = null, codigosPromo = false }) {
   const clave = await claveObligatoria(projectId);
   const fila = await model.insertar({
     projectId, leadId, conversionId, productId: prod.id, createdBy: userId,
     precioCatalogo: reglas.precioCatalogo, importe, descuentoPct: reglas.descuentoPct,
     moneda: reglas.moneda, caducidadDias: reglas.caducidadDias, installmentId: cuota?.id ?? null,
     guardaTarjeta: !!guardaTarjeta,
+    codigosPromo: !!codigosPromo,
     ...(enCuotas ? {
       numCuotas: enCuotas.num, importeCuota: enCuotas.importeCuota, importeInicial: enCuotas.inicial ?? null,
       planCuotas: enCuotas.plan ?? null,
@@ -455,6 +489,7 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
     });
     link = await stripe.crearLink(clave, {
       priceId: precio.id, metadata: meta, idempotencia: `${base}-link`, guardaTarjeta, pedirTelefono: sinPersona,
+      codigosPromo: !!codigosPromo,
     });
   } catch (err) {
     await model.borrar(fila.id).catch((e) => logger.error({ err: e.message, linkId: fila.id }, 'Links de pago: no se pudo borrar la fila de un link fallido'));
@@ -486,6 +521,7 @@ export async function crear({ projectId, leadId, conversionId, prod, reglas, imp
       descuento_valor: descuento.valor, descuento_importe: descuento.importe,
     } : {}),
     ...(sinPersona ? { sin_prospecto: true } : {}),
+    ...(codigosPromo ? { codigos_promo: true } : {}),
     ...(reglas.pendiente !== undefined ? { pendiente: reglas.pendiente } : {}),
   });
   logger.info({ linkId: fila.id, projectId, userId, importe, moneda: reglas.moneda }, 'Links de pago: link creado');
