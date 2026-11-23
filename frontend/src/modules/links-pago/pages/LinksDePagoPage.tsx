@@ -12,6 +12,7 @@ import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
 import { DatosDeSeguimiento, BotonRenovar } from '../components/SeguimientoDelLink';
+import EnviarLink from '../components/EnviarLink';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
 import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
 
@@ -196,8 +197,12 @@ export default function LinksDePagoPage() {
                     {l.estado === 'anulado' && <> · anulado: {l.motivo_anulacion}</>}
                   </span>
                   <DatosDeSeguimiento link={l} />
-                  <span className="ml-auto flex items-center gap-1.5">
+                  <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                    {vivo && l.url && (
+                      <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]" title={l.url}>{l.url.replace(/^https?:\/\//, '')}</span>
+                    )}
                     <BotonRenovar link={l} onRenovado={() => cargar()} />
+                    <EnviarLink link={l} />
                     {vivo && l.url && (
                       <>
                         <button type="button" onClick={() => copiarLink(l.url!)}
