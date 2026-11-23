@@ -67,13 +67,16 @@ describe('Registrar venta (#106, #134)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
     expect(avisos.toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Faltan datos', variant: 'destructive' }));
     const { description } = avisos.toast.mock.calls.at(-1)[0];
-    for (const que of ['el nombre en «Nombre del cliente»', 'el email o el teléfono', 'la formación en «Producto»', 'el importe en «Importe total»']) {
+    for (const que of ['el nombre en «Nombre del cliente»', 'el email o el teléfono', 'la formación en «Producto»', 'el importe en «Importe total»',
+      // #767: la fecha de inicio del curso, obligatoria al cerrar la venta.
+      'la fecha en «Fecha de inicio del curso»']) {
       expect(description).toContain(que);
     }
     // Si solo falta una cosa, su aviso de siempre.
     fireEvent.change(screen.getByLabelText(/^Nombre del cliente/), { target: { value: 'Ana' } });
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'ana@prueba.local' } });
     fireEvent.change(screen.getByLabelText(/^Importe total/), { target: { value: '500' } });
+    fireEvent.change(screen.getByLabelText(/^Fecha de inicio del curso/), { target: { value: '2026-12-01' } });
     fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
     expect(avisos.toast).toHaveBeenLastCalledWith(expect.objectContaining({ title: 'Falta la formación', description: expect.stringMatching(/Producto/) }));
   });
@@ -83,6 +86,19 @@ describe('Registrar venta (#106, #134)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
     const { description } = avisos.toast.mock.calls.at(-1)[0];
     expect(description).toContain('el proyecto');
+  });
+
+  it('la fecha de inicio del curso (#767): obligatoria, y si falta lo dice su campo', async () => {
+    await abrir({ modoInicial: 'new' });
+    const campo = screen.getByLabelText(/^Fecha de inicio del curso/);
+    expect(campo).toHaveAttribute('type', 'date');
+    expect(campo).toHaveAttribute('aria-required', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Registrar venta' }));
+    expect(campo).toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByText(/fecha de inicio pactada con el alumno/)).toBeInTheDocument();
+    // Una fecha pasada vale, con su aviso.
+    fireEvent.change(campo, { target: { value: '2020-03-02' } });
+    expect(screen.getByText(/Esa fecha ya pasó/)).toBeInTheDocument();
   });
 
   it('cada etiqueta enlazada a su campo, con cliente existente y con cliente nuevo (#106)', async () => {

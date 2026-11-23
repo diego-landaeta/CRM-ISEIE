@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { fechaInicioCurso } from '../conversions/conversion.validation.js';
 
 const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'fraccionado'];
 
@@ -23,6 +24,10 @@ export const createSaleSchema = z.object({
   importe_pagado: z.number().min(0).optional(),
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
   fecha_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD'),
+  // Inicio del curso pactado (#767). Aquí opcional: este esquema lo usa también
+  // Conciliación, que crea la venta de un cargo de Stripe ya cobrado. La exige
+  // el controlador de POST /api/ventas, que es el formulario «Registrar venta».
+  fecha_inicio: fechaInicioCurso().optional().nullable(),
   notas: z.string().max(2000).optional().nullable(),
   // VENTA SIN GESTORA: se crea de cero y no es de nadie. Quien puede pedirlo lo
   // decide el permiso `conversions.sin_gestora`, y eso se comprueba en el

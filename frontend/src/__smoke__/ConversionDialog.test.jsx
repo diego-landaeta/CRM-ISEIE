@@ -5,7 +5,7 @@
 // hay número de factura al convertir.
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render as renderBase, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
 
 // Sin `globals` en vitest, Testing Library no limpia sola entre pruebas.
 afterEach(cleanup);
@@ -40,6 +40,17 @@ vi.mock('@/shared/hooks/useToast', () => ({
 }));
 
 import ConversionDialog from '@/modules/conversions/components/ConversionDialog';
+
+// La fecha de inicio del curso es obligatoria desde el #767. Las pruebas de
+// otras cosas abren el diálogo con ella ya puesta, para que cada una siga
+// diciendo lo que defiende; las de la fecha, al final, usan «renderBase».
+const FECHA_INICIO = '2026-12-01';
+const render = (ui, opts) => {
+  const r = renderBase(ui, opts);
+  const campo = r.container.querySelector('#venta-fecha-inicio');
+  if (campo) fireEvent.change(campo, { target: { value: FECHA_INICIO } });
+  return r;
+};
 
 // Las etiquetas de Field (#106) que no apuntan a ningún campo. Las de grupo
 // (varios controles juntos, como «IVA» o «Pago recibido hoy») no tienen a
@@ -515,5 +526,65 @@ describe('ConversionDialog — hay que decir si ha pagado', () => {
     fireEvent.submit(container.querySelector('form'));
     await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
     expect(createMock.mock.calls[0][0]).toMatchObject({ importe_total: 965, importe_pagado: 0 });
+  });
+});
+
+/**
+ * La fecha de inicio del curso, obligatoria al cerrar la venta (#767, paso 1).
+ * Con ella se programa la matrícula en Moodle: el día anterior.
+ */
+describe('ConversionDialog — fecha de inicio del curso (#767)', () => {
+  const rellenarLoDemas = (container) => {
+    fireEvent.change(container.querySelector('input[placeholder*="producto"]'), { target: { value: 'Master IA' } });
+    fireEvent.change(precioBase(container), { target: { value: '1200' } });
+    pagoTotal();
+  };
+
+  it('el campo está, marcado como obligatorio y enlazado a su etiqueta', () => {
+    renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    const campo = screen.getByLabelText(/Fecha de inicio del curso/);
+    expect(campo).toHaveAttribute('type', 'date');
+    expect(campo).toHaveValue('');
+    expect(campo).toHaveAttribute('aria-required', 'true');
+    expect(screen.getByText(/día anterior a esta fecha/)).toBeInTheDocument();
+  });
+
+  it('sin ella no registra: lo dice el aviso y el propio campo', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    rellenarLoDemas(container);
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Falta la fecha de inicio del curso', variant: 'destructive',
+    })));
+    expect(createMock).not.toHaveBeenCalled();
+    expect(screen.getByRole('alert')).toHaveTextContent(/fecha de inicio pactada con el alumno/);
+    expect(screen.getByLabelText(/Fecha de inicio del curso/)).toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('con todo vacío, la fecha va en la misma lista que lo demás', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} />);
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(toastMock).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Faltan datos', description: expect.stringContaining('la fecha en «Fecha de inicio del curso»'),
+    })));
+  });
+
+  it('con ella, la manda en la venta', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} onCreated={vi.fn()} />);
+    rellenarLoDemas(container);
+    fireEvent.change(screen.getByLabelText(/Fecha de inicio del curso/), { target: { value: '2027-02-15' } });
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][0]).toMatchObject({ fecha_inicio: '2027-02-15' });
+  });
+
+  it('una fecha que ya pasó se deja poner, con aviso de que la matrícula irá con el pago', async () => {
+    const { container } = renderBase(<ConversionDialog open onClose={vi.fn()} lead={baseLead} projectId={1} onCreated={vi.fn()} />);
+    rellenarLoDemas(container);
+    fireEvent.change(screen.getByLabelText(/Fecha de inicio del curso/), { target: { value: '2020-01-10' } });
+    expect(screen.getByText(/Esa fecha ya pasó/)).toBeInTheDocument();
+    fireEvent.submit(container.querySelector('form'));
+    await waitFor(() => expect(createMock).toHaveBeenCalledTimes(1));
+    expect(createMock.mock.calls[0][0]).toMatchObject({ fecha_inicio: '2020-01-10' });
   });
 });

@@ -169,6 +169,8 @@ export async function createSale(data, requestUser, { comprobarRepetida: mirarRe
       fecha_conversion: data.fecha_pago,
       fecha_compromiso_pago: importePagado < data.importe_total ? data.fecha_pago : null,
       notas_pago: data.notas || null,
+      // Inicio del curso (#767): con ella se programa la matrícula en Moodle.
+      ...(data.fecha_inicio ? { fecha_inicio: data.fecha_inicio } : {}),
       // En ISEIE, sin decirlo, el 21 % se suma ENCIMA del importe. El formulario no
       // lo manda (no está en createSaleSchema) y sigue igual; lo pide quien sabe que
       // el importe ya es el precio final, como la compra directa de la web (puerta 6).

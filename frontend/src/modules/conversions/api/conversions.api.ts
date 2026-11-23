@@ -43,6 +43,8 @@ export interface Conversion {
   metodo_pago?: MetodoPago | null;
   fecha_conversion: string;
   fecha_compromiso_pago?: string | null;
+  /** Inicio del curso pactado (#767); null en las ventas que no la tienen. */
+  fecha_inicio?: string | null;
   notas_pago?: string | null;
   payments_count?: number;
   payments?: Payment[];
@@ -106,6 +108,8 @@ export interface CreateConversionInput {
   metodo_pago: MetodoPago;
   fecha_compromiso_pago?: string | null;
   fecha_conversion: string;
+  /** Inicio del curso pactado con el alumno (#767). Obligatoria desde el formulario. */
+  fecha_inicio: string;
   notas_pago?: string | null;
 }
 

@@ -217,6 +217,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
                     <div className="text-xs text-muted-foreground">
                       {formatDate(c.fecha_conversion)} {c.metodo_pago ? `• ${c.metodo_pago}` : ''}
                       {c.fecha_compromiso_pago && ` • Compromiso: ${formatDate(c.fecha_compromiso_pago)}`}
+                      {c.fecha_inicio && ` • Inicio del curso: ${formatDate(c.fecha_inicio)}`}
                     </div>
                   </div>
                   {canManage && (

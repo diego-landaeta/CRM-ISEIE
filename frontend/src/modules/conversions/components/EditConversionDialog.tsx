@@ -4,6 +4,7 @@ import { conversionsApi, type Conversion } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import { formatCurrency } from '@/shared/lib/format';
 import { useProducts } from '@/modules/products/hooks/useProducts';
+import FechaInicioCurso from './FechaInicioCurso';
 
 interface Props {
   conversion: Conversion | null;
@@ -30,6 +31,10 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
   const [metodoPago, setMetodoPago] = useState<string>('');
   const [fechaConversion, setFechaConversion] = useState('');
   const [fechaCompromiso, setFechaCompromiso] = useState('');
+  // Inicio del curso (#767). Aquí no es obligatoria: las ventas de antes no la
+  // tienen y no por eso se les tiene que impedir corregir otra cosa. Pero la
+  // que ya la tenía no se puede dejar en blanco.
+  const [fechaInicio, setFechaInicio] = useState('');
   const [notas, setNotas] = useState('');
   const [saving, setSaving] = useState(false);
   // Catálogo del proyecto para resolver el FK del programa por nombre.
@@ -42,6 +47,7 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
     setMetodoPago(conversion.metodo_pago || '');
     setFechaConversion((conversion.fecha_conversion || '').slice(0, 10));
     setFechaCompromiso((conversion.fecha_compromiso_pago || '').slice(0, 10));
+    setFechaInicio((conversion.fecha_inicio || '').slice(0, 10));
     setNotas(conversion.notas_pago || '');
   }, [conversion?.id]);
 
@@ -65,6 +71,11 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
       toast({ title: 'Producto requerido', variant: 'destructive' });
       return;
     }
+    const inicioAntes = (conversion.fecha_inicio || '').slice(0, 10);
+    if (inicioAntes && !fechaInicio) {
+      toast({ title: 'Falta la fecha de inicio del curso', description: 'Esta venta ya la tenía: cámbiala por otra, pero no la dejes en blanco.', variant: 'destructive' });
+      return;
+    }
     setSaving(true);
     try {
       const patch: any = {
@@ -79,6 +90,8 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
       const matched = products.find((p) => (p.nombre || '').trim().toLowerCase() === producto.trim().toLowerCase());
       if (matched) patch.producto_contratado_id = matched.id;
       if (fechaConversion) patch.fecha_conversion = fechaConversion;
+      // Solo si cambia: así guardar otra cosa no depende de esta columna.
+      if (fechaInicio && fechaInicio !== inicioAntes) patch.fecha_inicio = fechaInicio;
       await conversionsApi.update(conversion.id, patch);
       toast({ title: 'Conversión actualizada' });
       onSaved?.();
@@ -162,6 +175,10 @@ export default function EditConversionDialog({ conversion, onClose, onSaved }: P
               />
             </div>
           </div>
+
+          <FechaInicioCurso id="editar-venta-fecha-inicio" value={fechaInicio} onChange={setFechaInicio}
+            required={Boolean((conversion.fecha_inicio || '').slice(0, 10))}
+            hint="Sin fecha, el alumno se matricula en Moodle al confirmarse el pago." />
 
           <div>
             <label className="text-xs font-semibold text-muted-foreground mb-1 block">Notas</label>

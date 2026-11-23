@@ -2,6 +2,7 @@ import * as salesService from './sales.service.js';
 import * as reportModel from '../reports/report.model.js';
 import * as goalsService from './sales.goals.js';
 import { createSaleSchema, facturadoQuerySchema } from './sales.validation.js';
+import { FALTA_FECHA_INICIO } from '../conversions/conversion.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
@@ -13,6 +14,13 @@ export async function create(req, res, next) {
     const parsed = createSaleSchema.safeParse(req.body);
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    }
+    // LA FECHA DE INICIO DEL CURSO, OBLIGATORIA AL CERRAR LA VENTA (#767).
+    // Esta ruta es la del formulario «Registrar venta». Conciliación, la compra
+    // directa y los links de pago crean la venta por el servicio y no pasan por
+    // aquí: siguen sin ella, y entonces la matrícula va con el pago.
+    if (!parsed.data.fecha_inicio) {
+      throw new AppError(FALTA_FECHA_INICIO, 400, 'VALIDATION_ERROR');
     }
     // EL CANDADO DE «SIN GESTORA», EN EL SERVIDOR.
     //
