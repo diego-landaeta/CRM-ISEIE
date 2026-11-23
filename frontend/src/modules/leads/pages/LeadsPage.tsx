@@ -79,6 +79,8 @@ import { getLeadPriority, getPriorityStyle } from '../lib/leadPriority';
 import { getLeadExportColumns } from '../lib/leadFormat';
 import { yaPaso } from '@/shared/lib/fechas';
 import LoQueTocaHoyYManana from '../components/LoQueTocaHoyYManana';
+// El recorrido guiado de la pantalla (#611, gemela de CRM#928): señala, paso a paso, cada parte.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { qfDelServidor } from '../lib/filtrosRapidos';
 import {
@@ -639,7 +641,9 @@ export default function LeadsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido: la barra fija de
+       arriba no le tapa el principio. */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <LeadFormDialog open={formOpen} onClose={() => setFormOpen(false)} onSubmit={handleCreateLead} lead={null} />
       {configTab && activeProject && (
         <Suspense fallback={null}>
@@ -659,6 +663,8 @@ export default function LeadsPage() {
           <p className="text-muted-foreground text-xs">Explora y gestiona tus clientes potenciales</p>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
+          {/* Es el recorrido de la lista: en «Equipo» sus partes están escondidas. */}
+          {vista === 'lista' && <VerRecorrido id="prospectos" listo={!loading} />}
           <button
             onClick={() => { setNewCount(0); refetch(); }}
             title="Refrescar lista de prospectos"
@@ -750,6 +756,7 @@ export default function LeadsPage() {
             </div>
           )}
           <button
+            data-recorrido="prospectos-nuevo"
             onClick={() => setFormOpen(true)}
             className="h-9 inline-flex items-center gap-1.5 px-3 rounded-md bg-primary text-primary-foreground text-xs sm:text-sm font-semibold hover:bg-primary/90 transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-2"
           >
@@ -762,7 +769,7 @@ export default function LeadsPage() {
 
 
       {/* Lista / Equipo (#534, parte 4). La lista, primero y sin nada delante. */}
-      <div className="inline-flex rounded-md border border-border overflow-hidden" role="tablist" aria-label="Vista de prospectos">
+      <div className="inline-flex rounded-md border border-border overflow-hidden" role="tablist" aria-label="Vista de prospectos" data-recorrido="prospectos-vistas">
         {([['lista', 'Lista'], ['equipo', 'Equipo']] as const).map(([v, texto]) => (
           <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
             className={'px-4 py-1.5 text-sm font-medium transition-colors '
@@ -856,6 +863,9 @@ export default function LeadsPage() {
 
       {/* v2 — UI limpia. TODOS los filtros viven dentro del dropdown "Filtros".
               Arriba quedan solo el botón Filtros + las pildoras de filtros activos. */}
+      {/* El paso «Buscar y filtrar» del recorrido (#611): en ISEIE el buscador va
+          dentro de «Filtros», así que el anclaje es la barra entera. */}
+      <div data-recorrido="prospectos-filtros">
       <LeadsFiltersBar
         activeProject={activeProject}
         gestores={gestores}
@@ -898,6 +908,7 @@ export default function LeadsPage() {
           }
         }}
       />
+      </div>
 
       {/* Error state */}
       {error && (
@@ -909,6 +920,9 @@ export default function LeadsPage() {
 
       {/* Table. El id es adonde baja «Ver todos» de Siguientes acciones: en
           MultiCRM va en la fila de tramos de encima, que ISEIE no tiene. */}
+      {/* El anclaje del recorrido (#611), en un envoltorio: así su margen de
+          scroll no pisa el `scroll-mt-4` adonde baja «Ver todos». */}
+      <div data-recorrido="prospectos-lista">
       <div id="lista-de-prospectos" className="bg-card rounded-lg border border-border scroll-mt-4">
         {/* Desktop table */}
         <div className="hidden md:block overflow-x-auto">
@@ -1173,6 +1187,7 @@ export default function LeadsPage() {
             </div>
           </div>
         )}
+      </div>
       </div>
 
       {/* LO QUE TOCA, HOY Y MAÑANA. Diego, 18/11 (PR CRM#883): se queda en

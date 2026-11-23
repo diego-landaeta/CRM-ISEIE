@@ -24,6 +24,8 @@ import ListaDeFacturas, { CostePorCampus } from '../components/ListaDeFacturas';
 import EtiquetaDelPdf, { EtiquetaVendedora } from '../components/EtiquetaDelPdf';
 import ConfirmacionDelPago from '../components/ConfirmacionDelPago';
 import LeyendaFacturas, { ACCION } from '../components/LeyendaFacturas';
+// El recorrido guiado de la pantalla (#611): la primera vez sale solo.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * Finanzas › Facturas de colaboradores (#202).
@@ -120,7 +122,8 @@ export default function FacturasColaboradoresPage() {
     setParams(n, { replace: true });
   };
 
-  const cabecera = <PageHeader title="Facturas de colaboradores" subtitle="Colaboradores y vendedoras suben su factura del mes por un enlace personal, una por empresa y mes" />;
+  const cabecera = <PageHeader title="Facturas de colaboradores" subtitle="Colaboradores y vendedoras suben su factura del mes por un enlace personal, una por empresa y mes"
+    actions={<VerRecorrido id="facturas-colaboradores" />} />;
   if (!veElMes && !gestiona) {
     return (
       <div className="p-4 sm:p-6 space-y-4">
@@ -139,18 +142,22 @@ export default function FacturasColaboradoresPage() {
   ] as const).filter(([, , puede]) => puede);
 
   return (
-    <div className="p-4 sm:p-6 space-y-4">
+    // El margen de scroll de lo que señala el recorrido: que la barra fija no lo tape.
+    <div className="p-4 sm:p-6 space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       {cabecera}
       <div className="flex flex-wrap items-center gap-1">
+        <div data-recorrido="facturas-colab-pestanas" className="flex flex-wrap items-center gap-1">
         {pestanas.map(([clave, rotulo]) => (
           <button key={clave} type="button" aria-pressed={vista === clave} onClick={() => cambiar(clave)}
+            data-recorrido={clave === 'por_validar' ? 'facturas-colab-por-validar' : undefined}
             className={`h-8 px-3 rounded-md border text-xs font-medium transition-colors ${
               vista === clave ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-muted/60'
             }`}>
             {rotulo}
           </button>
         ))}
-        <div className="ml-auto w-56 flex-none">
+        </div>
+        <div data-recorrido="facturas-colab-tipo" className="ml-auto w-56 flex-none">
           <Select<'' | Tipo> value={tipo} onChange={setTipo} ariaLabel="Vendedoras o colaboradores" options={TIPO_FILTRO} />
         </div>
       </div>
@@ -312,7 +319,7 @@ function DelMes({ empresas, empresa, tipo }: { empresas: EmpresaDelGrupo[]; empr
         </Button>
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="facturas-colab-mes" className="bg-card border border-border rounded-lg overflow-hidden">
         {datos && r && (
           <div className="px-4 py-2.5 border-b border-border text-sm">
             <strong>{primeraMayuscula(datos.mes.replace(' de ', ' '))}</strong>

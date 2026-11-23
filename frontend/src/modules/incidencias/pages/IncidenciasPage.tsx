@@ -14,6 +14,8 @@ import {
 import { TIPOS, ORDEN_TIPOS, ESTADOS, GRAVEDADES, ENTIDADES, enlaceDe, fechaHora } from '../lib/incidencias';
 import IncidenciaDialog, { type Persona, type Campus } from '../components/IncidenciaDialog';
 import CifrasIncidencias from '../components/CifrasIncidencias';
+// El recorrido guiado de la pantalla (#611): la primera vez sale solo.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * Incidencias (#253).
@@ -147,12 +149,16 @@ export default function IncidenciasPage() {
   }
 
   return (
-    <div className="space-y-4">
+    // El margen de scroll de lo que señala el recorrido: que la barra fija no lo tape.
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Incidencias"
         subtitle="Qué salió mal, cómo se arregló y quién necesita formación."
         actions={
           <div className="flex items-center gap-2">
+            {/* La primera vez sale solo, con la lista ya cargada (#611). Pequeño: a
+                375 px, con el normal, «Nueva incidencia» se partía en dos líneas. */}
+            <VerRecorrido id="incidencias" listo={!cargando} compacto />
             <button type="button" onClick={cargar} disabled={cargando} aria-label="Actualizar" title="Actualizar"
               className="inline-flex items-center gap-1.5 text-sm h-9 px-3 rounded-md border border-border hover:bg-muted disabled:opacity-50">
               <ArrowClockwise size={15} className={cargando ? 'animate-spin' : ''} />
@@ -160,7 +166,7 @@ export default function IncidenciasPage() {
               <span className="hidden sm:inline">Actualizar</span>
             </button>
             {puedeApuntar && (
-              <button type="button" onClick={() => setAbierta('nueva')}
+              <button type="button" onClick={() => setAbierta('nueva')} data-recorrido="incidencias-nueva"
                 className="inline-flex items-center gap-1.5 text-sm h-9 px-3 rounded-md bg-primary text-primary-foreground font-semibold hover:opacity-90">
                 <Plus size={14} weight="bold" /> Nueva incidencia
               </button>
@@ -170,7 +176,7 @@ export default function IncidenciasPage() {
       />
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="inline-flex rounded-md border border-border overflow-hidden" role="tablist" aria-label="Vista">
+        <div className="inline-flex rounded-md border border-border overflow-hidden" role="tablist" aria-label="Vista" data-recorrido="incidencias-vistas">
           {(['lista', 'cifras'] as Vista[]).map((v) => (
             <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
               className={cn('px-4 py-1.5 text-sm font-medium transition-colors',
@@ -182,7 +188,7 @@ export default function IncidenciasPage() {
       </div>
 
       {vista === 'lista' && (
-        <div className="rounded-md border border-border bg-card p-3 flex flex-wrap items-end gap-3">
+        <div className="rounded-md border border-border bg-card p-3 flex flex-wrap items-end gap-3" data-recorrido="incidencias-filtros">
           <label className="flex flex-col gap-1 text-secundario text-muted-foreground min-w-[150px]">
             Estado
             <Select<EstadoIncidencia | ''> value={estado} onChange={setEstado} size="sm" ariaLabel="Estado"
@@ -218,7 +224,7 @@ export default function IncidenciasPage() {
         cifras ? <CifrasIncidencias m={cifras} onPersona={(id) => { setPersona(id); setVista('lista'); }} />
           : !cargando && <p className="p-8 text-center text-sm text-muted-foreground">No se pudieron leer las cifras.</p>
       ) : (
-        <div className="rounded-md border border-border bg-card overflow-hidden">
+        <div className="rounded-md border border-border bg-card overflow-hidden" data-recorrido="incidencias-lista">
           {cargando && !filas.length ? (
             <p className="p-8 text-center text-sm text-muted-foreground">Leyendo las incidencias…</p>
           ) : !filas.length ? (

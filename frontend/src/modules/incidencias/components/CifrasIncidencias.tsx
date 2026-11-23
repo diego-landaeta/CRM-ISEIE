@@ -21,7 +21,7 @@ export default function CifrasIncidencias({ m, onPersona }: {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-md border border-border bg-card overflow-hidden">
+      <section className="rounded-md border border-border bg-card overflow-hidden" data-recorrido="incidencias-cifras">
         <h3 className="px-tarjeta py-3 text-sm font-semibold border-b border-border">Por persona</h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
