@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "CRM-ISEIE - API REST",
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "main": "src/app.js",
   "scripts": {
     "dev": "nodemon src/app.js",
