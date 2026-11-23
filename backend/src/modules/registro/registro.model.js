@@ -293,6 +293,10 @@ function enCristiano(action, details) {
     // #248: el super admin, sobre otro usuario. La contraseña nunca se guarda.
     'usuario.cambiar_correo': `Cambió el correo de ${d.nombre || `usuario ${d.usuario_id}`}: ${d.de || '—'} → ${d.a || '—'}`,
     'usuario.cambiar_contrasena': `Cambió la contraseña de ${d.nombre || `usuario ${d.usuario_id}`}`,
+    // La suya, desde «Mi perfil» (POST /auth/change-password). `change_password`
+    // es como se apuntaba antes.
+    password_changed: 'Cambió su contraseña',
+    change_password: 'Cambió su contraseña',
   };
   return M[action] || action;
 }

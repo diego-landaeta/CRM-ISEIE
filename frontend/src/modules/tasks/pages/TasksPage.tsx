@@ -695,6 +695,7 @@ export default function TasksPage() {
         canAssign={canAssign}
         canEdit={canEdit}
         canViewAll={canViewAll}
+        canManage={canManage}
         canArchiveAny={canArchiveAny}
         canClose={canClose}
         assignees={assignees}
