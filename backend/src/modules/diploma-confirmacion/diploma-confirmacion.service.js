@@ -384,7 +384,7 @@ async function avisarAdministracion(centro, title, message, matriculaId) {
       type: 'diploma_confirmacion',
       title: String(title).slice(0, 200),
       message: String(message).slice(0, 300),
-      link_path: '/clientes/matriculas/diplomas',
+      link_path: '/matriculas/diplomas',
       metadata: { matriculaId: Number(matriculaId), centro },
     });
   } catch (err) {

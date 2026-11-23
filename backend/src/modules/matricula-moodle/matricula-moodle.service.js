@@ -122,7 +122,7 @@ async function avisar(fila, { tipo, title, message }, destinatarios) {
       type: tipo,
       title,
       message,
-      link_path: fila.lead_id ? `/clientes/${fila.lead_id}` : null,
+      link_path: fila.lead_id ? `/clients/${fila.lead_id}` : null,
       metadata: { matricula_id: fila.id, conversion_id: fila.conversion_id, campus_id: fila.project_id },
     });
   } catch (err) {
