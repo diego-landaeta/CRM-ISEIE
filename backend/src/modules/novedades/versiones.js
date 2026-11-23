@@ -13,6 +13,49 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "3.0.1",
+    "fecha": "2026-11-24",
+    "titulo": "Versión 3.0.1",
+    "intro": "«Ver recorrido» en cada novedad, y recorridos nuevos para Consultas y Conciliación.",
+    "grupos": [
+      {
+        "titulo": "Recorridos",
+        "items": [
+          {
+            "titulo": "«Ver recorrido» desde Novedades",
+            "texto": "Cada novedad que tiene recorrido trae su botón «Ver recorrido»: te lleva a la pantalla y te la enseña paso a paso. Solo se abre al pulsarlo.",
+            "roles": ["gestor", "admin", "superadmin", "tutor", "tutor_redactor"]
+          },
+          {
+            "titulo": "Consultas y el chat del campus",
+            "texto": "Recorrido nuevo: las pendientes y su color, buscar, contestar y «Leer el campus ahora».",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas",
+            "recorrido": "consultas-chat"
+          },
+          {
+            "titulo": "Conciliación de facturas y cobros",
+            "texto": "Recorrido nuevo: campus y mes, facturas sin cobro, cobros sin factura y «Enlazar todas las seguras».",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/accounting/conciliacion/facturas",
+            "boton": "Ir a Conciliación",
+            "recorrido": "conciliacion-facturas"
+          },
+          {
+            "titulo": "Códigos promocionales y links creados en Stripe",
+            "texto": "El recorrido de Links de pago enseña ya los links creados directamente en Stripe y sus cobros por vincular, y el de Integraciones, los códigos promocionales.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          }
+        ]
+      }
+    ],
+    "arreglos": []
+  },
+  {
     "version": "3.0.0",
     "fecha": "2026-11-24",
     "titulo": "Versión 3.0.0",
@@ -26,21 +69,24 @@ const LISTA = [
             "texto": "Tus alumnos con su % hecho, las dudas por contestar, las entregas por corregir y los cursos por desarrollar, en una sola pantalla.",
             "roles": ["tutor", "admin", "superadmin"],
             "ruta": "/mis-cursos/campus",
-            "boton": "Ir a Mi campus"
+            "boton": "Ir a Mi campus",
+            "recorrido": "mi-campus"
           },
           {
             "titulo": "El chat del campus, en Consultas",
             "texto": "Las dudas que el alumno escribe en el chat de Moodle llegan a Consultas y se contestan desde el CRM; la respuesta sale en Moodle a nombre de la tutora. Se enciende campus a campus, al conectar el plugin.",
             "roles": ["tutor", "admin", "superadmin"],
             "ruta": "/consultas",
-            "boton": "Ir a Consultas"
+            "boton": "Ir a Consultas",
+            "recorrido": "consultas-chat"
           },
           {
             "titulo": "Cada producto con su curso de Moodle",
             "texto": "En «Cursos de Moodle» eliges el curso de cada producto, y avisa de los vendidos sin curso. «Probar conexión» dice qué le falta al Moodle de cada campus.",
             "roles": ["admin", "superadmin", "soporte"],
             "ruta": "/products/cursos-moodle",
-            "boton": "Ir a Cursos de Moodle"
+            "boton": "Ir a Cursos de Moodle",
+            "recorrido": "cursos-producto"
           },
           {
             "titulo": "Matrícula automática",
@@ -91,7 +137,10 @@ const LISTA = [
           {
             "titulo": "Nadie valida ni paga su propia factura",
             "texto": "En las facturas del mes de vendedoras y colaboradores, quien la emite no puede validarla ni marcarla como pagada: lo hace otra persona.",
-            "roles": ["admin", "superadmin"]
+            "roles": ["admin", "superadmin"],
+            "ruta": "/accounting/facturas-colaboradores",
+            "boton": "Ir a Facturas de colaboradores",
+            "recorrido": "facturas-colaboradores"
           }
         ]
       }
@@ -115,35 +164,40 @@ const LISTA = [
             "texto": "Al crear un link «En cuotas» eliges la fecha de cada cuota, y puedes poner otro importe, un descuento o una inicial más las cuotas. Con Stripe conectado para cobros automáticos, Stripe cobra cada cuota en su fecha; si no, el asistente te dice por qué.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/links-pago",
-            "boton": "Ir a Links de pago"
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           },
           {
             "titulo": "La moneda de cada campus y códigos promocionales",
             "texto": "Cada link sale en la moneda de su campus. Los códigos de campaña, con su fecha límite, se encienden campus a campus en Integraciones › Links de pago.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/links-pago",
-            "boton": "Ir a Links de pago"
+            "boton": "Ir a Links de pago",
+            "recorrido": "integraciones-stripe"
           },
           {
             "titulo": "Links creados directamente en Stripe",
             "texto": "Los links hechos en Stripe también entran al CRM, en «Creados en Stripe». Sus cobros que no se sabe de qué venta son esperan en «Cobros de Stripe por vincular» hasta que eliges la venta.",
             "roles": ["admin", "superadmin"],
             "ruta": "/links-pago",
-            "boton": "Ir a Links de pago"
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           },
           {
             "titulo": "Embudo y seguimiento de los links sin pagar",
             "texto": "El embudo cuenta los links creados, abiertos y pagados, y las cuotas cobradas, por gestora y por campus. Un link que no se paga avisa a su gestora y se puede renovar; cada link enseña su estado. Se manda también desde el chat de WhatsApp o en una secuencia de correo.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/links-pago",
-            "boton": "Ir a Links de pago"
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           },
           {
             "titulo": "«FALTA CONECTAR STRIPE»",
             "texto": "En un campus sin la clave de Stripe, el asistente lo dice nada más abrirlo y lleva a Integraciones para conectarla.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/links-pago",
-            "boton": "Ir a Links de pago"
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           }
         ]
       },
@@ -155,14 +209,16 @@ const LISTA = [
             "texto": "Al registrar una venta o un cobro puedes emitir su factura en el momento, sin esperar a la cola.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/accounting/facturas",
-            "boton": "Ir a Facturación"
+            "boton": "Ir a Facturación",
+            "recorrido": "cola-facturacion"
           },
           {
             "titulo": "Conciliación de facturas, cobros y cargos de Stripe",
             "texto": "Facturas sin cobro, cobros sin factura y cargos de Stripe sin enlazar, por campus y mes, para enlazarlos o crear la venta.",
             "roles": ["admin", "superadmin"],
             "ruta": "/accounting/conciliacion",
-            "boton": "Ir a Conciliación"
+            "boton": "Ir a Conciliación",
+            "recorrido": "conciliacion-facturas"
           }
         ]
       }

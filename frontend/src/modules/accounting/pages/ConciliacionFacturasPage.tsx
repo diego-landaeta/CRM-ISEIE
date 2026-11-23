@@ -179,14 +179,14 @@ export default function ConciliacionFacturasPage() {
         title="Facturas y cobros"
         subtitle="Facturas emitidas sin su cobro y cobros sin factura, por campus y por mes. «Enlazar» no cambia el número, el importe ni los datos del cliente."
         actions={r && r.seguras > 0 ? (
-          <button type="button" onClick={() => setConfirmar(true)} disabled={cargando || todas}
+          <button type="button" onClick={() => setConfirmar(true)} disabled={cargando || todas} data-recorrido="conciliacion-todas"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-primary/40">
             <LinkSimple size={14} weight="bold" /> Enlazar todas las seguras ({r.seguras})
           </button>
         ) : null}
       />
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div className="flex flex-wrap items-end gap-3" data-recorrido="conciliacion-filtros">
         <label className="text-sm flex flex-col gap-1">
           <span className="text-xs font-semibold text-muted-foreground">Campus</span>
           <select value={campus} onChange={(e) => setCampus(e.target.value)} aria-label="Campus"
@@ -233,7 +233,7 @@ export default function ConciliacionFacturasPage() {
 
       {!cargando && !error && datos && (
         <>
-          <section aria-labelledby="facturas-sin-cobro" className="bg-card border border-border rounded-md">
+          <section aria-labelledby="facturas-sin-cobro" className="bg-card border border-border rounded-md" data-recorrido="conciliacion-sin-cobro">
             <h2 id="facturas-sin-cobro" className="px-3 py-2 border-b border-border text-sm font-semibold">
               Facturas emitidas sin cobro <span className="text-muted-foreground font-normal">· {datos.facturas.length}</span>
             </h2>
@@ -294,7 +294,7 @@ export default function ConciliacionFacturasPage() {
             )}
           </section>
 
-          <section aria-labelledby="cobros-sin-factura" className="bg-card border border-border rounded-md">
+          <section aria-labelledby="cobros-sin-factura" className="bg-card border border-border rounded-md" data-recorrido="conciliacion-sin-factura">
             <h2 id="cobros-sin-factura" className="px-3 py-2 border-b border-border text-sm font-semibold">
               Cobros sin factura <span className="text-muted-foreground font-normal">· {datos.cobros.length}</span>
             </h2>
