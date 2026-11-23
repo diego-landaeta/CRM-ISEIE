@@ -41,7 +41,7 @@ export interface CreateInvoiceBody {
   clienteDireccion: string;
   clienteCiudad: string;
   clienteCp: string;
-  clientePais: string;
+  clientePais?: string;
   clienteEmail?: string | null;
   clienteTelefono?: string | null;
   items: InvoiceItem[];

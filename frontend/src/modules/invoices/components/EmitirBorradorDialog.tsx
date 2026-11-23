@@ -4,6 +4,7 @@ import { invoicesApi } from '../api/invoices.api';
 import type { Invoice } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
 import { toast } from '@/shared/hooks/useToast';
+import { paisDelCliente } from '../lib/paisDelCliente';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 
@@ -32,7 +33,7 @@ export default function EmitirBorradorDialog({ invoice, onClose, onEmitted }: { 
   const [direccion, setDireccion] = useState(limpio(invoice.cliente_direccion));
   const [ciudad, setCiudad] = useState(limpio(invoice.cliente_ciudad));
   const [cp, setCp] = useState(limpio(invoice.cliente_cp));
-  const [pais, setPais] = useState(limpio(invoice.cliente_pais) || 'España');
+  const [pais, setPais] = useState(paisDelCliente(limpio(invoice.cliente_pais), invoice.cliente_telefono));
   // Emitida (CRM#793): se rellena lo que falta; lo que ya tiene, de solo lectura.
   const fijo = (v?: string | null) => !esBorrador && !!limpio(v);
   const [working, setWorking] = useState(false);

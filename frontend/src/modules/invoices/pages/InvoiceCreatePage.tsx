@@ -21,6 +21,7 @@ import Select from '@/shared/components/ui/Select';
 // vacia y se dice. (#113, el arreglo de las once pantallas en blanco.)
 import { lista } from '@/shared/lib/lista';
 import usePermission from '@/shared/hooks/usePermission';
+import { paisDelCliente } from '../lib/paisDelCliente';
 
 type Tipo = 'persona' | 'empresa' | 'contado';
 interface LeadHit { id: number; nombre: string; email?: string | null; telefono?: string | null }
@@ -113,7 +114,7 @@ export default function InvoiceCreatePage() {
   const [direccion, setDireccion] = useState('');
   const [ciudad, setCiudad] = useState('');
   const [cp, setCp] = useState('');
-  const [pais, setPais] = useState('España');
+  const [pais, setPais] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
   // VIES: para empresa de la UE (no España), marca si su NIF-IVA está validado en VIES
@@ -231,10 +232,10 @@ export default function InvoiceCreatePage() {
         setDireccion(d.direccion_fiscal || '');
         setCiudad(d.ciudad_fiscal || '');
         setCp(d.codigo_postal_fiscal || '');
-        setPais(d.pais_fiscal || 'España');
+        setPais(paisDelCliente(d.pais_fiscal, d.telefono));
         setEmail(d.email || '');
         setTelefono(d.telefono || '');
-        if (d.pais_fiscal && !d.pais_fiscal.toLowerCase().match(/españa|espana|spain|^es$/)) setLlevaIva(false);
+        if (paisDelCliente(d.pais_fiscal, d.telefono) && !paisDelCliente(d.pais_fiscal, d.telefono).toLowerCase().match(/españa|espana|spain|^es$/)) setLlevaIva(false);
         // Traer los cursos contratados (conversiones) como conceptos + importe.
         const convs = d.conversiones || [];
         if (convs.length) {
@@ -306,7 +307,7 @@ export default function InvoiceCreatePage() {
         // ensancha a `string` al guardarlo en la variable y ya no encaja con
         // la union que pide el cuerpo de la factura.
         clienteTipo: tipo === 'empresa' ? ('empresa' as const) : ('particular' as const),
-        clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || 'España',
+        clienteDireccion: direccion.trim(), clienteCiudad: ciudad.trim(), clienteCp: cp.trim(), clientePais: pais.trim() || undefined,
         clienteEmail: email.trim() || null, clienteTelefono: telefono.trim() || null,
         items: items.filter((it) => it.descripcion.trim()),
         ivaPct: regimenSel ? Number(regimenSel.iva_pct) : (llevaIva ? 21 : 0),
@@ -395,7 +396,7 @@ export default function InvoiceCreatePage() {
       setDireccion(noVal(f.cliente_direccion) ? '' : (f.cliente_direccion || ''));
       setCiudad(noVal(f.cliente_ciudad) ? '' : (f.cliente_ciudad || ''));
       setCp(noVal(f.cliente_cp) ? '' : (f.cliente_cp || ''));
-      setPais(f.cliente_pais || 'España');
+      setPais(paisDelCliente(f.cliente_pais, f.cliente_telefono));
       setEmail(f.cliente_email || '');
       setTelefono(f.cliente_telefono || '');
       setLlevaIva(Number(f.iva_pct) > 0);
