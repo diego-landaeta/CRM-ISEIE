@@ -1,0 +1,11 @@
+-- pais_fiscal sin «España» por defecto (Diego, 23/11/2026).
+--
+-- La 090 creó leads.pais_fiscal con DEFAULT 'España', así que todo prospecto
+-- nacía «de España» aunque escribiera desde México. La factura toma el país de
+-- la ficha y salía «…, Buenos Aires, España» (2026/1008 de ISEIE). Sin valor
+-- por defecto, el país lo pone quien lo sabe (la ficha, el formulario de datos
+-- fiscales o el prefijo del teléfono al facturar) y, si nadie lo sabe, se pide.
+--
+-- La corrección de los datos ya guardados va aparte, con copia previa:
+-- scripts/datos/2311_pais_fiscal_por_telefono.sql.
+ALTER TABLE leads ALTER COLUMN pais_fiscal DROP DEFAULT;
