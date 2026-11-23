@@ -87,6 +87,13 @@ export function enUnidadesMinimas(importe, moneda) {
   return Math.round(n * 100);
 }
 
+/** Al revés (CRM#1019): 12345 EUR → 123.45; 1500 CLP → 1500. null si no es un número. */
+export function desdeUnidadesMinimas(unidades, moneda) {
+  if (typeof unidades !== 'number' || !Number.isFinite(unidades)) return null;
+  if (SIN_DECIMALES.has(String(moneda || '').toUpperCase())) return unidades;
+  return Math.round(unidades) / 100;
+}
+
 export const MENSAJE_INACTIVO = 'Este link de pago ya no está disponible. Pide uno nuevo a la persona que te atiende.';
 
 /** El Price del link: el importe que se cobra, una sola vez. */
@@ -145,6 +152,41 @@ export function crearLink(apiKey, { priceId, metadata, idempotencia, guardaTarje
 export function sesionesDelLink(apiKey, paymentLinkId, { limite = 10 } = {}) {
   return llamar(apiKey, 'GET',
     `/v1/checkout/sessions?payment_link=${encodeURIComponent(paymentLinkId)}&limit=${Number(limite) || 10}`);
+}
+
+// ─── Los links creados directamente en Stripe (CRM#1019): solo lectura ──────
+
+/**
+ * Los Payment Links de la cuenta, con sus líneas (lo que se cobra), de 100 en
+ * 100 y hasta `maxPaginas`. Solo lee: el CRM no cambia un link que no creó.
+ */
+export async function listarLinks(apiKey, { maxPaginas = 5 } = {}) {
+  const todos = [];
+  let despues = null;
+  for (let i = 0; i < maxPaginas; i += 1) {
+    const pagina = await llamar(apiKey, 'GET',
+      `/v1/payment_links?limit=100&expand[]=data.line_items${despues ? `&starting_after=${encodeURIComponent(despues)}` : ''}`);
+    const datos = Array.isArray(pagina?.data) ? pagina.data : [];
+    todos.push(...datos);
+    if (!pagina?.has_more || !datos.length) break;
+    despues = datos[datos.length - 1].id;
+  }
+  return todos;
+}
+
+/** Un Payment Link con sus líneas. */
+export function verLink(apiKey, paymentLinkId) {
+  return llamar(apiKey, 'GET', `/v1/payment_links/${encodeURIComponent(paymentLinkId)}?expand[]=line_items`);
+}
+
+/**
+ * Las sesiones de Checkout completadas desde `desde` (segundos), de toda la
+ * cuenta: con ellas se recogen los cobros de un link de Stripe cuyo aviso no
+ * llegó. Una página de 100: la vuelta siguiente coge las que falten.
+ */
+export function sesionesCompletadas(apiKey, { desde }) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?status=complete&limit=100&created[gte]=${Math.floor(Number(desde) || 0)}`);
 }
 
 /** Desactivar un link (caducado o anulado). Un link de Stripe no se borra. */

@@ -17,6 +17,8 @@ import EmbudoLinks from '../components/EmbudoLinks';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
 import { listarTodos, anularLink, conectarStripe, type LinkDePago, type EstadoLink, type ConectarStripe } from '../api/linksPago.api';
 import AvisoConectarStripe, { AvisoCobroAutoApagado } from '../components/AvisoConectarStripe';
+// Los links creados directamente en Stripe y sus cobros por vincular (CRM#1019).
+import LinksDeStripe from '../components/LinksDeStripe';
 
 /*
   LA PANTALLA «LINKS DE PAGO» (Comercial › Links de pago; Diego, 19/11).
@@ -255,6 +257,10 @@ export default function LinksDePagoPage() {
         <Paginacion pagina={pagina} limite={limite} total={total} onPagina={setPagina}
           onLimite={(n) => { setLimite(n); setPagina(1); }} unidad="links" />
       )}
+
+      {/* ─── CRM#1019: los links creados directamente en Stripe y sus cobros por vincular ─── */}
+      <LinksDeStripe ambito={ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } })} />
+      {/* ─── fin CRM#1019 ─── */}
 
       {creando && (
         <CrearLinkAsistente formaInicial={creando} onClose={() => setCreando(false)} onCreado={() => cargar()} />
