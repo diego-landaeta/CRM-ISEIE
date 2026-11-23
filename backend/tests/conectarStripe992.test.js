@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
  *
  * Sin base: la base, el servidor y Stripe, de mentira.
  *
- *   · la migración 312: encendido de serie y en los campus que ya hay, y se
+ *   · la migración 324: encendido de serie y en los campus que ya hay, y se
  *     puede pasar dos veces;
  *   · cada «no se puede» de las cuotas lleva su código: `sin_clave` y
  *     `clave_sin_permiso` (los del aviso), `apagado_entorno` (el interruptor del
@@ -38,7 +38,7 @@ const { ErrorDeStripe } = await import('../src/modules/links-pago/links-pago.str
 const { AppError } = await import('../src/shared/utils/AppError.js');
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
-const SQL = fs.readFileSync(path.join(AQUI, '..', 'migrations', '312_cobro_automatico_en_todos_los_campus.sql'), 'utf8');
+const SQL = fs.readFileSync(path.join(AQUI, '..', 'migrations', '324_cobro_automatico_en_todos_los_campus.sql'), 'utf8');
 const sinComentarios = SQL.split('\n').filter((l) => !l.trim().startsWith('--')).join('\n');
 
 const CFG = { cuotas_admitidas: true, cuotas_max: 12, monedas: ['EUR'] };
@@ -60,7 +60,7 @@ afterEach(() => {
   for (const [k, v] of Object.entries(antes)) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
 });
 
-describe('la migración 312', () => {
+describe('la migración 324', () => {
   it('encendido de serie y en todos los campus, en una transacción, sin borrar nada', () => {
     expect(sinComentarios).toMatch(/ALTER TABLE projects ALTER COLUMN links_pago_cobro_auto SET DEFAULT true;/);
     expect(sinComentarios).toMatch(/UPDATE projects SET links_pago_cobro_auto = true WHERE links_pago_cobro_auto IS DISTINCT FROM true;/);
