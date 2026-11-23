@@ -459,6 +459,11 @@ describe('los contadores, por campus', () => {
 
 describe('los avisos por fecha, una sola vez', () => {
   let VENCE; let TARDE; let SIN; let SINHAB;
+  // La vuelta, solo sobre los campus de esta prueba: la de verdad recorre la base
+  // entera, y otra prueba que corre a la vez (cursosVendidosSinDesarrollar770) se
+  // quedaba con sus cursos o le metía los suyos en la cuenta de `enviados`.
+  const vuelta = () => avisarVencimientos({ projectIds: ids.projects });
+  const mios = `SELECT count(*)::int AS n FROM admin_notifications WHERE type LIKE 'curso_pendiente_%' AND title LIKE '%' || $1 || '%'`;
   beforeAll(async () => {
     const nuevo = async (n, extra = '') => (await crear(GESTORA, { nombre: nombre(n), lead_id: LEAD_C })).body.data.curso.id;
     VENCE = await nuevo('Vence en tres días');
@@ -474,7 +479,7 @@ describe('los avisos por fecha, una sola vez', () => {
   });
 
   it('manda cada aviso a quien toca', async () => {
-    const r = await avisarVencimientos();
+    const r = await vuelta();
     expect(r.enviados).toBeGreaterThanOrEqual(4);
     expect((await avisos('curso_pendiente_vence', TUTORA2.id)).map((a) => a.title)).toContain(`Faltan 3 días: ${nombre('Vence en tres días')}`);
     // El retrasado, a la tutora Y al admin del campus (y al super admin).
@@ -491,23 +496,23 @@ describe('los avisos por fecha, una sola vez', () => {
   });
 
   it('repetir la vuelta no repite ningún aviso', async () => {
-    const antes = (await q(`SELECT count(*)::int AS n FROM admin_notifications WHERE type LIKE 'curso_pendiente_%'`))[0].n;
-    const r = await avisarVencimientos();
-    const despues = (await q(`SELECT count(*)::int AS n FROM admin_notifications WHERE type LIKE 'curso_pendiente_%'`))[0].n;
+    const antes = (await q(mios, [MARCA]))[0].n;
+    const r = await vuelta();
+    const despues = (await q(mios, [MARCA]))[0].n;
     expect(despues).toBe(antes);
     expect(r.enviados).toBe(0);
   });
 
   it('si se mueve la fecha, el nuevo vencimiento vuelve a avisar', async () => {
     await q(`UPDATE cursos_pendientes SET fecha_comprometida = ${HOY_SQL} - 1 WHERE id = $1`, [TARDE]);
-    const r = await avisarVencimientos();
+    const r = await vuelta();
     expect(r.enviados).toBe(1);
   });
 
   it('un curso cerrado o cancelado no avisa', async () => {
     await q(`UPDATE cursos_pendientes SET estado = 'cancelado' WHERE id = ANY($1::int[])`, [[VENCE, TARDE, SIN, SINHAB]]);
     await q(`UPDATE cursos_pendientes SET fecha_comprometida = CURRENT_DATE - 9 WHERE id = ANY($1::int[])`, [[TARDE]]).catch(() => {});
-    const r = await avisarVencimientos();
+    const r = await vuelta();
     expect(r.enviados).toBe(0);
   });
 });

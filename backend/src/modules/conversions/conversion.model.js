@@ -4,6 +4,7 @@ import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
+import { comoLista } from '../../shared/utils/ambito.js';
 
 // EL DÍA DE UNA VENTA ES EL DE MADRID (#693). `CURRENT_DATE` es el día en la
 // zona de la sesión de PostgreSQL, que en el servidor no tiene por qué ser la
@@ -328,12 +329,15 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
+export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
 
-  if (projectId) { conditions.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  // Un campus o los de una empresa (#73): aquí dentro son lo mismo, una lista.
+  // La misma en la lista, en las tarjetas y en «Por proyecto».
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { conditions.push(`c.project_id = ANY($${idx++}::int[])`); params.push(lista); }
   if (leadId) { conditions.push(`c.lead_id = $${idx++}`); params.push(leadId); }
   if (responsableId) { conditions.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push([].concat(responsableId).map(Number)); }
   // Pagada o no, por lo que suman sus pagos (#692), no por el campo guardado.
@@ -448,7 +452,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
     // El mismo recorte de proyecto que el resto de la consulta, pero sobre la
     // factura: si se esta mirando una sociedad, sus facturas y no las demas.
     let alcance = 'TRUE';
-    if (projectId) { args.push(projectId); alcance = `i.project_id = $3`; }
+    if (lista) { args.push(lista); alcance = `i.project_id = ANY($3::int[])`; }
     // Los mismos recortes que la lista y que «Por proyecto»: gestora y curso.
     // Sin esto la tarjeta decia 3 cuotas y la lista enseñaba 1 al filtrar.
     let porGestora = '', porProducto = '';
@@ -505,7 +509,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (from && to) {
     const args = [from, to];
     let alcanceC = 'TRUE', alcanceI = 'TRUE';
-    if (projectId) { args.push(projectId); alcanceC = `c.project_id = $${args.length}`; alcanceI = `i.project_id = $${args.length}`; }
+    if (lista) { args.push(lista); alcanceC = `c.project_id = ANY($${args.length}::int[])`; alcanceI = `i.project_id = ANY($${args.length}::int[])`; }
     // Los MISMOS recortes que las tarjetas --gestora y curso--, o la columna no
     // sumaria la tarjeta en cuanto se filtre. Salio en la revision.
     let porGestora = '', porProducto = '';
@@ -567,7 +571,7 @@ export async function findAll({ projectId, leadId, responsableId, pendiente, ven
   if (from && to) {
     const args = [from, to];
     let alcance = 'TRUE';
-    if (projectId) { args.push(projectId); alcance = 'c.project_id = $3'; }
+    if (lista) { args.push(lista); alcance = 'c.project_id = ANY($3::int[])'; }
     const { rows: [cb] } = await query(
       `WITH cobros AS (
          SELECT cp.importe,
@@ -650,7 +654,9 @@ export async function cuotasDelPeriodo({
   const args = [from, to];
   
   let alcance = 'TRUE';
-  if (projectId) { args.push(projectId); alcance = `i.project_id = $${args.length}`; }
+  // Un campus o los de una empresa (#73).
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { args.push(lista); alcance = `i.project_id = ANY($${args.length}::int[])`; }
   let porGestora = '';
   if (responsableId) {
     args.push([].concat(responsableId).map(Number));
@@ -698,14 +704,16 @@ export async function cuotasDelPeriodo({
  * que ya se ve, y esconderlas volveria a descuadrar el recuento de facturas.
  */
 export async function filasDelPeriodo({
-  projectId = null, from, to, responsableId = null, producto = null, page = 1, limit = 50,
+  projectId = null, projectIds = null, from, to, responsableId = null, producto = null, page = 1, limit = 50,
 } = {}) {
   if (!from || !to) return { filas: [], total: 0 };
   const args = [from, to];
-  
+
   let alcanceC = 'TRUE';
   let alcanceI = 'TRUE';
-  if (projectId) { args.push(projectId); alcanceC = `c.project_id = $${args.length}`; alcanceI = `i.project_id = $${args.length}`; }
+  // Un campus o los de una empresa (#73).
+  const lista = comoLista(projectId, projectIds);
+  if (lista) { args.push(lista); alcanceC = `c.project_id = ANY($${args.length}::int[])`; alcanceI = `i.project_id = ANY($${args.length}::int[])`; }
   let porGestora = '';
   if (responsableId) {
     args.push([].concat(responsableId).map(Number));
@@ -1008,11 +1016,13 @@ export async function deleteConversion(id) {
 
 // Valores distintos de producto para el desplegable de filtros. Va aparte de
 // findAll porque el listado esta paginado y no ve el catalogo completo.
-export async function listProductos({ projectId, responsableId }) {
+export async function listProductos({ projectId, projectIds = null, responsableId }) {
   const cond = ["TRIM(COALESCE(c.producto_contratado, '')) <> ''"];
   const params = [];
   let idx = 1;
-  if (projectId) { cond.push(`c.project_id = $${idx++}`); params.push(projectId); }
+  // Un campus o los de una empresa (#73).
+  const listaP = comoLista(projectId, projectIds);
+  if (listaP) { cond.push(`c.project_id = ANY($${idx++}::int[])`); params.push(listaP); }
   if (responsableId) { cond.push(`EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${idx++}::int[]))`); params.push([].concat(responsableId).map(Number)); }
   const { rows } = await query(
     `SELECT DISTINCT TRIM(c.producto_contratado) AS producto

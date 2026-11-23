@@ -2985,6 +2985,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conversions/productos-con-curso",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/productos-con-curso",
+  "relativa": "GET /productos-con-curso",
+  "controlador": "productosConCursoMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/conversions/sin-fecha-inicio",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/sin-fecha-inicio",
+  "relativa": "GET /sin-fecha-inicio",
+  "controlador": "sinFechaInicio",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/conversions/by-lead/:leadId",
   "tipo": "ruta",
   "modulo": "conversions",

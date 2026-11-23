@@ -15,15 +15,48 @@ import {
 import { METODOS_QUE_DISPARAN } from '../webhooks-salientes/webhooks-salientes.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
-import { campusParaRecortar } from '../../shared/utils/ambito.js';
+import { campusParaRecortar, proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { posiblesRepetidas as gruposRepetidos } from './venta-repetida.js';
+import { exigirFechaSiTieneCurso, exigirAlQuitarla, productosConCurso, ventasSinFecha } from './fecha-inicio.js';
 
 export async function create(req, res, next) {
   try {
     const parsed = createConversionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // Con curso de Moodle, sin fecha de inicio no se cierra la venta (#455, gemela de CRM#1036).
+    await exigirFechaSiTieneCurso(parsed.data);
     const conversion = await conversionService.create(parsed.data, req.user.userId);
     res.status(201).json({ success: true, data: conversion });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/productos-con-curso?projectId=
+//
+// Los productos del campus unidos a un curso de Moodle (ids). Los formularios
+// de venta lo piden para saber si la fecha de inicio es obligatoria (gemela de
+// CRM#1036). Fuera de los campus de quien pide, lista vacía.
+export async function productosConCursoMoodle(req, res, next) {
+  try {
+    const pid = /^[1-9]\d{0,9}$/.test(String(req.query.projectId ?? '')) ? Number(req.query.projectId) : null;
+    if (!pid) throw new AppError('projectId requerido', 400, 'VALIDATION_ERROR');
+    const suyos = await campusParaRecortar(req);
+    const data = suyos && !suyos.includes(pid) ? [] : await productosConCurso(pid);
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// GET /api/conversions/sin-fecha-inicio?projectId=|issuerId=
+//
+// Las ventas ya hechas sin fecha de inicio cuyo producto tiene curso de Moodle,
+// para completarlas (gemela de CRM#1036). Por campus o empresa, solo en los de
+// quien pide; una gestora (o quien lleva un equipo), solo las suyas.
+export async function sinFechaInicio(req, res, next) {
+  try {
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
+    const campus = projectId ? [projectId] : projectIds;
+    const personas = await alcanceComercial(req.user);
+    const data = await ventasSinFecha({ projectIds: campus, personas });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 
@@ -51,7 +84,11 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const filters = { ...parsed.data };
+    // Un campus, una empresa entera o todos (#73, como en el 360): se resuelve
+    // aquí, siempre dentro de los campus de quien pide, y el modelo recibe ya la
+    // lista. Antes iba con el `projectId` de la dirección sin mirar de quién era
+    // y, sin él, con las ventas de todo el CRM.
+    const filters = { ...parsed.data, ...(await proyectosDelAmbito(req)) };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
     // Con equipo comercial (09/11/2026), las suyas y las de sus gestoras.
     const alcance = await alcanceComercial(req.user);
@@ -82,8 +119,7 @@ export async function cuotas(req, res, next) {
     if (alcance) responsableId = personasDentro(alcance, responsableId);
 
     const data = await conversionModel.cuotasDelPeriodo({
-      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null,
-      from, to, responsableId,
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -106,7 +142,7 @@ export async function filas(req, res, next) {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const r = await conversionModel.filasDelPeriodo({
-      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null, from, to, responsableId,
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
       producto: req.query.producto ? String(req.query.producto) : null, page, limit,
     });
     res.json({ success: true, data: r.filas,
@@ -138,6 +174,8 @@ export async function update(req, res, next) {
     if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
     const parsed = updateConversionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // Quitar la fecha de inicio de una venta con curso de Moodle, no (gemela de CRM#1036).
+    if (parsed.data.fecha_inicio === null) await exigirAlQuitarla(id);
     const updated = await conversionService.update(id, parsed.data);
     res.json({ success: true, data: updated });
   } catch (err) { next(err); }
@@ -338,11 +376,11 @@ export async function unpayInstallment(req, res, next) {
 
 export async function listProductos(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     const alcance = await alcanceComercial(req.user);
     if (alcance) responsableId = personasDentro(alcance, responsableId);
-    const data = await conversionService.listProductos({ projectId, responsableId });
+    const data = await conversionService.listProductos({ projectId, projectIds, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

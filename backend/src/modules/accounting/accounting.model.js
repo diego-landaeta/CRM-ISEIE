@@ -223,11 +223,13 @@ export async function getDashboardStats({ projectId, projectIds = null, from, to
 // plan de cuotas (importe pendiente de la conversión). Cada fila trae su fecha de
 // vencimiento, cliente, producto, proyecto y gestora responsable.
 // ============================================================
-export async function getReceivable({ projectId = null, responsableId = null, from = null, to = null } = {}) {
+export async function getReceivable({ projectId = null, projectIds = null, responsableId = null, from = null, to = null } = {}) {
   const conds = [];
   const params = [];
   let i = 1;
-  if (projectId)     { conds.push(`c.project_id = $${i++}`); params.push(projectId); }
+  // Un campus o los de una empresa (#73): aquí dentro son lo mismo, una lista.
+  const idsCobro = comoLista(projectId, projectIds);
+  if (idsCobro)      { conds.push(`c.project_id = ANY($${i++}::int[])`); params.push(idsCobro); }
   // Una o varias (el equipo de una administradora, 09/11/2026).
   if (responsableId) { conds.push(`l.responsable_id = ANY($${i++}::int[])`); params.push([].concat(responsableId).map(Number)); }
   const extra = conds.length ? ' AND ' + conds.join(' AND ') : '';

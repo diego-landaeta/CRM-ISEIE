@@ -9,7 +9,8 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
 import PageHeader from '@/shared/components/ui/PageHeader';
-import RecorridoGuiado, { recorridoPendiente } from '@/shared/components/ui/RecorridoGuiado';
+import RecorridoGuiado from '@/shared/components/ui/RecorridoGuiado';
+import { useRegistrarRecorrido } from '@/shared/lib/lanzadorRecorridos';
 import { CLAVE_RECORRIDO_TABLERO, PASOS_TABLERO } from '../lib/recorridoTablero';
 import Select from '@/shared/components/ui/Select';
 import { agruparPorEmpresa, campusConEmpresa, empresaCorta } from '../lib/campusPorEmpresa';
@@ -146,7 +147,7 @@ export default function TasksPage() {
   const [cargandoMetricas, setCargandoMetricas] = useState(false);
   const [arrastrando, setArrastrando] = useState<Task | null>(null);
   const [nueva, setNueva] = useState<{ status: TaskStatus } | null>(null);
-  // El recorrido guiado (12/10): solo la primera vez, y cuando se pida con «Recorrido».
+  // El recorrido guiado (12/10): solo cuando se pida con «Recorrido» (CRM#1012).
   const [recorrido, setRecorrido] = useState(false);
 
   // Una pestaña por equipo, si está en más de uno (Diego, 04/11/2026): quien lleva
@@ -343,14 +344,11 @@ export default function TasksPage() {
     }
   }
 
-  // Con una ficha abierta, el recorrido NO se abre solo, y si estaba abierto se cierra
+  // El recorrido NUNCA se abre solo (CRM#1012, Diego 23/11): solo con «Recorrido»,
+  // aquí o en la cabecera. Con una ficha abierta, si estaba abierto se cierra
   // (27/10/2026): su capa quedaba encima de la ficha y se tragaba «Crear tarea».
   const fichaAbierta = abiertaId != null || nueva != null;
-  useEffect(() => {
-    if (cargando || fichaAbierta || !recorridoPendiente(CLAVE_RECORRIDO_TABLERO)) return undefined;
-    const t = setTimeout(() => setRecorrido(true), 800);
-    return () => clearTimeout(t);
-  }, [cargando, fichaAbierta]);
+  useRegistrarRecorrido({ id: 'tablero', titulo: 'El tablero del equipo', abrir: () => setRecorrido(true) });
   useEffect(() => {
     if (fichaAbierta) setRecorrido(false);
   }, [fichaAbierta]);
@@ -695,6 +693,7 @@ export default function TasksPage() {
         canAssign={canAssign}
         canEdit={canEdit}
         canViewAll={canViewAll}
+        canManage={canManage}
         canArchiveAny={canArchiveAny}
         canClose={canClose}
         assignees={assignees}

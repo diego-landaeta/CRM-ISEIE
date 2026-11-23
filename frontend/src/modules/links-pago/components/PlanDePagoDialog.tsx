@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CalendarCheck, CheckCircle, Copy, ArrowSquareOut, WarningCircle, LinkSimple, Lightning } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import usePermission from '@/shared/hooks/usePermission';
 import { generarPlan, verPlan, cambiarCobroAutomatico, type PlanDePago } from '../api/linksPago.api';
 import { copiarLink, errorDe } from './CrearLinkAsistente';
@@ -145,13 +146,15 @@ export default function PlanDePagoDialog({ conversionId, onClose }: { conversion
                 Un link de pago por cada cuota pendiente. Al pagar uno, se salda esa cuota de la venta.
               </p>
             </div>
+            {/* El recorrido del plan (CRM#1012): solo al pulsarlo, dentro de la ventana. */}
+            <VerRecorrido id="plan-de-pago" compacto dentroDe='[data-recorrido="links-plan"]' />
           </div>
 
           <div className="p-5 space-y-4">
             {cargando && <p className="text-sm text-muted-foreground">Cargando las cuotas…</p>}
 
             {plan?.venta && (
-              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+              <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm" data-recorrido="links-plan-venta">
                 <p className="font-semibold">{plan.venta.lead_nombre || 'Sin nombre'} · {plan.venta.producto_nombre || 'sin curso'}</p>
                 <p className="text-xs text-muted-foreground">
                   Venta n.º {plan.venta.id} · total {dinero(plan.venta.importe_total)} · cobrado {dinero(plan.venta.cobrado)} · pendiente {dinero(plan.venta.pendiente)}

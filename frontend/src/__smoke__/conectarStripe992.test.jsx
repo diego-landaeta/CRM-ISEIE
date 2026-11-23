@@ -92,10 +92,11 @@ describe('el aviso, solo', () => {
     expect(rutaDeLaClave(7)).toBe('/accounting/integrations?campus=7&seccion=links-pago');
   });
 
-  it('sin clave: «Conectar Stripe», que lleva a la clave de ese campus', () => {
+  it('sin clave: «FALTA CONECTAR STRIPE» (Diego, 23/11), que lleva a la clave de ese campus', () => {
     render(<MemoryRouter><AvisoConectarStripe campus={[{ project_id: 7, codigo: 'sin_clave', motivo: SIN_CLAVE }]} /></MemoryRouter>);
     const aviso = screen.getByTestId('aviso-conectar-stripe');
-    expect(aviso.textContent).toMatch(/Conectar Stripe para cobros automáticos/);
+    expect(aviso.textContent).toMatch(/FALTA CONECTAR STRIPE/);
+    expect(aviso.textContent).not.toMatch(/cobros automáticos/);
     expect(aviso.textContent).toContain(SIN_CLAVE);
     expect(within(aviso).getByRole('link', { name: /Conectar Stripe/ }).getAttribute('href')).toBe('/accounting/integrations?campus=7&seccion=links-pago');
   });

@@ -404,7 +404,9 @@ export default function ComoVoy({
     : mejorQueElEquipo ? 'text-success' : 'text-warning-soft-foreground';
 
   return (
+    // `data-recorrido`: el paso «Cómo vas este mes» del recorrido de Clientes (#619).
     <section
+      data-recorrido="como-voy"
       aria-label={esJefe ? 'Cómo va el equipo este mes' : 'Cómo voy este mes'}
       className={`rounded-lg border border-border bg-card ${compacto ? 'px-3 py-2' : 'p-4'}`}
     >

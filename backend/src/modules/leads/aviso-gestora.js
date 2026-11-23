@@ -69,7 +69,7 @@ export async function avisarGestoraDelLeadNuevo({ lead, proyecto = null, canal =
     type: 'lead_asignado',
     title: `Nuevo prospecto: ${lead.nombre || 'sin nombre'}`,
     message: canal ? `Entro por ${canal}.` : 'Te lo ha asignado el reparto automatico.',
-    link_path: `/prospectos/${lead.id}`,
+    link_path: `/leads/${lead.id}`,
     metadata: { lead_id: lead.id, project_id: projectId },
   }).catch(() => {});
 

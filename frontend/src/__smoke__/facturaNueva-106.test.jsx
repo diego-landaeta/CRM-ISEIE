@@ -173,7 +173,7 @@ describe('Datos fiscales para la factura (#106)', () => {
     await abrirDialogo();
     expect(screen.getByRole('button', { name: /Emitir factura/ })).toHaveProperty('disabled', true);
     expect(screen.getByRole('status').textContent)
-      .toBe('Para emitirla, falta en «Cliente»: Nombre · NIF / DNI / CIF · Código postal · Dirección fiscal · Ciudad.');
+      .toBe('Para emitirla, falta en «Cliente»: Nombre · NIF / DNI / CIF · Código postal · Dirección fiscal · Ciudad · País.');
   });
 
   it('cada etiqueta enlazada a su campo, también los datos del cliente', async () => {

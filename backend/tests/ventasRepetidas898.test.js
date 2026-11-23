@@ -43,6 +43,7 @@ const venta = (extra) => request.post('/api/ventas').set(auth()).send({
   importe_pagado: 300,
   metodo_pago: 'transferencia',
   fecha_pago: FECHA,
+  fecha_inicio: FECHA,
   ...extra,
 });
 
@@ -115,7 +116,7 @@ describe('alta de una venta que el alumno ya tiene', () => {
   it('desde la ficha (POST /api/conversions) también da 409', async () => {
     const r = await request.post('/api/conversions').set(auth()).send({
       lead_id: lead.id, project_id: PROYECTO, producto_contratado: `Diplomado ${MARCA}`,
-      producto_contratado_id: producto, importe_total: 300, fecha_conversion: FECHA,
+      producto_contratado_id: producto, importe_total: 300, fecha_conversion: FECHA, fecha_inicio: FECHA,
     });
     expect(r.status, JSON.stringify(r.body)).toBe(409);
     expect(r.body.code).toBe('VENTA_YA_EXISTE');

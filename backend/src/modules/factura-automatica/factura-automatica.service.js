@@ -483,7 +483,7 @@ async function avisarGestora(conversionId, mensaje) {
       type: 'factura_automatica',
       title: 'Una factura espera revisión en la cola',
       message: mensaje,
-      link_path: v.lead_id ? `/clientes/${v.lead_id}` : null,
+      link_path: v.lead_id ? `/clients/${v.lead_id}` : null,
       metadata: { conversion_id: conversionId },
     });
   } catch (err) {

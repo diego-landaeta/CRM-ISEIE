@@ -4,6 +4,32 @@ import { z } from 'zod';
 // formas de cobro que disparan el webhook de transferencias (migración 206).
 export const PAYMENT_METHODS = ['transferencia', 'deposito', 'tarjeta', 'tarjeta_stripe', 'efectivo', 'bizum', 'paypal', 'fraccionado', 'otro'];
 
+/** AAAA-MM-DD y que exista de verdad (ni 2026-02-30 ni «hola»). */
+export const fechaReal = (requerida) => z
+  .string({ required_error: requerida, invalid_type_error: requerida })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'la fecha va como AAAA-MM-DD')
+  .refine((v) => {
+    const d = new Date(`${v}T12:00:00Z`);
+    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
+  }, 'esa fecha no existe');
+
+/*
+ * La fecha de inicio del curso (#767, paso 1). Con ella se programa la
+ * matrícula en Moodle: el día anterior. OBLIGATORIA en las dos rutas del
+ * formulario que cierra una venta (POST /api/conversions y POST /api/ventas)
+ * CUANDO EL PRODUCTO TIENE CURSO DE MOODLE en su campus (CRM#1036): eso lo mira
+ * el controlador con `exigirFechaSiTieneCurso` (fecha-inicio.js); el esquema
+ * solo comprueba que, si llega, sea una fecha que existe.
+ * Los caminos sin nadie delante (compra directa, links de pago, Conciliación,
+ * plataformas de IA) crean la venta por el servicio, sin pasar por aquí, y
+ * siguen sin ella: entonces la matrícula va con el pago.
+ *
+ * Una fecha pasada vale: hay ventas de cursos ya empezados. La matrícula se
+ * hace entonces al confirmarse el pago (`MOMENTO_SQL` toma la más tardía).
+ */
+export const FALTA_FECHA_INICIO = 'Falta la fecha de inicio del curso (fecha_inicio): con ella se programa la matrícula en Moodle';
+export const fechaInicioCurso = () => fechaReal(FALTA_FECHA_INICIO);
+
 // La referencia del banco de una transferencia o un depósito (nº de operación).
 const referencia = z.string().trim().max(120).optional().nullable();
 
@@ -26,8 +52,10 @@ export const createConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),
-  // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el día anterior.
-  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
+  // Inicio del curso pactado con el alumno (#767): la matrícula en Moodle va el
+  // día anterior. Obligatoria si el producto tiene curso de Moodle (lo mira el
+  // controlador, que es el de «Nueva venta»).
+  fecha_inicio: fechaInicioCurso().optional().nullable(),
   // Multi-item + IVA + descuento
   items: z.array(conversionItemSchema).optional(),
   iva_pct: z.number().min(0).max(100).optional(),
@@ -51,7 +79,8 @@ export const updateConversionSchema = z.object({
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   notas_pago: z.string().max(2000).nullable().optional(),
-  fecha_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  // Se puede poner o cambiar; null la quita (la matrícula iría con el pago).
+  fecha_inicio: fechaInicioCurso().nullable().optional(),
 }).refine((d) => Object.keys(d).length > 0, { message: 'Al menos un campo requerido' });
 
 export const createPaymentSchema = z.object({
@@ -90,14 +119,7 @@ export const editPaidInstallmentSchema = z.object({
 // suelto dentro de la transacción: una cuota mal escrita daba 500 (y ensuciaba
 // los avisos de 5xx), y `num_cuotas: "abc"` borraba el plan sin crear otro.
 
-/** AAAA-MM-DD y que exista de verdad (ni 2026-02-30 ni «hola»). */
-const fechaReal = (requerida) => z
-  .string({ required_error: requerida, invalid_type_error: requerida })
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'la fecha va como AAAA-MM-DD')
-  .refine((v) => {
-    const d = new Date(`${v}T12:00:00Z`);
-    return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
-  }, 'esa fecha no existe');
+// `fechaReal` está arriba del todo: la usa también la venta (fecha de inicio).
 
 /** Un número, aunque llegue como texto («50»), pero no «abc» ni vacío. */
 const numero = (falta, noEs) => z.preprocess(

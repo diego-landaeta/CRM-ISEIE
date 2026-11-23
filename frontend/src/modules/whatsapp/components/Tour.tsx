@@ -7,7 +7,7 @@ import './tour.css';
 //
 // La guia escrita esta bien para leerla una vez, pero nadie la lee antes de
 // empezar: se abre el chat y se prueba. Esto son seis pasos señalando lo que ya
-// tiene delante, la primera vez que entra.
+// tiene delante, cuando lo pide (CRM#1012: nunca se abre solo).
 //
 // Se marca en el navegador de cada persona, no en la base: es una preferencia
 // suya, no un dato del CRM, y no merece una tabla ni una migracion.
@@ -67,7 +67,7 @@ const PASOS: Paso[] = [
     enElCorto: true,
     donde: '.wa-sin-enlazar',
     titulo: 'Te falta conectar el tuyo',
-    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos, y cuando vuelvas te enseño el resto con tus conversaciones ya delante.',
+    texto: 'Todavía no hay ninguno enlazado, por eso la pantalla está vacía. Te llevo: leerás un aviso sobre lo que supone —merece la pena leerlo— y saldrá un código para escanear con el móvil. Son dos minutos. Cuando vuelvas, pulsa «Tutorial» (o «Recorrido» arriba) y te enseño el resto con tus conversaciones ya delante.',
     accion: { texto: 'Enlazar mi número', a: '/whatsapp/conexion' },
   },
   {
@@ -391,7 +391,7 @@ export default function Tour({
   );
 }
 
-/** ¿Toca enseñarlo? Solo la primera vez de cada persona en este navegador. */
+/** ¿Lo ha visto ya? Desde la #1012 no decide nada: ningún recorrido se abre solo. */
 export function tourPendiente(clave: string = VISTO) {
   try { return localStorage.getItem(clave) !== '1'; } catch { return false; }
 }

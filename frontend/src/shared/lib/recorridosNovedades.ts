@@ -1,4 +1,5 @@
 import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
+import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
 
 /**
  * LOS RECORRIDOS DE LAS NOVEDADES DEL 18/11 (CRM-ISEIE#611, tanda A; gemela de
@@ -45,13 +46,13 @@ type RecorridoNovedades = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoNovedad
 
 const anclaje = (nombre: string) => `[data-recorrido="${nombre}"]`;
 
-const FINAL = 'No volverá a salir solo. Para repasarlo, pulsa «Ver recorrido» en esta pantalla cuando quieras.';
 
 /** En el orden de la issue: menú, «Hoy», ventas repetidas y cuotas. */
 export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedades> = {
   // ─── 1 · El menú por bloques (#587; #534 en el 360) ─────────────────────────
   'menu-bloques': {
     id: 'menu-bloques',
+    rutas: [],
     titulo: 'El menú por bloques',
     pantalla: ['shared/components/layout/Sidebar.jsx'],
     pasos: [
@@ -96,6 +97,7 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
   // ─── 2 · El Dashboard como «Hoy» (#590; #884 en el 360) ─────────────────────
   'hoy-dashboard': {
     id: 'hoy-dashboard',
+    rutas: ['/dashboard'],
     titulo: 'Hoy',
     pantalla: [
       'shared/pages/DashboardPage.jsx',
@@ -138,6 +140,7 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
   // 27/10), así que se explica desde el botón que la abre.
   'ventas-repetidas': {
     id: 'ventas-repetidas',
+    rutas: ['/ventas'],
     titulo: 'Ventas repetidas',
     permiso: ['ventas.registrar', 'conversions.edit'],
     pantalla: [
@@ -174,18 +177,24 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
   // ─── 4 · Las cuotas en la ficha de la venta (`/ventas/:id`; CRM#892) ────────
   'venta-cuotas': {
     id: 'venta-cuotas',
+    rutas: ['/ventas/:id'],
     titulo: 'Cuotas y cobros de la venta',
     permiso: 'conversions.view',
-    pantalla: ['modules/sales/pages/SaleDetailPage.tsx'],
+    pantalla: ['modules/sales/pages/SaleDetailPage.tsx', 'modules/links-pago/components/CobroAutomaticoCuotas.tsx'],
     pasos: [
       {
         titulo: 'Cuotas y cobros',
-        texto: 'Cada cobro de esta venta salda su cuota solo: no hay que marcar nada a mano. Son {pasos} pasos.',
+        texto: 'Cada cobro de esta venta salda su cuota solo, venga de un link de pago, del cobro automático de Stripe o apuntado a mano: no hay que marcar nada. Son {pasos} pasos.',
       },
       {
         donde: anclaje('venta-cuotas'),
-        titulo: 'Cada cobro salda su cuota',
-        texto: 'Los cobros saldan las cuotas en orden, con su fecha, su importe y su método. Uno que paga dos cuotas salda las dos; uno que no llega la salda en parte y el resto sigue pendiente.',
+        titulo: 'El plan de cuotas',
+        texto: 'Cada cuota con su número, su vencimiento y su importe. Los cobros las saldan en orden: uno que paga dos cuotas salda las dos; uno que no llega la salda en parte y el resto sigue pendiente.',
+      },
+      {
+        donde: anclaje('venta-cuotas-estado'),
+        titulo: 'En qué está cada una',
+        texto: '«Cobrada» con su fecha, «Pendiente» o «Vencida» si pasó la fecha sin cobrarse. «Stripe» al lado: la pagó el alumno con su link o la cobró Stripe sola.',
       },
       // Justo detrás del anterior, sobre la misma tabla: en el PC es más alta que
       // la pantalla y, volviendo a ella desde abajo, la barra fija le tapaba el
@@ -195,6 +204,16 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
         permiso: 'conversions.cobros',
         titulo: 'Cuota ya pagada',
         texto: 'Si registras el pago de una cuota que ya salda otro cobro, el CRM te dice con qué cobro y no apunta nada. Si ese pago ya entró por Stripe, te avisa para que lo enlaces en vez de apuntarlo otra vez.',
+      },
+      {
+        donde: anclaje('venta-cuotas-factura'),
+        titulo: 'Su factura',
+        texto: 'Cada cuota cobrada pasa a la cola de facturación de Finanzas › Facturas. Cuando se emite, su número sale aquí; con «—», aún espera su turno.',
+      },
+      {
+        donde: anclaje('cobro-automatico'),
+        titulo: 'Si Stripe las cobra solas',
+        texto: 'Con el cobro automático, esta tarjeta dice cuándo cobrará Stripe cada cuota, cuáles cobró y si alguna falló. Tiene su propio recorrido en «Recorrido» arriba.',
       },
       {
         donde: anclaje('venta-pagos'),

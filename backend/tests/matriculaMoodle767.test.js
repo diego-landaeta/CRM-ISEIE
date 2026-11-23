@@ -260,7 +260,7 @@ describe('#767 · la vuelta de cada hora', () => {
     expect(aviso.type).toBe(mm.TIPO_LISTA);
     expect(aviso.target_user_ids).toEqual(DESTINO);
     expect(aviso.message).toMatch(/Máster de prueba \(id 41\)/);
-    expect(aviso.link_path).toBe(`/clientes/${v.lead_id}`);
+    expect(aviso.link_path).toBe(`/clients/${v.lead_id}`);
 
     // Otra vuelta no la vuelve a tocar ni a avisar.
     await mm.vuelta({ destinatarios: DESTINO });

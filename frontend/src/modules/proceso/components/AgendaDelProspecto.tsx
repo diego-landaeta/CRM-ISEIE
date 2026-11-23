@@ -150,7 +150,8 @@ export default function AgendaDelProspecto({
   const hechos = pasos.filter((p) => p.hecho).length;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4">
+    // `data-recorrido`: el paso «El proceso comercial» del recorrido de la ficha (#619).
+    <div data-recorrido="ficha-proceso" className="bg-card border border-border rounded-xl p-4">
       <div className="mb-3 flex items-center justify-between gap-3">
         <h3 className="flex items-center gap-2 text-sm font-semibold">
           <ListChecks size={16} weight="duotone" className="text-info" />

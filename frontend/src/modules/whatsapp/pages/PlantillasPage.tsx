@@ -7,7 +7,8 @@ import {
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
 import { VARIABLES as VARIABLES_PLANTILLA } from '../lib/plantilla';
-import Tour, { tourPendiente } from '../components/Tour';
+import Tour from '../components/Tour';
+import { useRegistrarRecorrido } from '@/shared/lib/lanzadorRecorridos';
 import { PASOS_DE_PLANTILLAS, VISTO_PLANTILLAS } from '../components/tourDePlantillas';
 import { whatsappApi, type PlantillaWhatsapp } from '../api/whatsapp.api';
 import usePermission from '@/shared/hooks/usePermission';
@@ -87,8 +88,7 @@ export default function PlantillasWhatsappPage() {
   const [cargando, setCargando] = useState(true);
 
   /**
-   * El tutorial guiado, la primera vez y solo cuando hay algo que señalar
-   * (#129). Sobre una pantalla todavia vacia, los carteles apuntan al aire.
+   * El tutorial guiado (#129), solo cuando se pide (CRM#1012).
    */
   const [tour, setTour] = useState(false);
   const [borrador, setBorrador] = useState<Record<number, { label: string; body: string }>>({});
@@ -113,11 +113,9 @@ export default function PlantillasWhatsappPage() {
     } finally { setCargando(false); }
   }, [projectId, issuerId]);
 
-  // Se enseña cuando ya hay plantillas delante: es lo que el recorrido señala.
-  useEffect(() => {
-    if (cargando || lista.length === 0) return;
-    if (tourPendiente(VISTO_PLANTILLAS)) setTour(true);
-  }, [cargando, lista.length]);
+  // NUNCA se abre solo (CRM#1012, Diego 23/11): con «Tutorial» o con «Recorrido»
+  // en la cabecera.
+  useRegistrarRecorrido({ id: 'whatsapp-plantillas', titulo: 'Las plantillas de WhatsApp', abrir: () => setTour(true) });
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -244,7 +242,7 @@ export default function PlantillasWhatsappPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {/* Para volver a verlo (#576): solo se abre solo la primera vez. */}
+          {/* El tutorial (#576): solo al pulsarlo, aquí o en «Recorrido» arriba (CRM#1012). */}
           <button type="button" onClick={() => setTour(true)}
             aria-label="Ver el tutorial" title="Ver el recorrido por esta pantalla"
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-medium hover:bg-muted/60">

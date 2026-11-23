@@ -10,6 +10,9 @@ import OfflineBanner from '@/shared/components/ui/OfflineBanner';
 import PwaInstallPrompt from '@/shared/components/ui/PwaInstallPrompt';
 import ShortcutsFAB from '@/shared/components/ui/ShortcutsFAB';
 import SectionTabs from './SectionTabs';
+// «Recorrido» arriba y el recorrido que se pide con él (#681, gemela de CRM#1012).
+import BotonRecorrido from './BotonRecorrido';
+import PresentadorRecorrido from './PresentadorRecorrido';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
@@ -67,12 +70,13 @@ const AvisoFacturacionPausada = lazy(() => import('@/modules/invoices/components
 const COLLAPSED_KEY = 'crm.sidebar.collapsed';
 
 export default function AppLayout() {
-  const { permissions } = useAuth();
+  const { permissions, user } = useAuth();
   // Quien no tiene WhatsApp —el colaborador (#210, QA del 07/10), el tutor (QA
   // del 22/10)…— recibe un 403 del servidor, y el aviso de mensajes preguntaba
   // cada pocos segundos. Se decide con el mismo criterio que el servidor: su
   // permiso (#423), como en MultiCRM.
-  const sinWhatsapp = !tieneWhatsapp(permissions);
+  // Y la casilla «usa WhatsApp» de su ficha (23/11): apagada, tampoco.
+  const sinWhatsapp = !tieneWhatsapp(permissions, user);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(() => {
     try { return localStorage.getItem(COLLAPSED_KEY) === '1'; } catch { return false; }
@@ -89,6 +93,12 @@ export default function AppLayout() {
 
   // Cerrar drawer mobile al cambiar de ruta + al pulsar Escape.
   useEffect(() => { setMobileOpen(false); }, [pathname]);
+  // El recorrido general en el móvil abre antes el menú (#681, gemela de CRM#1012).
+  useEffect(() => {
+    const onAbrirMenu = () => setMobileOpen(true);
+    window.addEventListener('crm:abrir-menu', onAbrirMenu);
+    return () => window.removeEventListener('crm:abrir-menu', onAbrirMenu);
+  }, []);
   useEffect(() => {
     if (!mobileOpen) return;
     const onKey = (e) => { if (e.key === 'Escape') setMobileOpen(false); };
@@ -120,6 +130,8 @@ export default function AppLayout() {
           <img src="/iseie-logo-color.png" alt="ISEIE" className="h-6 w-auto object-contain dark:hidden" />
           <img src="/iseie-logo.png"       alt="ISEIE" className="h-6 w-auto object-contain hidden dark:block" />
         </div>
+        {/* «Recorrido» (#681): en el móvil, en la barra de arriba. Ninguno se abre solo. */}
+        <BotonRecorrido className="ml-auto" />
       </div>
 
       {/* Drawer mobile */}
@@ -174,6 +186,12 @@ export default function AppLayout() {
           collapsed ? 'lg:ml-16' : 'lg:ml-60 xl:ml-64'
         )}
       >
+        {/* «Recorrido» (#681, gemela de CRM#1012): en el PC, arriba a la derecha de
+            todas las pantallas (ISEIE no tiene la cabecera del 360). El de esta
+            pantalla, o el general según el rol. Ninguno se abre solo. */}
+        <div className="hidden lg:flex justify-end mb-2">
+          <BotonRecorrido />
+        </div>
         <SectionTabs />
         {/* El aviso de la facturación pausada (#765). Fuera del `key` de la ruta:
             no parpadea al cambiar de pantalla. Sin permiso o apagada, no pinta nada. */}
@@ -196,6 +214,8 @@ export default function AppLayout() {
           </div>
         </Suspense>
       </main>
+      {/* El recorrido que se pide con «Recorrido» (#681). */}
+      <PresentadorRecorrido />
 
       {/* Los avisos del CRM. Sin esto, `toast(...)` no pinta nada: el aviso se
           manda y no lo ve nadie. Estuvo asi hasta el 19/08 y por eso «guardar

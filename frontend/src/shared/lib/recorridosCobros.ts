@@ -1,19 +1,24 @@
 import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
+import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
 // Los del bloque Finanzas (#619, segunda tanda; gemela de CRM#941), en su propio fichero.
 import { RECORRIDOS_FINANZAS, type IdRecorridoFinanzas } from '@/shared/lib/recorridosFinanzas';
 // Los de las novedades del 18/11 (#611, tanda A; gemela de CRM#928), en su propio fichero.
 import { RECORRIDOS_NOVEDADES, type IdRecorridoNovedades } from '@/shared/lib/recorridosNovedades';
 // Los de las novedades del 18/11 (#611, tanda B; gemela de CRM#928), en su propio fichero.
 import { RECORRIDOS_NOVEDADES_B, type IdRecorridoNovedadesB } from '@/shared/lib/recorridosNovedadesB';
+// Los del día a día de una gestora (#619, tanda C; gemela de CRM#941), en su propio fichero.
+import { RECORRIDOS_GESTORA, type IdRecorridoGestora } from '@/shared/lib/recorridosGestora';
+// Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
+import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
 /**
  * LOS RECORRIDOS DE STRIPE Y DE LOS COBROS (Diego, 18/11: «deben haber tutorial
  * guiado como en el tablero de tareas»).
  *
  * El mismo `RecorridoGuiado` del tablero: carteles que señalan, paso a paso, lo que
- * la persona tiene delante. Cada pantalla lo lanza con `VerRecorrido`, que lo abre
- * solo la primera vez que esa persona entra y deja el botón «Ver recorrido» para
- * repetirlo.
+ * la persona tiene delante. DESDE LA #681 (gemela de CRM#1012) NINGUNO SE ABRE SOLO:
+ * se abren con el botón «Recorrido» de arriba, que ofrece los de la pantalla
+ * (`rutas`) y el general según el rol, o con «Ver recorrido» donde la pantalla lo tiene.
  *
  *  · Cada paso apunta a un `data-recorrido` de su pantalla (nunca a un texto). La
  *    prueba `recorridosCobros.test.jsx` comprueba que sigue estando en el código.
@@ -51,8 +56,6 @@ export interface PasoCobros extends PasoRecorrido {
 
 export type IdRecorridoCobros =
   | 'integraciones-stripe'
-  | 'link-de-pago'
-  | 'links-pago'
   | 'cargos-sin-enlazar'
   | 'anular-factura'
   | 'pagos-stripe'
@@ -61,7 +64,9 @@ export type IdRecorridoCobros =
   | 'ventas'
   | IdRecorridoFinanzas
   | IdRecorridoNovedades
-  | IdRecorridoNovedadesB;
+  | IdRecorridoNovedadesB
+  | IdRecorridoGestora
+  | IdRecorridoLinks;
 
 export interface RecorridoCobros {
   id: IdRecorridoCobros;
@@ -69,6 +74,12 @@ export interface RecorridoCobros {
   titulo: string;
   /** Sin este permiso (o ninguno de la lista), ni botón ni recorrido. */
   permiso?: Permiso;
+  /**
+   * Las rutas de la app donde se ofrece en «Recorrido de esta pantalla» (el botón
+   * de la cabecera, CRM#1012), como en `App.jsx` (`/finanzas/ventas/:id`). Vacía:
+   * solo desde un botón de la propia pantalla.
+   */
+  rutas: string[];
   /** Los ficheros de la pantalla donde viven sus `data-recorrido` (para la prueba). */
   pantalla: string[];
   pasos: PasoCobros[];
@@ -83,20 +94,20 @@ export const pasosPara = (r: RecorridoCobros, can: (p: string) => boolean): Paso
   r.pasos.filter((p) => tienePermiso(p.permiso, can)).map(({ donde, titulo, texto }) => ({ donde, titulo, texto }));
 
 /**
- * La clave del navegador: de cada recorrido Y de cada persona. Se marca al abrirse,
- * así que no vuelve a salir solo; para verlo otra vez, «Ver recorrido».
+ * La clave del navegador: de cada recorrido Y de cada persona. Se marca al abrirse;
+ * desde la #1012 ya no decide nada (ninguno se abre solo).
  */
 export const claveRecorrido = (id: IdRecorridoCobros, userId?: number | string | null) =>
   `recorrido-${id}-visto-v1${userId != null ? `-u${userId}` : ''}`;
 
 const anclaje = (nombre: string) => `[data-recorrido="${nombre}"]`;
 
-const FINAL = 'No volverá a salir solo. Para repasarlo, pulsa «Ver recorrido» en esta pantalla cuando quieras.';
 
 export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 1 · Integraciones › Stripe y Links de pago (para admin) ──────────────────
   'integraciones-stripe': {
     id: 'integraciones-stripe',
+    rutas: ['/accounting/integrations'],
     titulo: 'Stripe y links de pago',
     permiso: 'integrations.view',
     pantalla: [
@@ -131,6 +142,18 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         texto: 'Lo que puede elegir la gestora al crear un link: cuánto descuento puede hacer como mucho, cuántos días dura el link, si admite cuotas y cuántas, y en qué monedas se cobra. Cambia lo que haga falta y pulsa «Guardar reglas».',
       },
       {
+        donde: anclaje('links-cobro-auto'),
+        permiso: 'links_pago.configurar',
+        titulo: 'Cobro automático de las cuotas',
+        texto: 'Encendido, la gestora puede hacer que Stripe cobre solas las cuotas de una venta con la tarjeta que guarda el alumno. Elige si se reintenta un cobro fallido y a los cuántos días. Apagarlo cancela en Stripe los cobros programados del campus.',
+      },
+      {
+        donde: anclaje('links-seguimiento'),
+        permiso: 'links_pago.configurar',
+        titulo: 'Seguimiento de los no pagados',
+        texto: 'A las cuántas horas se avisa a la gestora si el alumno abrió el link y no pagó, y si se le recuerda el pago por correo a las 24 y a las 72 horas.',
+      },
+      {
         donde: anclaje('links-webhook'),
         permiso: 'links_pago.configurar',
         titulo: 'El interruptor del campus',
@@ -143,117 +166,12 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     ],
   },
 
-  // ─── 2 · Crear un link de pago desde la venta (para la gestora) ──────────────
-  'link-de-pago': {
-    id: 'link-de-pago',
-    titulo: 'Crear un link de pago',
-    permiso: ['links_pago.crear', 'links_pago.ver_todos'],
-    pantalla: [
-      'modules/links-pago/components/LinksDePagoCard.tsx',
-      'modules/sales/pages/SaleDetailPage.tsx',
-      'modules/links-pago/components/AccionesCobroVenta.tsx',
-    ],
-    pasos: [
-      {
-        donde: anclaje('links-pago'),
-        titulo: 'Links de pago',
-        texto: 'Un link de pago es un enlace de Stripe: el alumno lo abre y paga con tarjeta. El cobro entra solo en esta venta. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('links-crear'),
-        permiso: 'links_pago.crear',
-        titulo: 'Crear el link',
-        texto: 'Elige el curso, el importe (sale lo que queda por cobrar), la moneda y cuántos días dura. Si bajas el precio más de lo que permite el campus, no te deja: pídeselo a un admin.',
-      },
-      {
-        donde: anclaje('links-crear'),
-        permiso: 'links_pago.crear',
-        titulo: 'Pago único',
-        texto: 'Cada link es un pago. Si paga todo de una vez, un solo link con lo que queda por cobrar.',
-      },
-      {
-        donde: anclaje('ventas-plan-pago'),
-        permiso: 'links_pago.crear',
-        titulo: 'Generar plan de pago',
-        texto: 'Si va a plazos, «Generar plan de pago» crea un link por cada cuota pendiente, con su importe y la fecha que pusiste. Cuando paga uno, se salda ESA cuota. «Copiar todos» te deja el mensaje para el alumno con todos los links.',
-      },
-      {
-        donde: anclaje('links-lista'),
-        titulo: 'Copiar y enviar',
-        texto: 'Aquí salen los links de esta venta y cómo van: Pendiente, Pagado, Caducado o Anulado. «Copiar» copia el enlace para pegarlo en WhatsApp o en un correo. Si te equivocaste, «Anular» y escribe por qué.',
-      },
-      {
-        donde: anclaje('venta-cuotas'),
-        titulo: 'Cuando el alumno paga',
-        texto: 'No tienes que apuntar nada: el cobro entra solo en «Pagos registrados» y la cuota se marca como cobrada, con la etiqueta Stripe. El link pasa a «Pagado».',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
-
-  // ─── 2 bis · Comercial › Links de pago: la pantalla (Diego, 19/11) ──────────────
-  'links-pago': {
-    id: 'links-pago',
-    titulo: 'Links de pago',
-    permiso: ['links_pago.crear', 'links_pago.ver_todos'],
-    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx', 'modules/links-pago/components/EmbudoLinks.tsx'],
-    pasos: [
-      {
-        titulo: 'Links de pago',
-        texto: 'Un link de pago es un enlace de Stripe: el alumno lo abre y paga con tarjeta, y el cobro entra solo en el CRM. Aquí los creas y ves cómo va cada uno. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('links-pantalla-crear'),
-        permiso: 'links_pago.crear',
-        titulo: 'Crear link de pago',
-        texto: 'Pulsa aquí: eliges el curso, «Pago único» o «Inicial + cuotas» y «Crear link». No hace falta el nombre: al pagar, el CRM busca la ficha del alumno por su correo o la crea, y le apunta la venta.',
-      },
-      // Los dos recorridos de Diego (21/11, CRM#982): «son dos recorridos, hay que hacerlos».
-      {
-        donde: anclaje('links-pantalla-unico'),
-        permiso: 'links_pago.crear',
-        titulo: 'Pago único con descuento',
-        texto: 'Sale el precio del curso y lo puedes cambiar. Pon un descuento en € o en % y verás el total, con el precio de antes tachado. El link cobra ese total y la venta se crea por él. El tope de descuento del campus sigue mandando.',
-      },
-      {
-        donde: anclaje('links-pantalla-inicial'),
-        permiso: 'links_pago.crear',
-        titulo: 'Inicial más cuotas',
-        texto: 'El total (también con descuento), la inicial que cobra el link y en cuántas cuotas va lo que queda. Ves cuánto es cada una y desde qué fecha. Al pagar, la inicial es la cuota 1 de la venta y Stripe cobra las demás solas, una al mes.',
-      },
-      {
-        titulo: 'Al registrar la venta, sale solo',
-        texto: 'Lo más rápido: al registrar la venta («Convertir lead») deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cada cuota con su fecha, y si hay inicial, marca «La inicial se paga con link de pago» y lleva el suyo. Al terminar te los da todos para copiar.',
-      },
-      // El embudo por gestora y por campus (CRM#987).
-      {
-        donde: anclaje('links-embudo'),
-        titulo: 'Cómo van tus links',
-        texto: 'Para el periodo que elijas: los links creados, cuántos se abrieron y cuántos se pagaron (con su %), y lo cobrado. En las cuotas que cobra Stripe solo: las cobradas, las que fallaron y las pendientes. Por gestora o por campus; cada uno ve lo suyo.',
-      },
-      {
-        donde: anclaje('links-pantalla-filtros'),
-        titulo: 'Por estado',
-        texto: 'Pendientes, abiertos, pagados, caducados o anulados. Cada gestora ve los suyos; quien ve los de todos, los de sus campus.',
-      },
-      {
-        donde: anclaje('links-pantalla-lista'),
-        titulo: 'Copiar, abrir o anular',
-        texto: 'Cada link con su alumno, su programa y la venta a la que va. «Copiar» lo deja listo para pegarlo en WhatsApp o en un correo; si te equivocaste, «Anular» y escribe por qué. Cuando lo paga, el cobro entra en su venta y salda su cuota.',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
+  // ─── 2 · Links de pago y cuotas: en `recorridosLinksYCuotas.ts` (CRM#1012) ───
 
   // ─── 3 · Ficha de la venta › «Cargos de Stripe sin enlazar» ────────────────────
   'cargos-sin-enlazar': {
     id: 'cargos-sin-enlazar',
+    rutas: ['/ventas/:id'],
     titulo: 'Cargos de Stripe sin enlazar',
     permiso: 'stripe.edit',
     pantalla: [
@@ -295,6 +213,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 4 · Facturas › Anular ───────────────────────────────────────────────────
   'anular-factura': {
     id: 'anular-factura',
+    rutas: ['/accounting/facturas'],
     titulo: 'Anular una factura',
     permiso: 'facturas.gestionar',
     pantalla: [
@@ -341,6 +260,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 5 · Pagos Stripe (para admin) ───────────────────────────────────────────
   'pagos-stripe': {
     id: 'pagos-stripe',
+    rutas: ['/accounting/pagos-stripe'],
     titulo: 'Pagos de Stripe',
     permiso: 'stripe.view',
     pantalla: ['modules/accounting/pages/StripePaymentsPage.tsx'],
@@ -390,6 +310,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 5 bis · Disputas de Stripe (para admin) ─────────────────────────────────
   'disputas-stripe': {
     id: 'disputas-stripe',
+    rutas: ['/accounting/disputas'],
     titulo: 'Disputas de Stripe',
     permiso: 'stripe.edit',
     pantalla: ['modules/accounting/pages/DisputasStripePage.tsx'],
@@ -428,6 +349,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 6 · Catálogo › Cursos de Moodle (gemela de CRM#976 / CRM#957, para admin y soporte) ─
   'cursos-producto': {
     id: 'cursos-producto',
+    rutas: ['/products/cursos-moodle'],
     titulo: 'Cursos de Moodle de cada producto',
     permiso: 'moodle.cursos_producto',
     pantalla: ['modules/moodle/pages/CursosDeProductosPage.tsx'],
@@ -471,9 +393,11 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // salta solo.
   ventas: {
     id: 'ventas',
+    rutas: ['/accounting/income'],
     titulo: 'Ventas',
     permiso: 'ventas.view',
     pantalla: [
+      'modules/links-pago/components/AccionesCobroVenta.tsx',
       'modules/accounting/pages/IncomePage.tsx',
       'modules/sales/components/MyGoalCard.tsx',
       'modules/sales/components/TopProductsCard.tsx',
@@ -534,6 +458,12 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         texto: 'Ventas y cuotas de estas fechas, cada una con su etiqueta: VENTA es nueva; CUOTA, un cobro de una venta anterior; COMPARTIDO, atendida entre dos gestoras. Pulsa una fila para abrir la ficha del prospecto.',
       },
       {
+        donde: anclaje('ventas-crear-link'),
+        permiso: 'links_pago.crear',
+        titulo: 'Link y Plan en cada venta',
+        texto: '«Link» crea un link de pago por lo pendiente de esa venta; «Plan», uno por cada cuota (o el cobro automático de Stripe). Solo salen en las ventas con algo por cobrar.',
+      },
+      {
         donde: anclaje('ventas-nueva'),
         titulo: 'Nueva venta',
         texto: EN_ESTE_CRM.ventasNueva,
@@ -552,5 +482,11 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   ...RECORRIDOS_NOVEDADES,
   // ─── 9 · Las novedades del 18/11 (#611, tanda B; la A va en el 8): `recorridosNovedadesB.ts` ───
   ...RECORRIDOS_NOVEDADES_B,
+
+  // ─── 9 · El día a día de una gestora (#619, tanda C): `recorridosGestora.ts` ───
+  ...RECORRIDOS_GESTORA,
+
+  // ─── Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
+  ...RECORRIDOS_LINKS,
 };
 

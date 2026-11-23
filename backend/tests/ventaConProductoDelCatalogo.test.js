@@ -106,6 +106,7 @@ describe('el alta por el formulario de Ventas', () => {
         importe_pagado: 60,
         metodo_pago: 'transferencia',
         fecha_pago: FECHA,
+        fecha_inicio: FECHA,
       });
     expect(res.status, JSON.stringify(res.body)).toBe(201);
     const id = res.body.data.conversion_id;

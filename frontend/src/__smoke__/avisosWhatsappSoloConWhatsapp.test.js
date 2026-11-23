@@ -14,7 +14,7 @@ if (typeof window !== 'undefined') {
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { tieneWhatsapp, PERMISOS_DE_LOS_AVISOS } from '@/shared/lib/roles';
+import { tieneWhatsapp, PERMISOS_DE_LOS_AVISOS, PERMISO_DEL_AVISO } from '@/shared/lib/roles';
 
 /**
  * QA de Diego, 22/10, punto 8: «El tutor recibe 403 cada pocos segundos en
@@ -39,8 +39,17 @@ describe('a quién le corresponde WhatsApp', () => {
     expect(tieneWhatsapp({ 'whatsapp.usar': true })).toBe(true);
   });
 
-  it('y a quien solo supervisa el de otras: el servidor también le contesta', () => {
-    expect(tieneWhatsapp({ 'whatsapp.usar': false, 'whatsapp.supervisar': true })).toBe(true);
+  // Errores de producción del 23/11: la ruta le deja pasar, pero `/sin-leer` es su
+  // línea propia y el controlador pide «Usar su WhatsApp»: 403 SIN_WHATSAPP.
+  it('a quien solo supervisa el de otras, no: sin línea propia no hay avisos suyos', () => {
+    expect(tieneWhatsapp({ 'whatsapp.usar': false, 'whatsapp.supervisar': true })).toBe(false);
+  });
+
+  it('con la casilla «usa WhatsApp» apagada en su ficha, no (aunque el mapa sea de antes)', () => {
+    expect(tieneWhatsapp({ 'whatsapp.usar': true }, { usa_whatsapp: false })).toBe(false);
+    // null = la columna no está o nunca se tocó: manda el permiso.
+    expect(tieneWhatsapp({ 'whatsapp.usar': true }, { usa_whatsapp: null })).toBe(true);
+    expect(tieneWhatsapp({ 'whatsapp.usar': true }, { usa_whatsapp: true })).toBe(true);
   });
 
   it('a quien se lo han quitado en «Ver permisos», no', () => {
@@ -67,6 +76,12 @@ describe('el mismo criterio que el servidor', () => {
     expect([...PERMISOS_DE_LOS_AVISOS].sort()).toEqual(claves.sort());
   });
 
+  it('y para la línea propia el controlador pide «Usar su WhatsApp», que es lo que mira el aviso', () => {
+    const chat = readFileSync(resolve(process.cwd(), '../backend/src/modules/whatsapp/chat.controller.js'), 'utf8');
+    expect(PERMISOS_DE_LOS_AVISOS).toContain(PERMISO_DEL_AVISO);
+    expect(chat).toContain(`if (!(await puedeWa(req, '${PERMISO_DEL_AVISO}'))) {`);
+  });
+
   it('y `usaOSupervisa` es lo que protege lo que preguntan los avisos', () => {
     expect(servidor).toMatch(/router\.get\('\/sin-leer', usaOSupervisa,/);
     expect(servidor).toMatch(/router\.get\('\/respuesta-llamada', usaOSupervisa,/);
@@ -75,7 +90,7 @@ describe('el mismo criterio que el servidor', () => {
   // En ISEIE solo está el aviso de mensajes (el de llamadas es de MultiCRM).
   it('AppLayout monta el aviso según tieneWhatsapp, con el mapa de permisos', () => {
     const layout = readFileSync(resolve(process.cwd(), 'src/shared/components/layout/AppLayout.jsx'), 'utf8');
-    expect(layout).toMatch(/const sinWhatsapp = !tieneWhatsapp\(permissions\)/);
+    expect(layout).toMatch(/const sinWhatsapp = !tieneWhatsapp\(permissions, user\)/);
     expect(layout).toMatch(/\{!sinWhatsapp && \(\s*<Suspense fallback=\{null\}>\s*<AvisoDeMensaje \/>/);
     // Ya no se decide por el rol: el tutor también recibía un 403 (QA del 22/10).
     expect(layout).not.toMatch(/soloEsColaborador/);

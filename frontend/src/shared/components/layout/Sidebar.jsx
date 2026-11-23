@@ -325,6 +325,16 @@ export const SECCIONES_DE_ANTES = [
 // de ISEIE no llevan icono: solo el nombre.
 export const NAV_SECTIONS = reagruparMenu(SECCIONES_DE_ANTES);
 
+/**
+ * El `data-recorrido` de cada bloque del menú: «menu-» y su nombre sin tildes
+ * («Captación y publicidad» → `menu-captacion-y-publicidad`). Lo señalan el
+ * recorrido del menú (#611) y el recorrido general según el rol (#681, gemela
+ * de CRM#1012).
+ */
+export function anclaDelBloque(label) {
+  return `menu-${String(label).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')}`;
+}
+
 // Interruptor de compilacion para dejar una parte fuera de una instalacion sin
 // borrar su codigo. Se usa con WhatsApp, que en produccion todavia no se enciende
 // —esta en revision— pero viaja en el mismo build que el resto.
@@ -791,7 +801,9 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
         // todos los items se ven como iconos en línea.
         if (collapsed) {
           return (
-            <div key={section.label} className="space-y-0.5">
+            // Plegado también lleva su anclaje: el recorrido general (#681) lo señala.
+            // Solo hay menú plegado en el PC (el del cajón nunca lo está).
+            <div key={section.label} className="space-y-0.5" data-recorrido={anclaDelBloque(section.label)}>
               {items.map(pintar)}
             </div>
           );
@@ -810,7 +822,7 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
                 : section.label === 'Comercial' ? 'menu-comercial'
                   : section.label === 'Académico' ? 'menu-academico'
                     : section.label === 'Finanzas' ? 'menu-finanzas'
-                      : section.label === 'Configuración' ? 'menu-configuracion' : undefined}
+                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
           >
             <button
               type="button"
@@ -951,7 +963,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
               Ctrl K
             </kbd>
           </button>
-          {/* El recorrido del menú por bloques (#611): sale solo la primera vez. */}
+          {/* El recorrido del menú por bloques (#611): solo con el botón (#681). */}
           {conRecorrido && <VerRecorrido id="menu-bloques" compacto />}
         </div>
       )}

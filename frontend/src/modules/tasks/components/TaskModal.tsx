@@ -15,6 +15,7 @@ import {
   DEFAULT_COLUMNS, TAG_COLORS, ZONA_OFICINA, armarCambiosDeTarea, fromDateInput, puedeEditarTarea, tagChip, toDateInput,
 } from '../lib/taskUi';
 import { fechaYHora } from '../lib/periodo';
+import { puedeVerElEquipo } from '../lib/verElEquipo';
 import type {
   Assignee,
   TagColor,
@@ -45,6 +46,8 @@ interface TaskModalProps {
   canEdit?: boolean;
   /** `tasks.view_all`: con «Editar», es el admin, que edita todas. */
   canViewAll?: boolean;
+  /** `tasks.manage`: también ve la gente de cualquier equipo (`GET /tasks/assignees`). */
+  canManage?: boolean;
   canArchiveAny: boolean;
   assignees: Assignee[];
   /** Los campus que se pueden elegir (en ISEIE, todos los de la persona). */
@@ -80,7 +83,7 @@ export function motivoDelError(err: unknown): string {
 
 export function TaskModal({
   open, taskId, initialStatus = 'por_hacer', initialProjectId = null, defaultAssigneeId = null, onClose, onChanged,
-  currentUserId, canClose = false, canAssign, canEdit = true, canViewAll = false, canArchiveAny, assignees, projects,
+  currentUserId, canClose = false, canAssign, canEdit = true, canViewAll = false, canManage = false, canArchiveAny, assignees, projects,
   areas = [], externalProjects = [], columns = [], equipos = [], misEquipos = [], initialTeamId = null, esSuperadmin = false,
 }: TaskModalProps) {
   useEscapeKey(onClose, open);
@@ -165,14 +168,17 @@ export function TaskModal({
     setTeamId(t.team_id ?? '');
   }, [currentUserId]);
 
+  // La gente del equipo, solo a quien el servidor se la enseña (23/11: a un
+  // colaborador sin «ver el equipo» le contestaba 403 al abrir cada tarea).
+  const veGenteDelEquipo = puedeVerElEquipo({ viewAll: canViewAll, assign: canAssign, manage: canManage }, equiposDondeDelego, teamId);
   useEffect(() => {
-    if (!open || !teamId) { setGenteDelEquipo(null); return; }
+    if (!open || !teamId || !veGenteDelEquipo) { setGenteDelEquipo(null); return; }
     let vivo = true;
     tasksApi.getAssignees({ team_id: Number(teamId) })
       .then((g) => { if (vivo) setGenteDelEquipo(g); })
       .catch(() => { if (vivo) setGenteDelEquipo(null); });
     return () => { vivo = false; };
-  }, [open, teamId]);
+  }, [open, teamId, veGenteDelEquipo]);
 
   // Los equipos de una persona: de la lista de responsables o, si es quien mira,
   // los suyos. null si no se sabe (entonces lo decide el servidor al guardar).

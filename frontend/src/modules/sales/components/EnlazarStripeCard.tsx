@@ -94,7 +94,7 @@ export default function EnlazarStripeCard({ conversionId, onEnlazado }: {
         <h3 className="font-semibold flex items-center gap-2">
           <LinkSimple size={16} weight="bold" /> Cargos de Stripe sin enlazar ({cargos.length})
         </h3>
-        {/* El recorrido (18/11): sale solo la primera vez que hay cargos sueltos. */}
+        {/* El recorrido (18/11): solo con el botón (CRM#1012). */}
         <VerRecorrido id="cargos-sin-enlazar" compacto />
       </div>
       <p className="text-xs text-muted-foreground mb-3">

@@ -7,6 +7,7 @@ import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
 import { casaPorTrozos } from '@/shared/lib/buscarPorTrozos';
 import { toast } from '@/shared/hooks/useToast';
+import VentasSinFechaInicio from '@/modules/conversions/components/VentasSinFechaInicio';
 import {
   cursosProductoApi, type CursoDelMoodle, type ProductoConCurso, type ResumenCursosProducto,
 } from '../api/cursosProducto.api';
@@ -193,6 +194,8 @@ export default function CursosDeProductosPage() {
               <span className="shrink-0 text-xs font-semibold underline">Ver</span>
             </button>
           )}
+          {/* Las ventas ya hechas de productos con curso que no tienen fecha de inicio (CRM#1036). */}
+          <VentasSinFechaInicio projectId={campus.id} />
 
           {/* Buscar y filtrar. */}
           <div className="flex flex-wrap items-center gap-2" data-recorrido="cursos-producto-filtros">

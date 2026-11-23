@@ -59,7 +59,9 @@ export default function AvisoConectarStripe({ campus, onIr }: {
     <div role="status" data-testid="aviso-conectar-stripe" data-recorrido="links-conectar-stripe"
       className="rounded-md border border-warning/40 bg-warning-soft p-3 text-sm text-warning-soft-foreground space-y-2">
       <p className="font-semibold flex items-center gap-1.5">
-        <PlugsConnected size={16} weight="bold" aria-hidden="true" /> Conectar Stripe para cobros automáticos
+        <PlugsConnected size={16} weight="bold" aria-hidden="true" />
+        {/* Diego, 23/11: un campus sin clave de Stripe tiene que decirlo claro. */}
+        {lista.some((c) => c.codigo === 'sin_clave') ? 'FALTA CONECTAR STRIPE' : 'Conectar Stripe para cobros automáticos'}
       </p>
       <ul className="space-y-2">
         {lista.map((c) => (
