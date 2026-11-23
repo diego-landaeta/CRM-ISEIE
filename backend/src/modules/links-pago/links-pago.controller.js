@@ -12,6 +12,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query } from '../../shared/config/db.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
+import { cobroAutomaticoActivo } from '../../shared/config/soloEnPruebas.js';
 import { listaDelAmbito, campusDeTodos, campusParaRecortar, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { alcanceComercial, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
 
@@ -278,6 +279,22 @@ export async function cuotasDisponibles(req, res, next) {
       cfg, puedeCobroAuto: await tienePermiso(req, 'links_pago.cobro_automatico'),
     });
     res.json({ success: true, data: { project_id: parsed.data.projectId, ...data } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/conectar-stripe (con el ámbito de la pantalla: ?projectId / ?issuerId)
+// El aviso de arriba de «Links de pago» (CRM#992): los campus del ámbito de quien
+// mira que no pueden cobrar cuotas solas por la clave de Stripe (no la tienen, o
+// no tiene permiso de suscripciones). Con el interruptor del servidor apagado no
+// se mira ningún campus: `activo: false` y el motivo.
+export async function conectarStripe(req, res, next) {
+  try {
+    if (!cobroAutomaticoActivo()) {
+      return res.json({ success: true, data: { activo: false, codigo: 'apagado_entorno', motivo: cobroAuto.MOTIVO_APAGADO, campus: [] } });
+    }
+    const projectIds = (await listaDelAmbito(req)) || await campusDeTodos(req);
+    const campus = await cobroAuto.campusPorConectar(projectIds);
+    res.json({ success: true, data: { activo: true, codigo: null, motivo: null, campus } });
   } catch (err) { next(err); }
 }
 

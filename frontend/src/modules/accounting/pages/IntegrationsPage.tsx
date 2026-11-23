@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
@@ -89,6 +89,18 @@ function fmt(d: string | null): string {
 export default function IntegrationsPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
   const pid = activeProject?.id;
+  /*
+    ABRIR EN SU CLAVE DE LINKS (CRM-ISEIE#667, gemela de CRM#992): el aviso «Conectar
+    Stripe para cobros automáticos» trae aquí con `?seccion=links-pago`. ISEIE es un
+    solo campus: no hay que cambiar de campus, solo bajar a la tarjeta y marcarla.
+  */
+  const [irALinks] = useState(() => typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('seccion') === 'links-pago');
+  useEffect(() => {
+    if (!irALinks) return undefined;
+    const t = setTimeout(() => document.getElementById('integracion-links-pago')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
+    return () => clearTimeout(t);
+  }, [irALinks]);
   // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
@@ -151,7 +163,12 @@ export default function IntegrationsPage() {
               producción, con LINKS_PAGO_EN_PRODUCCION=1. */}
           {/* `key`: al cambiar de campus la tarjeta empieza de cero; si no,
               enseñaba un momento el descuento del campus anterior. */}
-          {linksPago && <StripeLinksCard key={pid} projectId={pid} />}
+          {linksPago && (
+            <div id="integracion-links-pago" data-testid="integracion-links-pago"
+              className={`scroll-mt-4 rounded-lg ${irALinks ? 'ring-2 ring-primary' : ''}`}>
+              <StripeLinksCard key={pid} projectId={pid} />
+            </div>
+          )}
           <BrevoCard projectId={pid} />
           <MoodleCard projectId={pid} />
         </div>

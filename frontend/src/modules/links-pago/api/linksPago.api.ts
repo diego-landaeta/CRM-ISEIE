@@ -141,10 +141,23 @@ export function crearLink(cuerpo: {
 }
 
 /** Si «Cuotas» se puede en el campus y, si no, por qué (20/11). */
-export interface CuotasDisponibles { disponible: boolean; motivo: string | null; cuotas_max: number | null }
+/*
+  `codigo` (CRM#992): por qué no. `sin_clave` y `clave_sin_permiso` se arreglan en
+  Integraciones › Links de pago (aviso «Conectar Stripe para cobros automáticos»);
+  `apagado_entorno`, en ningún sitio de la pantalla. El resto, solo el texto.
+*/
+export interface CuotasDisponibles { disponible: boolean; codigo?: string | null; motivo: string | null; cuotas_max: number | null }
 
 export function cuotasDisponibles(projectId: number) {
   return client.get<CuotasDisponibles>('/links-pago/cuotas-disponibles', { params: { projectId } });
+}
+
+export interface CampusPorConectar { project_id: number; nombre: string; codigo: string; motivo: string }
+export interface ConectarStripe { activo: boolean; codigo: string | null; motivo: string | null; campus: CampusPorConectar[] }
+
+/** Los campus del ámbito sin clave de Stripe o sin su permiso de suscripciones (CRM#992). */
+export function conectarStripe(ambito?: { projectId?: number; issuerId?: number }) {
+  return client.get<ConectarStripe>('/links-pago/conectar-stripe', { params: { ...(ambito || {}) } });
 }
 
 export function anularLink(id: number, motivo: string) {
