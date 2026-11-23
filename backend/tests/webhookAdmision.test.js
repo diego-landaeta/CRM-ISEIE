@@ -397,8 +397,8 @@ describe('se une a la persona («que se sincronicen con el mail»)', () => {
   });
 
   it('los datos de la solicitud pasan a la ficha fiscal SOLO donde está vacía: nunca encima (13/11)', async () => {
-    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, direccion_fiscal, codigo_postal_fiscal)
-                         VALUES ($1, 'Fina Fiscal', $2, 'Calle Vieja 9', '  ') RETURNING id`, [PROYECTO.id, correo('fina')]);
+    const [l] = await q(`INSERT INTO leads (project_id, nombre, email, direccion_fiscal, codigo_postal_fiscal, pais_fiscal)
+                         VALUES ($1, 'Fina Fiscal', $2, 'Calle Vieja 9', '  ', 'España') RETURNING id`, [PROYECTO.id, correo('fina')]);
     await admitir({ nombre: 'Fina', email: correo('fina'), dni: '33333333P', direccion: 'Calle Nueva 1', pais: 'México', ciudad: 'Puebla', codigo_postal: '72000' });
     const [f] = await q('SELECT identificacion_fiscal, direccion_fiscal, ciudad_fiscal, codigo_postal_fiscal, pais_fiscal FROM leads WHERE id = $1', [l.id]);
     expect(f).toEqual({
