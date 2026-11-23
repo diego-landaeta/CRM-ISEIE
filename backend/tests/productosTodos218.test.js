@@ -84,16 +84,22 @@ describe('#218 · el catálogo de todos sus campus', () => {
     expect(mios.find((p) => p.project_id === PSIKO).proyecto_nombre).toBe(`${MARCA} psiko`);
   });
 
-  it('el campus de otra empresa no se cuela ni pidiéndolo', async () => {
+  // Diego, 23/11/2026: «los productos los ven todos, de todos». Antes el campus
+  // de otra empresa no se colaba ni pidiéndolo; ahora se ve, solo para leer.
+  it('el campus de otra empresa, pidiéndolo, también se ve', async () => {
     const res = await pedir(ADMIN, `/api/products/ambito?projectIds=${ICT}`);
-    expect(res.body.data.some((p) => p.project_id === ICT)).toBe(false);
+    expect(res.status).toBe(200);
+    expect(campusDe(res)).toEqual([ICT]);
   });
 
-  it('con una empresa, los de esa empresa; el superadmin, también los de otras', async () => {
+  it('con una empresa, los de esa empresa; con «Todos», los de todos (también para una gestora)', async () => {
     const conEmpresa = await pedir(ADMIN, `/api/products/ambito?issuerId=${CEDIA}`);
     expect(campusDe(conEmpresa).every((c) => [PSIKO, FONO].includes(c))).toBe(true);
-    const todo = await pedir(SUPER, '/api/products/ambito');
-    expect(campusDe(todo)).toEqual(expect.arrayContaining([PSIKO, FONO, ICT]));
+    for (const u of [SUPER, ADMIN, GESTORA]) {
+      const todo = await pedir(u, '/api/products/ambito');
+      expect(todo.status, u.role).toBe(200);
+      expect(campusDe(todo), u.role).toEqual(expect.arrayContaining([PSIKO, FONO, ICT]));
+    }
   });
 
   it('`/:id` sigue siendo un producto: «ambito» no se confunde con un id', async () => {
