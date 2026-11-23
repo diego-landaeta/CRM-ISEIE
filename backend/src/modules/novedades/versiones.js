@@ -13,6 +13,17 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
+    "version": "2.9.5",
+    "fecha": "2026-11-23",
+    "titulo": "Versión 2.9.5",
+    "intro": "El país de los clientes, de verdad.",
+    "grupos": [],
+    "arreglos": [
+      "Un prospecto nuevo ya no nace «de España»: el país lo pone su ficha, el formulario de datos fiscales o el prefijo de su teléfono; si no se sabe, se pide al facturar.",
+      "Corregido el país de los prospectos que figuraban como España con teléfono de otro país y sin DNI ni código postal español."
+    ]
+  },
+  {
     "version": "2.9.4",
     "fecha": "2026-11-23",
     "titulo": "Versión 2.9.4",
