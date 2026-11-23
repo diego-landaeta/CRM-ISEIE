@@ -178,7 +178,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   const [installments, setInstallments] = useState<Installment[]>([]);
   const [installmentsDirty, setInstallmentsDirty] = useState(false);
   /*
-    CON COBRO, LA FACTURA DE ESE COBRO (CRM#1043, gemela del CRM#1043).
+    CON COBRO, LA FACTURA DE ESE COBRO (#708, gemela de CRM#1043).
 
     Ticket de soporte del 23/11 (360): con la primera cuota cobrada, la gestora
     solo vio «¿proforma?»; dijo que no y la venta se quedó sin la factura de su
