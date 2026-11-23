@@ -597,6 +597,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| conectarStripe | `GET /api/links-pago/conectar-stripe` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verPlan | `GET /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | generarPlan | `POST /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |

@@ -52,7 +52,7 @@ import { logger } from '../../shared/utils/logger.js';
   importe programado nunca pasa de lo pendiente de la venta.
 
   Apagado en producción salvo COBRO_AUTOMATICO_EN_PRODUCCION=1, y por campus
-  (Integraciones › Links de pago, apagado de serie).
+  (Integraciones › Links de pago; encendido en todos los campus desde la 312, CRM#992).
 
   LA CLAVE: la de escritura del campus (`stripe_links`). Además de lo de los
   links necesita Subscription Schedules, Subscriptions e Invoices de escritura
@@ -158,19 +158,84 @@ export function textoConsentimiento({ campus, cuotas = [] }) {
 
 // ─── Disponibilidad y estado de una venta ───────────────────────────────────
 
-/** ¿Se puede activar en este campus? `{ disponible, motivo, campus }`. Sin llamar a Stripe. */
+/*
+  EL MOTIVO, CON SU CÓDIGO (CRM#992; Diego, 21/11/2026: «todos deben tenerlo, y
+  el que no, que salga un anuncio: conectar Stripe para cobros automáticos, y al
+  tocarlo que los mande al sitio de edición»).
+
+  Cada «no se puede» lleva un `codigo` además del texto, para que la pantalla
+  sepa qué enseñar sin leer el texto:
+    · `sin_clave` y `clave_sin_permiso`: le falta la clave de links o la clave no
+      puede programar cobros. Son los que se arreglan en Integraciones › Links de
+      pago: la pantalla saca «Conectar Stripe para cobros automáticos» y lleva
+      allí (`CODIGOS_DE_CONECTAR`);
+    · `apagado_entorno`: el interruptor del servidor (COBRO_AUTOMATICO_EN_PRODUCCION)
+      está apagado. No se arregla en ninguna pantalla;
+    · el resto (`campus_no_permitido`, `cuotas_no_admitidas`, `sin_euros`,
+      `sin_permiso`, `clave_live_en_pruebas`, `stripe_no_contesta`,
+      `campus_no_encontrado`): el texto de siempre.
+*/
+export const CODIGOS_DE_CONECTAR = Object.freeze(['sin_clave', 'clave_sin_permiso']);
+export const MOTIVO_APAGADO = 'El cobro automático de cuotas no está activo en este entorno.';
+
+/** ¿Se puede activar en este campus? `{ disponible, codigo, motivo, campus }`. Sin llamar a Stripe. */
 export async function disponibilidad(projectId, { env = process.env } = {}) {
   if (!cobroAutomaticoActivo(env)) {
-    return { disponible: false, motivo: 'El cobro automático de cuotas está apagado en este servidor.' };
+    return { disponible: false, codigo: 'apagado_entorno', motivo: MOTIVO_APAGADO };
   }
   const campus = await model.delCampus(projectId);
   if (!campus?.permitido) {
-    return { disponible: false, motivo: 'Este campus no tiene permitido el cobro automático. Lo enciende un admin en Integraciones › Links de pago.', campus };
+    return { disponible: false, codigo: 'campus_no_permitido', motivo: 'Este campus no tiene permitido el cobro automático. Lo enciende un admin en Integraciones › Links de pago.', campus };
   }
   if (!(await linksService.claveDeEscritura(projectId))) {
-    return { disponible: false, motivo: 'Este campus no tiene la clave de links de pago (Integraciones › Links de pago).', campus };
+    return { disponible: false, codigo: 'sin_clave', motivo: 'Este campus no tiene la clave de links de pago de Stripe: sin ella no se pueden cobrar las cuotas solas.', campus };
   }
-  return { disponible: true, motivo: null, campus };
+  return { disponible: true, codigo: null, motivo: null, campus };
+}
+
+/**
+ * ¿Puede ESTE CAMPUS cobrar cuotas solas? Lo del servidor, el campus y su clave,
+ * preguntando a Stripe si la clave puede programar cobros (no cobra nada). No
+ * mira a la persona. `{ disponible, codigo, motivo }`. Nunca lanza por Stripe.
+ */
+export async function cobroDelCampus(projectId) {
+  const no = (codigo, motivo) => ({ disponible: false, codigo, motivo });
+  const disp = await disponibilidad(projectId);
+  if (!disp.disponible) return no(disp.codigo, disp.motivo);
+  let clave;
+  try {
+    clave = await linksService.claveObligatoria(projectId);
+  } catch (err) {
+    return no(err?.code === 'CLAVE_LIVE_EN_PRUEBAS' ? 'clave_live_en_pruebas' : 'sin_clave', err.message);
+  }
+  try {
+    await stripe.comprobarPermisosDeCobro(clave);
+  } catch (err) {
+    if (err instanceof stripe.ErrorDeStripe && (err.status === 401 || err.status === 403)) {
+      return no('clave_sin_permiso', `La clave de links de pago de este campus no tiene permiso de suscripciones: en Stripe le faltan ${PERMISOS_QUE_FALTAN}. `
+        + 'Añádeselos en el panel de Stripe o pon otra clave que los tenga.');
+    }
+    return no('stripe_no_contesta', `Stripe no ha contestado al comprobar la clave: ${err.message}`);
+  }
+  return { disponible: true, codigo: null, motivo: null };
+}
+
+/**
+ * Los campus de la lista que no pueden cobrar cuotas solas por la clave
+ * (`CODIGOS_DE_CONECTAR`), para el aviso de «Links de pago» (CRM#992). Solo los
+ * que admiten cuotas en euros: a los demás no les sirve la clave para esto.
+ * `[{ project_id, nombre, codigo, motivo }]`, por nombre.
+ */
+export async function campusPorConectar(projectIds) {
+  const ids = [...new Set((projectIds || []).map(Number).filter((n) => Number.isInteger(n) && n > 0))];
+  const filas = await Promise.all(ids.map(async (id) => {
+    const cfg = await linksModel.config(id);
+    if (!cfg?.cuotas_admitidas || !(cfg.monedas || []).includes('EUR')) return null;
+    const r = await cobroDelCampus(id);
+    if (!CODIGOS_DE_CONECTAR.includes(r.codigo)) return null;
+    return { project_id: id, nombre: (await linksModel.nombreDelCampus(id)) || `Campus ${id}`, codigo: r.codigo, motivo: r.motivo };
+  }));
+  return filas.filter(Boolean).sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'));
 }
 
 /*
@@ -181,31 +246,18 @@ export async function disponibilidad(projectId, { env = process.env } = {}) {
   se puede y por qué: el campus no admite cuotas o no tiene permitido el cobro
   automático, la persona no tiene su permiso, o la clave de Stripe no puede
   programar cobros (se pregunta a Stripe, sin cobrar nada).
-  `{ disponible, motivo, cuotas_max }`. Nunca lanza.
+  `{ disponible, codigo, motivo, cuotas_max }` (el código, en `CODIGOS_DE_CONECTAR`
+  y arriba). Nunca lanza.
 */
 export async function paraUnLinkEnCuotas(projectId, { cfg, puedeCobroAuto }) {
-  const no = (motivo) => ({ disponible: false, motivo, cuotas_max: cfg?.cuotas_max ?? null });
-  if (!cfg) return no('Campus no encontrado.');
-  if (!cfg.cuotas_admitidas) return no('Este campus no admite pagos en cuotas. Lo cambia un admin en Integraciones › Links de pago.');
-  if (!cfg.monedas.includes('EUR')) return no('Las cuotas van en euros y este campus no cobra en EUR.');
-  if (!puedeCobroAuto) return no('No tienes el permiso «Cobro automático de cuotas»: pídeselo a un admin.');
-  const disp = await disponibilidad(projectId);
-  if (!disp.disponible) return no(disp.motivo);
-  let clave;
-  try {
-    clave = await linksService.claveObligatoria(projectId);
-  } catch (err) {
-    return no(err.message);
-  }
-  try {
-    await stripe.comprobarPermisosDeCobro(clave);
-  } catch (err) {
-    if (err instanceof stripe.ErrorDeStripe && (err.status === 401 || err.status === 403)) {
-      return no(`La clave de links de pago de este campus no puede programar cobros: en Stripe le faltan los permisos ${PERMISOS_QUE_FALTAN}. Los añade Diego en la clave del panel de Stripe.`);
-    }
-    return no(`Stripe no ha contestado al comprobar la clave: ${err.message}`);
-  }
-  return { disponible: true, motivo: null, cuotas_max: cfg.cuotas_max };
+  const no = (codigo, motivo) => ({ disponible: false, codigo, motivo, cuotas_max: cfg?.cuotas_max ?? null });
+  if (!cfg) return no('campus_no_encontrado', 'Campus no encontrado.');
+  if (!cfg.cuotas_admitidas) return no('cuotas_no_admitidas', 'Este campus no admite pagos en cuotas. Lo cambia un admin en Integraciones › Links de pago.');
+  if (!cfg.monedas.includes('EUR')) return no('sin_euros', 'Las cuotas van en euros y este campus no cobra en EUR.');
+  if (!puedeCobroAuto) return no('sin_permiso', 'No tienes el permiso «Cobro automático de cuotas»: pídeselo a un admin.');
+  const campus = await cobroDelCampus(projectId);
+  if (!campus.disponible) return no(campus.codigo, campus.motivo);
+  return { disponible: true, codigo: null, motivo: null, cuotas_max: cfg.cuotas_max };
 }
 
 function tarjetaDe(ca) {
