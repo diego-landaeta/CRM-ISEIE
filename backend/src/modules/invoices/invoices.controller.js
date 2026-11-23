@@ -795,6 +795,18 @@ export async function generarDeCola(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/invoices/cola/venta/:conversionId — los cobros de esa venta que
+// esperan en la cola y las facturas que ya tiene (CRM#1043).
+export async function cobrosDeVentaEnCola(req, res, next) {
+  try {
+    const conversionId = Number(req.params.conversionId);
+    if (!Number.isInteger(conversionId) || conversionId <= 0) throw new AppError('Venta no valida', 400, 'BAD_ID');
+    const data = await service.cobrosDeVentaEnCola(conversionId, { personas: await alcanceDeLider(req.user) });
+    // Si puede emitirlos aquí mismo: el botón «Emitir ya» solo sale con «Emitir desde la cola».
+    res.json({ success: true, data: { ...data, puede_emitir: await tienePermiso(req, 'facturas.cola') } });
+  } catch (err) { next(err); }
+}
+
 // POST /api/invoices/cola/emitir-hasta  { projectId, hasta }
 export async function emitirColaHasta(req, res, next) {
   try {

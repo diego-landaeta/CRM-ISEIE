@@ -5,6 +5,7 @@ import { conversionsApi, type Conversion, type MetodoPago } from '../api/convers
 import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { formatCurrency } from '@/shared/lib/format';
+import EmitirFacturaCobro, { QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
 
 interface PaymentForm {
   importe: string;
@@ -47,6 +48,9 @@ interface PaymentDialogProps {
 export default function PaymentDialog({ open, onClose, conversion, onPaid }: PaymentDialogProps) {
   useEscapeKey(onClose, open);
   const [saving, setSaving] = useState(false);
+  // El cobro recién apuntado: se queda abierto para decir qué pasa con su
+  // factura y, con «Emitir desde la cola», emitirla ya (CRM#1043).
+  const [cobrado, setCobrado] = useState<number | null>(null);
   const [form, setForm] = useState<PaymentForm>({
     importe: '',
     fecha: new Date().toISOString().slice(0, 10),
@@ -57,6 +61,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
 
   useEffect(() => {
     if (open) {
+      setCobrado(null);
       setForm({ importe: '', fecha: new Date().toISOString().slice(0, 10), notas: '', metodo: '', referencia: '' });
     }
   }, [open]);
@@ -105,7 +110,9 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
       if (res.success) {
         toast({ title: 'Pago registrado', description: formatCurrency(importe) });
         onPaid?.();
-        onClose();
+        const pagoId = Number((res.data as { payment?: { id?: number } } | undefined)?.payment?.id) || null;
+        if (pagoId) setCobrado(pagoId);
+        else onClose();
       }
     } catch (err: any) {
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
@@ -116,6 +123,28 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
 
   const inputClass = 'w-full h-9 px-3 rounded-lg border border-border bg-muted/50 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20';
 
+  if (cobrado) {
+    return (
+      <Portal>
+        <div role="dialog" className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
+          <div className="fixed inset-0 !m-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+          <div className="relative bg-card rounded-lg border border-border w-full max-w-md mx-4 p-6 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold">Cobro registrado</h2>
+              <button type="button" onClick={onClose} aria-label="Cerrar" className="p-1.5 rounded-lg hover:bg-muted">
+                <X size={18} weight="bold" />
+              </button>
+            </div>
+            <EmitirFacturaCobro conversionId={conversion.id} paymentId={cobrado} />
+            <QueEsCadaUna />
+            <div className="flex justify-end">
+              <button type="button" onClick={onClose} className="h-9 px-4 rounded-lg border border-border bg-card text-sm font-semibold hover:bg-muted">Cerrar</button>
+            </div>
+          </div>
+        </div>
+      </Portal>
+    );
+  }
   return (
     <Portal>
       <div role="dialog" className="fixed inset-0 !m-0 z-[80] flex items-center justify-center sm:p-4">
