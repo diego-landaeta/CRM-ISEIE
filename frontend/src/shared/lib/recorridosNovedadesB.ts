@@ -106,8 +106,8 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
       },
       {
         donde: anclaje('facturas-colab-tipo'),
-        titulo: 'Vendedoras o colaboradores',
-        texto: 'Deja solo las de las vendedoras o solo las de los colaboradores. Vale para todas las pestañas, y los totales salen del filtro.',
+        titulo: 'Quién factura',
+        texto: 'Deja solo las de las vendedoras, los colaboradores, el equipo de desarrollo o las tutoras redactoras. Vale para todas las pestañas, y los totales salen del filtro.',
       },
       {
         donde: anclaje('facturas-colab-por-validar'),

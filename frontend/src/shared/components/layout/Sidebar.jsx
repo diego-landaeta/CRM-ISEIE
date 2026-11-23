@@ -24,6 +24,7 @@ import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConf
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { reagruparMenu } from './bloquesDelMenu';
 
 const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
@@ -705,7 +706,7 @@ function defaultOpenSections(sections, pathname) {
   return out;
 }
 
-function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, onNavigate, onExpandSidebar }) {
+function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, onNavigate, onExpandSidebar, anclas = false }) {
   const location = useLocation();
   const STORAGE_KEY = 'crm-sidebar-sections-v1';
   const [openMap, setOpenMap] = useState(() => {
@@ -789,7 +790,19 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
 
         const open = !!openMap[section.label];
         return (
-          <div key={section.label}>
+          <div
+            key={section.label}
+            // Los bloques que señala el recorrido del menú (#611). Un bloque
+            // que esa persona no tiene no se pinta, y su paso se salta.
+            // Solo en el menú que se ve (`anclas`): el otro también está montado
+            // y el recorrido cogería el primero que encuentre, aunque esté oculto.
+            data-recorrido={!anclas ? undefined
+              : section.label === 'Hoy' ? 'menu-hoy'
+                : section.label === 'Comercial' ? 'menu-comercial'
+                  : section.label === 'Académico' ? 'menu-academico'
+                    : section.label === 'Finanzas' ? 'menu-finanzas'
+                      : section.label === 'Configuración' ? 'menu-configuracion' : undefined}
+          >
             <button
               type="button"
               onClick={() => toggle(section.label)}
@@ -815,10 +828,31 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
   );
 }
 
-export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate }) {
+/** ¿Se ve el menú fijo del PC (`lg`, 1024 px)? El mismo corte que AppLayout. */
+const PC = '(min-width: 1024px)';
+function useEsPC() {
+  const mq = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(PC) : null);
+  const [esPC, setEsPC] = useState(() => !!mq()?.matches);
+  useEffect(() => {
+    const m = mq();
+    if (!m?.addEventListener) return undefined;
+    const alCambiar = () => setEsPC(m.matches);
+    m.addEventListener('change', alCambiar);
+    return () => m.removeEventListener('change', alCambiar);
+  }, []);
+  return esPC;
+}
+
+export default function Sidebar({ collapsed = false, onToggleCollapsed, onNavigate, visible = true }) {
   const { user, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
+  // El recorrido del menú (#611), solo en el menú que se ve: en el PC, el fijo;
+  // en el móvil, el del cajón (`onNavigate`). El fijo sigue montado (oculto)
+  // en el móvil, y su recorrido se abriría sobre nada. En ISEIE el cajón
+  // también sigue montado cerrado (para deslizarse): `visible` dice si está abierto.
+  const esPC = useEsPC();
+  const conRecorrido = !collapsed && visible && (onNavigate ? !esPC : esPC);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef(null);
 
@@ -891,21 +925,26 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
       {/* Trigger del CommandPalette (atajo Ctrl/Cmd + K). El render del modal
           vive en AppLayout; aquí solo disparamos el evento keydown sintético. */}
       {!collapsed && (
-        <button
-          type="button"
-          onClick={() => {
-            const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
-            window.dispatchEvent(ev);
-          }}
-          className="mb-3 relative w-full h-8 pl-8 pr-12 rounded-md bg-secondary/40 border border-border text-[12px] text-left text-muted-foreground/80 hover:bg-secondary/60 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-colors"
-          aria-label="Abrir búsqueda global"
-        >
-          <MagnifyingGlass size={13} weight="bold" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
-          Buscar…
-          <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border bg-card text-muted-foreground">
-            Ctrl K
-          </kbd>
-        </button>
+        <div className="mb-3 space-y-2">
+          <button
+            type="button"
+            data-recorrido={conRecorrido ? 'menu-buscar' : undefined}
+            onClick={() => {
+              const ev = new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true });
+              window.dispatchEvent(ev);
+            }}
+            className="relative w-full h-8 pl-8 pr-12 rounded-md bg-secondary/40 border border-border text-[12px] text-left text-muted-foreground/80 hover:bg-secondary/60 hover:text-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 transition-colors"
+            aria-label="Abrir búsqueda global"
+          >
+            <MagnifyingGlass size={13} weight="bold" className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground/60 pointer-events-none" />
+            Buscar…
+            <kbd className="absolute right-2 top-1/2 -translate-y-1/2 text-[9px] font-mono font-semibold px-1.5 py-0.5 rounded border border-border bg-card text-muted-foreground">
+              Ctrl K
+            </kbd>
+          </button>
+          {/* El recorrido del menú por bloques (#611): sale solo la primera vez. */}
+          {conRecorrido && <VerRecorrido id="menu-bloques" compacto />}
+        </div>
       )}
 
       {/* Nav — secciones colapsables. El estado se persiste en localStorage por
@@ -921,6 +960,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         collapsed={collapsed}
         onNavigate={onNavigate}
         onExpandSidebar={onToggleCollapsed}
+        anclas={conRecorrido}
       />
 
       {/* User menu + notification bell */}

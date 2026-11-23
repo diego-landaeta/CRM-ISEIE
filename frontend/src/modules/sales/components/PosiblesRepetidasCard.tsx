@@ -55,7 +55,8 @@ export default function PosiblesRepetidasCard({ projectId }: { projectId: number
   }, [abierta, projectId]);
 
   return (
-    <section className="bg-card border border-border rounded-lg">
+    // `data-recorrido`: la señala el recorrido de las ventas repetidas (#611).
+    <section data-recorrido="ventas-repetidas-lista" className="bg-card border border-border rounded-lg">
       <button
         type="button"
         onClick={() => setAbierta((v) => !v)}

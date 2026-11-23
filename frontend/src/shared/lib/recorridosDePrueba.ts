@@ -23,7 +23,9 @@ import { tienePermiso, type Permiso } from '@/shared/lib/recorridosCobros';
  * IGUAL EN LOS DOS CRM (paridad): mismos pasos y mismo texto.
  */
 
-export type IdRecorridoDePrueba = 'cobros-paypal' | 'extractos-banco' | 'informe-mensual' | 'monitask';
+export type IdRecorridoDePrueba =
+  | 'cobros-paypal' | 'extractos-banco' | 'informe-mensual' | 'monitask'
+  | 'factura-automatica' | 'auditoria-facturacion' | 'factura-duplicada' | 'brevo-bloqueados';
 
 export interface PasoDePrueba extends PasoRecorrido {
   /** Sin este permiso (o ninguno de la lista), el paso no sale. */
@@ -66,6 +68,151 @@ const anclaje = (nombre: string) => `[data-recorrido="${nombre}"]`;
 const REPETIR = 'Para repasarlo, «Ver cómo funciona».';
 
 export const RECORRIDOS_DE_PRUEBA: Record<IdRecorridoDePrueba, RecorridoDePrueba> = {
+  // ─── Finanzas › Facturas › Factura automática con datos fiscales (#764) ─────
+  'factura-automatica': {
+    id: 'factura-automatica',
+    titulo: 'Factura automática',
+    issue: 'CRM#764',
+    permiso: 'facturas.cola',
+    interruptor: 'FACTURA_AUTOMATICA_ACTIVA',
+    pantalla: ['modules/invoices/pages/InvoicesPage.tsx', 'modules/invoices/components/FacturacionAlDiaCard.tsx'],
+    pasos: [
+      {
+        titulo: 'La factura que sale sola',
+        texto: 'Cuando entra un cobro, el CRM manda al alumno un enlace para que rellene sus datos fiscales. Con ellos, su factura sale sola y en orden, sin que nadie la genere. Pruébalo solo en el CRM de pruebas: una factura emitida no se borra. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('cola-facturacion'),
+        titulo: 'La cola de facturación',
+        texto: 'Aquí espera todo cobro sin factura, por orden de fecha. Registra un cobro en una venta de prueba («[PRUEBA]» en el nombre del alumno, con tu correo) y míralo aparecer aquí.',
+      },
+      {
+        donde: anclaje('cola-datos-fiscales'),
+        titulo: 'En qué está cada cobro',
+        texto: 'Debajo del cliente: «Esperando datos del alumno» (con su plazo), «sale sola», «sale sola cuando le toque» o «no sale sola» con el motivo. «Revisar datos» pide a una persona.',
+      },
+      {
+        titulo: 'El correo y el formulario',
+        texto: 'Te llega el correo con el enlace. Rellénalo con datos de prueba. A propósito: escribe un NIF español mal (cambia la letra del DNI). El formulario no lo acepta y te dice qué revisar.',
+      },
+      {
+        donde: anclaje('cola-generar'),
+        titulo: 'Si no sale sola',
+        texto: 'Cuando dice «no sale sola», arregla lo que indica el motivo o pulsa «Generar factura» y emítela a mano, en su turno.',
+      },
+      {
+        titulo: 'Y dejarlo limpio',
+        texto: `Anula la factura de prueba con el motivo «[PRUEBA]» (sale su abono) y borra el cobro y la venta de prueba. Un número emitido no se reutiliza: por eso, solo en el CRM de pruebas. ${REPETIR}`,
+      },
+    ],
+  },
+
+  // ─── Finanzas › Facturas › Auditoría de facturación y pausa (#765) ──────────
+  'auditoria-facturacion': {
+    id: 'auditoria-facturacion',
+    titulo: 'Auditoría y pausa de la facturación',
+    issue: 'CRM#765',
+    permiso: 'facturas.auditoria',
+    interruptor: 'FACTURACION_AUDITORIA_ACTIVA',
+    pantalla: ['modules/invoices/pages/InvoicesPage.tsx', 'modules/invoices/components/AvisoFacturacionPausada.tsx'],
+    pasos: [
+      {
+        titulo: 'La auditoría de cada 2 horas',
+        texto: 'Cada dos horas el CRM revisa las facturas: números repetidos en una serie, facturas emitidas sin datos fiscales y cobros que se quedaron sin factura. Si encuentra uno, para la emisión de facturas nuevas. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('facturacion-pausada'),
+        titulo: 'El aviso de pausa',
+        texto: 'Si está pausada, este aviso sale arriba a superadmin y admin: el motivo, desde cuándo y cuántos cobros esperan. Si no lo ves, la facturación va bien.',
+      },
+      {
+        donde: anclaje('facturacion-errores'),
+        titulo: 'Qué ha encontrado',
+        texto: 'Despliega la lista: cada error dice la serie, la factura o el cobro. La auditoría no corrige nada; lo arreglas tú.',
+      },
+      {
+        donde: anclaje('facturacion-solucionado'),
+        titulo: 'Marcar como solucionado',
+        texto: 'A propósito: púlsalo sin arreglar nada. Dice «Sigue habiendo errores» y la pausa sigue. Arréglalo y vuelve a pulsar: solo reanuda si sale limpia, y entonces emite en orden lo que entró durante la pausa.',
+      },
+      {
+        titulo: 'Para provocar una pausa',
+        texto: 'En el CRM de pruebas, crea una venta «[PRUEBA]», regístrale un cobro y no generes su factura. En la siguiente auditoría sale como cobro sin factura.',
+      },
+      {
+        titulo: 'Y dejarlo limpio',
+        texto: `Emite o anula (motivo «[PRUEBA]») lo que hayas creado, borra la venta de prueba y pulsa «Marcar como solucionado» hasta que reanude. ${REPETIR}`,
+      },
+    ],
+  },
+
+  // ─── Finanzas › Facturas › Aviso de factura duplicada (#819) ────────────────
+  'factura-duplicada': {
+    id: 'factura-duplicada',
+    titulo: 'Aviso de factura duplicada',
+    issue: 'CRM#819',
+    permiso: 'facturas.emitir',
+    pantalla: ['modules/invoices/pages/InvoicesPage.tsx', 'modules/invoices/components/FacturacionAlDiaCard.tsx'],
+    pasos: [
+      {
+        titulo: 'Una factura dos veces',
+        texto: 'El CRM no emite una factura si ya hay otra del mismo cliente (mismo nombre, aunque cambie un espacio, o mismo NIF), por el mismo importe y a 7 días o menos. Antes, pregunta. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('cola-motivo'),
+        titulo: 'La marca en la cola',
+        texto: 'Si un cobro de la cola se parece a una factura ya emitida, lo dice aquí. Pon el ratón encima: sale el número y la fecha de la otra.',
+      },
+      {
+        donde: anclaje('cola-generar'),
+        permiso: 'facturas.cola',
+        titulo: 'Lo que debe salir',
+        texto: 'Para probarlo: dos ventas «[PRUEBA]» del mismo alumno con el mismo importe. Genera la primera factura. A propósito: la segunda no se emite sin más; sale «Posible factura duplicada» con la otra.',
+      },
+      {
+        titulo: 'Cancelar o emitir igualmente',
+        texto: '«Cancelar» no emite nada: compruébalo, la segunda sigue en la cola. «Emitir igualmente» la emite, solo si de verdad son dos facturas distintas.',
+      },
+      {
+        titulo: 'Y dejarlo limpio',
+        texto: `Anula las facturas de prueba con el motivo «[PRUEBA]» y borra los cobros y las ventas de prueba. ${REPETIR}`,
+      },
+    ],
+  },
+
+  // ─── Configuración › Usuarios › Correos bloqueados en Brevo (#824) ──────────
+  'brevo-bloqueados': {
+    id: 'brevo-bloqueados',
+    titulo: 'Correos bloqueados en Brevo',
+    issue: 'CRM#824',
+    permiso: 'users.view',
+    interruptor: 'BREVO_BLOQUEADOS_ACTIVO',
+    pantalla: ['shared/pages/SettingsPage.jsx'],
+    pasos: [
+      {
+        titulo: 'Correos que Brevo no entrega',
+        texto: 'Si un buzón rebota, Brevo bloquea esa dirección y no le entrega ningún correo del CRM. Cada 6 horas el CRM lo mira, marca a esa persona aquí y avisa a superadmin y a los admins de sus campus. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('brevo-marca'),
+        titulo: 'La marca en la lista',
+        texto: '«Correo bloqueado en Brevo» al lado de la persona. Pon el ratón encima: desde cuándo y por qué (rebote, marcado como spam, baja…).',
+      },
+      {
+        titulo: 'En su ficha',
+        texto: 'Al abrir su ficha sale el mismo aviso arriba. Superadmin y admin ven además «Desbloquear en Brevo». Antes, comprueba que el buzón existe.',
+      },
+      {
+        titulo: 'Para probarlo',
+        texto: 'Da de alta un usuario «[PRUEBA]» con una dirección que no existe en un dominio real. A propósito: el correo de bienvenida rebota y, en la siguiente revisión, sale la marca. Si lo desbloqueas, Brevo lo vuelve a bloquear.',
+      },
+      {
+        titulo: 'Y dejarlo limpio',
+        texto: `Desactiva el usuario «[PRUEBA]». La dirección inventada se queda bloqueada en Brevo: no pasa nada, no es de nadie. ${REPETIR}`,
+      },
+    ],
+  },
+
   // ─── Finanzas › PayPal y banco › PayPal (#766) ──────────────────────────────
   'cobros-paypal': {
     id: 'cobros-paypal',

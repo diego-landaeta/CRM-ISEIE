@@ -14,6 +14,7 @@ import { CLAVE_RECORRIDO_TABLERO, PASOS_TABLERO } from '../lib/recorridoTablero'
 import Select from '@/shared/components/ui/Select';
 import { agruparPorEmpresa, campusConEmpresa, empresaCorta } from '../lib/campusPorEmpresa';
 import { pestanasDeEquipos, pestanaValida } from '../lib/pestanasEquipo';
+import { opcionesDeTipo, TIPO_EQUIPO_ES } from '../lib/tiposDeEquipo';
 import { Button } from '@/shared/components/ui/button';
 import { inputClass } from '@/shared/lib/ui';
 import * as tasksApi from '../api/tasks.api';
@@ -40,6 +41,7 @@ import type {
   TeamMemberMetric,
   Team,
   MyTeam,
+  TipoEquipo,
 } from '../types';
 
 /*
@@ -61,6 +63,8 @@ type Filtros = {
   search: string;
   personaId: number | '';
   equipo: string; // '' = cualquiera, 'sin' = sin equipo, o el id
+  /** «Los dos equipos» (CRM-ISEIE#687): desarrollo o tutoras redactoras, de todas las empresas. */
+  tipoEquipo: '' | TipoEquipo;
   projectId: number | '';
   externalProjectId: number | '';
   areaId: number | '';
@@ -70,7 +74,7 @@ type Filtros = {
 };
 
 const SIN_FILTROS: Filtros = {
-  search: '', personaId: '', equipo: '', projectId: '', externalProjectId: '', areaId: '', priority: '', tag: '', vencidas: false,
+  search: '', personaId: '', equipo: '', tipoEquipo: '', projectId: '', externalProjectId: '', areaId: '', priority: '', tag: '', vencidas: false,
 };
 
 const PERIODOS: ReadonlyArray<{ value: TipoPeriodo; label: string }> = [
@@ -204,6 +208,7 @@ export default function TasksPage() {
         ...(ver === 'todo' ? ambito : {}),
         ...filtroDeVista(ver),
         team_id: teamIdElegido,
+        team_tipo: filtros.tipoEquipo || undefined,
         assigned_to: filtros.personaId || undefined,
         search: filtros.search.trim() || undefined,
         project_id: filtros.projectId || undefined,
@@ -360,6 +365,8 @@ export default function TasksPage() {
   }, [assignees, personasVistas, yo, user?.nombre]);
   const nombreEquipo = (e: Team) => (equipos.some((o) => o.id !== e.id && o.name === e.name) ? `${e.name} · ${empresaCorta(e.empresa)}` : e.name);
   const equiposActivos = equipos.filter((e) => e.is_active);
+  // El tipo de equipo, para quien ve todo y tiene equipos de más de un tipo (CRM-ISEIE#687).
+  const opcionesTipo = canViewAll ? opcionesDeTipo(equipos) : [];
 
   // Los filtros activos, para verlos y quitarlos uno a uno.
   const activos: Array<{ clave: string; texto: string; quitar: () => void }> = [];
@@ -374,6 +381,7 @@ export default function TasksPage() {
     const e = equipos.find((x) => String(x.id) === filtros.equipo);
     activos.push({ clave: 'equipo', texto: `Equipo: ${filtros.equipo === 'sin' ? 'sin equipo' : e ? nombreEquipo(e) : '…'}`, quitar: quitar('equipo') });
   }
+  if (filtros.tipoEquipo) activos.push({ clave: 'tipoEquipo', texto: TIPO_EQUIPO_ES[filtros.tipoEquipo], quitar: quitar('tipoEquipo') });
   if (filtros.areaId) activos.push({ clave: 'area', texto: `Área: ${areasActivas.find((a) => a.id === filtros.areaId)?.name || '…'}`, quitar: quitar('areaId') });
   if (filtros.tag) activos.push({ clave: 'tag', texto: `Etiqueta: ${filtros.tag}`, quitar: quitar('tag') });
   if (filtros.priority) activos.push({ clave: 'prioridad', texto: `Prioridad: ${PRIORITY[filtros.priority].label.toLowerCase()}`, quitar: quitar('priority') });
@@ -479,6 +487,14 @@ export default function TasksPage() {
             disabled={soloLoSuyo}
             ariaLabel="Persona" size="sm" className="w-44"
           />
+          {opcionesTipo.length > 0 && (
+            <Select<'' | TipoEquipo>
+              value={filtros.tipoEquipo}
+              onChange={(v) => setFiltros((f) => ({ ...f, tipoEquipo: v }))}
+              options={opcionesTipo}
+              ariaLabel="Equipo de trabajo" size="sm" className="w-52"
+            />
+          )}
           {equiposActivos.length > 0 && pestanas.length === 0 && (
             <Select<string>
               value={filtros.equipo}

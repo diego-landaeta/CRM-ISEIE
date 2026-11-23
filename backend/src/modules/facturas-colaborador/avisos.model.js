@@ -52,7 +52,7 @@ export async function paraElAviso(ids) {
     `SELECT f.id, to_char(f.periodo, 'YYYY-MM-DD') AS periodo, f.importe, f.moneda,
             f.numero_factura, f.numero_recepcion, f.subida_at,
             f.archivo_key, f.nombre_original, f.tamano,
-            c.nombre AS colaborador_nombre
+            f.colaborador_id, c.nombre AS colaborador_nombre
        FROM facturas_colaborador f
        JOIN colaboradores c ON c.id = f.colaborador_id
       WHERE f.id = ANY($1::int[])

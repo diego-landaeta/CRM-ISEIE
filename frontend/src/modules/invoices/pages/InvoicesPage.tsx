@@ -19,6 +19,7 @@ import CobrarProformaDialog from '../components/CobrarProformaDialog';
 import AnularFacturaDialog from '../components/AnularFacturaDialog';
 import TutorialButton from '../components/TutorialButton';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 
@@ -54,6 +55,26 @@ export default function InvoicesPage() {
   // de la sociedad, las ventas sin factura y los cobros sueltos son trabajo suyo.
   const { can, llevaEquipo } = usePermission();
   const canManage = can('facturas.gestionar');
+  // «Ver cómo funciona» (CRM#856): si la factura automática y la auditoría están
+  // encendidas en este servidor. null mientras no se sabe (el botón espera); si no
+  // contesta, apagada: mejor decir «la enciende Diego» que recorrer una pantalla vacía.
+  const [interruptores, setInterruptores] = useState<{ facturaAutomatica: boolean | null; auditoria: boolean | null }>(
+    { facturaAutomatica: null, auditoria: null },
+  );
+  const puedeCola = can('facturas.cola');
+  const puedeAuditoria = can('facturas.auditoria');
+  useEffect(() => {
+    if (puedeCola) {
+      client.get('/factura-automatica/interruptor')
+        .then((r: { data?: { activa?: boolean } }) => setInterruptores((s) => ({ ...s, facturaAutomatica: !!r.data?.activa })))
+        .catch(() => setInterruptores((s) => ({ ...s, facturaAutomatica: false })));
+    }
+    if (puedeAuditoria) {
+      client.get('/facturacion-auditoria/estado')
+        .then((r: { data?: { activa?: boolean } }) => setInterruptores((s) => ({ ...s, auditoria: !!r.data?.activa })))
+        .catch(() => setInterruptores((s) => ({ ...s, auditoria: false })));
+    }
+  }, [puedeCola, puedeAuditoria]);
   // Corregir, abonar, asociar a una venta y borrar: quien lleva un equipo
   // comercial no gestiona ninguna factura (Diego, 09/11: «solo Daniela»; el
   // servidor le da 403). No se le enseña lo que no puede hacer (QA 09/11).
@@ -320,6 +341,21 @@ export default function InvoicesPage() {
           </div>
         )}
       />
+
+      {/* Probar lo nuevo de staging (CRM#856): un recorrido por función, solo al pulsarlo.
+          Apagada en este servidor, el botón lo dice. */}
+      {(can('facturas.cola') || can('facturas.auditoria') || can('facturas.emitir')) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <span>Ver cómo funciona:</span>
+          {interruptores.facturaAutomatica !== null && (
+            <VerComoFunciona id="factura-automatica" texto="Factura automática" apagada={!interruptores.facturaAutomatica} compacto />
+          )}
+          {interruptores.auditoria !== null && (
+            <VerComoFunciona id="auditoria-facturacion" texto="Auditoría y pausa" apagada={!interruptores.auditoria} compacto />
+          )}
+          <VerComoFunciona id="factura-duplicada" texto="Factura duplicada" compacto />
+        </div>
+      )}
 
       {/* Si la serie tiene agujeros, se dice aqui: es donde se factura. */}
       <AvisoHuecosFacturas projectId={activeProject?.id} />

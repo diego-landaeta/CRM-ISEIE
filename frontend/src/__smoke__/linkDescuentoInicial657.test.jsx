@@ -158,16 +158,20 @@ describe('recorrido 2 · inicial más cuotas', () => {
     expect(within(d).getByLabelText('Inicial').value).toBe('299,99');
     const resumen = within(d).getByTestId('link-resumen-cuotas').textContent.replace(/\s+/g, ' ');
     expect(resumen).toMatch(/Quedan 600,01 € en 5 × 100,00 € y la última de 100,01 €/);
-    const [, primera] = fechasMensuales(hoy(), 2);
-    expect(resumen).toContain(`desde el ${primera.split('-').reverse().join('/')} si paga hoy`);
+    // Cada cuota con su fecha (23/11): una al mes desde hoy, la primera dentro de un mes.
+    const fechas = fechasMensuales(hoy(), 7).slice(1);
+    expect(within(d).getByLabelText('Fecha de la cuota 1').value).toBe(fechas[0]);
+    expect(within(d).getByLabelText('Fecha de la cuota 6').value).toBe(fechas[5]);
+    expect(within(d).getByLabelText('Importe de la cuota 6').value).toBe('100.01');
     expect(within(d).getByText(/Al pagar, el link cobra la inicial \(299,99 €\)/)).toBeTruthy();
+    const plan = [100, 100, 100, 100, 100, 100.01].map((importe, i) => ({ importe, vence: fechas[i] }));
 
-    post.mockResolvedValue({ success: true, data: { ...LINK, modalidad: 'cuotas', num_cuotas: 7, importe_cuota: '299.99', importe_inicial: '299.99' } });
+    post.mockResolvedValue({ success: true, data: { ...LINK, modalidad: 'cuotas', num_cuotas: 7, importe_cuota: '299.99', importe_inicial: '299.99', plan_cuotas: plan, guarda_tarjeta: true } });
     await crearHabilitado(d);
     fireEvent.click(within(d).getByRole('button', { name: 'Crear link' }));
     await vi.waitFor(() => expect(post).toHaveBeenCalledWith('/links-pago', {
       projectId: 1, productId: 5, importe: 900, precio_original: 1000, descuento_tipo: 'pct', descuento_valor: 10,
-      modalidad: 'cuotas', num_cuotas: 6, inicial: 299.99,
+      modalidad: 'cuotas', num_cuotas: 6, inicial: 299.99, cuotas: plan,
     }));
     expect(await within(d).findByText(/299,99 € de inicial con el link y 5 × 100,00 € y la última de 100,01 €/)).toBeTruthy();
   });

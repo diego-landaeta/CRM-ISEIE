@@ -66,7 +66,7 @@ export function useDashboard() {
       try {
         const csv = idsDelAmbito.join(',');
         const [statsRes, todayRes, leadsRes] = await Promise.all([
-          client.get(`/leads/stats?projectIds=${csv}`).catch(() => ({ success: false })),
+          client.get(`/leads/stats?projectIds=${csv}&includeConverted=true`).catch(() => ({ success: false })),
           client.get(`/leads/today?projectIds=${csv}`).catch(() => ({ success: false })),
           client.get(`/leads?projectIds=${csv}&limit=10&page=1`).catch(() => ({ success: false })),
         ]);
@@ -93,7 +93,7 @@ export function useDashboard() {
     setError(null);
     try {
       const [statsRes, leadsRes, todayRes] = await Promise.all([
-        client.get(`/leads/stats?projectId=${pid}`),
+        client.get(`/leads/stats?projectId=${pid}&includeConverted=true`),
         client.get(`/leads?projectId=${pid}&limit=5&page=1`),
         client.get(`/leads/today?projectId=${pid}`).catch(() => ({ success: false })),
       ]);

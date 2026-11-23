@@ -24,6 +24,7 @@ import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } fro
 import { avisoDeLoQueFalta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import BrevoBloqueoAviso from '@/modules/settings/components/BrevoBloqueoAviso';
+import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { desbloquearBrevo, listBrevoBloqueos, porPersona, textoDelBloqueo } from '@/shared/lib/brevoBloqueo';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -233,10 +234,13 @@ function UsersSection({ isAdmin }) {
   // Correos que Brevo no entrega (migración 290). Si falla o está apagado, sin
   // marcas: la lista sigue igual.
   const [bloqueosBrevo, setBloqueosBrevo] = useState(() => new Map());
+  // Si la revisión de Brevo está encendida en este servidor («Ver cómo funciona»,
+  // gemela de CRM#856). null mientras no se sabe; si no contesta, apagada.
+  const [brevoActivo, setBrevoActivo] = useState(null);
   function cargarBloqueosBrevo() {
     listBrevoBloqueos()
-      .then((r) => setBloqueosBrevo(porPersona(r.bloqueos)))
-      .catch(() => setBloqueosBrevo(new Map()));
+      .then((r) => { setBloqueosBrevo(porPersona(r.bloqueos)); setBrevoActivo(r.activo); })
+      .catch(() => { setBloqueosBrevo(new Map()); setBrevoActivo(false); });
   }
   useEffect(() => { cargarBloqueosBrevo(); }, []);
   async function desbloquearEnBrevo(u) {
@@ -289,6 +293,9 @@ function UsersSection({ isAdmin }) {
         title="Usuarios"
         subtitle="Invita gestores, admins y soporte. Cada uno con su rol y disponibilidad."
         action={
+          <div className="flex flex-wrap items-center justify-end gap-2">
+          {/* Probar los correos bloqueados en Brevo (gemela de CRM#856): solo al pulsarlo. */}
+          {brevoActivo !== null && <VerComoFunciona id="brevo-bloqueados" apagada={!brevoActivo} />}
           <button
             onClick={() => setShowInvite(true)}
             disabled={!isAdmin}
@@ -298,6 +305,7 @@ function UsersSection({ isAdmin }) {
             <Plus size={14} weight="bold" />
             Invitar usuario
           </button>
+          </div>
         }
       />
 
@@ -351,7 +359,7 @@ function UsersSection({ isAdmin }) {
                       {u.active ? 'Activo' : 'Inactivo'}
                     </span>
                     {bloqueosBrevo.get(u.id) && (
-                      <span className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
+                      <span data-recorrido="brevo-marca" className="mt-0.5 flex items-center gap-1 text-[11px] font-semibold text-destructive" title={textoDelBloqueo(bloqueosBrevo.get(u.id))}>
                         <span className="w-1.5 h-1.5 rounded-full bg-destructive flex-shrink-0" />
                         Correo bloqueado en Brevo
                       </span>

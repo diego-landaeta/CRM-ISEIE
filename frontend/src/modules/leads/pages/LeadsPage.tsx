@@ -1152,7 +1152,9 @@ export default function LeadsPage() {
 
         {/* Pagination */}
         {total > 0 && (
-          <div className="px-5 py-3 border-t flex items-center justify-between text-[13px] text-muted-foreground">
+          // En el móvil la fila no cabe (se salía 22 px a 375): salta de línea y
+          // «Anterior»/«Siguiente» se quedan en la flecha.
+          <div className="px-5 py-3 border-t flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-[13px] text-muted-foreground">
             <span>
               Mostrando <strong className="text-foreground">{Math.min((page - 1) * 20 + 1, total)}&ndash;{Math.min(page * 20, total)}</strong> de {total}
             </span>
@@ -1160,9 +1162,10 @@ export default function LeadsPage() {
               <button
                 onClick={() => setPage(Math.max(1, page - 1))}
                 disabled={page === 1}
+                aria-label="Página anterior"
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
-                <CaretLeft size={12} weight="bold" /> Anterior
+                <CaretLeft size={12} weight="bold" /> <span className="hidden sm:inline">Anterior</span>
               </button>
               {getVisiblePages().map((p) => (
                 <button
@@ -1180,9 +1183,10 @@ export default function LeadsPage() {
               <button
                 onClick={() => setPage(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
+                aria-label="Página siguiente"
                 className="flex items-center gap-1 px-3 py-1.5 rounded-lg border border-border bg-card text-xs font-medium hover:bg-muted transition-colors disabled:opacity-40 disabled:pointer-events-none"
               >
-                Siguiente <CaretRight size={12} weight="bold" />
+                <span className="hidden sm:inline">Siguiente</span> <CaretRight size={12} weight="bold" />
               </button>
             </div>
           </div>

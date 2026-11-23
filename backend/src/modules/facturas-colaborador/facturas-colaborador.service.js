@@ -105,6 +105,15 @@ export async function listar(user, filtros) {
   return model.listar({ issuerIds: ambito, ...filtros });
 }
 
+/**
+ * Las tutoras redactoras sin ficha de colaboradora (CRM-ISEIE#687: «sus fichas»), de
+ * las empresas que ve quien mira. También las desactivadas: se dan de alta
+ * apagadas hasta tener el chat de Moodle y la ficha se prepara antes.
+ */
+export async function redactorasSinFicha(user) {
+  return model.redactorasSinFicha(await ambitoDe(user));
+}
+
 export async function ver(user, id) {
   const c = await model.porId(id, await ambitoDe(user));
   if (!c) throw NO_ESTA();

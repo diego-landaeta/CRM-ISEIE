@@ -1,6 +1,8 @@
 import type { PasoRecorrido } from '@/shared/components/ui/RecorridoGuiado';
 // Los del bloque Finanzas (#619, segunda tanda; gemela de CRM#941), en su propio fichero.
 import { RECORRIDOS_FINANZAS, type IdRecorridoFinanzas } from '@/shared/lib/recorridosFinanzas';
+// Los de las novedades del 18/11 (#611, tanda A; gemela de CRM#928), en su propio fichero.
+import { RECORRIDOS_NOVEDADES, type IdRecorridoNovedades } from '@/shared/lib/recorridosNovedades';
 // Los de las novedades del 18/11 (#611, tanda B; gemela de CRM#928), en su propio fichero.
 import { RECORRIDOS_NOVEDADES_B, type IdRecorridoNovedadesB } from '@/shared/lib/recorridosNovedadesB';
 
@@ -58,6 +60,7 @@ export type IdRecorridoCobros =
   | 'cursos-producto'
   | 'ventas'
   | IdRecorridoFinanzas
+  | IdRecorridoNovedades
   | IdRecorridoNovedadesB;
 
 export interface RecorridoCobros {
@@ -196,7 +199,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     id: 'links-pago',
     titulo: 'Links de pago',
     permiso: ['links_pago.crear', 'links_pago.ver_todos'],
-    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx'],
+    pantalla: ['modules/links-pago/pages/LinksDePagoPage.tsx', 'modules/links-pago/components/EmbudoLinks.tsx'],
     pasos: [
       {
         titulo: 'Links de pago',
@@ -224,6 +227,12 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
       {
         titulo: 'Al registrar la venta, sale solo',
         texto: 'Lo más rápido: al registrar la venta («Convertir lead») deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cada cuota con su fecha, y si hay inicial, marca «La inicial se paga con link de pago» y lleva el suyo. Al terminar te los da todos para copiar.',
+      },
+      // El embudo por gestora y por campus (CRM#987).
+      {
+        donde: anclaje('links-embudo'),
+        titulo: 'Cómo van tus links',
+        texto: 'Para el periodo que elijas: los links creados, cuántos se abrieron y cuántos se pagaron (con su %), y lo cobrado. En las cuotas que cobra Stripe solo: las cobradas, las que fallaron y las pendientes. Por gestora o por campus; cada uno ve lo suyo.',
       },
       {
         donde: anclaje('links-pantalla-filtros'),
@@ -539,6 +548,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   // ─── 7 · El bloque Finanzas (#619, segunda tanda): `recorridosFinanzas.ts` ───
   ...RECORRIDOS_FINANZAS,
 
+  // ─── 8 · Las novedades del 18/11 (#611, tanda A): `recorridosNovedades.ts` ───
+  ...RECORRIDOS_NOVEDADES,
   // ─── 9 · Las novedades del 18/11 (#611, tanda B; la A va en el 8): `recorridosNovedadesB.ts` ───
   ...RECORRIDOS_NOVEDADES_B,
 };

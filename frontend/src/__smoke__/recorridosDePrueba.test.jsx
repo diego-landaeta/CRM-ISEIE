@@ -49,8 +49,11 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('cada recorrido existe y tiene sus pasos', () => {
-  it('son los de la tabla de #522 elegidos para esta tanda', () => {
-    expect(Object.keys(RECORRIDOS_DE_PRUEBA).sort()).toEqual(['cobros-paypal', 'extractos-banco', 'informe-mensual', 'monitask']);
+  it('son los ocho de la tabla de #522', () => {
+    expect(Object.keys(RECORRIDOS_DE_PRUEBA).sort()).toEqual([
+      'auditoria-facturacion', 'brevo-bloqueados', 'cobros-paypal', 'extractos-banco',
+      'factura-automatica', 'factura-duplicada', 'informe-mensual', 'monitask',
+    ]);
   });
 
   it.each(PARES)('%s: presenta, cuenta sus pasos y termina con cómo dejarlo limpio', (id, r) => {
@@ -113,6 +116,12 @@ describe('quién lo ve', () => {
     expect(t('cobros-paypal', editar)).toEqual(expect.arrayContaining(['Traerlos ahora', 'Enlazar a mano']));
     expect(t('extractos-banco', ver)).not.toContain('Subir un extracto');
     expect(t('extractos-banco', editar)).toContain('Subir un extracto');
+  });
+
+  it('sin «emitir desde la cola» no se explica cómo generar la duplicada', () => {
+    const t = (can) => pasosDePruebaPara(RECORRIDOS_DE_PRUEBA['factura-duplicada'], can).map((p) => p.titulo);
+    expect(t((k) => k === 'facturas.emitir')).not.toContain('Lo que debe salir');
+    expect(t((k) => ['facturas.emitir', 'facturas.cola'].includes(k))).toContain('Lo que debe salir');
   });
 });
 

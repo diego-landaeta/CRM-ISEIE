@@ -425,7 +425,9 @@ const CONSULTAS = [
     })))],
   [(s) => s.includes('WHERE f.id = $1 AND ($2::int[] IS NULL OR f.issuer_id = ANY($2::int[]))'), ([id, issuerIds]) => {
     const f = factura(id);
-    return filas(f && enLista(issuerIds, f.issuer_id) ? [{ ...filaEnlace(f), archivo_key: f.archivo_key ?? null, tamano: f.tamano ?? null }] : []);
+    return filas(f && enLista(issuerIds, f.issuer_id)
+      ? [{ ...filaEnlace(f), archivo_key: f.archivo_key ?? null, tamano: f.tamano ?? null, colaborador_user_id: colaborador(f.colaborador_id).user_id ?? null }]
+      : []);
   }],
   [(s) => s.includes('SET anulada_at = NOW(), anulada_por = $2'), ([id, por, motivo]) => {
     Object.assign(factura(id), { anulada_at: new Date(), anulada_por: por, motivo_anulacion: motivo });

@@ -5,6 +5,7 @@ import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, exigirExpedientes } from './certifex.alcance.js';
 import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
 import { revertirSchema, mensajeDeValidacion } from './certifex.validation.js';
+import { soltarEmisionRevertida } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 
 /**
  * «Revertir» un diploma de «Emitidos, falta enviarlos al alumno» (#351).
@@ -151,6 +152,9 @@ export async function revertir(req, res, next) {
     // ese curso), no el navegador.
     const matriculaId = Number.isSafeInteger(hecho?.matriculaId) ? hecho.matriculaId : null;
     logger.info({ userId: req.user.userId, nexpediente: d.nexpediente, matriculaId }, 'Certifex: diploma revertido');
+    // La confirmación de datos del alumno (#456) suelta el número anulado: al volver a
+    // emitir, apunta el nuevo. No falla nunca (ya está revertido en Certifex).
+    await soltarEmisionRevertida(d.nexpediente);
 
     let registrado = false;
     let aviso;
@@ -180,6 +184,8 @@ async function apuntarDesdeCertifex(dip) {
     titulacion: dip.titulacion ?? null, motivo: a.motivo || '(sin motivo en Certifex)', revertidoPor: null,
     revertidoPorEmail: correoDe(a.por) || '(desconocido)', revertidoEn: a.en ?? null,
   });
+  // Como al revertir: si el CRM se cortó antes de hacerlo, se hace ahora (#456).
+  await soltarEmisionRevertida(dip.nexpediente);
 }
 
 /**

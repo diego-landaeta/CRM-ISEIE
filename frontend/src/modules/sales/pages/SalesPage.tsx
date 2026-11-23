@@ -5,6 +5,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const RegisterSaleDialog = lazy(() => import('../components/RegisterSaleDialog'));
 const CursosVendidosCard = lazy(() => import('../components/CursosVendidosCard'));
@@ -75,7 +76,9 @@ export default function SalesPage() {
   );
 
   return (
-    <div className="space-y-6">
+    // El margen de scroll, como en Ventas (#619): la barra fija de arriba no
+    // tapa lo que señala el recorrido (#611).
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">
@@ -87,7 +90,9 @@ export default function SalesPage() {
               : 'Registra ventas — del día o históricas. Crea cliente + conversión + pago en un solo paso.'}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* El recorrido de las ventas repetidas (#611): sale solo la primera vez. */}
+          <VerRecorrido id="ventas-repetidas" />
           {isAdmin && !allProjects && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">
               <UsersThree size={14} className="text-muted-foreground" />
@@ -124,6 +129,7 @@ export default function SalesPage() {
             <div className="relative">
               <button
                 type="button"
+                data-recorrido="ventas-repetidas-nueva"
                 onClick={() => setMenuAbierto((v) => !v)}
                 disabled={!hasActiveCtx || allProjects}
                 aria-haspopup="menu"
@@ -182,6 +188,7 @@ export default function SalesPage() {
           ) : (
             <button
               type="button"
+              data-recorrido="ventas-repetidas-nueva"
               onClick={() => abrirVenta('existing')}
               disabled={!hasActiveCtx || allProjects}
               title={allProjects ? 'Selecciona un proyecto concreto para registrar una venta' : ''}
@@ -251,14 +258,9 @@ export default function SalesPage() {
             </Suspense>
           )}
 
-          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898). */}
-          {can('conversions.edit') && (
-            <Suspense fallback={null}>
-              <PosiblesRepetidasCard projectId={projectIdParam} />
-            </Suspense>
-          )}
-
-          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898). */}
+          {/* Mismo alumno y programa con más de una venta, para revisar (CRM#898).
+              Salía dos veces (se duplicó al traer main a staging); el recorrido
+              de las ventas repetidas (#611) la señala, y con una basta. */}
           {can('conversions.edit') && (
             <Suspense fallback={null}>
               <PosiblesRepetidasCard projectId={projectIdParam} />

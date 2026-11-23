@@ -9,6 +9,7 @@ import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import CrearLinkAsistente, { copiarLink as copiar, errorDe } from './CrearLinkAsistente';
 import { DatosDeSeguimiento, BotonRenovar } from './SeguimientoDelLink';
+import EnviarLink from './EnviarLink';
 import {
   listarLinks, anularLink,
   type LinkDePago, type EstadoLink,
@@ -161,8 +162,12 @@ export default function LinksDePagoCard({ leadId, conversionId, conRecorrido = f
                   {l.estado === 'anulado' && <> · anulado{l.anulado_por_nombre ? ` por ${l.anulado_por_nombre}` : ''}: {l.motivo_anulacion}</>}
                 </span>
                 <DatosDeSeguimiento link={l} />
-                <span className="ml-auto flex items-center gap-1.5">
+                <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                  {vivo && l.url && (
+                    <span className="font-mono text-[11px] text-muted-foreground truncate max-w-[240px]" title={l.url}>{l.url.replace(/^https?:\/\//, '')}</span>
+                  )}
                   <BotonRenovar link={l} onRenovado={() => cargar()} />
+                  <EnviarLink link={l} />
                   {vivo && l.url && (
                     <button type="button" onClick={() => copiar(l.url!)}
                       className="inline-flex items-center gap-1 h-8 px-2.5 rounded-md border border-border bg-card text-xs font-semibold hover:bg-muted">
