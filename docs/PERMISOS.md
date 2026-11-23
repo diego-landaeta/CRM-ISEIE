@@ -381,6 +381,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
+| interruptor | `GET /api/factura-automatica/interruptor` | (no existía) | (ruta nueva) | `facturas.view` |
 | estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
 | formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |

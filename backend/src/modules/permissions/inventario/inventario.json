@@ -4932,6 +4932,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/interruptor",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/interruptor",
+  "relativa": "GET /interruptor",
+  "controlador": "interruptor",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/factura-automatica/venta/:conversionId",
   "tipo": "ruta",
   "modulo": "factura-automatica",
