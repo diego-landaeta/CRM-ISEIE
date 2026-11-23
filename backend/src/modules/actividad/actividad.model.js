@@ -30,7 +30,8 @@ import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 export const LIMITE_POR_DEFECTO = 30;
 export const LIMITE_MAXIMO = 100;
 
-export const TIPOS = ['lead_creado', 'venta_creada', 'estado_cambiado', 'contacto'];
+// `recordatorio_completado`: desde la migración 329, que apunta cuándo y quién (los de antes no tienen fecha).
+export const TIPOS = ['lead_creado', 'venta_creada', 'estado_cambiado', 'contacto', 'recordatorio_completado'];
 
 /** Los estados con el nombre que ve la gente en pantalla. */
 const ESTADOS = {
@@ -139,6 +140,21 @@ export async function actividadReciente({
         ORDER BY i.created_at DESC LIMIT ${b.limite}`, b.params));
   }
 
+  if (quiere('recordatorio_completado')) {
+    const b = base({
+      proyectoCol: 'l.project_id', fechaCol: 'r.completado_at',
+      gestora: (ph) => `(l.responsable_id = ${ph} OR r.completado_por = ${ph})`,
+    });
+    pedir.push(query(
+      `SELECT 'recordatorio_completado' AS tipo, r.completado_at AS fecha, r.lead_id, l.nombre AS lead_nombre,
+              l.project_id, p.nombre AS proyecto, uc.nombre AS persona, r.nota AS detalle, NULL::numeric AS importe
+         FROM lead_reminders r
+         JOIN leads l ON l.id = r.lead_id JOIN projects p ON p.id = l.project_id
+         LEFT JOIN users uc ON uc.id = r.completado_por
+        WHERE r.completado_at IS NOT NULL AND l.deleted_at IS NULL AND ${b.cond}
+        ORDER BY r.completado_at DESC LIMIT ${b.limite}`, b.params));
+  }
+
   const filas = (await Promise.all(pedir)).flatMap((r) => r.rows);
   filas.sort((a, b) => new Date(b.fecha) - new Date(a.fecha));
   const hayMas = filas.length > n;
@@ -176,6 +192,12 @@ export function frase(f) {
       return `${f.persona || 'El sistema'} pasó a ${lead} de «${String(f.detalle).split(' → ').map(estado).join('» a «')}»`;
     case 'contacto':
       return (CONTACTO[f.detalle] || ((q, l) => `${q} contactó con ${l}`))(quien, lead);
+    case 'recordatorio_completado': {
+      // La nota del recordatorio, si la tiene, corta: es lo que había que hacer.
+      const nota = String(f.detalle || '').replace(/\s+/g, ' ').trim();
+      const corta = nota.length > 80 ? `${nota.slice(0, 79)}…` : nota;
+      return `${quien} completó un recordatorio de ${lead}${corta ? `: «${corta}»` : ''}`;
+    }
     default:
       return lead;
   }

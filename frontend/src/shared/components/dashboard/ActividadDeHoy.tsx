@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowsLeftRight, ChatCircleDots, CurrencyEur, UserPlus } from '@phosphor-icons/react';
+import { ArrowsLeftRight, ChatCircleDots, CheckCircle, CurrencyEur, UserPlus } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 
 /**
  * «Qué ha pasado hoy» (#13): la actividad reciente, de más nueva a más vieja.
  *
- * Altas de prospectos, ventas, cambios de estado y contactos. Cada gestora ve lo
+ * Altas de prospectos, ventas, cambios de estado, contactos y recordatorios hechos. Cada gestora ve lo
  * suyo (sus prospectos y lo que hizo ella) y quien manda, lo de sus campus: el
  * recorte lo pone el servidor con la sesión. Cada fila lleva a la ficha.
  *
@@ -16,7 +16,7 @@ import client from '@/shared/api/client';
  */
 
 interface Evento {
-  tipo: 'lead_creado' | 'venta_creada' | 'estado_cambiado' | 'contacto';
+  tipo: 'lead_creado' | 'venta_creada' | 'estado_cambiado' | 'contacto' | 'recordatorio_completado';
   fecha: string;
   lead_id: number | null;
   proyecto: string;
@@ -29,6 +29,7 @@ const ICONO = {
   venta_creada: CurrencyEur,
   estado_cambiado: ArrowsLeftRight,
   contacto: ChatCircleDots,
+  recordatorio_completado: CheckCircle,
 } as const;
 
 const TONO: Record<Evento['tipo'], string> = {
@@ -36,6 +37,7 @@ const TONO: Record<Evento['tipo'], string> = {
   venta_creada: 'bg-success-soft text-success-soft-foreground',
   estado_cambiado: 'bg-muted text-muted-foreground',
   contacto: 'bg-muted text-muted-foreground',
+  recordatorio_completado: 'bg-muted text-muted-foreground',
 };
 
 const hora = (iso: string) => new Date(iso).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
@@ -84,7 +86,7 @@ export default function ActividadDeHoy(
   return (
     <div className="bg-card border border-border rounded-lg p-4">
       <h2 className="font-semibold text-base">Qué ha pasado hoy</h2>
-      <p className="text-xs text-muted-foreground mb-3">Altas, ventas, cambios de estado y contactos, de lo más nuevo a lo más viejo.</p>
+      <p className="text-xs text-muted-foreground mb-3">Altas, ventas, cambios de estado, contactos y recordatorios hechos, de lo más nuevo a lo más viejo.</p>
 
       {eventos.length === 0 ? (
         <p className="text-sm text-muted-foreground py-2">Todavía no ha pasado nada hoy.</p>

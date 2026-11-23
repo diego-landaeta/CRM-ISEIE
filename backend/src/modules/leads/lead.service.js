@@ -665,8 +665,8 @@ export async function addReminder(leadId, fechaRecordatorio, nota, userId) {
   return await leadModel.createReminder(leadId, fechaRecordatorio, nota, userId);
 }
 
-export async function markReminderComplete(reminderId) {
-  await leadModel.completeReminder(reminderId);
+export async function markReminderComplete(reminderId, userId = null) {
+  await leadModel.completeReminder(reminderId, userId);
   return { message: 'Recordatorio completado' };
 }
 
