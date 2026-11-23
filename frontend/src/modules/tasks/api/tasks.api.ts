@@ -19,6 +19,7 @@ import type {
   TeamMember,
   TeamRole,
   MyTeam,
+  TipoEquipo,
   HistorialTarea,
   FichaDeIntegrante,
 } from '../types';
@@ -33,6 +34,8 @@ export type Ambito = { issuerId?: number; projectId?: number };
 export type GetTasksParams = Ambito & {
   /** El equipo elegido arriba; 0 = «Sin equipo». */
   team_id?: number;
+  /** Solo los equipos de un tipo: desarrollo o tutoras redactoras (CRM-ISEIE#687). */
+  team_tipo?: TipoEquipo;
   /** «Mi tablero»: lo que llevo, lo que supervisé y lo que creé (26/10/2026). Desde el 27/10, `ver`. */
   mias?: boolean;
   /** «Mis tareas», «Mi equipo» o «Todo» (27/10/2026). El servidor lo recorta al permiso. */
@@ -114,6 +117,8 @@ export type HistorialParams = Ambito & {
   ver?: 'mias' | 'equipo' | 'todo';
   /** 0 = «Sin equipo». */
   team_id?: number;
+  /** Solo los equipos de un tipo (CRM-ISEIE#687). */
+  team_tipo?: TipoEquipo;
   /** Quien la hizo (el responsable). */
   assigned_to?: number;
   /** El día del cierre, en días de la oficina (YYYY-MM-DD). */
@@ -325,7 +330,7 @@ export async function getTeam(id: number): Promise<Team & { miembros: TeamMember
   return data;
 }
 
-export async function createTeam(body: { issuer_id: number; name: string; color?: string; tipo?: 'colaboradores' | 'tutores' }): Promise<Team> {
+export async function createTeam(body: { issuer_id: number; name: string; color?: string; tipo?: TipoEquipo }): Promise<Team> {
   const { data } = await client.post<Team>('/tasks/teams', body);
   return data;
 }
@@ -345,8 +350,8 @@ export async function updateTeamRole(teamId: number, roleId: number, body: Parti
   return data;
 }
 
-export async function getTeamCandidates(teamId: number): Promise<{ id: number; nombre: string; email: string; role: string }[]> {
-  const { data } = await client.get<{ id: number; nombre: string; email: string; role: string }[]>(`/tasks/teams/${teamId}/candidates`);
+export async function getTeamCandidates(teamId: number): Promise<{ id: number; nombre: string; email: string; role: string; active?: boolean }[]> {
+  const { data } = await client.get<{ id: number; nombre: string; email: string; role: string; active?: boolean }[]>(`/tasks/teams/${teamId}/candidates`);
   return data ?? [];
 }
 

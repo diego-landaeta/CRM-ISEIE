@@ -135,6 +135,12 @@ export const RUTAS_DEL_TUTOR_REDACTOR = [
   // que tiene asignados, como a un tutor.
   /^\/api\/cursos-pendientes(?:\/|$)/,
   /^\/api\/notifications(?:\/|$)/,
+  // Lo que la cabecera le pide a cualquiera y el tutor ya tenia (CRM-ISEIE#687): las
+  // novedades, los mensajes internos (la campana) y si le esta sonando una
+  // llamada. Sin esto, la redactora veia 403 en la cabecera al abrir Consultas.
+  /^\/api\/novedades(?:\/|$)/,
+  /^\/api\/mensajes(?:\/|$)/,
+  /^\/api\/whatsapp\/sonando\/?$/,
   // Pedir acceso o permiso (CRM#820): solo esa ruta de Soporte, nada mas de tickets.
   /^\/api\/soporte\/accesos\/?$/,
   /^\/api\/permissions\/system-defaults\/?$/,

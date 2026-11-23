@@ -60,6 +60,7 @@ const CONCEPTOS = {
   seo: 'Servicios de SEO',
   contenido: 'Servicios de contenido',
   soporte: 'Servicios de soporte',
+  redaccion: 'Servicios de redacción de cursos',
   otra: 'Servicios profesionales',
 };
 

@@ -1,4 +1,5 @@
 import pool, { query } from '../../shared/config/db.js';
+import { sqlEquipo } from './equipo.js';
 
 /*
   Facturas de colaboradores (#202) · la base.
@@ -48,7 +49,7 @@ export const ACTIVO = `(c.baja_desde IS NULL
   OR c.baja_desde > date_trunc('month', NOW() AT TIME ZONE 'Europe/Madrid')::date)`;
 
 const CAMPOS_COLABORADOR = `
-  c.id, c.nombre, c.email, c.nif, c.area, c.tipo, c.notas, c.user_id, ${ACTIVO} AS activo,
+  c.id, c.nombre, c.email, c.nif, c.area, c.tipo, ${sqlEquipo('c')} AS equipo, c.notas, c.user_id, ${ACTIVO} AS activo,
   to_char(c.alta_desde, 'YYYY-MM') AS alta_desde,
   to_char(c.baja_desde, 'YYYY-MM') AS baja_desde,
   c.created_at, c.updated_at,
@@ -91,7 +92,7 @@ const VISIBLE = `($1::int[] IS NULL OR EXISTS (
   SELECT 1 FROM colaborador_empresas ce
    WHERE ce.colaborador_id = c.id AND ce.issuer_id = ANY($1::int[])))`;
 
-export async function listar({ issuerIds, issuerId = null, estado = 'activos', q = null, tipo = null }) {
+export async function listar({ issuerIds, issuerId = null, estado = 'activos', q = null, tipo = null, equipo = null }) {
   const { rows } = await query(
     `SELECT ${CAMPOS_COLABORADOR}, ${EMPRESAS_VISIBLES}, ${COMPARTIDO}
        FROM colaboradores c
@@ -103,8 +104,32 @@ export async function listar({ issuerIds, issuerId = null, estado = 'activos', q
         AND ($3 = 'todos' OR ($3 = 'activos') = ${ACTIVO})
         AND ($4::text IS NULL OR c.nombre ILIKE $4 OR c.email ILIKE $4)
         AND ($5::text IS NULL OR c.tipo = $5)
+        -- «Los dos equipos» (CRM-ISEIE#687): desarrollo o tutoras redactoras.
+        AND ($6::text IS NULL OR ${sqlEquipo('c')} = $6)
       ORDER BY activo DESC, c.nombre`,
-    [issuerIds, issuerId, estado, q ? textoParaLike(q) : null, tipo],
+    [issuerIds, issuerId, estado, q ? textoParaLike(q) : null, tipo, equipo],
+  );
+  return rows;
+}
+
+/**
+ * Las tutoras redactoras (rol principal o añadido) que no tienen ficha de
+ * colaboradora. `issuerIds` (null = todas): solo las de esas empresas, por un
+ * campus, la empresa entera o como tutora. Activas primero.
+ */
+export async function redactorasSinFicha(issuerIds) {
+  const { rows } = await query(
+    `SELECT u.id, u.nombre, u.email, u.active
+       FROM users u
+      WHERE (u.role::text = 'tutor_redactor' OR 'tutor_redactor' = ANY(COALESCE(u.roles_extra, '{}')::text[]))
+        AND NOT EXISTS (SELECT 1 FROM colaboradores c WHERE c.user_id = u.id AND c.tipo = 'colaborador')
+        AND ($1::int[] IS NULL
+             OR EXISTS (SELECT 1 FROM user_empresas ue WHERE ue.user_id = u.id AND ue.issuer_id = ANY($1::int[]))
+             OR EXISTS (SELECT 1 FROM user_projects up JOIN projects p ON p.id = up.project_id
+                         WHERE up.user_id = u.id AND up.active AND p.sociedad_emisora_id = ANY($1::int[]))
+             OR EXISTS (SELECT 1 FROM tutor_empresas te WHERE te.tutor_id = u.id AND te.issuer_id = ANY($1::int[])))
+      ORDER BY u.active DESC, u.nombre`,
+    [issuerIds],
   );
   return rows;
 }

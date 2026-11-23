@@ -1,4 +1,5 @@
 import pool, { query } from '../../shared/config/db.js';
+import { sqlEquipo } from './equipo.js';
 import { base } from '../../shared/services/email-plantilla.service.js';
 import { empresaCorta } from './facturas.emails.js';
 
@@ -424,7 +425,7 @@ export async function cambiarEnlace(db, id, tokenHash, semilla, caducaAt) {
 /** La lista del mes para administración, con su cabecera. */
 /** Una fila de las listas de administración («Del mes» y las pestañas de la segunda parte). */
 const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.periodo, 'YYYY-MM') AS periodo,
-              c.nombre AS colaborador_nombre, c.email, c.area, c.tipo,
+              c.nombre AS colaborador_nombre, c.email, c.area, c.tipo, ${sqlEquipo('c')} AS equipo,
               ii.razon_social AS empresa,
               f.importe_esperado, f.importe, f.moneda,
               -- Lo acordado es la base: con desglose, la diferencia es la de su base
@@ -450,7 +451,7 @@ const FILA_DE_LISTA = `SELECT f.id, f.colaborador_id, f.issuer_id, to_char(f.per
          JOIN colaboradores c ON c.id = f.colaborador_id
          JOIN invoice_issuers ii ON ii.id = f.issuer_id`;
 
-export async function delMes({ periodo, issuerIds, issuerId = null, estado = null, area = null, tipo = null }) {
+export async function delMes({ periodo, issuerIds, issuerId = null, estado = null, area = null, tipo = null, equipo = null }) {
   const { rows } = await query(
     `SELECT * FROM (
        ${FILA_DE_LISTA}
@@ -461,8 +462,10 @@ export async function delMes({ periodo, issuerIds, issuerId = null, estado = nul
           AND ($6::text IS NULL OR c.tipo = $6)
      ) t
      WHERE ($4::text IS NULL OR t.estado = $4)
+       -- «Los dos equipos» (CRM-ISEIE#687): desarrollo o tutoras redactoras.
+       AND ($7::text IS NULL OR t.equipo = $7)
      ORDER BY (t.estado = 'anulada'), t.colaborador_nombre, t.empresa, t.id`,
-    [periodo, issuerIds, issuerId, estado, area, tipo],
+    [periodo, issuerIds, issuerId, estado, area, tipo, equipo],
   );
   return rows;
 }
@@ -482,7 +485,7 @@ const VISTAS = {
   historial: 'TRUE',
 };
 
-export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null, q = null, tipo = null }) {
+export async function deLaVista({ vista, issuerIds, issuerId = null, colaboradorId = null, periodo = null, estado = null, q = null, tipo = null, equipo = null }) {
   const { rows } = await query(
     `SELECT * FROM (
        ${FILA_DE_LISTA}
@@ -498,9 +501,10 @@ export async function deLaVista({ vista, issuerIds, issuerId = null, colaborador
           AND ($7::text IS NULL OR c.tipo = $7)
      ) t
      WHERE ($5::text IS NULL OR t.estado = $5 OR ($5 = 'no_cuadra' AND t.cuadra = false AND t.estado <> 'anulada'))
+       AND ($8::text IS NULL OR t.equipo = $8)
      ORDER BY t.periodo DESC, t.colaborador_nombre, t.empresa, t.id
      LIMIT 1000`,
-    [issuerIds, issuerId, colaboradorId, periodo, estado, q ? `%${q}%` : null, tipo],
+    [issuerIds, issuerId, colaboradorId, periodo, estado, q ? `%${q}%` : null, tipo, equipo],
   );
   return rows;
 }
