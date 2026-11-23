@@ -13,6 +13,7 @@ import Select from '@/shared/components/ui/Select';
 // Si el servidor no manda una lista, la pantalla no se cae: se queda
 // vacia y se dice. (#113, el arreglo de las once pantallas en blanco.)
 import { lista } from '@/shared/lib/lista';
+import { paisDelCliente } from '../lib/paisDelCliente';
 
 interface Props {
   projectId: number;
@@ -44,7 +45,7 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
   const [direccion, setDireccion] = useState('');
   const [ciudad, setCiudad] = useState('');
   const [cp, setCp] = useState('');
-  const [pais, setPais] = useState('España');
+  const [pais, setPais] = useState('');
   const [email, setEmail] = useState('');
   const [telefono, setTelefono] = useState('');
 
@@ -91,11 +92,11 @@ export default function FiscalDataDialog({ projectId, leadId, conversionId, defa
         setDireccion(d.direccion_fiscal || '');
         setCiudad(d.ciudad_fiscal || '');
         setCp(d.codigo_postal_fiscal || '');
-        setPais(d.pais_fiscal || 'España');
+        setPais(paisDelCliente(d.pais_fiscal, d.telefono));
         setEmail(d.email || '');
         setTelefono(d.telefono || '');
         // Auto IVA según país
-        if (d.pais_fiscal && !d.pais_fiscal.toLowerCase().match(/españa|espana|spain|^es$/)) {
+        if (paisDelCliente(d.pais_fiscal, d.telefono) && !paisDelCliente(d.pais_fiscal, d.telefono).toLowerCase().match(/españa|espana|spain|^es$/)) {
           setLlevaIva(false);
         }
       }

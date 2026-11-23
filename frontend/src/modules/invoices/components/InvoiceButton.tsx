@@ -3,6 +3,7 @@ import { Receipt, Warning } from '@phosphor-icons/react';
 import { invoicesApi, invoiceFaltantes } from '../api/invoices.api';
 import type { Invoice, InvoiceItem } from '../api/invoices.api';
 import { emitirPreguntandoSiPasa } from '../lib/masQueLoCobrado';
+import { paisDelCliente } from '../lib/paisDelCliente';
 import { toast } from '@/shared/hooks/useToast';
 
 const EmitirBorradorDialog = lazy(() => import('./EmitirBorradorDialog'));
@@ -90,7 +91,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
           clienteDireccion: d.direccion_fiscal || undefined,
           clienteCiudad: d.ciudad_fiscal || undefined,
           clienteCp: d.codigo_postal_fiscal || undefined,
-          clientePais: d.pais_fiscal || 'España',
+          clientePais: paisDelCliente(d.pais_fiscal, d.telefono) || undefined,
           clienteEmail: d.email, clienteTelefono: d.telefono,
           items, metodoPago: metodoDefault as 'transferencia', piePago: pieDefault,
         });
@@ -123,7 +124,7 @@ export default function InvoiceButton({ projectId, leadId, conversionId, items, 
         clienteDireccion: d.direccion_fiscal || undefined,
         clienteCiudad: d.ciudad_fiscal || undefined,
         clienteCp: d.codigo_postal_fiscal || undefined,
-        clientePais: d.pais_fiscal || 'España',
+        clientePais: paisDelCliente(d.pais_fiscal, d.telefono) || undefined,
         clienteEmail: d.email,
         clienteTelefono: d.telefono,
         items,
