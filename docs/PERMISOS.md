@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-894 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+895 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -640,6 +640,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | generarPlan | `POST /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verCobroAutomatico | `GET /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | cambiarCobroAutomatico | `PUT /api/links-pago/cobro-automatico` | (no existía) | (ruta nueva) | `links_pago.cobro_automatico` |
+| embudo | `GET /api/links-pago/embudo` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | listar | `GET /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | detalle | `GET /api/links-pago/:id` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | crear | `POST /api/links-pago/` | (no existía) | (ruta nueva) | `links_pago.crear` |

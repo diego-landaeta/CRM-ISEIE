@@ -9003,6 +9003,29 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/embudo",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/embudo",
+  "relativa": "GET /embudo",
+  "controlador": "embudo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear",
+     "links_pago.ver_todos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/",
   "tipo": "ruta",
   "modulo": "links-pago",

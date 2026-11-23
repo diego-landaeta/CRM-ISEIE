@@ -13,6 +13,7 @@ import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import CrearLinkAsistente, { copiarLink, errorDe, resumenDelPlan } from '../components/CrearLinkAsistente';
 import { DatosDeSeguimiento, BotonRenovar } from '../components/SeguimientoDelLink';
 import EnviarLink from '../components/EnviarLink';
+import EmbudoLinks from '../components/EmbudoLinks';
 import { ESTADOS, dinero, cuando } from '../components/LinksDePagoCard';
 import { listarTodos, anularLink, type LinkDePago, type EstadoLink } from '../api/linksPago.api';
 
@@ -132,6 +133,9 @@ export default function LinksDePagoPage() {
           </button>
         </div>
       )}
+
+      {/* El resumen por gestora y por campus (CRM#987). */}
+      <EmbudoLinks ambito={ambitoComoObjeto({ activeIssuerId: activeIssuerId ?? null, activeProject: { id: proyectoId } })} />
 
       <div className="flex flex-wrap gap-1.5" role="group" aria-label="Filtrar por estado" data-recorrido="links-pantalla-filtros">
         {FILTROS.map((f) => (

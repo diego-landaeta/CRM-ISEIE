@@ -151,6 +151,28 @@ export function anularLink(id: number, motivo: string) {
   return client.post<LinkDePago>(`/links-pago/${id}/anular`, { motivo });
 }
 
+/** Una fila del embudo (CRM#987): por gestora (`user_id`), por campus (`project_id`) o el total. */
+export interface FilaEmbudo {
+  user_id?: number | null;
+  project_id?: number;
+  nombre?: string;
+  creados: number;
+  abiertos: number;
+  pagados: number;
+  pct_abiertos: number | null;
+  pct_pagados: number | null;
+  cobrado: number;
+  cuotas_cobradas: number;
+  cuotas_fallidas: number;
+  cuotas_pendientes: number;
+}
+export interface Embudo { desde: string; hasta: string; total: FilaEmbudo; por_gestora: FilaEmbudo[]; por_campus: FilaEmbudo[] }
+
+/** El embudo de los links (CRM#987), con el ámbito de quien mira. */
+export function verEmbudo(params: { desde: string; hasta: string; ambito?: { projectId?: number; issuerId?: number } }) {
+  return client.get<Embudo>('/links-pago/embudo', { params: { desde: params.desde, hasta: params.hasta, ...(params.ambito || {}) } });
+}
+
 /** Renovar un caducado (gemela de CRM#984): un link nuevo igual, con la caducidad de serie del campus. */
 export function renovarLink(id: number) {
   return client.post<LinkDePago>(`/links-pago/${id}/renovar`, {});
