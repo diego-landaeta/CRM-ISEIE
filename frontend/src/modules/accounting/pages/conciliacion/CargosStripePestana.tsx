@@ -51,7 +51,11 @@ export default function CargosStripePestana() {
   const pid = activeProject?.id;
   const unCampus = Boolean(pid && pid > 0);
 
-  const [mes, setMes] = useState('');
+  // QA del 21/11/2026: se abre en el mes actual. «Todos los meses» cruza todos
+  // los cargos sin enlazar de una vez; en ISEIE (925) tardaba 71 s y Cloudflare
+  // la cortaba con 504, así que la pantalla no llegaba a cargar ni a dar los
+  // meses para elegir. Un mes tarda ~300 ms y trae también la lista de meses.
+  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [filtro, setFiltro] = useState<Filtro>('todos');
   const [datos, setDatos] = useState<Conciliacion | null>(null);
   const [cargando, setCargando] = useState(true);
