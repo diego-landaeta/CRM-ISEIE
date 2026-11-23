@@ -76,11 +76,13 @@ afterAll(async () => {
 });
 
 describe('#218 · el catálogo de todos sus campus', () => {
-  it('un admin ve los productos de sus campus, cada uno con su campus', async () => {
+  // Con «Todos», los de todos los campus, también los que no son suyos (Diego,
+  // 23/11/2026: «los productos los ven todos, de todos»), cada uno con su campus.
+  it('un admin ve los productos de todos los campus, cada uno con su campus', async () => {
     const res = await pedir(ADMIN, '/api/products/ambito');
     expect(res.status).toBe(200);
     const mios = res.body.data.filter((p) => p.nombre.startsWith(MARCA));
-    expect(campusDe({ body: { data: mios } }).sort()).toEqual([PSIKO, FONO].sort());
+    expect(campusDe({ body: { data: mios } }).sort()).toEqual([PSIKO, FONO, ICT].sort());
     expect(mios.find((p) => p.project_id === PSIKO).proyecto_nombre).toBe(`${MARCA} psiko`);
   });
 
