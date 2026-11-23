@@ -69,7 +69,8 @@ export default function ParaHoyYManana(
   if (!algo) return null;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    // `data-recorrido`: lo señala el recorrido de «Hoy» (#611).
+    <div data-recorrido="hoy-lo-que-toca" className="bg-card border border-border rounded-lg p-4">
       <h2 className="font-semibold text-base">Lo que toca</h2>
       <p className="text-xs text-muted-foreground mb-3">
         Del proceso comercial. Pulsa un tramo y la cola se abre con él puesto.

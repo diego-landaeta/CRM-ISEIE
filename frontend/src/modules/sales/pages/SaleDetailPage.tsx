@@ -12,6 +12,7 @@ import { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import RepartoVentaCard from '../components/RepartoVentaCard';
 import EnlazarStripeCard from '../components/EnlazarStripeCard';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
@@ -115,7 +116,9 @@ export default function SaleDetailPage() {
   const noCuadra = guardado != null && Math.abs(Number(guardado) - Number(venta.importe_pagado || 0)) > 0.005;
 
   return (
-    <div className="space-y-5 pb-8">
+    // El margen de scroll, como en Ventas (#619): la barra fija de arriba no
+    // tapa lo que señala el recorrido de las cuotas (#611).
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <button
         type="button"
         onClick={() => navigate(-1)}
@@ -129,6 +132,8 @@ export default function SaleDetailPage() {
         subtitle={`${venta.producto_contratado || 'Sin programa'} · ${venta.proyecto_nombre || ''}`}
         actions={
           <span className="flex flex-wrap items-center gap-2">
+            {/* El recorrido de las cuotas y los cobros (#611): sale solo la primera vez. */}
+            <VerRecorrido id="venta-cuotas" />
             {/* «Crear link de pago» arriba (Diego, 19/11), con esta venta ya elegida. */}
             <BotonCrearLink leadId={venta.lead_id} conversionId={venta.id} />
             {/* «Generar plan de pago» (19/11): un link por cuota pendiente. */}
@@ -275,7 +280,7 @@ export default function SaleDetailPage() {
 
       <EnlazarStripeCard conversionId={venta.id} onEnlazado={() => setRecarga((n) => n + 1)} />
 
-      <div className="bg-card border border-border rounded-lg p-4">
+      <div className="bg-card border border-border rounded-lg p-4" data-recorrido="venta-pagos">
         <h3 className="font-semibold mb-3">Pagos registrados ({pagos.length})</h3>
         {pagos.length === 0 ? (
           <EmptyState icon={CreditCard} title="Sin pagos" description="Todavía no se ha registrado ningún cobro." />

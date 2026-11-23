@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Compass } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
@@ -100,8 +101,13 @@ export default function VerRecorrido({ id, listo = true, compacto = false }: {
       >
         <Compass size={compacto ? 13 : 14} weight="bold" aria-hidden="true" /> Ver recorrido
       </button>
-      {abierto && (
-        <RecorridoGuiado pasos={pasos} clave={clave} alCerrar={() => setAbierto(false)} />
+      {/* En el `body`, no aquí (como en el 360, CRM#941): el botón del menú
+          (#611) vive en el cajón del móvil, que se mueve con `transform`, y eso
+          encierra lo `fixed`: el recuadro y el cartel quedaban dentro del
+          cajón, no sobre la pantalla. */}
+      {abierto && createPortal(
+        <RecorridoGuiado pasos={pasos} clave={clave} alCerrar={() => setAbierto(false)} />,
+        document.body,
       )}
     </>
   );

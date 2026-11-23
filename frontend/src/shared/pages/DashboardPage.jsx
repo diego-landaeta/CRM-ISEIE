@@ -8,6 +8,7 @@ import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import ParaHoyYManana from '@/shared/components/dashboard/ParaHoyYManana';
 import CifrasDeHoy from '@/shared/components/dashboard/CifrasDeHoy';
 import BloquePlegable from '@/shared/components/ui/BloquePlegable';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { PROCESO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { useStripeMonitor } from '@/modules/ia-dashboard/hooks/useStripeMonitor';
 
@@ -210,11 +211,15 @@ export default function DashboardPage() {
   const todayDate = new Date().toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 
   return (
-    <div className="space-y-6">
+    // El margen de scroll, como en Ventas (#619, #611): al subir o bajar hasta lo que
+    // señala el recorrido, la barra fija de arriba no le tapa el principio.
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         // «Hoy» (gemela de CRM#884): lo primero es el día, no el nombre de la pantalla.
         title={`Hoy, ${todayDate}`}
         subtitle={activeProject?.nombre || 'Sin proyecto'}
+        // El recorrido guiado de «Hoy» (#611): sale solo la primera vez.
+        actions={<VerRecorrido id="hoy-dashboard" />}
       />
 
       {/* Si falta algun numero en la serie de facturas, se avisa arriba del
@@ -234,19 +239,22 @@ export default function DashboardPage() {
 
       {/* TODO LO DEMÁS, PLEGADO (gemela de CRM#884). Arriba queda lo que se mira
           cada mañana; esto se abre cuando hace falta y cada bloque recuerda
-          cómo lo dejaste. No se ha quitado nada. */}
-      <BloquePlegable clave="dashboard-equipo" titulo="El equipo este mes" abiertoPorDefecto={false} resumen="Ranking por lo cobrado">
-        <div className="space-y-6">
-          {/* Como va quien mira: su puesto y, a quien dirige, el podio y el
-              ranking de gestoras por lo cobrado. Como en MultiCRM.
-              Diego, 22/10/2026: «¿por qué en ISEIE dejaron de aparecer los
-              ranking de las gestoras para los admin?». El ranking no es el
-              proceso comercial: no depende de PROCESO_EN_PRUEBAS.
-              12/11/2026, Diego: «los montos de los rankings de todas las vistas
-              son del monto cobrado». */}
-          <ComoVoy />
-        </div>
-      </BloquePlegable>
+          cómo lo dejaste. No se ha quitado nada.
+          El recorrido (#611) señala el primero y cuenta los demás. */}
+      <div data-recorrido="hoy-plegados">
+        <BloquePlegable clave="dashboard-equipo" titulo="El equipo este mes" abiertoPorDefecto={false} resumen="Ranking por lo cobrado">
+          <div className="space-y-6">
+            {/* Como va quien mira: su puesto y, a quien dirige, el podio y el
+                ranking de gestoras por lo cobrado. Como en MultiCRM.
+                Diego, 22/10/2026: «¿por qué en ISEIE dejaron de aparecer los
+                ranking de las gestoras para los admin?». El ranking no es el
+                proceso comercial: no depende de PROCESO_EN_PRUEBAS.
+                12/11/2026, Diego: «los montos de los rankings de todas las vistas
+                son del monto cobrado». */}
+            <ComoVoy />
+          </div>
+        </BloquePlegable>
+      </div>
 
       <BloquePlegable clave="dashboard-productos" titulo="Productos vendidos" abiertoPorDefecto={false} resumen="Top 10 del mes">
         <div className="space-y-6">
