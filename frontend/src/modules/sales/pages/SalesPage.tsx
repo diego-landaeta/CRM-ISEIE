@@ -91,7 +91,7 @@ export default function SalesPage() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {/* El recorrido de las ventas repetidas (#611): sale solo la primera vez. */}
+          {/* El recorrido de las ventas repetidas (#611): solo con el botón (#681). */}
           <VerRecorrido id="ventas-repetidas" />
           {isAdmin && !allProjects && (
             <div className="flex items-center gap-1.5 h-9 px-2.5 rounded-md border border-border bg-card text-sm">

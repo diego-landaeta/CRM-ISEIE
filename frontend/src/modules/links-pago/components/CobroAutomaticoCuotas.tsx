@@ -114,7 +114,7 @@ export function CobroAutomaticoDetalle({ estado, onQuitar, quitando = false }: {
         </ul>
       )}
       {estado.activo && onQuitar && (
-        <button type="button" onClick={onQuitar} disabled={quitando}
+        <button type="button" onClick={onQuitar} disabled={quitando} data-recorrido="cobro-automatico-quitar"
           className="h-8 px-2.5 rounded-md border border-border bg-card text-xs font-medium hover:bg-muted disabled:opacity-50">
           {quitando ? 'Quitando…' : 'Quitar el cobro automático'}
         </button>

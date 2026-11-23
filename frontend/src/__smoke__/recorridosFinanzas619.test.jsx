@@ -116,7 +116,7 @@ describe('los recorridos de Finanzas', () => {
     expect(r.pasos.length).toBeGreaterThanOrEqual(4);
     expect(r.pasos[0].texto).toContain('{pasos}');
     expect(r.pasos[0].donde).toBeUndefined();
-    expect(r.pasos.at(-1).texto).toMatch(/«Ver recorrido»/);
+    expect(r.pasos.at(-1).texto).toMatch(/«Recorrido»/);
     for (const p of r.pasos) {
       expect(p.titulo.length).toBeGreaterThan(3);
       // Frases cortas, de las que se leen en un cartel.

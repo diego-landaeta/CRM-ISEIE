@@ -96,10 +96,12 @@ export default function AyudaPage() {
           Enlazar tu número, escribir a un prospecto, y que no te bloqueen la línea.
           Se lee en cinco minutos.
         </p>
-        {/* navigate() y no window.location: lo segundo recarga la aplicacion
+        {/* El chat abre el recorrido porque se le pide aquí (`abrirTour`): ya no
+            se abre solo al entrar (CRM#1012).
+            navigate() y no window.location: lo segundo recarga la aplicacion
             entera y ademas depende de la ruta relativa, asi que se rompe segun
             de donde cuelgue el CRM (/crm, /testeo). */}
-        <button type="button" onClick={() => { reiniciarTour(); navigate('/whatsapp/chat'); }}
+        <button type="button" onClick={() => { reiniciarTour(); navigate('/whatsapp/chat', { state: { abrirTour: true } }); }}
           className="mt-3 h-9 px-3 rounded-md bg-success text-success-foreground text-sm font-semibold hover:bg-success/90">
           Ver el recorrido por el chat
         </button>

@@ -62,8 +62,11 @@ afterEach(() => cleanup());
 const abrirEn = (ruta) => render(<MemoryRouter initialEntries={[ruta]}><TasksPage /></MemoryRouter>);
 
 describe('el recorrido guiado no tapa la ficha', () => {
-  it('sin ficha abierta, la primera vez sale solo', async () => {
+  it('nunca sale solo (#681, gemela de CRM#1012), ni la primera vez: solo con «Recorrido»', async () => {
     abrirEn('/tareas');
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(screen.queryByTestId('recorrido')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Recorrido' }));
     expect(await screen.findByTestId('recorrido', {}, { timeout: 3000 })).toBeTruthy();
   });
 
@@ -75,6 +78,7 @@ describe('el recorrido guiado no tapa la ficha', () => {
 
   it('si estaba abierto y se abre «Nueva tarea», se cierra', async () => {
     abrirEn('/tareas');
+    fireEvent.click(await screen.findByRole('button', { name: 'Recorrido' }));
     await screen.findByTestId('recorrido', {}, { timeout: 3000 });
     fireEvent.click(screen.getAllByRole('button', { name: /Nueva/ })[0]);
     await waitFor(() => expect(screen.queryByTestId('recorrido')).toBeNull());

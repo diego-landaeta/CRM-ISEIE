@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   MainContainer, ChatContainer, MessageList, Message, MessageInput,
   ConversationList, Conversation, Avatar, Sidebar, Search, ConversationHeader,
@@ -14,7 +14,8 @@ import {
   type ChatWhatsapp, type MensajeWhatsapp, type ConexionWhatsapp, type EtiquetaWhatsapp,
 } from '../api/whatsapp.api';
 import SelectorDeSesion, { type SesionElegida } from '../components/SelectorDeSesion';
-import Tour, { tourPendiente, hayQueSeñalar } from '../components/Tour';
+import Tour from '../components/Tour';
+import { useRegistrarRecorrido } from '@/shared/lib/lanzadorRecorridos';
 import NotaDeVoz from '../components/NotaDeVoz';
 import VistaPreviaAdjunto from '../components/VistaPreviaAdjunto';
 import ElegirChat from '../components/ElegirChat';
@@ -475,8 +476,7 @@ export default function ChatPage() {
   const [textoEditado, setTextoEditado] = useState('');
   // El mensaje al que se esta respondiendo, si hay alguno.
   const [citando, setCitando] = useState<MensajeWhatsapp | null>(null);
-  // El tour, solo la primera vez y solo cuando ya hay algo que enseñar: sobre
-  // una pantalla vacia no señala nada y no se entiende.
+  // El tour, solo cuando se pide (CRM#1012): con «Tutorial» o desde la cabecera.
   const [tour, setTour] = useState(false);
   // Solo el chat, sin el resto del CRM alrededor. Para cuando se pasa la
   // mañana aqui: el menu, la cabecera y el selector de proyecto no pintan nada.
@@ -690,22 +690,20 @@ export default function ChatPage() {
     };
   }, [masAbierto]);
 
-  // El recorrido, AL ENTRAR.
-  //
-  // Antes esperaba a `chats.length && conv`: a que hubiera conversaciones Y una
-  // abierta. Quien acababa de enlazar no tenia ninguna, asi que el recorrido
-  // saltaba cuando ya llevaba un rato trabajando — «medio ano despues me sale
-  // el tutorial», textual. Justo cuando ya no hace falta.
-  //
-  // Ahora basta con que haya algo que señalar. Los pasos que apunten a cosas
-  // que aun no existen se saltan solos.
+  // El recorrido NUNCA se abre solo (CRM#1012, Diego 23/11): con «Tutorial»
+  // aquí o con «Recorrido» en la cabecera.
+  useRegistrarRecorrido({ id: 'whatsapp-chat', titulo: 'El chat de WhatsApp', abrir: () => setTour(true) });
+  // Desde la guía, «Ver el recorrido por el chat» lo pide al navegar (botón pulsado).
+  // El aviso se borra al usarlo: si no, al recargar la página el recorrido saldría solo.
+  const lugar = useLocation();
+  const irA = useNavigate();
+  const pedidoDesdeLaGuia = !!(lugar.state as { abrirTour?: boolean } | null)?.abrirTour;
   useEffect(() => {
-    if (!tourPendiente() || cargando) return undefined;
-    // Un respiro para que la pantalla acabe de pintarse: medir antes de que
-    // exista la lista daria «no hay nada que señalar» siempre.
-    const t = setTimeout(() => { if (hayQueSeñalar()) setTour(true); }, 700);
-    return () => clearTimeout(t);
-  }, [cargando]);
+    if (!pedidoDesdeLaGuia) return;
+    setTour(true);
+    irA(`${lugar.pathname}${lugar.search}`, { replace: true, state: null });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pedidoDesdeLaGuia]);
   useEffect(() => { if (abierto) cargarHilo(abierto); }, [abierto, cargarHilo]);
 
   // El alto se MIDE, no se adivina.
