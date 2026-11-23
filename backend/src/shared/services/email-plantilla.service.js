@@ -627,9 +627,12 @@ const CABECERA_HTML = `<!DOCTYPE html>
  * @param {string}   [opts.saludo]  «Hola Ana,»
  * @param {string[]} opts.bloques   HTML de las piezas de arriba
  * @param {object}   [opts.apagar]  `{ texto }` — el pie con el enlace para apagarlo
+ * @param {string}   [opts.pie]     HTML del pie en lugar de «Te lo manda el CRM…», para
+ *                                  los correos al alumno que no deben nombrar el CRM
+ *                                  (la bienvenida al campus, #455)
  * @returns {{ htmlContent: string, textContent: string }}
  */
-export function correo({ proyecto = {}, titulo, saludo, bloques = [], apagar = null, resumen = null }) {
+export function correo({ proyecto = {}, titulo, saludo, bloques = [], apagar = null, resumen = null, pie = null }) {
   const cuerpo = bloques.filter(Boolean).join('\n');
   const urlPreferencias = enlace('preferencias');
   // La fecha de hoy, escrita como la escribiria una persona. Va en la cabecera
@@ -680,7 +683,7 @@ export function correo({ proyecto = {}, titulo, saludo, bloques = [], apagar = n
           <tr>
             <td class="linea tenue" style="padding:18px 28px 22px;border-top:1px solid ${C.borde};
                        font-family:${FUENTE};font-size:12px;line-height:20px;color:${C.tenue}">
-              Te lo manda el <strong class="txt" style="color:${C.texto}">CRM${proyecto.nombre ? ` de ${esc(proyecto.nombre)}` : ''}</strong>.
+              ${pie ?? `Te lo manda el <strong class="txt" style="color:${C.texto}">CRM${proyecto.nombre ? ` de ${esc(proyecto.nombre)}` : ''}</strong>.`}
               ${apagar ? `<br>${esc(apagar.texto || 'Recibes este aviso porque lo tienes activado.')}
                  <a class="enlace" href="${esc(urlPreferencias)}" style="color:${C.primario};text-decoration:none">
                    Puedes apagarlo en Mis preferencias</a>.` : ''}

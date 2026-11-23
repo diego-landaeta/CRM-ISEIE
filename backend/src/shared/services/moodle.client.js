@@ -25,9 +25,12 @@ export const FUNCIONES_NECESARIAS = ['core_webservice_get_site_info', 'core_user
 
 /** Error con un mensaje para enseñar tal cual y un código para decidir. */
 export class MoodleError extends Error {
-  constructor(mensaje, codigo) {
+  constructor(mensaje, codigo, errorcode = null) {
     super(mensaje);
     this.codigo = codigo;
+    // El `errorcode` tal cual lo dijo Moodle («matricular_correo_repetido»…), para
+    // quien tenga que distinguir un rechazo de otro (la matrícula automática, #455).
+    this.errorcode = errorcode;
   }
 }
 
@@ -90,18 +93,19 @@ export async function llamar({ url, token }, funcion, parametros = {}, { fetchIm
 /** Lo que dice Moodle, en palabras de quien tiene que arreglarlo. */
 function traducir(datos, funcion) {
   const codigo = datos.errorcode || '';
-  if (codigo === 'invalidtoken') return new MoodleError('El token del campus no vale (caducado o mal copiado).', 'TOKEN');
+  const error = (mensaje, propio) => new MoodleError(mensaje, propio, codigo || null);
+  if (codigo === 'invalidtoken') return error('El token del campus no vale (caducado o mal copiado).', 'TOKEN');
   if (codigo === 'accessexception' || codigo === 'servicerequireslogin') {
-    return new MoodleError(`El token no tiene permiso para «${funcion}»: añádela al servicio del token en el campus.`, 'PERMISO');
+    return error(`El token no tiene permiso para «${funcion}»: añádela al servicio del token en el campus.`, 'PERMISO');
   }
   if (codigo === 'webservicesnotenabled' || codigo === 'enablewsdescription') {
-    return new MoodleError('El campus tiene los servicios web apagados.', 'WS_APAGADOS');
+    return error('El campus tiene los servicios web apagados.', 'WS_APAGADOS');
   }
   if (/invalidrecord|function.*not.*found|codingerror/i.test(`${codigo} ${datos.message || ''}`)) {
-    return new MoodleError(`El servicio del token no tiene la función «${funcion}».`, 'SIN_FUNCION');
+    return error(`El servicio del token no tiene la función «${funcion}».`, 'SIN_FUNCION');
   }
   const motivo = motivoDelError(datos) || codigo || 'error sin detalle';
-  return new MoodleError(`El campus ha dicho: ${motivo.replace(/[.\s]+$/, '')}.`, 'MOODLE');
+  return error(`El campus ha dicho: ${motivo.replace(/[.\s]+$/, '')}.`, 'MOODLE');
 }
 
 /**
