@@ -21,6 +21,7 @@ import ElegirChat from '../components/ElegirChat';
 import FichaProspecto from '../components/FichaProspecto';
 import AvisoAlSalir from '../components/AvisoAlSalir';
 import SelectorPlantillas from '../components/SelectorPlantillas';
+import BotonLinkEnChat from '@/modules/links-pago/components/BotonLinkEnChat';
 import Llamar from '../components/Llamar';
 import EtiquetasDelChat from '../components/EtiquetasDelChat';
 import type { DatosParaRellenar } from '../lib/plantilla';
@@ -2194,6 +2195,11 @@ export default function ChatPage() {
                     <FileText size={15} />
                     <span>Plantillas</span>
                   </button>
+                )}
+                {/* Gemela de CRM#983: crear un link de pago y mandarlo aquí, con su mensaje. */}
+                {!bloqueo && (
+                  <BotonLinkEnChat leadId={conv?.lead_id} conversacionId={abierto} usuarioId={deQuien}
+                    onEnviado={() => { if (abierto) cargarHilo(abierto); cargarLista(); }} />
                 )}
               </InputToolbox>
 

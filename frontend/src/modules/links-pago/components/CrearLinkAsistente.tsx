@@ -1,13 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
-  LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle, CaretDown, CaretRight,
+  LinkSimple, Copy, CheckCircle, MagnifyingGlass, ArrowSquareOut, WhatsappLogo, EnvelopeSimple, WarningCircle, CaretDown, CaretRight, ChatText,
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import Portal from '@/shared/components/ui/portal';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
-import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import { useProjectContext } from '@/contexts/ProjectContext';
 // El correo se carga al pulsar «Enviar por correo»: no hace falta para crear el link.
 const LeadEmailDialog = lazy(() => import('@/modules/leads/components/LeadEmailDialog'));
@@ -15,6 +13,7 @@ import {
   crearLink, verConfig, ventasDelProspecto, cuotasDisponibles,
   type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto,
 } from '../api/linksPago.api';
+import { useWhatsappConectado, enviarPorWhatsapp, copiarMensaje } from './EnviarLink';
 
 /*
   «CREAR LINK DE PAGO», EN UNA PANTALLA (Carlos y Diego, 20/11/2026).
@@ -162,14 +161,24 @@ export interface CrearLinkAsistenteProps {
   onCreado?: (link: LinkDePago) => void;
   /** Cómo sale elegido el pago (los atajos de la pantalla «Links de pago», CRM#982). */
   formaInicial?: 'unico' | 'cuotas';
+  /**
+   * Desde el chat de WhatsApp (gemela de CRM#983): la conversación abierta (y de quién es la
+   * sesión, si un admin mira la de otra). «Enviar por WhatsApp» manda el link ahí,
+   * con su mensaje, sin abrir otra conversación.
+   */
+  conversacionId?: number | null;
+  usuarioId?: number | null;
+  onEnviado?: () => void;
 }
 
 /** «Nueva venta al pagar»: el link va al prospecto y la venta se crea con el cobro. */
 const NUEVA = 'nueva';
 
-export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado, formaInicial = 'unico' }: CrearLinkAsistenteProps) {
+export default function CrearLinkAsistente({
+  leadId: leadInicial, conversionId: ventaInicial, onClose, onCreado, formaInicial = 'unico',
+  conversacionId = null, usuarioId = null, onEnviado,
+}: CrearLinkAsistenteProps) {
   const { can } = usePermission();
-  const navigate = useNavigate();
   const { activeProject, projects } = useProjectContext();
   const esAdmin = can('links_pago.configurar');
 
@@ -403,13 +412,25 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
     } finally { setEnviando(false); }
   }
 
+  /*
+    (gemela de CRM#983) «Enviar por WhatsApp» MANDA el link, con su mensaje, en la conversación
+    del CRM con el prospecto (o en la del chat desde el que se abrió). Antes lo
+    copiaba y abría el chat para pegarlo a mano. Solo con WhatsApp conectado.
+  */
+  const [enviandoWa, setEnviandoWa] = useState(false);
+  const [enviadoWa, setEnviadoWa] = useState(false);
   async function porWhatsapp() {
     const leadId = prospecto?.lead.id;
-    if (!hecho?.url || !leadId) return;
-    await copiarLink(hecho.url);
-    const ruta = await abrirChatCrm({ leadId });
-    if (ruta) { toast({ title: 'Link copiado', description: 'Pégalo en la conversación y envíalo.' }); navigate(ruta); }
-    else toast({ title: 'No se ha podido abrir el chat', description: 'El link está copiado: mándalo desde WhatsApp.', variant: 'destructive' });
+    if (!hecho?.url || (!leadId && !conversacionId)) return;
+    setEnviandoWa(true);
+    try {
+      await enviarPorWhatsapp(hecho, { leadId, nombre: prospecto?.lead.nombre, conversacionId, usuarioId });
+      setEnviadoWa(true);
+      toast({ title: 'Link enviado por WhatsApp', description: 'Ha salido en la conversación del CRM, con su mensaje.' });
+      onEnviado?.();
+    } catch (e) {
+      toast({ title: 'No se ha podido enviar', description: `${errorDe(e)} Puedes copiar el mensaje y mandarlo a mano.`, variant: 'destructive' });
+    } finally { setEnviandoWa(false); }
   }
 
   function olvidarProspecto() {
@@ -422,6 +443,7 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
 
   const campo = 'w-full h-10 px-3 rounded-md border border-border bg-card text-sm';
   const lead = prospecto?.lead;
+  const waConectado = useWhatsappConectado(!!hecho && !!(lead || conversacionId));
   const ventas = prospecto?.ventas || [];
   const desdeFicha = !!(leadInicial || ventaInicial);
   const nombreCampus = campusPosibles.find((c) => c.id === projectId)?.nombre;
@@ -473,10 +495,19 @@ export default function CrearLinkAsistente({ leadId: leadInicial, conversionId: 
                     <ArrowSquareOut size={14} weight="bold" aria-hidden="true" /> Abrir
                   </a>
                 )}
-                {lead && can('whatsapp.usar') && (
-                  <button type="button" onClick={porWhatsapp}
+                {hecho.url && (
+                  <button type="button" onClick={() => copiarMensaje(hecho, lead?.nombre)}
                     className="inline-flex items-center gap-1 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted">
-                    <WhatsappLogo size={14} weight="bold" aria-hidden="true" /> Enviar por WhatsApp
+                    <ChatText size={14} weight="bold" aria-hidden="true" /> Copiar mensaje
+                  </button>
+                )}
+                {(lead || conversacionId) && waConectado && (
+                  <button type="button" onClick={porWhatsapp} disabled={enviandoWa || enviadoWa}
+                    className={`inline-flex items-center gap-1 h-9 px-3 rounded-md text-sm font-semibold disabled:opacity-60 ${conversacionId
+                      ? 'bg-primary text-primary-foreground hover:bg-primary/90'
+                      : 'border border-border bg-card hover:bg-muted'}`}>
+                    <WhatsappLogo size={14} weight="bold" aria-hidden="true" />
+                    {enviadoWa ? 'Enviado por WhatsApp' : enviandoWa ? 'Enviando…' : conversacionId ? 'Enviar en este chat' : 'Enviar por WhatsApp'}
                   </button>
                 )}
                 {lead && can('leads.enviar_correo') && lead.email && (
