@@ -260,6 +260,8 @@ export async function renovar(linkId, { userId, puedeCobroAuto }) {
     const nuevo = await service.crear({
       projectId: Number(l.project_id), leadId: l.lead_id, conversionId: l.conversion_id,
       prod, reglas, importe: Number(l.importe), userId, cuota, guardaTarjeta, enCuotas, descuento,
+      // Códigos promocionales (CRM#986): como el caducado, si el campus los sigue admitiendo.
+      codigosPromo: l.codigos_promo === true && cfg.codigos_promo === true && l.modalidad !== 'cuotas' && !l.installment_id,
     });
     if (!(await seg.atarRenovacion(l.id, nuevo.id))) {
       // Otro clic lo renovó a la vez: el nuevo sobra, se anula.

@@ -152,15 +152,18 @@ export async function marcarLista(id, cursos) {
   return rows[0] || null;
 }
 
-/** Fase 2: hecha en Moodle. */
-export async function marcarHecha(id, { cursos, moodleUserId = null }) {
+/**
+ * Fase 2: hecha en Moodle. `cursos` lleva el resultado de cada uno; `motivo`, si
+ * alguno no se pudo (hecha parcial), cuál y por qué.
+ */
+export async function marcarHecha(id, { cursos, moodleUserId = null, motivo = null }) {
   const { rows } = await query(
     `UPDATE matriculas_moodle
         SET estado = 'hecha', hecha_at = NOW(), cursos = $2::jsonb, moodle_user_id = $3,
-            motivo = NULL, intentos = intentos + 1, proximo_intento_at = NULL, updated_at = NOW()
+            motivo = $4, intentos = intentos + 1, proximo_intento_at = NULL, updated_at = NOW()
       WHERE id = $1 AND estado = 'programada'
       RETURNING *`,
-    [id, JSON.stringify(cursos), moodleUserId]
+    [id, JSON.stringify(cursos), moodleUserId, motivo]
   );
   return rows[0] || null;
 }
@@ -206,4 +209,11 @@ export async function adminsDelCampus(projectId) {
     [projectId]
   );
   return rows.map((r) => r.id);
+}
+
+/** El campus, para la marca del correo al alumno (#455). */
+export async function campus(projectId) {
+  const { rows } = await query(
+    'SELECT id, nombre, slug, logo_url, emoji FROM projects WHERE id = $1', [projectId]);
+  return rows[0] || null;
 }

@@ -18,7 +18,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 const get = vi.hoisted(() => vi.fn());
 const post = vi.hoisted(() => vi.fn());
-vi.mock('@/shared/api/client', () => ({ default: { get, post, put: vi.fn(), delete: vi.fn() } }));
+vi.mock('@/shared/api/client', () => ({ APP_BASE_URL: '', API_BASE_URL: '/api', default: { get, post, put: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));

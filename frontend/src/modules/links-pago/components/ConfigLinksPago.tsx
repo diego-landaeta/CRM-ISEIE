@@ -32,6 +32,7 @@ type Borrador = {
   cuotas_admitidas: boolean; cuotas_max: string; monedas: string; moneda_defecto: string;
   cobro_auto: boolean; cobro_auto_reintento_dias: string;
   aviso_abierto_horas: string; recordatorios: boolean;
+  codigos_promo: boolean;
 };
 
 function aBorrador(c: Partial<ConfigLinks>): Borrador {
@@ -48,6 +49,7 @@ function aBorrador(c: Partial<ConfigLinks>): Borrador {
     cobro_auto_reintento_dias: t(c.cobro_auto_reintento_dias),
     aviso_abierto_horas: t(c.aviso_abierto_horas),
     recordatorios: c.recordatorios !== false,
+    codigos_promo: c.codigos_promo === true,
   };
 }
 
@@ -72,6 +74,8 @@ function cambiosDe(b: Borrador, g: Partial<ConfigLinks>): Partial<Omit<ConfigLin
   // Seguimiento de los que no se pagan (gemela de CRM#984).
   if (b.aviso_abierto_horas.trim() !== '' && num(b.aviso_abierto_horas) !== g.aviso_abierto_horas) c.aviso_abierto_horas = num(b.aviso_abierto_horas);
   if (g.recordatorios !== undefined && b.recordatorios !== g.recordatorios) c.recordatorios = b.recordatorios;
+  // Códigos promocionales de Stripe (CRM#986).
+  if (g.codigos_promo !== undefined && b.codigos_promo !== g.codigos_promo) c.codigos_promo = b.codigos_promo;
   return c;
 }
 
@@ -104,6 +108,8 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
       if (res.success && res.data) {
         setGuardado(res.data);
         setB(aBorrador(res.data));
+        // Los códigos de campaña (CRM#986) se enteran de si el campus los admite ya.
+        window.dispatchEvent(new CustomEvent('links-pago:config', { detail: res.data }));
         toast({ title: 'Reglas de los links guardadas', description: 'Valen para los links que se creen desde ahora.' });
       }
     } catch (e) {
@@ -212,6 +218,21 @@ export function ReglasDeLosLinks({ projectId }: { projectId: number }) {
               onChange={(e) => setB((x) => ({ ...x, recordatorios: e.target.checked }))} />
             Recordar el pago al alumno por correo a las 24 h y a las 72 h
           </label>
+        </div>
+      )}
+
+      {/* Códigos promocionales de Stripe (CRM#986) */}
+      {guardado?.codigos_promo !== undefined && (
+        <div className="rounded-md bg-muted/30 p-2.5 space-y-1.5" data-recorrido="links-codigos-promo">
+          <label className="text-xs font-semibold flex items-center gap-2">
+            <input type="checkbox" checked={b.codigos_promo}
+              onChange={(e) => setB((x) => ({ ...x, codigos_promo: e.target.checked }))} />
+            Códigos promocionales en los links
+          </label>
+          <p className="text-[11px] text-muted-foreground">
+            El alumno puede escribir un código de campaña al pagar un link de pago único (en cuotas y desde una venta, no).
+            Los códigos se crean abajo, con su fecha límite. La clave necesita además <em>Coupons</em> y <em>Promotion Codes</em> de escritura.
+          </p>
         </div>
       )}
 

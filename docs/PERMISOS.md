@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-902 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+905 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -635,6 +635,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarConfig | `PUT /api/links-pago/config` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | verWebhook | `GET /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cambiarWebhook | `PUT /api/links-pago/webhook` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| listarCodigos | `GET /api/links-pago/codigos` | (no existía) | (ruta nueva) | `links_pago.configurar` o `links_pago.crear` |
+| crearCodigo | `POST /api/links-pago/codigos` | (no existía) | (ruta nueva) | `links_pago.configurar` |
+| desactivarCodigo | `POST /api/links-pago/codigos/:id/desactivar` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | conectarStripe | `GET /api/links-pago/conectar-stripe` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
@@ -1584,7 +1587,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Crear links de pago | `links_pago.crear` | Crear un link de pago de Stripe para un prospecto o una venta de sus campus, y ver los suyos. | Admin, Gestora, Soporte |  |
 | Ver los links de todos | `links_pago.ver_todos` | Los links de pago de todas las personas de sus campus (o de su equipo, si lleva uno), los creados directamente en Stripe y vincular sus cobros a una venta. | Admin |  |
-| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas y monedas) y el webhook de su cuenta de Stripe. | Admin |  |
+| Configurar los links de pago | `links_pago.configurar` | Las reglas de los links de cada campus (descuento máximo, caducidad, cuotas, monedas y códigos promocionales de campaña) y el webhook de su cuenta de Stripe. | Admin |  |
 | Cobro automático de cuotas | `links_pago.cobro_automatico` | Activar o quitar en una venta que Stripe cobre solas sus cuotas, en sus fechas, con la tarjeta que guarda el alumno al pagar la primera. | Admin, Gestora, Soporte |  |
 
 ### Facturas de colaboradores

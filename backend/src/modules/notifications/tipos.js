@@ -279,6 +279,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
     descripcion: 'No se pudo preparar la matrícula de un alumno en Moodle (con el motivo)',
   },
+  // Fase 2 (#455): la matrícula automática no se pudo hacer sola y no se arregla
+  // reintentando (cuenta suspendida, rechazo del campus, un curso que falló, el campus
+  // sin el plugin 1.12.0 o la bienvenida que no salió). Una por alumno.
+  matricula_moodle_revisar: {
+    clase: ACCION, etiqueta: 'Matrícula en Moodle para revisar', agrupa: false,
+    descripcion: 'La matrícula automática de un alumno se quedó a medias o sin hacer y hay que mirarla',
+  },
   // #471: la renovación diaria de un token de Meta Ads o de Instagram ha fallado,
   // o el token caduca en menos de 7 días. Hay que volver a conectar la cuenta.
   // Una vez por fallo y una por fecha de caducidad (jobs/metaTokensScheduler.js).

@@ -52,7 +52,7 @@ export default function LeyendaFacturas({ conEnlace = false }: {
   conEnlace?: boolean;
 }) {
   return (
-    <details open className="rounded-lg border border-border bg-card px-4 py-3 text-sm" data-testid="leyenda-facturas">
+    <details open className="rounded-lg border border-border bg-card px-4 py-3 text-sm" data-testid="leyenda-facturas" data-recorrido="facturas-colab-leyenda">
       <summary className="cursor-pointer select-none font-semibold">Qué significa cada cosa</summary>
       <div className="mt-3 grid gap-4 md:grid-cols-2">
         <section className="min-w-0 space-y-2">

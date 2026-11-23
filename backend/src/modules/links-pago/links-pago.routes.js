@@ -33,6 +33,12 @@ router.put('/config', puede('links_pago.configurar'), projectAccess, ctrl.guarda
 router.get('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.verWebhook);
 router.put('/webhook', puede('links_pago.configurar'), projectAccess, ctrl.cambiarWebhook);
 
+// Códigos promocionales de campaña (CRM#986): verlos, quien crea links (los
+// vigentes) o quien configura (todos); crearlos y desactivarlos, quien configura.
+router.get('/codigos', puede('links_pago.configurar', 'links_pago.crear'), projectAccess, ctrl.listarCodigos);
+router.post('/codigos', puede('links_pago.configurar'), projectAccess, ctrl.crearCodigo);
+router.post('/codigos/:id/desactivar', puede('links_pago.configurar'), projectAccess, ctrl.desactivarCodigo);
+
 // El asistente de crear link (20/11): si «Cuotas» se puede en este campus y, si
 // no, por qué. Quien crea links; el campus, `projectAccess`.
 router.get('/cuotas-disponibles', puede('links_pago.crear'), projectAccess, ctrl.cuotasDisponibles);

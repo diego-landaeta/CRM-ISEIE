@@ -82,7 +82,7 @@ const moneda = z.string({ invalid_type_error: 'La moneda va en código ISO de tr
 */
 const CAMPOS_DE_CONFIG = ['descuento_max_pct', 'caducidad_dias', 'caducidad_max_dias', 'cuotas_admitidas',
   'cuotas_max', 'monedas', 'moneda_defecto', 'cobro_auto', 'cobro_auto_reintento_dias',
-  'aviso_abierto_horas', 'recordatorios'];
+  'aviso_abierto_horas', 'recordatorios', 'codigos_promo'];
 
 export const configBodySchema = z.object({
   projectId: id,
@@ -101,6 +101,8 @@ export const configBodySchema = z.object({
   // abrirlo sin pagar se avisa a la gestora, y si se manda el recordatorio de 24 y 72 h.
   aviso_abierto_horas: entero('Aviso a la gestora', 1, 72).optional(),
   recordatorios: z.boolean({ invalid_type_error: 'Recordatorios: sí o no' }).optional(),
+  // Códigos promocionales de Stripe en los links del campus (CRM#986).
+  codigos_promo: z.boolean({ invalid_type_error: 'Códigos promocionales: sí o no' }).optional(),
 }).refine((b) => CAMPOS_DE_CONFIG.some((k) => b[k] !== undefined), 'Falta el descuento');
 
 /*
@@ -187,6 +189,9 @@ export const crearSchema = z.object({
       .refine(dosDecimales, 'Dos decimales como mucho')).optional(),
   inicial: importeEnEuros('La inicial').optional(),
   cuotas: z.array(cuotaDelPlan).min(1, 'Falta alguna cuota').max(36, 'Como mucho 36 cuotas').optional(),
+  // CRM#986: si el link admite códigos promocionales de Stripe. Sin decirlo, lo que
+  // diga el campus (solo en pago único y sin venta).
+  codigos_promo: z.boolean({ invalid_type_error: 'Códigos promocionales: sí o no' }).optional(),
 }).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
   .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
   .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»')
@@ -244,3 +249,31 @@ export const cobroAutoBodySchema = z.object({
   conversionId: id,
   activo: z.boolean({ required_error: 'Falta decir si se activa', invalid_type_error: 'Activo: sí o no' }),
 });
+
+/*
+  LOS CÓDIGOS PROMOCIONALES DE CAMPAÑA (CRM#986). El código, en mayúsculas, de 3 a
+  40 letras, números, guiones o guiones bajos (lo que escribe el alumno en
+  Stripe). El descuento en % (hasta el 100) o en una moneda del campus. La fecha
+  límite, obligatoria: que no sea de antes de hoy ni pase de un año lo mira el
+  servicio (necesita el día de hoy en Madrid).
+*/
+export const codigosQuerySchema = z.object({ projectId: id });
+export const codigoBodySchema = z.object({
+  projectId: id,
+  codigo: z.string({ required_error: 'Falta el código', invalid_type_error: 'Falta el código' })
+    .trim().toUpperCase()
+    .regex(/^[A-Z0-9][A-Z0-9_-]{2,39}$/, 'El código, de 3 a 40 letras o números (sin espacios ni tildes; vale - y _)'),
+  campana: z.string().trim().max(120, 'El nombre de la campaña, en 120 caracteres como mucho').optional()
+    .transform((v) => (v ? v : undefined)),
+  tipo: z.enum(TIPOS_DE_DESCUENTO, { errorMap: () => ({ message: 'El descuento va en importe («monto») o en % («pct»)' }) }),
+  valor: z.preprocess(comoNumero,
+    z.number({ required_error: 'Falta el descuento', invalid_type_error: 'El descuento tiene que ser un número' })
+      .finite().positive('El descuento tiene que ser mayor que 0').max(999999.99, 'El descuento no puede pasar de 999.999,99')
+      .refine(dosDecimales, 'Dos decimales como mucho')),
+  moneda: moneda.optional(),
+  caduca_el: dia,
+  max_usos: entero('Usos máximos', 1, 100000).optional(),
+}).refine((b) => b.tipo !== 'pct' || b.valor <= 100, 'El descuento no puede pasar del 100 %')
+  .refine((b) => b.tipo === 'monto' || b.moneda === undefined, 'La moneda solo va con un descuento en importe');
+
+export const codigoDesactivarSchema = z.object({ projectId: id, id });

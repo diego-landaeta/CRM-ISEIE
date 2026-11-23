@@ -20,6 +20,8 @@ import { asociacionV2Activa } from './asociacion.config.js';
 import * as cobroDelLink from '../links-pago/links-pago.cobro.js';
 // Cobro automático de las cuotas (gemela de CRM 309): la cuota que cobra Stripe sola, a su cuota.
 import * as cobroAuto from '../links-pago/links-pago.cobro-auto.js';
+import { conElCodigo } from '../links-pago/links-pago.codigos.js';
+import { deUnidadesMinimas } from '../links-pago/links-pago.stripe.js';
 
 export { asociacionV2Activa };
 
@@ -84,7 +86,8 @@ function chargeToPayment(charge, projectId) {
     description: charge.description || null,
     metadata: {
       ...(charge.metadata || {}),
-      ...(foreign ? { original_amount: (charge.amount || 0) / 100, original_currency: chargeCur.toUpperCase(), stripe_exchange_rate: bt?.exchange_rate ?? null } : {}),
+      // En una moneda sin decimales (CLP, JPY…) Stripe da unidades, no céntimos (CRM#986).
+      ...(foreign ? { original_amount: deUnidadesMinimas(charge.amount || 0, chargeCur), original_currency: chargeCur.toUpperCase(), stripe_exchange_rate: bt?.exchange_rate ?? null } : {}),
     },
     payment_method: charge.payment_method_details?.type || null,
     // Cobro automático de las cuotas (309): con qué tarjeta se pagó, para guardarla
@@ -359,6 +362,9 @@ async function enlazarSiSePuede(projectId, payment, dbRow, { compraDirecta = fal
     return;
   }
 
+  // Códigos promocionales (CRM#986): si el alumno pagó el link con un código, se
+  // apunta y su venta se crea por lo que pagó, con el descuento.
+  if (delLink?.link) delLink.link = await conElCodigo(delLink.link, payment);
   const destino = delLink
     ? await cobroDelLink.ventaDelLink(projectId, payment, delLink.link)
     : delExterno ? await (await import('../links-pago/links-pago.externos.js')).ventaDelCargo(projectId, payment, dbRow)
