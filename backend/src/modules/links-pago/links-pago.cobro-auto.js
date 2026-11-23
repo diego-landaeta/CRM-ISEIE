@@ -239,25 +239,35 @@ export async function campusPorConectar(projectIds) {
 }
 
 /*
-  ¿SE PUEDE CREAR UN LINK EN CUOTAS EN ESTE CAMPUS? (link sencillo, 20/11)
+  ¿SE PUEDE CREAR UN LINK EN CUOTAS EN ESTE CAMPUS? ¿Y SE COBRAN SOLAS?
 
-  «Cuotas» en «Crear link de pago» es el cobro automático: el link cobra la
-  primera y Stripe las demás. Antes de crear el link, no después, se dice si no
-  se puede y por qué: el campus no admite cuotas o no tiene permitido el cobro
-  automático, la persona no tiene su permiso, o la clave de Stripe no puede
-  programar cobros (se pregunta a Stripe, sin cobrar nada).
-  `{ disponible, codigo, motivo, cuotas_max }` (el código, en `CODIGOS_DE_CONECTAR`
-  y arriba). Nunca lanza.
+  Hasta el 23/11, «Cuotas» en «Crear link de pago» ERA el cobro automático: sin
+  él (el campus no lo permite, la persona no tiene su permiso o la clave de Stripe
+  no puede programar cobros) la opción salía apagada. En producción ninguna clave
+  tenía esos permisos, así que nadie podía crear cuotas. Diego, 23/11: «el link de
+  pago debe dejar CREAR CUOTAS Y ELEGIR LAS FECHAS SÍ O SÍ».
+
+  Desde entonces las cuotas se pueden SIEMPRE que el campus las admita en euros:
+    · `disponible`: si se pueden crear cuotas. Solo dice que no el campus (no
+      existe, no admite cuotas o no cobra en EUR): eso lo decide un admin;
+    · `automatico`: si Stripe las cobrará solas (el link guarda la tarjeta y
+      programa las demás). Si no, cada cuota tendrá su propio link, con su fecha
+      de vencimiento, que se crean al pagarse la inicial (links-pago.cobro.js);
+    · `codigo` y `motivo`: por qué no (no se pueden, o no serán automáticas),
+      con los códigos de arriba (`CODIGOS_DE_CONECTAR`…).
+  `{ disponible, automatico, codigo, motivo, cuotas_max }`. Nunca lanza.
 */
 export async function paraUnLinkEnCuotas(projectId, { cfg, puedeCobroAuto }) {
-  const no = (codigo, motivo) => ({ disponible: false, codigo, motivo, cuotas_max: cfg?.cuotas_max ?? null });
+  const max = cfg?.cuotas_max ?? null;
+  const no = (codigo, motivo) => ({ disponible: false, automatico: false, codigo, motivo, cuotas_max: max });
+  const sinAuto = (codigo, motivo) => ({ disponible: true, automatico: false, codigo, motivo, cuotas_max: max });
   if (!cfg) return no('campus_no_encontrado', 'Campus no encontrado.');
   if (!cfg.cuotas_admitidas) return no('cuotas_no_admitidas', 'Este campus no admite pagos en cuotas. Lo cambia un admin en Integraciones › Links de pago.');
   if (!cfg.monedas.includes('EUR')) return no('sin_euros', 'Las cuotas van en euros y este campus no cobra en EUR.');
-  if (!puedeCobroAuto) return no('sin_permiso', 'No tienes el permiso «Cobro automático de cuotas»: pídeselo a un admin.');
+  if (!puedeCobroAuto) return sinAuto('sin_permiso', 'No tienes el permiso «Cobro automático de cuotas».');
   const campus = await cobroDelCampus(projectId);
-  if (!campus.disponible) return no(campus.codigo, campus.motivo);
-  return { disponible: true, codigo: null, motivo: null, cuotas_max: cfg.cuotas_max };
+  if (!campus.disponible) return sinAuto(campus.codigo, campus.motivo);
+  return { disponible: true, automatico: true, codigo: null, motivo: null, cuotas_max: max };
 }
 
 function tarjetaDe(ca) {

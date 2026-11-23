@@ -36,7 +36,7 @@ function EstadoDatosFiscales({ d }: { d: ColaItem['datos_fiscales'] }) {
   if (!texto) return null;
   const tono = necesitaPersona(d) ? 'text-amber-600 dark:text-amber-400' : 'text-muted-foreground';
   return (
-    <span className={`block whitespace-normal text-[10px] ${tono}`} title={d.detalle || d.motivo || undefined}>
+    <span className={`block whitespace-normal text-[10px] ${tono}`} title={d.detalle || d.motivo || undefined} data-recorrido="cola-datos-fiscales">
       {texto}
     </span>
   );
@@ -165,7 +165,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
 
   return (
-    <div className="bg-card border border-border rounded-lg p-4">
+    <div className="bg-card border border-border rounded-lg p-4" data-recorrido="cola-facturacion">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h3 className="font-semibold flex items-center gap-2">
@@ -248,6 +248,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                       {c.cliente || '—'}
                       {c.motivo && (
                         <span
+                          data-recorrido="cola-motivo"
                           className="block w-fit mt-0.5 px-1.5 rounded bg-warning-soft text-warning-soft-foreground text-[10px] font-semibold"
                           title={c.posible_duplicada
                             ? textoDuplicada(c.posible_duplicada)
@@ -272,6 +273,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                         <button
                           type="button"
                           onClick={() => generarDeLaFila(c.payment_id, c.posible_duplicada || null)}
+                          data-recorrido="cola-generar"
                           disabled={generando === c.payment_id}
                           className={`h-6 px-2 rounded font-semibold whitespace-nowrap disabled:opacity-40 ${
                             c.es_el_siguiente

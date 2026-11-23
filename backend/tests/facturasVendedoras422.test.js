@@ -188,3 +188,37 @@ describe('los correos de la vendedora', () => {
     expect(c.htmlContent).not.toContain('Importe acordado');
   });
 });
+
+describe('nadie valida ni paga su propia factura (gemela de CRM#710 / CRM#996)', () => {
+  // Una comercial con rol admin: trae «validar» y «pagar» de serie, pero su
+  // factura la valida y la paga otra persona de la empresa (aquí, el super admin).
+  let suya;
+  const pagarComo = (clave, ids) => request.post(`${API}/facturas/pagar`).set(como(clave))
+    .field('ids', ids.join(',')).field('fecha', '2026-05-06').field('forma_pago', 'transferencia');
+
+  beforeAll(async () => {
+    const res = await request.post(`${API}/colaboradores`).set(como('super'))
+      .send(ficha(U.adminB, { nombre: 'Admin de Beta', email: 'admin.beta@test.local', empresas: [{ issuer_id: E.B }] }));
+    expect(res.status, JSON.stringify(res.body)).toBe(201);
+    suya = recibida(res.body.data.id, 210);
+    base.factura(suya).issuer_id = E.B;
+  });
+
+  it('no valida la suya; otra persona de la empresa sí', async () => {
+    const propia = await request.post(`${API}/facturas/${suya}/validar`).set(como('adminB'));
+    expect(propia.status).toBe(403);
+    expect(propia.body.code).toBe('FACTURA_PROPIA');
+    expect(base.factura(suya).validada_at ?? null).toBeNull();
+    const otra = await request.post(`${API}/facturas/${suya}/validar`).set(como('super'));
+    expect(otra.status, JSON.stringify(otra.body)).toBe(200);
+  });
+
+  it('no paga la suya; otra persona de la empresa sí', async () => {
+    const propia = await pagarComo('adminB', [suya]);
+    expect(propia.status).toBe(403);
+    expect(propia.body.code).toBe('FACTURA_PROPIA');
+    expect(base.factura(suya).pagada_at ?? null).toBeNull();
+    const pago = await pagarComo('super', [suya]);
+    expect(pago.status, JSON.stringify(pago.body)).toBe(200);
+  });
+});

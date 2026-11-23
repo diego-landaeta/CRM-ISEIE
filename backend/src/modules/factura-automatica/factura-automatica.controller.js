@@ -1,5 +1,6 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as service from './factura-automatica.service.js';
+import { activa, diasDePlazo } from './factura-automatica.config.js';
 import { datosFiscalesSchema } from './factura-automatica.validation.js';
 
 // ── Públicas: el formulario, desde el enlace del correo ─────────────────────
@@ -27,6 +28,13 @@ const idDeVenta = (req) => {
   if (!Number.isInteger(id) || id <= 0) throw new AppError('Venta no válida', 400, 'BAD_ID');
   return id;
 };
+
+// GET /api/factura-automatica/interruptor — ¿está encendida en este servidor?
+// Lo pregunta el recorrido guiado (#856): apagada, dice que la enciende Diego.
+// Solo el sí o el no y el plazo; la lista de campus se queda en el .env.
+export function interruptor(req, res) {
+  res.json({ success: true, data: { activa: activa(), dias: diasDePlazo() } });
+}
 
 // GET /api/factura-automatica/venta/:conversionId
 export async function estado(req, res, next) {

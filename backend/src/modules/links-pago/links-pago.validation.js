@@ -148,6 +148,22 @@ export function totalConDescuento({ precio, tipo, valor }) {
   return { total: (precioC - descC) / 100, descuento: descC / 100 };
 }
 
+/*
+  LAS CUOTAS CON SU FECHA (Diego, 23/11/2026: «el link de pago debe dejar crear
+  cuotas y elegir las fechas sí o sí»). Con inicial, la gestora puede mandar
+  `cuotas`: una fila por cuota de después de la inicial, con su importe (repartido
+  a partes iguales y editable) y su fecha (una al mes de serie, editable). Tantas
+  como `num_cuotas`, que entre todas sumen lo que queda tras la inicial y cada una
+  después de la anterior. Que la primera sea de mañana en adelante lo mira el
+  servicio (necesita el día de hoy en Madrid).
+*/
+const fechaDeCuota = z.string({ required_error: 'Falta la fecha de la cuota', invalid_type_error: 'La fecha va como AAAA-MM-DD' })
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va como AAAA-MM-DD')
+  // Que exista de verdad: el 30 de febrero no (Date lo pasaría al 2 de marzo).
+  .refine((s) => { const d = new Date(`${s}T00:00:00Z`); return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s; }, 'Esa fecha no existe');
+const cuotaDelPlan = z.object({ importe: importeEnEuros('El importe de la cuota'), vence: fechaDeCuota });
+const centimos = (n) => Math.round(Number(n) * 100);
+
 export const crearSchema = z.object({
   leadId: id.optional(),
   conversionId: id.optional(),
@@ -170,6 +186,7 @@ export const crearSchema = z.object({
       .min(0, 'El descuento no puede ser negativo')
       .refine(dosDecimales, 'Dos decimales como mucho')).optional(),
   inicial: importeEnEuros('La inicial').optional(),
+  cuotas: z.array(cuotaDelPlan).min(1, 'Falta alguna cuota').max(36, 'Como mucho 36 cuotas').optional(),
 }).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
   .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
   .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»')
@@ -177,6 +194,14 @@ export const crearSchema = z.object({
   .refine((b) => b.modalidad !== 'cuotas' || b.inicial !== undefined || !(b.num_cuotas < 2), 'Sin inicial, de 2 cuotas en adelante')
   .refine((b) => b.inicial === undefined || Math.round(b.inicial * 100) < Math.round(b.importe * 100),
     'La inicial tiene que ser menor que el total')
+  .refine((b) => b.cuotas === undefined || (b.modalidad === 'cuotas' && b.inicial !== undefined),
+    'Las fechas de las cuotas van con «inicial + cuotas»')
+  .refine((b) => b.cuotas === undefined || b.cuotas.length === b.num_cuotas, 'Tiene que haber una fecha por cuota')
+  .refine((b) => b.cuotas === undefined || b.inicial === undefined
+    || b.cuotas.reduce((t, c) => t + centimos(c.importe), 0) === centimos(b.importe) - centimos(b.inicial),
+  'Las cuotas no suman lo que queda tras la inicial: vuelve a repartirlas')
+  .refine((b) => b.cuotas === undefined || b.cuotas.every((c, i) => i === 0 || c.vence > b.cuotas[i - 1].vence),
+    'Cada cuota tiene que ir después de la anterior')
   .refine((b) => (b.descuento_tipo === undefined) === (b.descuento_valor === undefined), 'Di el descuento y si es en € o en %')
   .refine((b) => b.descuento_tipo === undefined || b.precio_original !== undefined, 'Con descuento, falta el precio del que sale')
   .refine((b) => b.descuento_tipo !== 'pct' || b.descuento_valor <= 100, 'El descuento no puede pasar del 100 %')

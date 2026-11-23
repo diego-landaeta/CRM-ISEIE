@@ -23,7 +23,7 @@ const COLUMNAS = `
   pl.product_id, pr.nombre AS product_nombre,
   pl.created_by, cr.nombre AS creado_por_nombre,
   pl.precio_catalogo, pl.importe, pl.descuento_pct, pl.moneda,
-  pl.modalidad, pl.num_cuotas, pl.importe_cuota, pl.importe_inicial,
+  pl.modalidad, pl.num_cuotas, pl.importe_cuota, pl.importe_inicial, pl.plan_cuotas,
   pl.precio_original, pl.descuento_tipo, pl.descuento_valor, pl.descuento_importe,
   pl.estado, pl.url, pl.caduca_el, pl.pagado_el, pl.guarda_tarjeta,
   pl.anulado_por, an.nombre AS anulado_por_nombre, pl.anulado_el, pl.motivo_anulacion,
@@ -227,9 +227,11 @@ export async function insertar(l) {
   const { rows } = await query(
     `INSERT INTO payment_links (project_id, lead_id, conversion_id, product_id, created_by,
         precio_catalogo, importe, descuento_pct, moneda, modalidad, estado, caduca_el, installment_id, guarda_tarjeta,
-        num_cuotas, importe_cuota, importe_inicial, precio_original, descuento_tipo, descuento_valor, descuento_importe)
+        num_cuotas, importe_cuota, importe_inicial, precio_original, descuento_tipo, descuento_valor, descuento_importe,
+        plan_cuotas)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $13::int IS NULL THEN 'unico' ELSE 'cuotas' END, 'creado',
-             NOW() + make_interval(days => $10), $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19::numeric, 0))
+             NOW() + make_interval(days => $10), $11, $12, $13, $14, $15, $16, $17, $18, COALESCE($19::numeric, 0),
+             $20::jsonb)
      RETURNING id, created_at, caduca_el`,
     [l.projectId, l.leadId, l.conversionId, l.productId, l.createdBy,
       l.precioCatalogo, l.importe, l.descuentoPct, l.moneda, l.caducidadDias, l.installmentId ?? null, l.guardaTarjeta === true,
@@ -239,7 +241,9 @@ export async function insertar(l) {
       // 44,50 € daba un 500 (QA de staging, 21/11).
       // CRM-ISEIE#657 (321): la inicial, y el precio antes del descuento con su descuento.
       l.importeInicial ?? null, l.precioOriginal ?? null, l.descuentoTipo ?? null, l.descuentoValor ?? null,
-      l.descuentoImporte ?? null]);
+      l.descuentoImporte ?? null,
+      // 326 (23/11): las cuotas de después de la inicial con su importe y su fecha.
+      l.planCuotas ? JSON.stringify(l.planCuotas) : null]);
   return rows[0];
 }
 
@@ -317,7 +321,7 @@ export async function paraCobro(id) {
   const { rows } = await query(
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
             estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota,
-            importe_inicial, precio_original, descuento_tipo, descuento_valor, descuento_importe
+            importe_inicial, plan_cuotas, precio_original, descuento_tipo, descuento_valor, descuento_importe
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;

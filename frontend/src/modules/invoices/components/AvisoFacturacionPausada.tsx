@@ -85,7 +85,7 @@ export default function AvisoFacturacionPausada() {
   }
 
   return (
-    <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive-soft p-3 sm:p-4">
+    <div role="alert" className="mb-4 rounded-lg border border-destructive/30 bg-destructive-soft p-3 sm:p-4" data-recorrido="facturacion-pausada">
       <div className="flex items-start gap-3">
         <PauseCircle size={20} weight="fill" className="text-destructive flex-none mt-0.5" />
         <div className="min-w-0 flex-1">
@@ -113,6 +113,7 @@ export default function AvisoFacturacionPausada() {
               type="button"
               onClick={solucionado}
               disabled={trabajando}
+              data-recorrido="facturacion-solucionado"
               className="inline-flex items-center gap-1.5 h-7 px-2.5 rounded bg-destructive text-destructive-foreground text-xs font-semibold hover:bg-destructive/90 disabled:opacity-50"
             >
               {trabajando ? <ArrowClockwise size={14} className="animate-spin" /> : <CheckCircle size={14} weight="bold" />}
@@ -122,6 +123,7 @@ export default function AvisoFacturacionPausada() {
               <button
                 type="button"
                 onClick={() => setAbierto((v) => !v)}
+                data-recorrido="facturacion-errores"
                 className="inline-flex items-center gap-1 h-7 px-2.5 rounded border border-destructive/30 text-destructive-soft-foreground text-xs font-semibold hover:bg-destructive/10"
               >
                 {abierto ? <CaretUp size={12} /> : <CaretDown size={12} />}
