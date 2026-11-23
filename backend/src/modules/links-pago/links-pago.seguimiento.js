@@ -225,19 +225,35 @@ export async function renovar(linkId, { userId, puedeCobroAuto }) {
         const cobroAuto = await import('./links-pago.cobro-auto.js');
         const disp = await cobroAuto.paraUnLinkEnCuotas(l.project_id, { cfg, puedeCobroAuto });
         if (!disp.disponible) throw new AppError(disp.motivo, 409, 'CUOTAS_NO_DISPONIBLES');
-        // Con inicial (CRM#982): la inicial y las cuotas iguales de lo que queda;
-        // `num_cuotas` del link cuenta todos los pagos. Sin ella, el total entre N.
+        // Con inicial (CRM#982): la inicial y las cuotas de lo que queda (con las
+        // fechas que eligió la gestora, si las eligió: 23/11); `num_cuotas` del link
+        // cuenta todos los pagos. Sin ella, el total entre N.
         const conInicial = l.importe_inicial != null;
-        const importes = conInicial
-          ? [Number(l.importe_inicial), ...service.repartirEnCuotas(service.restaCentimos(l.importe, l.importe_inicial), Number(l.num_cuotas) - 1)]
-          : service.repartirEnCuotas(l.importe, l.num_cuotas);
-        enCuotas = { num: importes.length, importeCuota: importes[0], ...(conInicial ? { inicial: Number(l.importe_inicial) } : {}) };
-        guardaTarjeta = {
-          consentimiento: cobroAuto.textoConsentimiento({
-            campus: await model.nombreDelCampus(l.project_id),
-            cuotas: importes.slice(1).map((importe) => ({ importe })),
-          }),
+        const plan = conInicial && Array.isArray(l.plan_cuotas) && l.plan_cuotas.length ? l.plan_cuotas : null;
+        // El link nuevo lleva el mismo plan: si sus fechas ya pasaron, no vale renovarlo.
+        if (plan) {
+          try { service.comprobarFechasDelPlan(plan); } catch {
+            throw new AppError('Las fechas de las cuotas de este link ya pasaron: crea un link nuevo con fechas nuevas.', 409, 'NO_RENOVABLE');
+          }
+        }
+        const importes = plan
+          ? [Number(l.importe_inicial), ...plan.map((c) => Number(c.importe))]
+          : conInicial
+            ? [Number(l.importe_inicial), ...service.repartirEnCuotas(service.restaCentimos(l.importe, l.importe_inicial), Number(l.num_cuotas) - 1)]
+            : service.repartirEnCuotas(l.importe, l.num_cuotas);
+        enCuotas = {
+          num: importes.length, importeCuota: importes[0],
+          ...(conInicial ? { inicial: Number(l.importe_inicial) } : {}), ...(plan ? { plan } : {}),
         };
+        // Sin cobro automático (23/11), las cuotas van con su propio link al pagarse.
+        if (disp.automatico) {
+          guardaTarjeta = {
+            consentimiento: cobroAuto.textoConsentimiento({
+              campus: await model.nombreDelCampus(l.project_id),
+              cuotas: importes.slice(1).map((importe) => ({ importe })),
+            }),
+          };
+        }
       }
     }
 
