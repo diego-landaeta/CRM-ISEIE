@@ -211,7 +211,7 @@ describe('la pantalla «Links de pago»', () => {
   it('el recorrido guiado lleva un paso por cada recorrido, en los anclajes de la pantalla', () => {
     const pasos = RECORRIDOS_COBROS['links-pago'].pasos;
     const de = (n) => pasos.find((p) => p.donde === `[data-recorrido="${n}"]`);
-    expect(de('links-pantalla-unico')).toMatchObject({ titulo: 'Pago único con descuento', permiso: 'links_pago.crear' });
+    expect(de('links-pantalla-unico')).toMatchObject({ titulo: 'Pago único, con otro importe o descuento', permiso: 'links_pago.crear' });
     expect(de('links-pantalla-inicial')).toMatchObject({ titulo: 'Inicial más cuotas', permiso: 'links_pago.crear' });
     for (const p of pasos) expect(p.texto.length).toBeLessThanOrEqual(330);
   });
