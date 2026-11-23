@@ -4,6 +4,7 @@ import { Compass } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import RecorridoGuiado from '@/shared/components/ui/RecorridoGuiado';
+import { useRegistrarRecorrido } from '@/shared/lib/lanzadorRecorridos';
 import { tienePermiso } from '@/shared/lib/recorridosCobros';
 import {
   RECORRIDOS_DE_PRUEBA, claveRecorridoDePrueba, pasosApagada, pasosDePruebaPara, type IdRecorridoDePrueba,
@@ -13,7 +14,8 @@ import {
  * «Ver cómo funciona»: el recorrido guiado para probar una función nueva de staging
  * (CRM#856 · CRM-ISEIE#522). El mismo `RecorridoGuiado` del tablero.
  *
- *  · NUNCA se abre solo: solo al pulsar el botón (lo del 27/10).
+ *  · NUNCA se abre solo: solo al pulsar el botón (lo del 27/10), o desde
+ *    «Recorrido» en la cabecera (CRM#1012), donde se apunta mientras está montado.
  *  · Sin el permiso del recorrido, no hay botón. Los pasos de botones que esa persona
  *    no tiene se quitan antes de empezar.
  *  · `apagada`: la función está apagada en este servidor; el botón sigue y dice
@@ -57,6 +59,13 @@ export default function VerComoFunciona({ id, apagada = false, alAbrir, compacto
     [recorrido, apagada, firma],
   );
   const [abierto, setAbierto] = useState(false);
+
+  // También en el botón «Recorrido» de la cabecera (CRM#1012), mientras se vea aquí.
+  useRegistrarRecorrido(permitido && pasos.length > 0 ? {
+    id: `como-funciona-${id}`,
+    titulo: `Cómo probar: ${recorrido.titulo}`,
+    abrir: () => { alAbrir?.(); setAbierto(true); },
+  } : null);
 
   // Cambia el recorrido (otra pestaña): el que estaba puesto se cierra.
   useEffect(() => { setAbierto(false); }, [id, apagada]);

@@ -84,7 +84,11 @@ export async function list(req, res, next) {
   try {
     const parsed = listConversionsSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
-    const filters = { ...parsed.data };
+    // Un campus, una empresa entera o todos (#73, como en el 360): se resuelve
+    // aquí, siempre dentro de los campus de quien pide, y el modelo recibe ya la
+    // lista. Antes iba con el `projectId` de la dirección sin mirar de quién era
+    // y, sin él, con las ventas de todo el CRM.
+    const filters = { ...parsed.data, ...(await proyectosDelAmbito(req)) };
     // SEGURIDAD: gestor solo ve sus propias ventas, ignora filtro responsableId externo.
     // Con equipo comercial (09/11/2026), las suyas y las de sus gestoras.
     const alcance = await alcanceComercial(req.user);
@@ -115,8 +119,7 @@ export async function cuotas(req, res, next) {
     if (alcance) responsableId = personasDentro(alcance, responsableId);
 
     const data = await conversionModel.cuotasDelPeriodo({
-      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null,
-      from, to, responsableId,
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -139,7 +142,7 @@ export async function filas(req, res, next) {
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
     const r = await conversionModel.filasDelPeriodo({
-      projectId: req.query.projectId ? parseInt(req.query.projectId, 10) : null, from, to, responsableId,
+      ...(await proyectosDelAmbito(req)), from, to, responsableId,
       producto: req.query.producto ? String(req.query.producto) : null, page, limit,
     });
     res.json({ success: true, data: r.filas,
@@ -373,11 +376,11 @@ export async function unpayInstallment(req, res, next) {
 
 export async function listProductos(req, res, next) {
   try {
-    const projectId = req.query.projectId ? parseInt(req.query.projectId) : null;
+    const { projectId, projectIds } = await proyectosDelAmbito(req);
     let responsableId = req.query.responsableId ? parseInt(req.query.responsableId) : null;
     const alcance = await alcanceComercial(req.user);
     if (alcance) responsableId = personasDentro(alcance, responsableId);
-    const data = await conversionService.listProductos({ projectId, responsableId });
+    const data = await conversionService.listProductos({ projectId, projectIds, responsableId });
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

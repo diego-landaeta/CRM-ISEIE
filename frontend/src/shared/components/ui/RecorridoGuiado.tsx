@@ -72,6 +72,21 @@ export function colocarCartel(vista: Vista, hueco: Pick<DOMRect, 'left' | 'top' 
   return { izquierda, arriba, ancho };
 }
 
+/**
+ * Lo que señala un paso: el primero de la página que SE VE (CRM#1012). El menú
+ * lateral está dos veces en el móvil (el fijo, oculto, y el del cajón) y el
+ * primero que da `querySelector` es el oculto: el recuadro salía en 0,0.
+ * Donde nada se mide (las pruebas, sin maquetación), el primero que haya.
+ */
+export function buscarPaso(selector: string): Element | null {
+  const todos = Array.from(document.querySelectorAll(selector));
+  if (!todos.length) return null;
+  const visible = todos.find((el) => el.getClientRects().length > 0);
+  if (visible) return visible;
+  const sinMaquetar = document.body.getClientRects().length === 0;
+  return sinMaquetar ? todos[0] : null;
+}
+
 const visto = (clave: string) => {
   try { return localStorage.getItem(clave) === '1'; } catch { return true; }
 };
@@ -126,7 +141,7 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
   const saltar = useCallback(() => {
     for (let i = paso + 1; i < pasos.length; i++) {
       const p = pasos[i];
-      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+      if (!p.donde || buscarPaso(p.donde)) { setPaso(i); return; }
     }
     cerrar();
   }, [paso, pasos, cerrar]);
@@ -134,7 +149,7 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
   const atras = useCallback(() => {
     for (let i = paso - 1; i >= 0; i--) {
       const p = pasos[i];
-      if (!p.donde || document.querySelector(p.donde)) { setPaso(i); return; }
+      if (!p.donde || buscarPaso(p.donde)) { setPaso(i); return; }
     }
   }, [paso, pasos]);
 
@@ -145,7 +160,7 @@ export default function RecorridoGuiado({ pasos, clave, alCerrar }: {
     let esperando = 0;
     let traido = false;
     const medir = () => {
-      const el = document.querySelector(actual.donde!);
+      const el = buscarPaso(actual.donde!);
       if (el) {
         esperando = 0;
         if (!traido) {

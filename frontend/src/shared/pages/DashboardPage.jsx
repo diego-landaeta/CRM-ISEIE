@@ -218,7 +218,7 @@ export default function DashboardPage() {
         // «Hoy» (gemela de CRM#884): lo primero es el día, no el nombre de la pantalla.
         title={`Hoy, ${todayDate}`}
         subtitle={activeProject?.nombre || 'Sin proyecto'}
-        // El recorrido guiado de «Hoy» (#611): sale solo la primera vez.
+        // El recorrido guiado de «Hoy» (#611): solo con el botón (#681).
         actions={<VerRecorrido id="hoy-dashboard" />}
       />
 

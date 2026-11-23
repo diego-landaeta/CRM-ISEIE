@@ -167,12 +167,19 @@ describe('los recorridos de las novedades del 18/11, tanda B (#611)', () => {
   });
 });
 
+/** Desde la #1012 ninguno sale solo: se abre con su botón. */
+const abrir = async (id) => {
+  const r = RECORRIDOS_COBROS[id];
+  fireEvent.click(await screen.findByRole('button', { name: `Ver recorrido: ${r.titulo}` }, { timeout: 3000 }));
+};
+
 describe('pintadas de verdad, se recorren enteras', () => {
-  it('Mi factura: sale sola la primera vez y pasa por sus cinco pasos', async () => {
+  it('Mi factura: no sale sola (#1012); con «Ver recorrido» pasa por sus cinco pasos', async () => {
     rol.current = 'gestor'; // una vendedora: gestora con su ficha y el permiso por excepción
     permisos.add('facturas_colaborador.subir');
     pintar(MiFacturaPage);
     await screen.findAllByText(/Octubre de 2026 · CEDIA/);
+    await abrir('mi-factura');
     await screen.findByRole('dialog', { name: 'Tu factura del mes' }, { timeout: 3000 });
     // Se marca en un efecto, que puede ir un instante detrás del cartel (lo abre un
     // temporizador, fuera de `act`): se espera, en vez de mirarlo en el acto.
@@ -188,6 +195,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     api.mias.mockResolvedValue({ data: [] });
     pintar(MiFacturaPage);
     await screen.findByText('Todavía no tienes facturas que subir');
+    await abrir('mi-factura');
     await screen.findByRole('dialog', { name: 'Tu factura del mes' }, { timeout: 3000 });
     expect(recorrer(5)).toEqual(titulos('mi-factura', ['Subir mi factura', 'Revisión y pago']));
   });
@@ -197,6 +205,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     permisos.add('facturas_colaborador.validar');
     pintar(FacturasColaboradoresPage, '/finanzas/facturas-colaboradores');
     await screen.findByText('Lucía');
+    await abrir('facturas-colaboradores');
     await screen.findByRole('dialog', { name: 'Las facturas del mes' }, { timeout: 3000 });
     expect(recorrer(7)).toEqual(titulos('facturas-colaboradores'));
     // «Validar antes de pagar» señala la pestaña «Por validar».
@@ -208,15 +217,17 @@ describe('pintadas de verdad, se recorren enteras', () => {
     permisos.add('facturas_colaborador.ver_todas');
     pintar(FacturasColaboradoresPage, '/finanzas/facturas-colaboradores');
     await screen.findByText('Lucía');
+    await abrir('facturas-colaboradores');
     await screen.findByRole('dialog', { name: 'Las facturas del mes' }, { timeout: 3000 });
     expect(recorrer(7)).toEqual(titulos('facturas-colaboradores', ['Validar antes de pagar']));
   });
 
-  it('Mi campus (tutora): sale solo y pasa por los ocho', async () => {
+  it('Mi campus (tutora): con «Ver recorrido» pasa por los ocho', async () => {
     rol.current = 'tutor';
     permisos.add('tutores.mis_cursos');
     pintar(MiCampusPage, '/mis-cursos/campus');
     await screen.findByTestId('resumen-mi-campus');
+    await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
     expect(recorrer(8)).toEqual(titulos('mi-campus'));
   });
@@ -227,6 +238,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     api.miCampus.mockResolvedValue({ success: true, data: { ...MI_CAMPUS, sinConectar: [] } });
     pintar(MiCampusPage, '/mis-cursos/campus');
     await screen.findByTestId('resumen-mi-campus');
+    await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
     expect(recorrer(8)).toEqual(titulos('mi-campus', ['Campus sin conectar']));
   });
@@ -236,6 +248,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     permisos.add('incidencias.create');
     pintar(IncidenciasPage);
     await screen.findAllByText('Se cobró dos veces la matrícula');
+    await abrir('incidencias');
     await screen.findByRole('dialog', { name: 'Lo que salió mal' }, { timeout: 3000 });
     expect(recorrer(7)).toEqual(titulos('incidencias', ['Las cifras']));
   });

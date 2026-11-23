@@ -128,7 +128,10 @@ const PANTALLAS = {
   },
 };
 const IDS = Object.keys(PANTALLAS);
-const titulos = (id, can = () => true) => pasosPara(RECORRIDOS_NOVEDADES[id], can).map((p) => p.titulo);
+// «Si Stripe las cobra solas» señala la tarjeta del cobro automático, que aquí no sale
+// (links apagados en esta prueba): se salta sola, como en la app (#1012).
+const titulos = (id, can = () => true) => pasosPara(RECORRIDOS_NOVEDADES[id], can).map((p) => p.titulo)
+  .filter((t) => t !== 'Si Stripe las cobra solas');
 
 function recorrer(n) {
   const vistos = [];
@@ -151,16 +154,22 @@ beforeEach(() => {
 });
 afterEach(() => cleanup());
 
+/** Desde la #681 (gemela de CRM#1012) ninguno sale solo: se abre con su botón. */
+const abrir = async (id) => {
+  fireEvent.click(await screen.findByRole('button', { name: `Ver recorrido: ${RECORRIDOS_COBROS[id].titulo}` }, { timeout: 3000 }));
+};
+
 describe('los recorridos de las novedades (#611, tanda A)', () => {
   it('son los cuatro de la issue, en su orden, y están registrados con los demás', () => {
     expect(Object.keys(RECORRIDOS_NOVEDADES)).toEqual(['menu-bloques', 'hoy-dashboard', 'ventas-repetidas', 'venta-cuotas']);
     for (const id of IDS) expect(RECORRIDOS_COBROS[id]).toBe(RECORRIDOS_NOVEDADES[id]);
   });
 
-  it.each(IDS)('%s: de 5 a 8 pasos, casi todos señalando algo, y su pantalla lo ofrece', (id) => {
+  it.each(IDS)('%s: de 5 a 10 pasos, casi todos señalando algo, y su pantalla lo ofrece', (id) => {
     const r = RECORRIDOS_NOVEDADES[id];
     expect(r.pasos.length).toBeGreaterThanOrEqual(5);
-    expect(r.pasos.length).toBeLessThanOrEqual(8);
+    // Las cuotas de la venta crecieron con la #681 (estado, factura, cobro automático).
+    expect(r.pasos.length).toBeLessThanOrEqual(10);
     expect(r.pasos.filter((p) => p.donde).length).toBeGreaterThanOrEqual(r.pasos.length - 2);
     const codigo = fs.readFileSync(path.join(SRC, r.pantalla[0]), 'utf8');
     expect(codigo).toMatch(new RegExp(`<VerRecorrido id="${id}"`));
@@ -183,11 +192,14 @@ describe('los recorridos de las novedades (#611, tanda A)', () => {
 describe.each(IDS)('%s: la pantalla de verdad, recorrida entera', (id) => {
   const { pintar, cargada } = PANTALLAS[id];
 
-  it('la primera vez sale solo, cuando la pantalla ha cargado, y se recorre sin saltarse nada', async () => {
+  it('nunca sale solo (#1012); con «Ver recorrido» se recorre sin saltarse nada', async () => {
     for (const p of PANTALLAS[id].permisos) permisos.add(p);
     render(pintar());
     await screen.findAllByText(cargada, {}, { timeout: 5000 });
     const esperados = titulos(id, (k) => permisos.has(k));
+    await new Promise((r) => setTimeout(r, 1000));
+    expect(screen.queryByRole('dialog', { name: esperados[0] })).toBeNull();
+    await abrir(id);
     await screen.findByRole('dialog', { name: esperados[0] }, { timeout: 3000 });
     await waitFor(() => expect(localStorage.getItem(claveRecorrido(id, 41))).toBe('1'));
     expect(recorrer(esperados.length)).toEqual(esperados);
@@ -219,6 +231,7 @@ describe('quién ve qué', () => {
     render(PANTALLAS['ventas-repetidas'].pintar());
     const esperados = titulos('ventas-repetidas', (k) => permisos.has(k));
     expect(esperados).not.toContain('Posibles repetidas');
+    await abrir('ventas-repetidas');
     await screen.findByRole('dialog', { name: esperados[0] }, { timeout: 3000 });
     expect(screen.queryByText('Posibles repetidas')).toBeNull();
     expect(recorrer(esperados.length)).toEqual(esperados);
@@ -243,6 +256,7 @@ describe('quién ve qué', () => {
       render(PANTALLAS['venta-cuotas'].pintar());
       await screen.findAllByText('Plan de cuotas', {}, { timeout: 5000 });
       const esperados = titulos('venta-cuotas', (k) => permisos.has(k)).filter((t) => t !== 'Cobrado de más');
+      await abrir('venta-cuotas');
       await screen.findByRole('dialog', { name: esperados[0] }, { timeout: 3000 });
       expect(recorrer(esperados.length)).toEqual(esperados);
     } finally {
@@ -257,6 +271,7 @@ describe('quién ve qué', () => {
     for (const p of ['leads.view', 'ventas.view', 'proceso.view']) permisos.add(p);
     render(PANTALLAS['menu-bloques'].pintar());
     await screen.findAllByText('Buscar…', {}, { timeout: 5000 });
+    await abrir('menu-bloques');
     await screen.findByRole('dialog', { name: 'El menú, por bloques' }, { timeout: 3000 });
     const vistos = recorrer(8);
     expect(document.querySelector('[data-recorrido="menu-finanzas"]')).toBeNull();
