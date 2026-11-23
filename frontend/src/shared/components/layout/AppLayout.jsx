@@ -140,7 +140,8 @@ export default function AppLayout() {
             mobileOpen ? 'translate-x-0' : '-translate-x-full'
           )}
         >
-          <Sidebar onNavigate={() => setMobileOpen(false)} />
+          {/* `visible`: el cajón sigue montado cerrado; su «Ver recorrido» (#611), solo abierto. */}
+          <Sidebar onNavigate={() => setMobileOpen(false)} visible={mobileOpen} />
         </div>
         {/* Botón cerrar — fuera del sidebar, sobre el backdrop */}
         <button

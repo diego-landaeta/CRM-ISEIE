@@ -114,7 +114,8 @@ export default function CifrasDeHoy({ stats, today }: CifrasDeHoyProps) {
   }, [activeProject?.id, activeIssuerId]);
 
   return (
-    <section aria-label="Las cifras de hoy" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+    // `data-recorrido`: los sitios que señala el recorrido de «Hoy» (#611).
+    <section aria-label="Las cifras de hoy" data-recorrido="hoy-cifras" className="grid grid-cols-2 gap-3 lg:grid-cols-5">
       {mes && (
         <Tarjeta
           titulo="Cobrado"
@@ -145,7 +146,7 @@ export default function CifrasDeHoy({ stats, today }: CifrasDeHoyProps) {
         detalle={`este mes · ${numero(today?.nuevos_hoy || 0)} hoy`}
         ayuda="Prospectos entrados este mes, por su fecha de solicitud."
       />
-      <div className="col-span-2 flex flex-col justify-center gap-2 lg:col-span-1">
+      <div data-recorrido="hoy-alertas" className="col-span-2 flex flex-col justify-center gap-2 lg:col-span-1">
         <Alerta
           icono={UserMinus}
           cifra={Number(stats?.sin_asignar || 0)}

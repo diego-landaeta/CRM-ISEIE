@@ -51,6 +51,8 @@ vi.mock('@/modules/reports/components/ActividadPorComercial', () => ({ TarjetaAc
 vi.mock('@/shared/components/dashboard/ActividadDeHoy', () => ({ default: () => null }));
 // Las cifras de arriba del Dashboard «Hoy» (gemela de CRM#884) piden su API: aquí solo se mira el ranking.
 vi.mock('@/shared/components/dashboard/CifrasDeHoy', () => ({ default: () => null }));
+// «Ver recorrido» de «Hoy» (#611) pide la sesión: aquí solo se mira el ranking.
+vi.mock('@/shared/components/ui/VerRecorrido', () => ({ default: () => null }));
 
 import DashboardPage from '@/shared/pages/DashboardPage';
 
