@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
+import { redactorasMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import * as ctrl from './tutor.controller.js';
 
 const router = Router();
@@ -67,6 +68,11 @@ router.post('/:id/campus/:projectId/desvincular', puede('tutores.gestionar'), ct
 // Su correo del CRM no es el de Moodle: buscar su cuenta y vincularla a mano.
 router.get('/:id/campus/:projectId/buscar-cuenta', puede('tutores.gestionar'), ctrl.buscarCuentaMoodle);
 router.post('/:id/campus/:projectId/vincular', puede('tutores.gestionar'), ctrl.vincularCuentaMoodle);
+// La redactora en Moodle (CRM#1026): su cuenta y su rol en los cursos que redacta. Solo LEE,
+// pero aún sin aprobar: en producción, 404 salvo REDACTORAS_MOODLE_EN_PRODUCCION=1.
+if (redactorasMoodleActivo()) {
+  router.get('/:id/redaccion-moodle', puede('tutores.gestionar'), ctrl.redaccionMoodle);
+}
 router.post('/:id/empresas', puede('tutores.gestionar'), ctrl.asignarEmpresa);
 router.delete('/:id/empresas/:issuerId', puede('tutores.gestionar'), ctrl.quitarEmpresa);
 router.patch('/:id/disponible', puede('tutores.gestionar'), ctrl.cambiarDisponible);

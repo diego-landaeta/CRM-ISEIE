@@ -73,3 +73,50 @@ export const campusTutorApi = {
   disponible: (tutorId: number, disponible: boolean, motivo?: string | null) =>
     client.patch(`/tutores/${tutorId}/disponible`, { disponible, motivo: motivo || null }) as Promise<ApiResponse<PanelCampusTutor>>,
 };
+
+/*
+  Las tutoras redactoras en Moodle (CRM#1026): si su cuenta de cada campus está lista y si es
+  profesora de los cursos que redacta. Solo lee; no matricula.
+*/
+
+/** profesora · otro_rol (matriculada, pero no como profesora) · sin_matricula · sin_comprobar. */
+export type EstadoCursoRedaccion = 'profesora' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar';
+
+/** Por qué el producto es suyo. */
+export type PorQueEsSuyo = 'colaboracion' | 'curso_pendiente' | 'responsable';
+
+export interface CursoRedaccion {
+  product_id: number;
+  producto: string;
+  producto_activo: boolean;
+  por: PorQueEsSuyo[];
+  curso_moodle_id: number;
+  curso_nombre: string | null;
+  estado: EstadoCursoRedaccion;
+  roles: string[];
+  /** La página de participantes del curso en Moodle (para matricularla a mano). */
+  enlace: string | null;
+}
+
+export interface CampusRedaccion {
+  project_id: number;
+  campus: string;
+  tiene_campus: boolean;
+  campus_conectado: boolean;
+  vinculada_en_crm: boolean;
+  cuenta: { id: number; nombre: string | null; suspendida: boolean; vinculada: boolean } | null;
+  problemas: string[];
+  cursos: CursoRedaccion[];
+}
+
+export interface RedaccionEnMoodle {
+  es_redactora: boolean;
+  campus: CampusRedaccion[];
+  sin_curso: Array<{ product_id: number; producto: string; producto_activo: boolean; por: PorQueEsSuyo[] }>;
+  lista: boolean;
+}
+
+export const redaccionMoodleApi = {
+  ver: (tutorId: number) =>
+    client.get(`/tutores/${tutorId}/redaccion-moodle`) as Promise<ApiResponse<RedaccionEnMoodle>>,
+};

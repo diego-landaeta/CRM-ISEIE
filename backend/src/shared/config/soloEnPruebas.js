@@ -107,3 +107,15 @@ export function seguimientoLinksActivo(env = process.env) {
 export function recordatorioWhatsappActivo(env = process.env) {
   return seguimientoLinksActivo(env) && env.LINKS_PAGO_RECORDATORIO_WHATSAPP === '1';
 }
+
+/**
+ * Las tutoras redactoras en Moodle (CRM#1026 del 360, línea de #687): en su ficha de
+ * Tutores, si su cuenta de cada campus está lista y si es profesora de los cursos que
+ * redacta (sus productos, con su curso de Moodle unido). Solo LEE del Moodle (las
+ * mismas funciones que «Mi campus»); no matricula ni cambia roles.
+ * Aún sin aprobar: en producción no se monta la ruta salvo con
+ * REDACTORAS_MOODLE_EN_PRODUCCION=1.
+ */
+export function redactorasMoodleActivo(env = process.env) {
+  return enPruebasOAprobado('REDACTORAS_MOODLE_EN_PRODUCCION', env);
+}

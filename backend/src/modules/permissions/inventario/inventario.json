@@ -17248,6 +17248,30 @@
   "puertas": []
  },
  {
+  "id": "GET /api/tutores/:id/redaccion-moodle",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/:id/redaccion-moodle",
+  "relativa": "GET /:id/redaccion-moodle",
+  "controlador": "redaccionMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": [
+   "tutores.gestionar"
+  ]
+ },
+ {
   "id": "POST /api/tutores/:id/empresas",
   "tipo": "ruta",
   "modulo": "tutores",
