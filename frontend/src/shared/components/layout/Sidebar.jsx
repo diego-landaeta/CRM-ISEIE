@@ -147,11 +147,11 @@ export const SECCIONES_DE_ANTES = [
   {
     label: 'Captación',
     items: [
-      { to: '/secuencias-email', label: 'Email',     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'], permiso: 'email_sequences.view' },
-      { to: '/forms',           label: 'Formularios', icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'], permiso: 'forms.view' },
+      { to: '/secuencias-email', label: 'Email', seguirPorRol: true,     icon: Envelope, roles: ['admin', 'superadmin'], sectionPrefixes: ['/secuencias-email', '/email-templates'], permiso: 'email_sequences.view' },
+      { to: '/forms',           label: 'Formularios', seguirPorRol: true, icon: Globe,  roles: ['admin', 'superadmin'], sectionPrefixes: ['/forms'], permiso: 'forms.view' },
       // Make y Webhooks estaban aquí: desde la gemela de CRM#755, en Conexión ›
       // Webhooks. Lo que Webhooks pedía además (`forms.view`) va con su parte y su pestaña.
-      { to: '/captacion/whatsapp', label: 'Widget web', icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
+      { to: '/captacion/whatsapp', label: 'Widget web', seguirPorRol: true, icon: WhatsappLogo, roles: ['admin', 'superadmin', 'soporte'], permiso: 'widget.view' },
       // Campañas («Próximamente», #226) y Tráfico orgánico (que llevaba a «Aún no
       // conectado», #216) salen del menú hasta que tengan pantalla de verdad
       // (gemela de CRM#900; `menu-sin-proximamente-534`). La dirección /seo sigue
@@ -210,22 +210,22 @@ export const SECCIONES_DE_ANTES = [
       // pantalla (#234). `end` para que no se encienda en /accounting/income.
       { to: '/accounting',            label: 'Dashboard',          icon: Calculator, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', end: true, permiso: 'accounting.view' },
       { to: '/ventas',                label: 'Ventas',             icon: Receipt, statusTag: 'Pruebas', permiso: 'ventas.view' },
-      { to: '/accounting/income',    label: 'Ingresos',           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
-      { to: '/revenue',              label: 'Conversiones',       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
+      { to: '/accounting/income',    label: 'Ingresos', seguirPorRol: true,           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
+      { to: '/revenue',              label: 'Conversiones', seguirPorRol: true,       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'expenses.view' },
       { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'commissions.view' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
-      { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
-      { to: '/accounting/pagos-stripe', label: 'Pagos Stripe',    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
+      { to: '/accounting/pendiente-facturar', label: 'Pendientes de facturar', seguirPorRol: true, icon: WarningCircle, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'facturas.view' },
+      { to: '/accounting/pagos-stripe', label: 'Pagos Stripe', seguirPorRol: true,    icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'stripe.view' },
       // Disputas de Stripe (#396, gemela de CRM#839): solo admin y super admin, cada uno las de sus campus.
       { to: '/accounting/disputas', label: 'Disputas de Stripe', icon: Warning, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'stripe.edit' },
       // Conciliación (gemela de CRM#949 / CRM#905): facturas sin cobro y cobros sin
       // factura, y enlazarlos. Es de administración: admin y super admin, cada uno en
       // sus campus. Sus pestañas, cada una con su permiso en `SIN_ENTRADA`; la entrada,
       // con el de cualquiera de ellas (basta uno): los cargos de Stripe (CRM#906) piden `stripe.edit`.
-      { to: '/accounting/conciliacion', label: 'Conciliación', icon: ArrowsLeftRight, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: ['facturas.gestionar', 'stripe.edit'] },
+      { to: '/accounting/conciliacion', label: 'Conciliación', seguirPorRol: true, icon: ArrowsLeftRight, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: ['facturas.gestionar', 'stripe.edit'] },
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
@@ -240,7 +240,7 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/informes',     label: 'Reportes',      icon: ChartLineUp, sectionPrefixes: ['/informes', '/activity'] },
       // Por que no compran (#170). Fuera de produccion hasta aprobarlo.
-      ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/informes/feedback', label: 'Feedback', seguirPorRol: true, icon: ChatCircleText, roles: ['admin', 'superadmin'], permiso: 'feedback.view' }] : []),
       // Las pantallas de IA del CRM (#30) —Pregunta a tus datos y Chat IA— están
       // APAGADAS (Diego, 10/11/2026: se usa Claude por el MCP), como en MultiCRM.
       // Se encienden juntas con `PANTALLAS_IA` (`shared/lib/pantallasIA.js`).
@@ -422,10 +422,19 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
 
   if (!item.roles) return true;
   if (es('superadmin', 'soporte')) return true;
-  // El project manager ve todo (Diego, 04/11): cada pantalla cuyo permiso tiene
-  // (ya mirado arriba), aunque su rol no esté en `roles`. Lo de dentro, de sus
-  // campus: lo recorta el servidor.
-  if (es('project_manager') && item.permiso && !item.comingSoon) return true;
+  // El menú, por permiso y no por rol (gemela de CRM#1046; #230: «el rol solo vale
+  // para el ALCANCE»). Una entrada que pide `permiso` sale a quien lo TIENE —ya
+  // mirado arriba—, sea cual sea su rol: una gestora con permisos de admin dados
+  // como excepción ve sus pantallas (Productos con `products.view`, por ejemplo).
+  // Los `roles` de la entrada solo deciden a quién se le enseña de serie cuando la
+  // entrada NO pide permiso. Antes esto era solo del project manager (Diego, 04/11).
+  // Lo que ve dentro, de sus campus o solo lo suyo: lo recorta el servidor.
+  //
+  // `seguirPorRol` (pendiente de Diego): entradas cuyo permiso trae DE SERIE el
+  // rol de gestora. Con esta regla le saldrían a todas las gestoras; hasta que
+  // Diego decida, siguen saliendo solo a sus `roles` (o con `oPermiso`). El
+  // project manager las ve como antes, por su permiso.
+  if (item.permiso && !item.comingSoon && (!item.seguirPorRol || es('project_manager'))) return true;
   return item.roles.some((r) => roles.includes(r)) || porPermiso;
 }
 
