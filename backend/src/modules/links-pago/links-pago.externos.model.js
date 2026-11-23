@@ -164,7 +164,7 @@ export async function ventasDeFichas(projectId, leadIds) {
   return rows;
 }
 
-/** La bandeja: cobrados de un link de Stripe sin cobro en una venta, de esos campus. */
+/** La bandeja: cobrados (y no devueltos) de un link de Stripe sin cobro en una venta, de esos campus. */
 export async function porVincular({ projectIds }) {
   const { rows } = await query(
     `SELECT sp.id, sp.project_id, p.nombre AS project_nombre, sp.stripe_id,
@@ -179,6 +179,7 @@ export async function porVincular({ projectIds }) {
        JOIN stripe_links_externos e ON e.id = sp.stripe_link_externo_id
       WHERE sp.project_id = ANY($1::int[])
         AND sp.status = 'succeeded'
+        AND COALESCE(sp.refunded, false) = false
         AND sp.conversion_payment_id IS NULL
       ORDER BY sp.stripe_created_at DESC, sp.id DESC
       LIMIT 200`,
