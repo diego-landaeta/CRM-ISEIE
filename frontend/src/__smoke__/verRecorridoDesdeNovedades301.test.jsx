@@ -1,5 +1,6 @@
+// @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { render, screen, act, cleanup } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 /**
@@ -52,7 +53,7 @@ const montar = (entrada) => render(
 );
 
 beforeEach(() => { permisos.lista = []; lanzador.cerrarRecorrido(); });
-afterEach(() => { vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 describe('rutaConRecorrido', () => {
   it('añade el parámetro, también si la ruta ya trae otros o un ancla', () => {
