@@ -16,6 +16,8 @@ import WebhooksTab from '../components/WebhooksTab';
 import MatriculaDetail from '../components/MatriculaDetail';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { ponerAmbito, TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
+// El recorrido guiado del listado (#619, tanda G). Certificaciones y Diplomas no lo llevan: son de Certifex.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 // Certificaciones (Certifex). Diego, 30/09: «meterlo en la parte de matrículas en
 // una subsección que sea certificaciones [...] cuando alguien termina la formación,
@@ -237,7 +239,9 @@ export default function MatriculasPage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda G): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Solicitud de admisión"
         subtitle={enDiplomas
@@ -245,9 +249,10 @@ export default function MatriculasPage() {
           : enCertificaciones
           ? 'Certificaciones: quien termina la formación se aprueba aquí, y Certifex emite su título'
           : `${stats.total || 0} ${stats.total === 1 ? 'solicitud' : 'solicitudes'} en ${campusDelServidor.find((c) => String(c.id) === filtros.campusId)?.nombre || nombreAmbito}`}
+        actions={enCertifex ? null : <VerRecorrido id="solicitud-admision" listo={!loading} />}
       />
 
-      <div className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
+      <div data-recorrido="admision-pestanas" className="flex overflow-x-auto border-b border-border [&>button]:shrink-0">
         <button
           onClick={() => { setTab('list'); if (enCertifex) navigate('/matriculas'); }}
           className={`flex items-center gap-2 px-3 h-9 text-sm font-bold border-b-2 focus:outline-none focus:ring-2 focus:ring-primary/40 ${!enCertifex && (tab === 'list' || (tab === 'webhooks' && !verEmisiones)) ? 'border-primary text-primary' : 'border-transparent text-muted-foreground'}`}
@@ -330,7 +335,7 @@ export default function MatriculasPage() {
             description="Cada webhook de admisión se conecta al formulario de un campus. Elige uno arriba para ver o crear el suyo." />
         )
       ) : <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+      <div data-recorrido="admision-cifras" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
         {[
           { label: 'Total', value: stats.total, color: '#64748b' },
           // Lo que acaba de llegar del formulario de admisión (#199).
@@ -348,18 +353,20 @@ export default function MatriculasPage() {
 
       {/* Como en Prospectos: arriba el buscador, «Limpiar» y «Actualizar»; el
           resto de filtros, en el desplegable «Filtros» con sus píldoras. */}
-      <BarraFiltros
-        busqueda={search}
-        onBusqueda={setSearch}
-        placeholder="Buscar por nombre, email o DNI"
-        hayFiltros={hayFiltros}
-        onLimpiar={quitarFiltros}
-        onActualizar={load}
-        actualizando={loading}
-      />
-      <MatriculasFiltros filtros={filtros} onCambio={setFiltros} cursos={cursos} campus={campusDelAmbito} />
+      <div data-recorrido="admision-filtros" className="space-y-5">
+        <BarraFiltros
+          busqueda={search}
+          onBusqueda={setSearch}
+          placeholder="Buscar por nombre, email o DNI"
+          hayFiltros={hayFiltros}
+          onLimpiar={quitarFiltros}
+          onActualizar={load}
+          actualizando={loading}
+        />
+        <MatriculasFiltros filtros={filtros} onCambio={setFiltros} cursos={cursos} campus={campusDelAmbito} />
+      </div>
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div data-recorrido="admision-lista" className="bg-card border border-border rounded-2xl overflow-hidden">
         {loading ? <SkeletonTable rows={5} columns={6} /> : data.length === 0 ? (
           // Los textos de Diego (#199): sin filtros, cómo empezar; con filtros,
           // decirlo y dejar quitarlos.
@@ -420,6 +427,7 @@ export default function MatriculasPage() {
                       <td className="px-4 py-3 text-xs"><Venta conversionId={m.conversion_id} /></td>
                       <td className="px-4 py-3 text-right">
                         <button
+                          data-recorrido="admision-ver"
                           onClick={() => setDetail(m)}
                           aria-label="Ver la solicitud de admisión"
                           className="p-1.5 rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -455,6 +463,7 @@ export default function MatriculasPage() {
                   </div>
                   <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
                     <button
+                      data-recorrido="admision-ver"
                       onClick={() => setDetail(m)}
                       aria-label="Ver la solicitud de admisión"
                       className="h-8 w-8 inline-flex items-center justify-center rounded hover:bg-muted text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40"

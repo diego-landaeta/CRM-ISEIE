@@ -10,6 +10,8 @@ import {
 } from '../api/convocatorias.api';
 import { tramosDelEmbudo, hayEmbudo } from '../lib/ofrecimiento';
 import usePermission from '@/shared/hooks/usePermission';
+// El recorrido guiado de la pantalla (#619, tanda G).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * Convocatorias: las campañas, el embudo y a quién hay que contestarle hoy (#86).
@@ -109,7 +111,9 @@ export default function ConvocatoriasPage() {
   const tramos = tramosDelEmbudo(embudo);
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda G): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-semibold">
@@ -120,24 +124,27 @@ export default function ConvocatoriasPage() {
             Las becas que se ofrecen, a quién se le ofrecieron y en qué acabaron.
           </p>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Convocatoria</span>
-          <select
-            className={campo} value={elegida}
-            aria-label="Filtrar por convocatoria"
-            onChange={(e) => setElegida(e.target.value === '' ? '' : Number(e.target.value))}
-          >
-            <option value="">— Todas —</option>
-            {campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-          </select>
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <VerRecorrido id="convocatorias" listo={!cargando} />
+          <label data-recorrido="convocatorias-filtro" className="flex items-center gap-2 text-sm">
+            <span className="text-muted-foreground">Convocatoria</span>
+            <select
+              className={campo} value={elegida}
+              aria-label="Filtrar por convocatoria"
+              onChange={(e) => setElegida(e.target.value === '' ? '' : Number(e.target.value))}
+            >
+              <option value="">— Todas —</option>
+              {campanas.map((c) => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+            </select>
+          </label>
+        </div>
       </header>
 
       {fallo && <p className="text-sm text-destructive">{fallo}</p>}
 
       {/* 1 · Lo urgente. Ofrecer una beca, prometer respuesta para el 24 y no
           contestar es peor que no haberla ofrecido. */}
-      <section aria-label="Le debemos respuesta" className="rounded-xl border border-border bg-card p-4">
+      <section data-recorrido="convocatorias-pendientes" aria-label="Le debemos respuesta" className="rounded-xl border border-border bg-card p-4">
         <h2 className="flex items-center gap-2 text-base font-semibold">
           <WarningCircle size={16} weight="duotone" className="text-warning" />
           Le debemos respuesta hoy
@@ -184,7 +191,7 @@ export default function ConvocatoriasPage() {
       </section>
 
       {/* 2 · El embudo. */}
-      <section aria-label="El embudo" className="rounded-xl border border-border bg-card p-4">
+      <section data-recorrido="convocatorias-embudo" aria-label="El embudo" className="rounded-xl border border-border bg-card p-4">
         <h2 className="text-base font-semibold">De ofrecerla a venderla</h2>
         {cargando ? (
           <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -235,7 +242,7 @@ export default function ConvocatoriasPage() {
       </section>
 
       {/* 3 · Las campañas. */}
-      <section aria-label="Las convocatorias" className="rounded-xl border border-border bg-card p-4">
+      <section data-recorrido="convocatorias-lista" aria-label="Las convocatorias" className="rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-base font-semibold">Las convocatorias</h2>
           <div className="flex items-center gap-3">
@@ -244,7 +251,7 @@ export default function ConvocatoriasPage() {
               Ver también las cerradas
             </label>
             {esAdmin && can('convocatorias.create') && !creando && (
-              <button type="button" className={boton} onClick={() => { setCreando(true); setFallo(null); }}>
+              <button type="button" data-recorrido="convocatorias-nueva" className={boton} onClick={() => { setCreando(true); setFallo(null); }}>
                 <Plus size={13} weight="bold" /> Nueva
               </button>
             )}

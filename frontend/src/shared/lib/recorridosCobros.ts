@@ -15,6 +15,8 @@ import { RECORRIDOS_GESTORA_B, type IdRecorridoGestoraB } from '@/shared/lib/rec
 import { RECORRIDOS_GESTORA_C, type IdRecorridoGestoraC } from '@/shared/lib/recorridosGestoraC';
 // Los del día a día, cuarta tanda (#619, tanda F: Tutores y Proceso comercial).
 import { RECORRIDOS_GESTORA_D, type IdRecorridoGestoraD } from '@/shared/lib/recorridosGestoraD';
+// Lo que faltaba de Comercial (#619, tanda G: Convocatorias, los duplicados y Solicitud de admisión), en su propio fichero.
+import { RECORRIDOS_GESTORA_E, type IdRecorridoGestoraE } from '@/shared/lib/recorridosGestoraE';
 // Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
 import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
@@ -77,6 +79,7 @@ export type IdRecorridoCobros =
   | IdRecorridoGestoraB
   | IdRecorridoGestoraC
   | IdRecorridoGestoraD
+  | IdRecorridoGestoraE
   | IdRecorridoLinks;
 
 export interface RecorridoCobros {
@@ -511,6 +514,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   ...RECORRIDOS_GESTORA_C,
   // ─── 9 · El día a día, cuarta tanda (#619, tanda F): `recorridosGestoraD.ts` ───
   ...RECORRIDOS_GESTORA_D,
+  // ─── 9 · Lo que faltaba de Comercial (#619, tanda G): `recorridosGestoraE.ts` ───
+  ...RECORRIDOS_GESTORA_E,
 
   // ─── Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
   ...RECORRIDOS_LINKS,

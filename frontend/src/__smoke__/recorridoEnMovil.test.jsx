@@ -13,6 +13,7 @@ import { RECORRIDOS_GESTORA } from '@/shared/lib/recorridosGestora';
 import { RECORRIDOS_GESTORA_B } from '@/shared/lib/recorridosGestoraB';
 import { RECORRIDOS_GESTORA_C } from '@/shared/lib/recorridosGestoraC';
 import { RECORRIDOS_GESTORA_D } from '@/shared/lib/recorridosGestoraD';
+import { RECORRIDOS_GESTORA_E } from '@/shared/lib/recorridosGestoraE';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -217,6 +218,15 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   it('entre ellos, los del día a día, cuarta tanda (#619, tanda F), con todos sus pasos', () => {
     expect(Object.keys(RECORRIDOS_GESTORA_D)).toEqual(['tutores', 'proceso-comercial']);
     for (const r of Object.values(RECORRIDOS_GESTORA_D)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, lo que faltaba de Comercial (#619, tanda G), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_GESTORA_E)).toEqual(['convocatorias', 'revision-duplicados', 'buscar-duplicados', 'solicitud-admision']);
+    for (const r of Object.values(RECORRIDOS_GESTORA_E)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();
       expect(fila[1]).toHaveLength(r.pasos.length);
