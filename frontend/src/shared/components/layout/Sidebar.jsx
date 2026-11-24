@@ -12,6 +12,7 @@ import {
   GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond, ArrowsLeftRight,
   CalendarCheck, ArrowCounterClockwise, LinkSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
+import { funcionEncendida } from '@/shared/lib/funcionesDelServidor';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe, soloEsTutorRedactor } from '@/shared/lib/roles';
@@ -144,7 +145,10 @@ export const SECCIONES_DE_ANTES = [
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir', oPermiso: 'facturas_colaborador.subir', conFicha: true },
       // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
       // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
-      ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
+      // Sale cuando el SERVIDOR lo tiene encendido (MONITASK_ACTIVO → `/auth/me` →
+      // `funciones.monitask`), también en producción (gemela de CRM#236). Antes iba
+      // detrás de SOLO_EN_PRUEBAS y en producción no salía nunca, aunque se encendiera.
+      { to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view', funcion: 'monitask' },
     ],
   },
   {
@@ -371,6 +375,7 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Una función que enciende el servidor (`/auth/me` → `funciones`): apagada, no sale.
   if (item.funcion === 'links_pago' && !linksPagoEncendidos(permisos)) return false;
+  if (item.funcion && item.funcion !== 'links_pago' && !funcionEncendida(permisos, item.funcion)) return false;
   // El permiso de la pantalla (#230, gemela de CRM#423): sin él no sale, sea quien
   // sea. Es el mismo mapa que mira el servidor; quitarle a alguien «Ver
   // prospectos» le quita también la entrada. Los `roles` de cada entrada siguen

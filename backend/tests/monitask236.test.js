@@ -47,6 +47,8 @@ let SUPER; let ADMIN_OTRA; let GESTORA; let COL_ANA; let COL_DANI; let EMPRESA; 
 const mt = {
   usuarios: [], entradas: {}, actividad: {}, llamadas: [], pedidosDeToken: [],
   challenge: null, refreshVivo: null, accessValido: null, vueltas: 0,
+  // { [userId]: estado HTTP } con el que falla la actividad de esa persona.
+  fallaActividad: {},
 };
 const respuesta = (body, status = 200) => ({
   ok: status >= 200 && status < 300, status,
@@ -61,7 +63,7 @@ const nuevosTokens = () => {
 };
 const enRango = (lista, u) => {
   const [ini, fin] = [Date.parse(u.searchParams.get('start')), Date.parse(u.searchParams.get('end'))];
-  return (lista || []).filter((x) => { const t = Date.parse(x.startedAt || x.start); return t >= ini && t < fin; });
+  return (lista || []).filter((x) => { const t = Date.parse(x.startedAt || x.start || x.desdeLas); return t >= ini && t < fin; });
 };
 function fetchFalso(url, opts = {}) {
   const u = new URL(url);
@@ -88,7 +90,10 @@ function fetchFalso(url, opts = {}) {
   if (p === '/projects') return respuesta([{ id: 11, name: 'CRM' }, { id: 12, name: 'Web' }]);
   const uid = u.searchParams.get('userId');
   if (p === '/timeEntry/getByDateRange') return respuesta(enRango(mt.entradas[uid], u));
-  if (p === '/activity/getByDateRange') return respuesta({ data: enRango(mt.actividad[uid], u) });
+  if (p === '/activity/getByDateRange') {
+    if (mt.fallaActividad[uid]) return respuesta({ error: 'no' }, mt.fallaActividad[uid]);
+    return respuesta({ data: enRango(mt.actividad[uid], u) });
+  }
   return respuesta({ error: 'no' }, 404);
 }
 
@@ -397,6 +402,57 @@ describe('#236 · la vuelta de cada noche', () => {
     expect(r).toMatchObject({ personas: 3 });
     expect((await dia(MT.ana, '2026-10-05')).segundos).toBe(5 * 3600);
     expect(await vueltaNocturna({ ahora: new Date('2026-10-07T05:00:00Z'), env })).toEqual({ omitido: 'ya hecha hoy' });
+  });
+});
+
+describe('#236 · una persona que falla no deja sin % a las demás, y lo que no se entiende se dice', () => {
+  let entradasDeAntes;
+  beforeAll(() => { entradasDeAntes = structuredClone(mt.entradas); });
+  afterAll(() => { mt.fallaActividad = {}; mt.entradas = entradasDeAntes; });
+  const llamadasDeActividad = () => mt.llamadas.filter((l) => l.endsWith('/activity/getByDateRange')).length;
+
+  it('la actividad de Beto falla (500): Ana conserva su % y a Carla se le sigue pidiendo', async () => {
+    mt.fallaActividad = { [MT.beto]: 500 };
+    const r = await servicio.sincronizar({ desde: '2026-10-01', hasta: '2026-10-31' });
+    expect(r.sin_actividad).toBe(false);
+    expect(r.errores).toEqual([expect.objectContaining({ que: `actividad persona ${MT.beto}` })]);
+    expect(Number((await dia(MT.ana, '2026-10-05')).actividad_pct)).toBe(80);
+    expect((await dia(MT.beto, '2026-10-08')).segundos).toBe(3 * 3600);
+    // Ana 5 tramos, Beto 1 (falla y no se le pide más), Carla 5. Antes: 6, y Carla sin %.
+    expect(llamadasDeActividad()).toBe(11);
+  });
+
+  it('si Monitask niega la actividad a la cuenta (403), no se pide a nadie más; las horas siguen', async () => {
+    mt.fallaActividad = { [MT.ana]: 403 };
+    const r = await servicio.sincronizar({ desde: '2026-10-01', hasta: '2026-10-31' });
+    expect(r.sin_actividad).toBe(true);
+    expect(r.errores).toEqual([expect.objectContaining({ que: 'actividad' })]);
+    expect(llamadasDeActividad()).toBe(1);
+    const d5 = await dia(MT.ana, '2026-10-05');
+    expect(d5.segundos).toBe(5 * 3600);
+    expect(d5.actividad_pct).toBeNull();
+  });
+
+  it('entradas con campos que el CRM no reconoce: aviso con los NOMBRES de los campos, nunca los valores', async () => {
+    mt.fallaActividad = {};
+    mt.entradas = { [MT.ana]: [{ id: 77, desdeLas: '2026-10-05T08:00:00Z', hastaLas: '2026-10-05T09:00:00Z' }] };
+    const r = await servicio.sincronizar({ desde: '2026-10-01', hasta: '2026-10-31' });
+    const aviso = r.errores.find((e) => e.que === 'formato');
+    expect(aviso.error).toContain('1 entradas de tiempo');
+    expect(aviso.error).toContain('desdeLas, hastaLas, id');
+    expect(aviso.error).not.toContain('2026-10-05');
+    expect(r.leidas.entradas).toEqual({ llegan: 1, se_entienden: 0 });
+    // Y la tarjeta lo ve en /estado.
+    const e = await api.get('/api/monitask/estado').set(como(SUPER));
+    expect(e.body.data.ultima_sync.errores.some((x) => x.que === 'formato')).toBe(true);
+  });
+
+  it('lo normal no da avisos y dice cuántas entradas se han leído', async () => {
+    mt.entradas = structuredClone(entradasDeAntes);
+    const r = await servicio.sincronizar({ desde: '2026-10-01', hasta: '2026-10-31' });
+    expect(r.errores).toEqual([]);
+    expect(r.leidas.entradas).toEqual({ llegan: 4, se_entienden: 4 });
+    expect(r.leidas.actividad).toEqual({ llegan: 2, se_entienden: 2 });
   });
 });
 

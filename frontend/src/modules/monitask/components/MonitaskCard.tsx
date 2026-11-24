@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
+import { useFuncionEncendida } from '@/shared/lib/funcionesDelServidor';
 import {
   Timer, Eye, EyeSlash, FloppyDisk, PlugsConnected, Trash, ArrowsClockwise, Question, CheckCircle, WarningCircle, Copy,
 } from '@phosphor-icons/react';
@@ -40,6 +41,8 @@ function fmt(d: string | null): string {
 
 export default function MonitaskCard() {
   const { can } = usePermission();
+  // Con MONITASK_ACTIVO apagado en el servidor no se pregunta nada (contestaría 404).
+  const encendido = useFuncionEncendida('monitask');
   const [estado, setEstado] = useState<EstadoMonitask | null>(null);
   const [clientId, setClientId] = useState('');
   const [secreto, setSecreto] = useState('');
@@ -49,6 +52,7 @@ export default function MonitaskCard() {
   const [ocupado, setOcupado] = useState<null | 'guardar' | 'conectar' | 'sync' | 'quitar'>(null);
 
   const cargar = useCallback(async () => {
+    if (!encendido) { setEstado(null); return null; }
     try {
       const r = await monitaskApi.estado();
       const e = r.data || null;
@@ -62,7 +66,7 @@ export default function MonitaskCard() {
       setEstado(null);   // apagado o sin permiso: la tarjeta no sale
       return null;
     }
-  }, []);
+  }, [encendido]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -232,6 +236,19 @@ export default function MonitaskCard() {
             {s?.sin_actividad && ' · Monitask no dio el % de actividad'}</p>
           {estado.ultimo_error && (
             <p className="text-destructive">Último error ({fmt(estado.ultimo_error_at)}): {estado.ultimo_error}</p>
+          )}
+          {s?.fallo && !estado.ultimo_error && <p className="text-destructive">La última sincronización falló: {s.fallo}</p>}
+          {!estado.sincronizando && (s?.errores?.length ?? 0) > 0 && (
+            // Lo que no fue bien en la última vuelta (una persona, la actividad, o datos de
+            // Monitask que el CRM no sabe leer). Sin esto, solo se veía «0 personas».
+            <div className="rounded-md border border-warning/30 bg-warning-soft p-2 text-warning-soft-foreground" data-testid="monitask-avisos">
+              <p className="font-semibold">Avisos de la última sincronización ({s?.errores?.length})</p>
+              <ul className="list-disc list-inside">
+                {(s?.errores || []).slice(0, 6).map((e, i) => (
+                  <li key={`${e.que}-${i}`} className="break-words">{e.que === 'formato' ? '' : `${e.que}: `}{e.error}</li>
+                ))}
+              </ul>
+            </div>
           )}
         </div>
 

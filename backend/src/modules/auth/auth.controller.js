@@ -11,6 +11,7 @@ import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
 import { pluginMoodleActivo, linksPagoActivos, seguimientoLinksActivo } from '../../shared/config/soloEnPruebas.js';
+import { monitaskActivo } from '../monitask/interruptor.js';
 
 // /api/auth/me devuelve el mapa de `permissions` calculado (rol, rol a medida
 // y lo dado a una persona suelta), igual que MultiCRM. `view` sigue vacío: la
@@ -236,6 +237,10 @@ export async function me(req, res, next) {
             // gemela de MultiCRM): «Crear link» y la venta dicen si al alumno se le recordará
             // cada cuota o hay que mandársela (24/11).
             recordatorios_links: seguimientoLinksActivo(),
+            // Monitask (gemela de CRM#236): MONITASK_ACTIVO. Con él apagado, el menú no
+            // enseña «Actividad» y la pantalla y la tarjeta no piden /monitask/estado
+            // (contestaría 404 y llenaba el registro de «Peticion rechazada»).
+            monitask: monitaskActivo(),
           },
         },
         permissions,
