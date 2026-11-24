@@ -8,19 +8,27 @@
        que no esté suspendida ni sea la del administrador del sitio;
     2. el campus asignado en su ficha y la cuenta vinculada en el CRM (`tutor_campus`
        activa, con su `moodle_user_id`), que es lo que lee «Mi campus»;
-    3. matriculada en cada uno de esos cursos como profesora (`editingteacher` o
-       `teacher`): el chat de grupo del plugin y «Mi campus» solo cuentan ese rol.
+    3. matriculada en cada uno de esos cursos con el rol «Profesor» (`editingteacher`),
+       por matrícula manual, IGUAL QUE LAS TUTORAS DE HOY (Diego, CRM#1059): mirado el
+       24/11 en los siete campus con cursos, Yaibeth y Paola están así en todos los
+       suyos, sin roles de categoría. «Profesor sin permiso de edición» (`teacher`) es
+       el de los docentes que solo corrigen: «Mi campus» y el chat ya lo cuentan, pero
+       con él no puede redactar el curso, así que aquí no vale como «listo».
 
   Aquí se COMPRUEBA, campus a campus y curso a curso, sin escribir nada en Moodle ni en
   el CRM. «Los cursos que redacta» son sus productos (colaboración activa, curso
   pendiente asignado o «Responsable de desarrollarlo»: ver `cursosQueRedacta`) con su
   curso de Moodle unido (`moodle_cursos_producto`, migración 311).
 
-  Matricularla desde el CRM NO se hace: el plugin (`local_crm_matricular`, 1.12.0) solo
-  matricula con roles de tipo alumno, a propósito, y el servicio del CRM no lleva
-  `enrol_manual_enrol_users`. Darle a ese token permiso para hacer profesora a alguien
-  es una decisión de Diego (CRM#1026). Mientras, se da el enlace a la página de
-  participantes del curso para que lo haga quien administra el campus.
+  Matricularla desde el CRM NO se hace (Diego, CRM#1059: a mano, con el enlace del
+  panel): el plugin (`local_crm_matricular`, 1.12.0) solo matricula con roles de tipo
+  alumno, a propósito, y el servicio del CRM no lleva `enrol_manual_enrol_users`. Se da
+  el enlace a la página de participantes del curso para que lo haga quien administra
+  el campus.
+
+  Lo ven quien gestiona tutores, en la ficha (`/:id/redaccion-moodle`), y la propia
+  redactora en «Mi campus» (`/mi-campus/redaccion-moodle`, siempre con SU id, el del
+  token, nunca uno que venga en la petición). Con `ella`, los avisos le hablan a ella.
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -29,8 +37,17 @@ import {
 } from '../../shared/services/moodle.client.js';
 import { campusDelTutor, conexionDelCampus } from './tutor.campus.js';
 
-/** Los roles de Moodle con los que cuenta como profesora del curso (los de «Mi campus» y del chat de grupo). */
-const ROLES_DE_PROFESORA = new Set(['editingteacher', 'teacher']);
+/** El rol de Moodle de la redactora en sus cursos: el de las tutoras de hoy, «Profesor». */
+export const ROL_DE_REDACTORA = 'editingteacher';
+/** «Profesor sin permiso de edición»: ve el curso en «Mi campus», pero no puede redactarlo. */
+const ROL_SIN_EDICION = 'teacher';
+
+/** El estado de un curso en el que ya está matriculada, según sus roles en él. */
+export const estadoPorRoles = (roles) => {
+  if (roles.includes(ROL_DE_REDACTORA)) return 'profesora';
+  if (roles.includes(ROL_SIN_EDICION)) return 'sin_edicion';
+  return 'otro_rol';
+};
 
 /**
  * Los cursos que redacta: sus productos, cada uno con sus cursos de Moodle, o sin
@@ -88,7 +105,7 @@ const cursoSinMirar = (c, estado) => ({
   por: c.por,
   curso_moodle_id: c.curso_moodle_id,
   curso_nombre: c.curso_nombre,
-  estado,          // 'profesora' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar'
+  estado,          // 'profesora' | 'sin_edicion' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar'
   roles: [],
   enlace: null,
 });
@@ -97,7 +114,9 @@ const cursoSinMirar = (c, estado) => ({
  * Comprueba un campus: su cuenta y su rol en cada curso. Nunca lanza: lo que falla se
  * dice en `problema`, y los cursos que no se han podido mirar quedan «sin_comprobar».
  */
-async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, vinculo }, opciones) {
+async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, vinculo }, { ella = false, ...opciones } = {}) {
+  // Quien gestiona tutores puede arreglarlo; ella, pedirlo.
+  const aviso = (aQuienGestiona, aElla) => (ella ? aElla : aQuienGestiona);
   const entrada = {
     project_id: projectId,
     campus,
@@ -110,7 +129,9 @@ async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, 
     cursos: cursos.map((c) => cursoSinMirar(c, 'sin_comprobar')),
   };
   if (!tieneCampus) {
-    entrada.problemas.push('No tiene este campus: asígnaselo en «Consultas de alumnos» › Añadir un campus.');
+    entrada.problemas.push(aviso(
+      'No tiene este campus: asígnaselo en «Consultas de alumnos» › Añadir un campus.',
+      'No tienes este campus asignado en el CRM: pídeselo a coordinación.'));
   }
 
   const conexion = await conexionDelCampus(projectId);
@@ -134,18 +155,22 @@ async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, 
       : await usuarioPorCorreo(conexion, tutor.email, opciones);
     if (!cuenta) {
       entrada.problemas.push(vinculada
-        ? `La cuenta vinculada (id ${vinculada}) ya no existe en este Moodle: pulsa «Vincular de nuevo».`
-        : `No hay ninguna cuenta en este Moodle con su correo del CRM (${tutor.email}). Créala con ese correo o vincúlala a mano.`);
+        ? aviso(`La cuenta vinculada (id ${vinculada}) ya no existe en este Moodle: pulsa «Vincular de nuevo».`,
+          'Tu cuenta vinculada ya no existe en este Moodle: avisa a coordinación.')
+        : aviso(`No hay ninguna cuenta en este Moodle con su correo del CRM (${tutor.email}). Créala con ese correo o vincúlala a mano.`,
+          `No hay ninguna cuenta en este Moodle con tu correo del CRM (${tutor.email}): pide a coordinación que te la cree con ese correo.`));
       for (const c of entrada.cursos) c.estado = 'sin_matricula';
       return entrada;
     }
     entrada.cuenta = { id: Number(cuenta.id), nombre: cuenta.nombre || null, suspendida: Boolean(cuenta.suspendido), vinculada: Boolean(vinculada) };
-    if (cuenta.suspendido) entrada.problemas.push('Su cuenta de este Moodle está suspendida.');
+    if (cuenta.suspendido) entrada.problemas.push(aviso('Su cuenta de este Moodle está suspendida.', 'Tu cuenta de este Moodle está suspendida: avisa a coordinación.'));
 
     // Con un plugin anterior a la 1.10.2 no se puede saber (null): no se inventa.
     const datos = await cuentaDelCampus(conexion, cuenta.id, opciones);
     if (datos?.esAdministrador) {
-      entrada.problemas.push('Esa cuenta es la del administrador del sitio: el CRM no la vincula a una tutora. Necesita una cuenta propia.');
+      entrada.problemas.push(aviso(
+        'Esa cuenta es la del administrador del sitio: el CRM no la vincula a una tutora. Necesita una cuenta propia.',
+        'Esa cuenta es la del administrador del sitio: necesitas una cuenta propia. Pídesela a coordinación.'));
     }
 
     const suyos = new Set((await cursosDe(conexion, cuenta.id, opciones)).map((k) => k.id));
@@ -158,11 +183,13 @@ async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, 
         roles.set(c.curso_moodle_id, yo?.roles || []);
       }
       c.roles = roles.get(c.curso_moodle_id);
-      c.estado = c.roles.some((r) => ROLES_DE_PROFESORA.has(r)) ? 'profesora' : 'otro_rol';
+      c.estado = estadoPorRoles(c.roles);
     }
 
     if (tieneCampus && !entrada.vinculada_en_crm && !cuenta.suspendido && !datos?.esAdministrador) {
-      entrada.problemas.push('Su cuenta aún no está vinculada en el CRM: pulsa «Comprobar en los campus».');
+      entrada.problemas.push(aviso(
+        'Su cuenta aún no está vinculada en el CRM: pulsa «Comprobar en los campus».',
+        'Tu cuenta aún no está vinculada en el CRM: pide a coordinación que la vincule desde tu ficha.'));
     }
   } catch (err) {
     if (!(err instanceof MoodleError)) logger.warn({ projectId, err: err.message }, 'tutores/redaccion: fallo al leer el campus');
@@ -176,11 +203,12 @@ async function comprobarCampus({ tutor, projectId, campus, cursos, tieneCampus, 
  *
  * `campusVisibles`: los campus de quien mira (null = todos). Un campus de otra empresa
  * no se mira ni se enseña, como el vínculo de su cuenta (#689, punto 2).
+ * `ella`: la mira la propia redactora (los avisos le hablan a ella).
  *
  * Devuelve `{ es_redactora, campus: [...], sin_curso: [...], lista }`. `lista` es que
  * hay al menos un curso y en todos los campus está todo bien.
  */
-export async function redaccionEnMoodle(tutorId, { campusVisibles = null, ...opciones } = {}) {
+export async function redaccionEnMoodle(tutorId, { campusVisibles = null, ella = false, ...opciones } = {}) {
   const { rows: [tutor] } = await query(
     `SELECT id, email,
             (role::text = 'tutor_redactor' OR 'tutor_redactor' = ANY(COALESCE(roles_extra, '{}')::text[])) AS es_redactora
@@ -210,10 +238,10 @@ export async function redaccionEnMoodle(tutorId, { campusVisibles = null, ...opc
   for (const [projectId, { campus: nombre, cursos }] of porCampus) {
     campus.push(await comprobarCampus({
       tutor, projectId, campus: nombre, cursos, tieneCampus: suyos.has(projectId), vinculo: vinculoDe.get(projectId),
-    }, opciones));
+    }, { ...opciones, ella }));
   }
 
   const lista = campus.length > 0 && campus.every((c) => c.problemas.length === 0
     && c.cursos.every((k) => k.estado === 'profesora'));
-  return { es_redactora: Boolean(tutor.es_redactora), campus, sin_curso: sinCurso, lista };
+  return { es_redactora: Boolean(tutor.es_redactora), rol_moodle: ROL_DE_REDACTORA, campus, sin_curso: sinCurso, lista };
 }

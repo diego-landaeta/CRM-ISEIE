@@ -42,6 +42,11 @@ router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar')
 // «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
 // por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
 router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
+// La redactora ve lo suyo (CRM#1026): su cuenta y su rol en los cursos que redacta, con el
+// id del token (sin `:id`: no puede pedir el de otra). Antes que `/:id/...`. Aún sin aprobar.
+if (redactorasMoodleActivo()) {
+  router.get('/mi-campus/redaccion-moodle', puede('tutores.mis_cursos'), ctrl.miRedaccionMoodle);
+}
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.

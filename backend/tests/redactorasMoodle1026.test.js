@@ -26,9 +26,12 @@ vi.mock('../src/modules/permissions/permissions.service.js', async (original) =>
   curso pendiente o «Responsable de desarrollarlo», con su curso de Moodle unido).
 
     · profesora / otro rol / sin matrícula, curso a curso, con el enlace a participantes;
+    · «Profesor» (`editingteacher`) es lo correcto, como las tutoras de hoy; «Profesor
+      sin permiso de edición» (`teacher`) no deja redactar: no está «lista»;
     · sin cuenta con su correo, cuenta suspendida o administradora del sitio: se dice;
     · los productos sin curso de Moodle, aparte;
     · el admin de una empresa solo ve los campus de la suya;
+    · la redactora ve lo suyo en «Mi campus», con el id de su token, y nunca lo de otra;
     · SOLO LEE: ni una función de Moodle que escriba ni un cambio en `tutor_campus`;
     · en producción no se monta sin REDACTORAS_MOODLE_EN_PRODUCCION=1.
 
@@ -184,7 +187,7 @@ beforeAll(async () => {
     e.p5 = await crearProducto('Curso de C', e.campusC, e.redactora, [[e.campusC, 900]]);
     // De otra persona: no sale.
     e.otra = await crearUsuario('tutor');
-    await crearProducto('Curso ajeno', e.campusA, e.otra, [[e.campusA, 100]]);
+    e.pAjeno = await crearProducto('Curso ajeno', e.campusA, e.otra, [[e.campusA, 100]]);
 
     await campus.asignarCampus(e.redactora, e.campusA);
     await campus.asignarCampus(e.redactora, e.campusB);
@@ -225,6 +228,7 @@ const comoSuperadmin = () => pide({ userId: 0, role: 'superadmin' });
 const comoAdminA = () => pide({ userId: e.adminA, role: 'admin' });
 const comoAdminB = () => pide({ userId: e.adminB, role: 'admin' });
 const comoRedactora = () => pide({ userId: e.redactora, role: 'tutor_redactor' });
+const comoOtra = () => pide({ userId: e.otra, role: 'tutor' });
 
 describe('hay base', () => {
   it('contra la que probar', () => { expect(hayBase, porQueNo || '').toBe(true); });
@@ -277,10 +281,57 @@ describe('#1026 · la redactora en Moodle, en su ficha', () => {
     expect(deB.body.data.sin_curso).toEqual([]);
   });
 
-  it('la propia redactora no lo pide (es de quien gestiona tutores): 403', async () => {
+  it('la ruta de la ficha es de quien gestiona tutores: la redactora, ni con su id (403)', async () => {
     if (!hayBase) return;
     const r = await comoRedactora().get(`/api/tutores/${e.redactora}/redaccion-moodle`);
     expect(r.status).toBe(403);
+  });
+
+  it('la redactora ve lo suyo en «Mi campus», con los avisos dirigidos a ella', async () => {
+    if (!hayBase) return;
+    const r = await comoRedactora().get('/api/tutores/mi-campus/redaccion-moodle');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    const d = r.body.data;
+    expect(d).toMatchObject({ es_redactora: true, rol_moodle: 'editingteacher', lista: false });
+    // Sus tres campus: lo suyo no se recorta por empresa.
+    expect(d.campus.map((c) => c.project_id).sort()).toEqual([e.campusA, e.campusB, e.campusC].sort());
+    const a = d.campus.find((c) => c.project_id === e.campusA);
+    expect(Object.fromEntries(a.cursos.map((c) => [c.curso_moodle_id, c.estado])))
+      .toEqual({ 100: 'profesora', 101: 'otro_rol', 102: 'sin_matricula' });
+    const b = d.campus.find((c) => c.project_id === e.campusB);
+    expect(b.problemas.join(' ')).toContain(`con tu correo del CRM (${e.correo}): pide a coordinación`);
+    const c = d.campus.find((x) => x.project_id === e.campusC);
+    expect(c.problemas.join(' ')).toContain('No tienes este campus asignado en el CRM');
+    expect(d.sin_curso.map((p) => p.product_id)).toEqual([e.p3]);
+    expect(JSON.stringify(d)).not.toContain('Curso ajeno');
+  });
+
+  it('y no lo de otra: la ficha de otra da 403, y la suya no admite otro id (404 o lo suyo)', async () => {
+    if (!hayBase) return;
+    expect((await comoRedactora().get(`/api/tutores/${e.otra}/redaccion-moodle`)).status).toBe(403);
+    // Un id en la ruta no existe.
+    expect((await comoRedactora().get(`/api/tutores/mi-campus/redaccion-moodle/${e.otra}`)).status).toBe(404);
+    // Un id en la consulta no cambia nada: sigue siendo la suya.
+    const r = await comoRedactora().get(`/api/tutores/mi-campus/redaccion-moodle?id=${e.otra}&tutorId=${e.otra}`);
+    expect(r.status).toBe(200);
+    const productos = r.body.data.campus.flatMap((c) => c.cursos.map((k) => k.product_id));
+    expect(productos).toContain(e.p1);
+    expect(productos).not.toContain(e.pAjeno);
+  });
+
+  it('otra tutora, en la misma ruta, ve lo suyo y nada de la redactora', async () => {
+    if (!hayBase) return;
+    const r = await comoOtra().get('/api/tutores/mi-campus/redaccion-moodle');
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.es_redactora).toBe(false);
+    const productos = r.body.data.campus.flatMap((c) => c.cursos.map((k) => k.product_id));
+    expect(productos).toEqual([e.pAjeno]);
+    expect(JSON.stringify(r.body.data)).not.toContain(e.correo);
+  });
+
+  it('quien no tiene «sus cursos» (un admin) no entra en la de «Mi campus»: 403', async () => {
+    if (!hayBase) return;
+    expect((await comoAdminA().get('/api/tutores/mi-campus/redaccion-moodle')).status).toBe(403);
   });
 
   it('cuenta suspendida o del administrador del sitio: se dice y no está lista', async () => {
@@ -297,7 +348,7 @@ describe('#1026 · la redactora en Moodle, en su ficha', () => {
     a.admins.pop();
   });
 
-  it('con todo en orden en los campus que ve quien mira, «lista»', async () => {
+  it('«Profesor sin permiso de edición» no deja redactar: no está lista hasta que es «Profesor», como las tutoras', async () => {
     if (!hayBase) return;
     const a = CAMPUS['token-a'];
     a.matriculados[101] = [{ id: 10, roles: [{ shortname: 'teacher' }] }];
@@ -305,8 +356,15 @@ describe('#1026 · la redactora en Moodle, en su ficha', () => {
     a.matriculados[102] = [{ id: 10, roles: [{ shortname: 'student' }, { shortname: 'editingteacher' }] }];
     // Fuera los campus con problemas: el de B (sin cuenta) y el de C (sin Moodle).
     await query('DELETE FROM moodle_cursos_producto WHERE product_id = ANY($1::int[])', [[e.p4, e.p5]]);
-    const d = (await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`)).body.data;
+    let d = (await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`)).body.data;
+    expect(d.rol_moodle).toBe('editingteacher');
     expect(d.campus.map((c) => c.project_id)).toEqual([e.campusA]);
+    expect(d.campus[0].cursos.map((c) => c.estado)).toEqual(['profesora', 'sin_edicion', 'profesora']);
+    expect(d.campus[0].cursos[1].roles).toEqual(['teacher']);
+    expect(d.lista).toBe(false);
+
+    a.matriculados[101] = [{ id: 10, roles: [{ shortname: 'editingteacher' }] }];
+    d = (await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`)).body.data;
     expect(d.campus[0].cursos.map((c) => c.estado)).toEqual(['profesora', 'profesora', 'profesora']);
     expect(d.lista).toBe(true);
   });
@@ -316,6 +374,7 @@ describe('#1026 · la redactora en Moodle, en su ficha', () => {
     const antes = await vinculos(e.redactora);
     pedidas.length = 0;
     await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`);
+    await comoRedactora().get('/api/tutores/mi-campus/redaccion-moodle');
     expect(pedidas.length).toBeGreaterThan(0);
     expect(pedidas.filter((f) => !DE_LECTURA.has(f))).toEqual([]);
     expect(await vinculos(e.redactora)).toEqual(antes);

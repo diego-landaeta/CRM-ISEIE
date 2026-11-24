@@ -884,6 +884,16 @@ export async function redaccionMoodle(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/tutores/mi-campus/redaccion-moodle — lo mismo, para la propia redactora en «Mi
+// campus» (CRM#1026, Diego en CRM#1059). Siempre con el id del token: la ruta no recibe ninguno.
+export async function miRedaccionMoodle(req, res, next) {
+  try {
+    const data = await redaccionEnMoodle(req.user.userId, { ella: true });
+    if (!data) throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
+    res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
 // PATCH /api/tutores/:id/disponible  { disponible, motivo }
 export async function cambiarDisponible(req, res, next) {
   try {

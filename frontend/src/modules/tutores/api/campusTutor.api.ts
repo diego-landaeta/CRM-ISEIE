@@ -79,8 +79,12 @@ export const campusTutorApi = {
   profesora de los cursos que redacta. Solo lee; no matricula.
 */
 
-/** profesora · otro_rol (matriculada, pero no como profesora) · sin_matricula · sin_comprobar. */
-export type EstadoCursoRedaccion = 'profesora' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar';
+/**
+ * profesora («Profesor», `editingteacher`, como las tutoras de hoy) · sin_edicion
+ * («Profesor sin permiso de edición», `teacher`: no puede redactar) · otro_rol
+ * (matriculada, pero no como profesora) · sin_matricula · sin_comprobar.
+ */
+export type EstadoCursoRedaccion = 'profesora' | 'sin_edicion' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar';
 
 /** Por qué el producto es suyo. */
 export type PorQueEsSuyo = 'colaboracion' | 'curso_pendiente' | 'responsable';
@@ -111,6 +115,8 @@ export interface CampusRedaccion {
 
 export interface RedaccionEnMoodle {
   es_redactora: boolean;
+  /** El rol de Moodle que debe tener en sus cursos: `editingteacher`. */
+  rol_moodle?: string;
   campus: CampusRedaccion[];
   sin_curso: Array<{ product_id: number; producto: string; producto_activo: boolean; por: PorQueEsSuyo[] }>;
   lista: boolean;
@@ -119,4 +125,7 @@ export interface RedaccionEnMoodle {
 export const redaccionMoodleApi = {
   ver: (tutorId: number) =>
     client.get(`/tutores/${tutorId}/redaccion-moodle`) as Promise<ApiResponse<RedaccionEnMoodle>>,
+  /** La propia redactora, en «Mi campus»: el servidor usa el id de su sesión. */
+  mia: () =>
+    client.get('/tutores/mi-campus/redaccion-moodle') as Promise<ApiResponse<RedaccionEnMoodle>>,
 };
