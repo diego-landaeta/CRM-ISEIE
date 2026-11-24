@@ -5,8 +5,9 @@ import usePermission, { type PermissionMap } from '@/shared/hooks/usePermission'
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import EditorDePermisos from '../components/EditorDePermisos';
+import RegistroDeCambios from '../components/RegistroDeCambios';
 import * as api from '../api/permissions.api';
-import type { Catalogo, ListaDeRoles } from '../api/permissions.api';
+import type { ApunteDelRegistro, Catalogo, ListaDeRoles } from '../api/permissions.api';
 import { accionesDe, cambiadas, roturasNuevas } from '../lib/permisos';
 
 /**
@@ -29,6 +30,9 @@ export default function RolesPage() {
   const [roles, setRoles] = useState<ListaDeRoles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [elegido, setElegido] = useState<Elegido>({ tipo: 'fijo', clave: 'admin' });
+  const [pestana, setPestana] = useState<'permisos' | 'cambios'>('permisos');
+  // #703: los cambios del rol elegido (el registro lo lee quien tiene «Cambiar roles»).
+  const [registro, setRegistro] = useState<ApunteDelRegistro[] | null>(null);
   const [borrador, setBorrador] = useState<PermissionMap | null>(null);
   const [guardando, setGuardando] = useState(false);
   const [creando, setCreando] = useState<{ nombre: string; base: string } | null>(null);
@@ -71,6 +75,16 @@ export default function RolesPage() {
     if (!catalogo) return [];
     return accionesDe(catalogo).filter((a) => !can(a.clave) && original[a.clave] !== true).map((a) => a.clave);
   }, [catalogo, can, original]);
+
+  useEffect(() => {
+    if (pestana !== 'cambios' || !puedeCambiar) return;
+    let vivo = true;
+    setRegistro(null);
+    api.getRegistro(elegido.tipo === 'fijo' ? { rol: elegido.clave } : { customRoleId: elegido.id })
+      .then((r) => { if (vivo) setRegistro(r); })
+      .catch(() => { if (vivo) setRegistro([]); });
+    return () => { vivo = false; };
+  }, [pestana, puedeCambiar, elegido, roles]);
 
   function elegir(e: Elegido) {
     if (sucio && !window.confirm('Hay cambios sin guardar en este rol. ¿Descartarlos?')) return;
@@ -189,7 +203,24 @@ export default function RolesPage() {
                 )}
               </header>
 
-              {/* ISEIE no tiene la pestaña «Vista» del 360 (menú y aterrizaje por rol). */}
+              {/* ISEIE no tiene la pestaña «Vista» del 360 (menú y aterrizaje por rol); sí
+                  tiene «Cambios», para quien puede cambiar roles. */}
+              {puedeCambiar && (
+                <nav className="-mt-1 flex items-center gap-1">
+                  {([['permisos', 'Permisos'], ['cambios', 'Cambios']] as const).map(([id, texto]) => (
+                    <button key={id} type="button" onClick={() => setPestana(id)}
+                      className={cn('h-8 rounded-lg px-3 text-normal font-semibold transition-colors',
+                        pestana === id ? 'bg-primary/10 text-primary' : 'text-muted-foreground hover:bg-muted')}>
+                      {texto}
+                    </button>
+                  ))}
+                </nav>
+              )}
+
+              {pestana === 'cambios' ? (
+                registro ? <RegistroDeCambios apuntes={registro} conPersona titulo="Cambios de este rol" />
+                  : <p className="text-normal text-muted-foreground">Cargando…</p>
+              ) : (
                 <>
                   <EditorDePermisos
                     catalogo={catalogo}
@@ -225,6 +256,7 @@ export default function RolesPage() {
                     </div>
                   )}
                 </>
+              )}
             </>
           ) : (
             <p className="text-normal text-muted-foreground">{error ? '' : 'Cargando…'}</p>
