@@ -2243,6 +2243,29 @@ const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
  * la formación vendida y el programa, en el CRM. Solo antes de emitir: después, Corregir.
  */
 /** Un prospecto o cliente del proyecto del campus, tal y como lo da la búsqueda. */
+/**
+ * «Nuevo diploma»: a quién se le puede hacer (24/11, Diego: «varias personas no aparecen
+ * para emitir los certificados»). La lista de Prospectos esconde a los CLIENTES (los que
+ * tienen alguna venta), que son justo los que se diploman, y el correo solo buscaba los
+ * «convertidos». Ahora: primero los clientes del campus y luego el resto, por nombre,
+ * correo o teléfono, sin repetir a nadie. Cada uno, según lo que deja ver su alcance.
+ */
+export async function buscarParaDiploma(proyectoId: number, q: string): Promise<ClienteLite[]> {
+  const s = encodeURIComponent(q);
+  const [clientes, todos] = await Promise.all([
+    client.get(`/leads?projectId=${proyectoId}&search=${s}&conConversion=true&limit=10`),
+    client.get(`/leads?projectId=${proyectoId}&search=${s}&includeConverted=true&limit=10`),
+  ]);
+  const vistos = new Set<number>();
+  const out: ClienteLite[] = [];
+  for (const c of [...((clientes as { data?: ClienteLite[] }).data ?? []), ...((todos as { data?: ClienteLite[] }).data ?? [])]) {
+    if (vistos.has(c.id)) continue;
+    vistos.add(c.id);
+    out.push(c);
+  }
+  return out.slice(0, 10);
+}
+
 interface ClienteLite { id: number; nombre: string | null; email: string | null; telefono?: string | null }
 
 /**
@@ -2289,10 +2312,8 @@ function DialogoNuevoDiploma({ campus, alCerrar, alCrear }: {
     const t = setTimeout(async () => {
       setBuscando(true);
       try {
-        const r = q.includes('@')
-          ? await client.get(`/leads/lookup-by-email?email=${encodeURIComponent(q)}&projectId=${proyectoId}`)
-          : await client.get(`/leads?projectId=${proyectoId}&search=${encodeURIComponent(q)}&limit=10`);
-        if (vivo) setResultados(((r as { data?: ClienteLite[] }).data ?? []).slice(0, 10));
+        const r = await buscarParaDiploma(proyectoId, q);
+        if (vivo) setResultados(r);
       } catch { if (vivo) setResultados([]); }
       finally { if (vivo) setBuscando(false); }
     }, 350);
