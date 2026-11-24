@@ -5,6 +5,7 @@ import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ProductController from './product.controller.js';
 import * as ModulesController from './product-modules.controller.js';
+import * as FormacionController from './formacion.controller.js';
 
 import { AppError } from '../../shared/utils/AppError.js';
 
@@ -87,5 +88,15 @@ router.post('/:id/modules', puede('products.edit'), projectAccess, ModulesContro
 router.patch('/:id/modules/:moduleId', puede('products.edit'), projectAccess, ModulesController.updateModule);
 router.delete('/:id/modules/:moduleId', puede('products.edit'), projectAccess, ModulesController.deleteModule);
 router.post('/:id/modules/reorder', puede('products.edit'), projectAccess, ModulesController.reorderModules);
+
+// Productos › Formaciones (CRM-ISEIE#767, gemela de CRM#1113): la formación entera —datos y
+// módulos— de una vez. Leer, crear y editar con los permisos del catálogo; solo en sus campus
+// (`projectAccess`), también para leer: es la pantalla de editar, y enseña las tutoras.
+router.get('/:id/formacion', puede('products.view'), projectAccess, FormacionController.verFormacion);
+router.post('/formacion', puede('products.create'), projectAccess, FormacionController.crearFormacion);
+router.put('/:id/formacion', puede('products.edit'), projectAccess, FormacionController.guardarFormacion);
+// Fase 2: crear o actualizar su curso de Moodle (escribe en el Moodle del campus). Apagado en
+// producción hasta FORMACIONES_MOODLE_EN_PRODUCCION=1; permiso propio, `moodle.crear_cursos`.
+router.post('/:id/formacion/moodle', puede('moodle.crear_cursos'), projectAccess, FormacionController.llevarAMoodle);
 
 export default router;

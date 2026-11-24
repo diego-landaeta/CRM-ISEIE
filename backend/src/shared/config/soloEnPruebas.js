@@ -68,6 +68,16 @@ export function pluginMoodleActivo(env = process.env) {
 }
 
 /**
+ * Formaciones desde el CRM, fase 2 (CRM#1113): crear o actualizar el curso de Moodle de
+ * una formación, con una sección por módulo. ESCRIBE en el Moodle del campus, así que en
+ * producción va apagado hasta que se apruebe con FORMACIONES_MOODLE_EN_PRODUCCION=1 (y
+ * necesita además el plugin, PLUGIN_MOODLE_EN_PRODUCCION, y la 1.12.0 en el campus).
+ */
+export function formacionesMoodleActivas(env = process.env) {
+  return enPruebasOAprobado('FORMACIONES_MOODLE_EN_PRODUCCION', env);
+}
+
+/**
  * Cobro automático de las cuotas (#680; Diego, 19/11/2026): el CRM cobra solo cada
  * cuota en su fecha con la tarjeta que el alumno guardó al pagar su link. Mueve
  * dinero sin que nadie pulse nada, así que en producción va APAGADO hasta que

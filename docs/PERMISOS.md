@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-913 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+917 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -907,6 +907,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateModule | `PATCH /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | deleteModule | `DELETE /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | reorderModules | `POST /api/products/:id/modules/reorder` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
+| verFormacion | `GET /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.view` |
+| crearFormacion | `POST /api/products/formacion` | (no existía) | (ruta nueva) | `products.create` |
+| guardarFormacion | `PUT /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.edit` |
+| llevarAMoodle | `POST /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
 
 ## project-channels
 
@@ -1720,6 +1724,7 @@ lo que pide para tener sentido (editar pide ver).
 | Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
 | Unir productos con cursos de Moodle | `moodle.cursos_producto` | Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus. | Admin, Soporte |  |
+| Crear cursos en Moodle | `moodle.crear_cursos` | Crear o actualizar en el Moodle de sus campus el curso de una formación, con una sección por módulo. | Admin, Soporte |  |
 
 ### Webhooks de salida
 
