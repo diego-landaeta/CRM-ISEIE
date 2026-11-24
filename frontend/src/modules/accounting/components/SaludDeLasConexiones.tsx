@@ -6,6 +6,9 @@ import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { toast } from '@/shared/hooks/useToast';
+import {
+  agruparPorEmpresa, stripePrestadoDe, textoStripePrestado, type GrupoDeEmpresa, type ProyectoConEmpresa, type StripePrestado,
+} from '@/shared/lib/campusPorEmpresa';
 
 /**
  * La salud de las conexiones de cada campus (CRM#533). SOLO PARA VER.
@@ -42,6 +45,8 @@ interface FilaCampus {
   nombre: string;
   peor: Estado;
   casillas: Record<string, Casilla>;
+  /** Usa la cuenta de Stripe de otro campus (`feat/stripe-prestado`): conectado. */
+  stripe_prestado_de?: StripePrestado | null;
 }
 
 interface Salud {
@@ -72,7 +77,15 @@ export function Pastilla({ estado }: { estado: Estado }) {
   );
 }
 
-function Celda({ c, clave }: { c: Casilla | undefined; clave: string }) {
+function Celda({ c, clave, prestado = null }: { c: Casilla | undefined; clave: string; prestado?: StripePrestado | null }) {
+  // Con el Stripe de otro campus (24/11), «sin configurar» no es verdad: está conectado.
+  if (prestado && (clave === 'stripe' || clave === 'stripe_links') && (!c || c.estado === 'sin_configurar')) {
+    return (
+      <span data-testid="stripe-prestado" className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full whitespace-nowrap bg-success-soft text-success-soft-foreground">
+        <CheckCircle size={10} weight="fill" /> {textoStripePrestado(prestado)}
+      </span>
+    );
+  }
   if (!c) return <span className="text-muted-foreground">—</span>;
   const falla = c.estado === 'caida' || c.estado === 'atencion';
   const senal = fecha(c.ultimaSenal);
@@ -104,9 +117,10 @@ function Celda({ c, clave }: { c: Casilla | undefined; clave: string }) {
  * y el panel se quedaría en una sola fila.
  */
 export default function SaludDeLasConexiones({ deTodos = false }: { deTodos?: boolean } = {}) {
-  const { activeIssuerId, activeProject } = useProjectContext() as {
+  const { activeIssuerId, activeProject, projects } = useProjectContext() as {
     activeIssuerId?: number | null;
     activeProject?: { id?: number | null } | null;
+    projects?: ProyectoConEmpresa[];
   };
   const proyectoId = activeProject?.id ?? null;
   const [salud, setSalud] = useState<Salud | null>(null);
@@ -187,6 +201,10 @@ export default function SaludDeLasConexiones({ deTodos = false }: { deTodos?: bo
     );
   }
 
+  // Por empresa (Diego, 24/11): cada empresa con sus campus; sin empresas, como siempre.
+  const grupos = agruparPorEmpresa(salud.campus, projects, (c) => c.id);
+  const conEmpresas = grupos.some((g) => g.id !== null);
+  const porGrupo: GrupoDeEmpresa<FilaCampus>[] = conEmpresas ? grupos : [{ id: null, nombre: '', campus: salud.campus }];
   const caidos = salud.campus.filter((c) => c.peor === 'caida').length;
   const atencion = salud.campus.filter((c) => c.peor === 'atencion').length;
 
@@ -208,8 +226,16 @@ export default function SaludDeLasConexiones({ deTodos = false }: { deTodos?: bo
               {salud.conexiones.map((x) => <th key={x.clave} className="px-3 py-2 font-semibold whitespace-nowrap">{x.titulo}</th>)}
             </tr>
           </thead>
-          <tbody>
-            {salud.campus.map((c) => (
+          {porGrupo.map((g) => (
+          <tbody key={g.id ?? 'sin'} data-testid={conEmpresas ? 'grupo-empresa' : undefined}>
+            {conEmpresas && (
+              <tr className="bg-muted/40 border-b border-border">
+                <th scope="colgroup" colSpan={salud.conexiones.length + 1} className="px-5 py-1.5 text-left text-[11px] font-bold uppercase tracking-wide text-muted-foreground sticky left-0">
+                  {g.nombre}
+                </th>
+              </tr>
+            )}
+            {g.campus.map((c) => (
               <tr key={c.id} className="border-b border-border last:border-0 align-top">
                 <td className="px-5 py-3 sticky left-0 bg-card">
                   <div className="font-medium">{c.nombre}</div>
@@ -227,12 +253,13 @@ export default function SaludDeLasConexiones({ deTodos = false }: { deTodos?: bo
                 </td>
                 {salud.conexiones.map((x) => (
                   <td key={x.clave} className="px-3 py-3">
-                    <Celda c={c.casillas[x.clave]} clave={x.clave} />
+                    <Celda c={c.casillas[x.clave]} clave={x.clave} prestado={stripePrestadoDe(c)} />
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
+          ))}
         </table>
       </div>
     </div>

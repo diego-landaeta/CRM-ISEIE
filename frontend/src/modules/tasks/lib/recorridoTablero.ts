@@ -9,13 +9,18 @@ export const CLAVE_RECORRIDO_TABLERO = 'tablero-recorrido-visto-v1';
 
 export const PASOS_TABLERO: PasoRecorrido[] = [
   {
-    titulo: 'El tablero del equipo de desarrollo',
-    texto: 'Aquí van las tareas del equipo —web, SEO, Meta, diseño, Moodle—, cada una con su responsable. Avanzan de «Por hacer» a «En curso», «En revisión» y «Hecha». Solo lo usan superadmin, admin y colaboradores: las gestoras no lo ven. En {pasos} pasos te enseño cada cosa.',
+    titulo: 'El tablero del equipo',
+    texto: 'Aquí van las tareas de cada equipo —desarrollo (web, SEO, Meta, diseño, Moodle) y las tutoras redactoras—, cada una con su responsable. Avanzan de «Por hacer» a «En curso», «En revisión» y «Hecha». Lo usan superadmin, admin, colaboradores y redactoras: las gestoras no lo ven. En {pasos} pasos te enseño cada cosa.',
   },
   {
     donde: '[data-recorrido="filtros"]',
     titulo: 'Un solo tablero, con filtros',
     texto: 'Todas las tareas van en el mismo tablero; lo que cambia es lo que filtras: persona, equipo, área, etiqueta, prioridad, campus o proyecto propio. Se combinan, se ven debajo y se quitan con «Quitar filtros».',
+  },
+  {
+    donde: '[data-recorrido="equipos"]',
+    titulo: 'Desarrollo o redactoras',
+    texto: '«Equipo de trabajo» separa el tablero del equipo de desarrollo del de las tutoras redactoras. Cada redactora ve solo lo suyo; el admin elige el equipo aquí.',
   },
   {
     donde: '[data-recorrido="vista"]',

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useState, type ReactNode } from 'react';
 import { CaretDown } from '@phosphor-icons/react';
 import { cn } from '@/shared/lib/utils';
 // Traído de MultiCRM. ISEIE no tiene sus tokens de texto ni de espaciado:
@@ -16,6 +16,9 @@ import { cn } from '@/shared/lib/utils';
  *
  * SE RECUERDA POR PANTALLA, no en general: alguien puede querer el resumen en
  * Prospectos y no en Clientes. Por eso la `clave`.
+ *
+ * NACE ABIERTO (Diego, 24/11: «todo abierto como antes»): lo plegado es lo que
+ * cada uno pliega, y solo se recuerda eso.
  *
  * Si el navegador no deja guardar —ventana privada, permisos— se comporta como
  * si nada: abierto, y sin romperse.
@@ -47,14 +50,16 @@ export default function BloquePlegable({
   children: ReactNode;
   className?: string;
 }) {
-  const almacen = `crm.bloque.${clave}`;
+  // `v2` (24/11): con la 3.0.0 se guardaba «cerrado» nada más entrar, sin que
+  // nadie lo plegara. Lo de antes no vale: todos vuelven a verlo abierto.
+  const almacen = `crm.bloque.v2.${clave}`;
   const [abierto, setAbierto] = useState(() => leer(almacen, abiertoPorDefecto));
 
-  useEffect(() => {
-    try { localStorage.setItem(almacen, abierto ? '1' : '0'); } catch { /* sin guardar, pero funciona */ }
-  }, [almacen, abierto]);
-
-  const alternar = useCallback(() => setAbierto((v) => !v), []);
+  // Solo se guarda lo que la persona ELIGE (al pulsar), nunca al entrar.
+  const alternar = useCallback(() => setAbierto((v) => {
+    try { localStorage.setItem(almacen, v ? '0' : '1'); } catch { /* sin guardar, pero funciona */ }
+    return !v;
+  }), [almacen]);
   const idContenido = `bloque-${clave}`;
 
   return (

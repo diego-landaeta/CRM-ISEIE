@@ -13,18 +13,21 @@
 
   Se lee de Moodle en el momento, con el token del campus, para que las cifras
   sean las de Moodle y no las de ayer. Para no castigar al campus, se guarda
-  dos minutos por tutora; «Actualizar» lo vuelve a pedir. Las dudas que ya no
-  esperan se quitan también de esa copia: son del CRM, no de Moodle (#850).
+  dos minutos por tutora Y CAMPUS; «Actualizar» lo vuelve a pedir. Las dudas que
+  ya no esperan se quitan también de esa copia: son del CRM, no de Moodle (#850).
+
+  Uno o varios campus (Diego, 24/11: «que las tutoras redactoras puedan ver entre
+  uno y varios campus»): con `campus` se leen solo los elegidos (de los suyos; lo
+  que no es suyo se ignora) y `todosLosCampus` dice cuáles tiene, para el selector.
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno,
-  modosDeGrupoDelCurso, modoDeLaTarea, SIN_GRUPOS, GRUPOS_VISIBLES,
+  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno, esRolDeTutora,
+  esRolExtraDeTutora, modosDeGrupoDelCurso, modoDeLaTarea, SIN_GRUPOS, GRUPOS_VISIBLES,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 
-const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 const CACHE_MS = 2 * 60 * 1000;
 const PARALELO = 4;
 /**
@@ -41,11 +44,19 @@ export { esAlumno };
 const VEN_TODOS_LOS_GRUPOS = new Set(['editingteacher', 'manager']);
 
 /**
+ * ¿Ese rol ve todos los grupos? Los de serie, salvo que el campus lo haya puesto en
+ * `MOODLE_ROLES_TUTORA` (ISEIE: `manager`): ese rol cuenta como tutora, no como quien ve
+ * a todos; si está en algún grupo, se recorta como a una profesora sin edición (nunca
+ * enseñar de más; al poner la nota, el plugin mira los permisos exactos).
+ */
+export const veTodosLosGrupos = (rol) => VEN_TODOS_LOS_GRUPOS.has(rol) && !esRolExtraDeTutora(rol);
+
+/**
  * ¿Le pueden recortar los grupos? Solo a una profesora SIN permiso de edición (de serie no
  * tiene «ver todos los grupos») que está en algún grupo. Sin grupo, Moodle le deja el grupo
  * activo en 0 y le enseña a todos.
  */
-export const recortadaPorGrupos = (yo) => !yo.roles.some((r) => VEN_TODOS_LOS_GRUPOS.has(r)) && (yo.grupos || []).length > 0;
+export const recortadaPorGrupos = (yo) => !yo.roles.some(veTodosLosGrupos) && (yo.grupos || []).length > 0;
 
 /**
  * Los alumnos que le tocan a la profesora `yo`, como se los enseña Moodle (CRM#1062): quien
@@ -86,6 +97,8 @@ export async function vistaDeLaProfesora(conexion, cursoId, gente, yo, opciones)
     },
   };
 }
+
+/** La copia de dos minutos, por tutora y campus: `${tutorId}:${projectId}` → { at, datos }. */
 const cache = new Map();
 
 /**
@@ -183,12 +196,13 @@ async function dudasAbiertas(tutorId, projectId) {
 async function pendientesDeDesarrollar(tutorId) {
   const { rows } = await query(
     `SELECT cp.id, cp.nombre, cp.tipo, cp.estado, cp.fecha_comprometida, cp.avance_foto, cp.avance_video,
-            cp.avance_modulos, p.nombre AS campus
+            cp.avance_modulos, cp.project_id, p.nombre AS campus
        FROM cursos_pendientes cp JOIN projects p ON p.id = cp.project_id
       WHERE cp.tutor_id = $1 AND cp.estado NOT IN ('cerrado', 'cancelado')
       ORDER BY cp.fecha_comprometida NULLS LAST, cp.id`, [tutorId]);
   return rows.map((r) => ({
     id: Number(r.id), nombre: r.nombre, tipo: r.tipo, estado: r.estado, campus: r.campus,
+    projectId: r.project_id == null ? null : Number(r.project_id),
     fechaComprometida: r.fecha_comprometida,
     avance: { foto: r.avance_foto, video: r.avance_video, modulos: Number(r.avance_modulos) || 0 },
   }));
@@ -215,7 +229,7 @@ async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
     try {
       const gente = await matriculadosDe(conexion, curso.id, opciones);
       const yo = gente.find((g) => g.id === c.moodleId);
-      if (!yo || !yo.roles.some((r) => ROLES_PROFESOR.has(r))) return null;
+      if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) return null;
       const { alumnos, deLaTarea } = await vistaDeLaProfesora(conexion, curso.id, gente, yo, opciones);
       return { ...curso, alumnos, deLaTarea, error: null };
     } catch (err) {
@@ -307,9 +321,21 @@ export async function tareasPorTandas(conexion, cursoIds, opciones) {
 /** Lo que tiene pendiente un curso: entregas por corregir y dudas abiertas. */
 const porHacer = (curso) => curso.tareas.reduce((n, t) => n + t.sinCorregir.length, 0) + curso.dudas.length;
 
-/** Tras corregir: que «Mi campus» no enseñe la copia de antes de la nota. */
+/** Tras corregir: que «Mi campus» no enseñe la copia de antes de la nota (de ningún campus suyo). */
 export function olvidarMiCampus(tutorId) {
-  cache.delete(tutorId);
+  for (const clave of [...cache.keys()]) {
+    if (clave.startsWith(`${tutorId}:`)) cache.delete(clave);
+  }
+}
+
+/** Un campus leído de Moodle; si falla entero, el campus sale con su error y los demás siguen. */
+async function leerUnCampus(tutorId, c, opciones) {
+  try {
+    return await unCampus(tutorId, c, opciones);
+  } catch (err) {
+    logger.warn({ tutorId, projectId: c.projectId, err: err.message }, 'tutores/mi-campus: fallo al leer el campus');
+    return { projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', cursos: [], dudasSinCurso: [] };
+  }
 }
 
 /**
@@ -318,14 +344,7 @@ export function olvidarMiCampus(tutorId) {
  */
 export async function leerSusCampus(tutorId, opciones = {}) {
   const campus = [];
-  for (const c of await campusDeLaTutora(tutorId)) {
-    try {
-      campus.push(await unCampus(tutorId, c, opciones));
-    } catch (err) {
-      logger.warn({ tutorId, projectId: c.projectId, err: err.message }, 'tutores/mi-campus: fallo al leer el campus');
-      campus.push({ projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', cursos: [], dudasSinCurso: [] });
-    }
-  }
+  for (const c of await campusDeLaTutora(tutorId)) campus.push(await leerUnCampus(tutorId, c, opciones));
   return campus;
 }
 
@@ -349,15 +368,49 @@ async function sinLasYaAtendidas(tutorId, datos) {
   };
 }
 
-/** Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. */
-export async function miCampus(tutorId, { refrescar = false, ...opciones } = {}) {
-  const guardado = cache.get(tutorId);
-  if (!refrescar && guardado && Date.now() - guardado.at < CACHE_MS) return sinLasYaAtendidas(tutorId, guardado.datos);
-  const campus = await leerSusCampus(tutorId, opciones);
-  const datos = {
-    leidoAt: new Date().toISOString(), campus, pendientes: await pendientesDeDesarrollar(tutorId),
-    sinConectar: await campusSinConectar(tutorId),
-  };
-  cache.set(tutorId, { at: Date.now(), datos });
-  return datos;
+/**
+ * Los campus pedidos, de entre los suyos. Sin pedir nada (o nada válido), todos: lo de
+ * otra tutora o un campus que no es suyo no se lee, se ignora.
+ */
+export function campusElegidos(suyos, pedidos) {
+  const ids = new Set((Array.isArray(pedidos) ? pedidos : []).map(Number).filter((n) => Number.isInteger(n) && n > 0));
+  if (!ids.size) return { elegidos: suyos, filtro: null };
+  const elegidos = suyos.filter((c) => ids.has(c.projectId));
+  return elegidos.length ? { elegidos, filtro: new Set(elegidos.map((c) => c.projectId)) } : { elegidos: suyos, filtro: null };
+}
+
+/**
+ * Todo «Mi campus» de una tutora. Con `refrescar`, sin la copia de dos minutos. Con
+ * `campus` (ids de proyecto), solo esos campus suyos: lo demás ni se lee de Moodle.
+ */
+export async function miCampus(tutorId, { refrescar = false, campus: pedidos = null, ...opciones } = {}) {
+  const suyos = await campusDeLaTutora(tutorId);
+  const { elegidos, filtro } = campusElegidos(suyos, pedidos);
+  const campus = [];
+  let leidoAt = null;
+  for (const c of elegidos) {
+    const clave = `${tutorId}:${c.projectId}`;
+    const guardado = cache.get(clave);
+    let entrada = guardado;
+    if (refrescar || !guardado || Date.now() - guardado.at >= CACHE_MS) {
+      entrada = { at: Date.now(), datos: await leerUnCampus(tutorId, c, opciones) };
+      cache.set(clave, entrada);
+    }
+    campus.push(entrada.datos);
+    // «Leído a las…»: la hora de lo más antiguo que se enseña, no la de ahora.
+    if (leidoAt === null || entrada.at < leidoAt) leidoAt = entrada.at;
+  }
+  const pendientes = (await pendientesDeDesarrollar(tutorId))
+    .filter((p) => !filtro || p.projectId == null || filtro.has(p.projectId));
+  const sinConectar = (await campusSinConectar(tutorId))
+    .filter((s) => !filtro || filtro.has(s.projectId));
+  return sinLasYaAtendidas(tutorId, {
+    leidoAt: new Date(leidoAt ?? Date.now()).toISOString(),
+    campus,
+    pendientes,
+    sinConectar,
+    // Para el selector: todos los campus conectados de la tutora, también los no elegidos.
+    todosLosCampus: suyos.map((c) => ({ projectId: c.projectId, campus: c.campus })),
+    elegidos: filtro ? [...filtro] : null,
+  });
 }

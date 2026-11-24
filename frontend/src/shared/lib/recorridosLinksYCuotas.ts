@@ -53,6 +53,8 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
       'modules/links-pago/components/SeguimientoDelLink.tsx',
       // El embudo (#987) es una pieza aparte que pinta la pantalla.
       'modules/links-pago/components/EmbudoLinks.tsx',
+      // Los links creados directamente en Stripe y sus cobros por vincular (#1019).
+      'modules/links-pago/components/LinksDeStripe.tsx',
     ],
     pasos: [
       {
@@ -81,7 +83,7 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
       {
         titulo: 'Al registrar la venta, sale solo',
         permiso: 'links_pago.crear',
-        texto: 'Lo más rápido: al registrar la venta deja marcado «Generar link de pago de Stripe». Si paga de una vez, un link por todo; si va a plazos, un link por cuota con su fecha (y el de la inicial, si la marcas). Al terminar te los da todos para copiar.',
+        texto: 'Lo más rápido: al registrar la venta. Si paga de una vez, deja marcado «Generar link de pago de Stripe». Si va a plazos, te pregunta «¿Se cobra con link de pago?»: con «Sí», un link por cuota y eliges cómo paga la inicial; con «No», ninguno. Al terminar te los da para copiar.',
       },
       // El embudo por gestora y por campus (CRM#987).
       {
@@ -119,6 +121,12 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
         donde: anclaje('links-pantalla-acciones'),
         titulo: 'Mandar, copiar, abrir o anular',
         texto: '«Copiar mensaje» lo deja listo, con su texto, para pegarlo en WhatsApp o en un correo; con tu WhatsApp conectado en el CRM, «Enviar por WhatsApp» lo manda en su conversación. «Abrir» enseña lo que verá el alumno. Si te equivocaste, «Anular» y escribe por qué: se desactiva en Stripe y queda apuntado quién y cuándo.',
+      },
+      {
+        donde: anclaje('links-pantalla-stripe'),
+        permiso: 'links_pago.ver_todos',
+        titulo: 'Links creados en Stripe',
+        texto: 'Los links que alguien creó directamente en Stripe, fuera del CRM, también salen aquí. Si uno se paga y el CRM no sabe de qué venta es, aparece en «Cobros de Stripe por vincular»: elige su venta y queda apuntado.',
       },
       {
         titulo: 'Cuando lo paga',

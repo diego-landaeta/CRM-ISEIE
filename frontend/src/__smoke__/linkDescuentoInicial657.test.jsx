@@ -163,7 +163,8 @@ describe('recorrido 2 · inicial más cuotas', () => {
     expect(within(d).getByLabelText('Fecha de la cuota 1').value).toBe(fechas[0]);
     expect(within(d).getByLabelText('Fecha de la cuota 6').value).toBe(fechas[5]);
     expect(within(d).getByLabelText('Importe de la cuota 6').value).toBe('100.01');
-    expect(within(d).getByText(/Al pagar, el link cobra la inicial \(299,99 €\)/)).toBeTruthy();
+    // El aviso «cómo se cobra» (24/11): la inicial con este enlace, con su cifra.
+    expect(within(d).getByTestId('aviso-como-se-cobra').textContent).toMatch(/Hoy se cobra la inicial \(299,99 €\) con este enlace/);
     const plan = [100, 100, 100, 100, 100, 100.01].map((importe, i) => ({ importe, vence: fechas[i] }));
 
     post.mockResolvedValue({ success: true, data: { ...LINK, modalidad: 'cuotas', num_cuotas: 7, importe_cuota: '299.99', importe_inicial: '299.99', plan_cuotas: plan, guarda_tarjeta: true } });

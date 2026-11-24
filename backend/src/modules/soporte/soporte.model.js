@@ -274,9 +274,9 @@ export async function tiempos({ projectId = null, projectIds = null } = {}) {
   const { rows } = await query(
     `SELECT
        COUNT(*)::int AS total,
-       COUNT(*) FILTER (WHERE estado IN ('open','in_review'))::int AS abiertos,
+       COUNT(*) FILTER (WHERE estado IN ('open','in_review','follow_up'))::int AS abiertos,
        COUNT(*) FILTER (WHERE primera_respuesta_at IS NULL
-                          AND estado IN ('open','in_review'))::int AS sin_responder,
+                          AND estado IN ('open','in_review','follow_up'))::int AS sin_responder,
        percentile_cont(0.5) WITHIN GROUP (
          ORDER BY EXTRACT(EPOCH FROM (primera_respuesta_at - created_at))
        ) FILTER (WHERE primera_respuesta_at IS NOT NULL) AS mediana_respuesta_seg,

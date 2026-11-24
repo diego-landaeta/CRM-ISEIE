@@ -17159,6 +17159,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo",
+  "relativa": "GET /mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo",
+  "controlador": "archivoEntregado",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId",
+  "relativa": "GET /mi-campus/tareas/:projectId/:cursoId/:tareaId",
+  "controlador": "verTarea",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/cursos/:projectId/:cursoId",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/cursos/:projectId/:cursoId",
+  "relativa": "GET /mi-campus/cursos/:projectId/:cursoId",
+  "controlador": "verCurso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar",
+  "relativa": "POST /mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar",
+  "controlador": "calificar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/curso/:productId/brochure",
   "tipo": "ruta",
   "modulo": "tutores",

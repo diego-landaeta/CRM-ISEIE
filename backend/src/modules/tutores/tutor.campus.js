@@ -24,7 +24,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
-  usuarioPorCorreo, usuarioPor, estadoDeLaMatricula, MoodleError, cuentaDelToken, cuentaDelCampus, cursosDe, matriculadosDe,
+  usuarioPorCorreo, usuarioPor, estadoDeLaMatricula, MoodleError, cuentaDelToken, cuentaDelCampus, cursosDe, matriculadosDe, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 
 // Tutor = rol principal o añadido; el tutor redactor (CRM#708) también. `roles_extra` es un array de ENUM: se pide
@@ -217,7 +217,6 @@ async function guardarError(tutorId, projectId, anterior, mensaje) {
 export const OTRA_CUENTA = 'El correo apunta a otra cuenta del campus distinta de la vinculada. Si es correcto, pulsa «Vincular de nuevo».';
 
 /** Los roles de Moodle que son «profesora de un curso» (los mismos que `consultas.alumnos.js`). */
-const ROLES_DE_PROFESORA = new Set(['editingteacher', 'teacher']);
 
 /**
  * Que la tutora tenga ese campus (puesto a mano o por su empresa), como lo pone
@@ -269,7 +268,7 @@ async function exigirCuentaDeProfesora(conexion, cuenta, opciones) {
   // De uno en uno y parando en el primero: lo normal es que lo sea del primer curso.
   for (const curso of await cursosDe(conexion, cuenta.id, opciones)) {
     const yo = (await matriculadosDe(conexion, curso.id, opciones)).find((u) => u.id === Number(cuenta.id));
-    if (yo?.roles.some((r) => ROLES_DE_PROFESORA.has(r))) return;
+    if (yo?.roles.some((r) => esRolDeTutora(r))) return;
   }
   throw new AppError('Esa cuenta no es profesora de ningún curso de este campus: solo se vincula la cuenta con la que da clase.', 409, 'NO_ES_PROFESORA');
 }

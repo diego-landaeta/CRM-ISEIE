@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
+import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import * as ctrl from './tutor.controller.js';
 
 const router = Router();
@@ -41,6 +42,18 @@ router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar')
 // «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
 // por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
 router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
+// Corregir desde el CRM (#408, gemela de CRM#681): la tarea con sus entregas, un archivo entregado y la nota.
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo', puede('tutores.mis_cursos'), ctrl.archivoEntregado);
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId', puede('tutores.mis_cursos'), ctrl.verTarea);
+// El curso entero, como en Moodle: temas y todas sus actividades.
+router.get('/mi-campus/cursos/:projectId/:cursoId', puede('tutores.mis_cursos'), ctrl.verCurso);
+// Poner la nota ESCRIBE en el Moodle del alumno (por el plugin, `local_crm_calificar`):
+// con NODE_ENV=production no se monta —404— salvo en /staging o con
+// PLUGIN_MOODLE_EN_PRODUCCION=1, como las rutas del plugin en consultas.routes.js.
+// Leer (Mi campus, la tarea, el curso, los archivos) sí va siempre: no cambia nada.
+if (pluginMoodleActivo()) {
+  router.post('/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar', puede('tutores.mis_cursos'), ctrl.calificar);
+}
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.

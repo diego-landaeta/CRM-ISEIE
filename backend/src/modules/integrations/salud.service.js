@@ -507,10 +507,32 @@ export async function saludDeLosCampus(ids, { ahora = Date.now() } = {}) {
       admision: evaluarAdmision(admisionDe.get(pid), ahora),
       transferencias: evaluarTransferencias(webhooksDelCampus(transferencias, c), ahora),
     };
-    return { id: pid, nombre: c.nombre, type: c.type, peor: peorDe(casillas), casillas };
+    return { id: pid, nombre: c.nombre, type: c.type, peor: peorDe(casillas), casillas, stripe_prestado_de: c.stripe_prestado_de || null };
   });
 
-  return { comprobado: new Date(ahora).toISOString(), conexiones: CONEXIONES, campus: filas };
+  return { comprobado: new Date(ahora).toISOString(), conexiones: CONEXIONES, campus: conStripePrestado(filas) };
+}
+
+/**
+ * STRIPE PRESTADO (332): un campus que usa la cuenta de otro de su empresa no
+ * tiene clave propia y no es «sin configurar». Su casilla dice «Usa el Stripe
+ * de …» y, si el dueño está en la lista, lleva su estado (si la cuenta falla,
+ * falla para los dos); si no está, «bien».
+ */
+export function conStripePrestado(filas) {
+  const porId = new Map(filas.map((f) => [f.id, f]));
+  return filas.map((f) => {
+    const prestado = f.stripe_prestado_de;
+    if (!prestado) return f;
+    const delDueno = porId.get(Number(prestado.id))?.casillas?.stripe || null;
+    const stripe = {
+      ...(delDueno || casilla('bien', '')),
+      resumen: `Usa el Stripe de ${prestado.nombre}`,
+      datos: { ...(delDueno?.datos || {}), prestado_de: prestado },
+    };
+    const casillas = { ...f.casillas, stripe };
+    return { ...f, casillas, peor: peorDe(casillas) };
+  });
 }
 
 // ─── Comprobar ahora ─────────────────────────────────────────────────────────
