@@ -63,6 +63,8 @@ beforeEach(() => {
   cuotasMock.mockReset(); cuotasMock.mockResolvedValue({ success: true });
   planMock.mockReset(); planMock.mockResolvedValue({ success: true, data: { cuotas: [] } });
   linkMock.mockReset(); toastMock.mockReset(); get.mockReset();
+  // Lo que la venta pida al servidor por su cuenta (numeración…): vacío.
+  get.mockResolvedValue({ success: true, data: [] });
   ctx.valor = { activeProject: { id: -1 }, activeIssuerId: null, projects: PROYECTOS, switchProject: vi.fn() };
 });
 afterEach(() => { cleanup(); });
