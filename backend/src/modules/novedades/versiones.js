@@ -81,7 +81,7 @@ const LISTA = [
           },
           {
             "titulo": "Rol nuevo: Líder de equipo",
-            "texto": "Para quien lleva un equipo comercial sin ser administradora: ve lo suyo y lo de las gestoras de su equipo (prospectos, ventas, la cola y el ranking en «Cómo voy», con su propio puesto) y puede pasar un prospecto a otra de su equipo. Nada de administración. Se da en Usuarios, y su equipo se elige en su ficha.",
+            "texto": "Para quien lleva un equipo comercial sin ser administradora: ve lo suyo y lo de las gestoras de su equipo (prospectos, ventas, la cola y el ranking en «Cómo voy», con su propio puesto) puede pasar un prospecto a otra de su equipo, repartir una venta entre su equipo y ve el informe mensual de su equipo. Nada de administración. Se da en Usuarios, y su equipo se elige en su ficha.",
             "roles": ["lider_equipo", "admin", "superadmin"],
             "ruta": "/",
             "boton": "Ir al Dashboard"

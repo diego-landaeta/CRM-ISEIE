@@ -207,6 +207,15 @@ export async function remove(req, res, next) {
   try {
     const id = idValido(req);
     const venta = await traerVenta(id);
+    // Quien lleva un equipo (la líder de equipo, CRM-ISEIE#761): no deshace un
+    // reparto en el que hay alguien de fuera de su equipo; le quitaría su parte.
+    const lider = await alcanceDeLider(req.user);
+    if (lider) {
+      const { rows: partes } = await query('SELECT user_id FROM conversion_vendedoras WHERE conversion_id = $1', [id]);
+      if (partes.some((p) => !dentroDelAlcance(lider, p.user_id))) {
+        throw new AppError('En este reparto hay alguien de fuera de tu equipo: lo deshace administración', 403, 'FUERA_DE_TU_EQUIPO');
+      }
+    }
     const { rowCount } = await query('DELETE FROM conversion_vendedoras WHERE conversion_id = $1', [id]);
     if (rowCount === 0) throw new AppError('Esa venta no estaba repartida', 404, 'NOT_SHARED');
 

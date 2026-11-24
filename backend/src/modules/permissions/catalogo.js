@@ -719,6 +719,12 @@ export const DEL_EQUIPO = [
   'whatsapp.supervisar',
   // Su equipo en los desplegables, sin la lista de Usuarios (user.controller.js · list).
   'equipos.su_equipo',
+  // Diego, 24/11/2026: repartir una venta, solo entre ella y las gestoras de su equipo
+  // (reparto.controller.js · set y remove, con alcanceDeLider).
+  'conversions.reparto',
+  // Diego, 24/11/2026: el informe mensual de ventas (CRM#772), recortado a su equipo
+  // (informe-mensual.controller.js · informeDe); el ZIP de facturas de la empresa, no.
+  'reports.informe_mensual',
 ];
 for (const s of SECCIONES) {
   for (const r of s.recursos) {

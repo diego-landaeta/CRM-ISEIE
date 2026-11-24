@@ -1515,7 +1515,7 @@ lo que pide para tener sentido (editar pide ver).
 | Editar conversiones | `conversions.edit` | Cambiar los datos de una conversión. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view` |
 | Borrar conversiones | `conversions.delete` | Quitar una conversión (una gestora, solo las suyas). | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view` |
 | Cobros y cuotas | `conversions.cobros` | Apuntar cobros, generar y pagar cuotas. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view` |
-| Repartir una venta | `conversions.reparto` | Repartir una venta entre varias gestoras. | Admin | `conversions.view` |
+| Repartir una venta | `conversions.reparto` | Repartir una venta entre varias gestoras. | Admin, Líder de equipo | `conversions.view` |
 | Devoluciones | `conversions.devoluciones` | Apuntar y quitar devoluciones. | Admin, Soporte | `conversions.view` |
 | Venta sin gestora | `conversions.sin_gestora` | Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora. | Admin | `conversions.view` |
 
@@ -1634,7 +1634,7 @@ lo que pide para tener sentido (editar pide ver).
 | Dónde poner el dinero | `reports.dinero` | Ventas y gasto de publicidad por canal y campaña, contra el periodo anterior. | Admin, Project manager | `reports.view` |
 | Cambiar el baremo de la tasa de cierre | `reports.editar_baremo` | Los tramos que dicen qué significa cada tasa (buena, regular...) por campus; el general, solo el super admin. | Admin | `reports.view` |
 | El puesto de otra gestora | `reports.puesto_ajeno` | Ver en qué puesto va otra gestora del ranking. | Admin, Soporte, Project manager, Líder de equipo | `reports.mis_informes` |
-| Informe mensual para la gestoría | `reports.informe_mensual` | Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa. | Admin, Project manager | `reports.view` |
+| Informe mensual para la gestoría | `reports.informe_mensual` | Ver y bajar el informe de ventas del mes por equipo y por comercial, y el ZIP con las facturas emitidas de una empresa. | Admin, Project manager, Líder de equipo | `reports.view` |
 
 ### Feedback
 

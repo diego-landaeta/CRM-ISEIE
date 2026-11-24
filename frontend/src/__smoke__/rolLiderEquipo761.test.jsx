@@ -56,7 +56,8 @@ describe('el rol en la pantalla', () => {
   it('el servidor le da lo de la gestora y lo de equipo, nada de administración', () => {
     const deGestora = Object.keys(GESTORA).filter((k) => GESTORA[k]);
     expect(deGestora.filter((k) => !LIDER[k])).toEqual([]);
-    for (const k of ['reports.puesto_ajeno', 'reports.view', 'ventas.view_equipo', 'leads.assign', 'whatsapp.supervisar', 'equipos.su_equipo']) {
+    for (const k of ['reports.puesto_ajeno', 'reports.view', 'ventas.view_equipo', 'leads.assign', 'whatsapp.supervisar', 'equipos.su_equipo',
+      'conversions.reparto', 'reports.informe_mensual']) {
       expect(LIDER[k], k).toBe(true);
     }
     for (const k of ['users.view', 'users.create', 'roles.view', 'integrations.view', 'accounting.view', 'expenses.view',

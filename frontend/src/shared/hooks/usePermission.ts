@@ -84,6 +84,7 @@ export default function usePermission(): UsePermissionResult {
     roles: rolesDe(user),
     tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
     isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
-    llevaEquipo: Array.isArray(alcanceComercial) && alcanceComercial.length > 1,
+    // La líder de equipo (CRM-ISEIE#761) lo es aunque hoy no tenga a nadie: como `alcanceDeLider` en el servidor.
+    llevaEquipo: (Array.isArray(alcanceComercial) && alcanceComercial.length > 1) || tieneRolDe(user, 'lider_equipo'),
   };
 }
