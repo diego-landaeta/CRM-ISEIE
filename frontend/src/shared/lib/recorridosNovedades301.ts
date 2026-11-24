@@ -14,7 +14,7 @@ import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
  * cabecera, «Ver recorrido» de cada pantalla y de Novedades, y las pruebas de
  * siempre los ven. Solo importa TIPOS de `recorridosCobros` (sin ciclo).
  */
-export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas' | 'avance-alumno';
+export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas' | 'avance-alumno' | 'consulta-responder';
 
 type RecorridoNovedades301 = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoNovedades301 };
 
@@ -126,6 +126,60 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         donde: anclaje('avance-actualizar'),
         titulo: 'Actualizar',
         texto: 'Se lee de Moodle al abrir la pestaña. Si el alumno acaba de entregar algo, pulsa «Actualizar».',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+  // ─── Consultas › una consulta: responder al alumno (24/11) ──────────────────
+  'consulta-responder': {
+    id: 'consulta-responder',
+    rutas: ['/consultas/:id'],
+    titulo: 'Responder una consulta',
+    permiso: ['consultas.view', 'consultas.atender'],
+    pantalla: ['modules/consultas/pages/ConsultaPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Contestar al alumno',
+        texto: 'Lo que escribes aquí le llega al alumno en el chat de Moodle, a nombre de su tutora. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('consulta-mensajes'),
+        titulo: 'La conversación',
+        texto: 'Todo lo que se han escrito, por días. La doble marca quiere decir que la respuesta ya está en el campus. Si no llegó, sale un aviso con «Reintentar».',
+      },
+      {
+        donde: anclaje('consulta-escribir'),
+        permiso: 'consultas.atender',
+        titulo: 'Escribe la respuesta',
+        texto: 'Escríbela aquí. Con Ctrl + Intro se envía.',
+      },
+      {
+        donde: anclaje('consulta-nota'),
+        titulo: 'Nota interna',
+        texto: 'Para dejar algo al resto del equipo: el alumno no la ve. Administración solo puede dejar notas; responde la tutora.',
+      },
+      {
+        donde: anclaje('consulta-guardadas'),
+        permiso: 'consultas.atender',
+        titulo: 'Respuestas guardadas',
+        texto: 'Las que más repites, a un clic. Las guardas tú, o las comparte el campus.',
+      },
+      {
+        donde: anclaje('consulta-adjuntar'),
+        permiso: 'consultas.atender',
+        titulo: 'Adjuntar',
+        texto: 'PDF, imágenes, Word, Excel o texto. Llegan al alumno con la respuesta.',
+      },
+      {
+        donde: anclaje('consulta-enviar'),
+        permiso: 'consultas.atender',
+        titulo: 'Enviar',
+        texto: '«Enviar» la manda y deja la consulta abierta. «Enviar y cerrar» la manda y la da por resuelta.',
+      },
+      {
+        donde: anclaje('consulta-cerrar'),
+        titulo: 'Cerrar',
+        texto: 'Cuando ya está resuelta. Si el alumno vuelve a escribirte por privado, se abre sola (lo que escriba en el grupo del curso no la reabre).',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],
