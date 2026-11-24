@@ -152,6 +152,8 @@ export function crearLink(cuerpo: {
   cuotas?: { importe: number; vence: string }[];
   // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
+  // «Enviar factura automáticamente» y su correo (#764, 24/11).
+  envio_factura?: { auto: boolean; email: string | null };
   // CRM#986: si el link admite códigos promocionales (sin decirlo, lo que diga el campus).
   codigos_promo?: boolean;
   // CRM#1107: el alumno ya tiene una venta de ese programa y se crea otra igualmente.

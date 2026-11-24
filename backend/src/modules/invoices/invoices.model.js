@@ -631,6 +631,8 @@ export async function list({ projectId, projectIds, issuerId, estado, search, fr
             i.cliente_nombre, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad, i.cliente_cp, i.cliente_pais,
             i.cliente_email, i.total, i.iva_pct, i.estado, i.sent_at, i.tipo,
             i.lead_id, i.conversion_id,
+            -- «No se envía automáticamente: la envía la gestora» (#764, 24/11).
+            i.envio_nota, i.datos_fiscales_id,
             i.project_id, p.nombre AS proyecto_nombre,
             i.issuer_id, i.issuer_razon_social,
             i.metodo_pago, i.moneda, i.total_divisa,

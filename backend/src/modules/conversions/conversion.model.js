@@ -264,7 +264,9 @@ export async function findById(id) {
             )) AS pagado_por_stripe,
             i.id  AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
-            i.cliente_cp, i.cliente_pais, i.items AS factura_items
+            i.cliente_cp, i.cliente_pais, i.items AS factura_items,
+            -- La factura salió sola sin mandarse: «la envía la gestora» (#764, 24/11).
+            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a
        FROM conversion_payments cp
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1

@@ -329,7 +329,9 @@ export async function paraCobro(id) {
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
             estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota,
             importe_inicial, plan_cuotas, precio_original, descuento_tipo, descuento_valor, descuento_importe,
-            codigos_promo, promo_codigo
+            codigos_promo, promo_codigo,
+            -- «Enviar factura automáticamente» y su correo (#764, 24/11): pasan a la venta.
+            factura_envio_auto, factura_envio_email
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;

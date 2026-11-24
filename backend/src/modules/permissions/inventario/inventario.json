@@ -5042,6 +5042,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/venta/:conversionId/envio",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/venta/:conversionId/envio",
+  "relativa": "GET /venta/:conversionId/envio",
+  "controlador": "verEnvio",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/factura-automatica/venta/:conversionId/envio",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "PUT",
+  "ruta": "/api/factura-automatica/venta/:conversionId/envio",
+  "relativa": "PUT /venta/:conversionId/envio",
+  "controlador": "guardarEnvio",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/factura-automatica/panel",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/panel",
+  "relativa": "GET /panel",
+  "controlador": "panel",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/fd/:token",
   "tipo": "ruta",
   "modulo": "factura-automatica",
@@ -5095,6 +5161,28 @@
   "ruta": "/api/facturacion-auditoria/historial",
   "relativa": "GET /historial",
   "controlador": "historial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-auditoria/simular",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/simular",
+  "relativa": "GET /simular",
+  "controlador": "simular",
   "publica": false,
   "guardias": [
    {

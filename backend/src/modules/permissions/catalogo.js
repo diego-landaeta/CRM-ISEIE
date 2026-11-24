@@ -323,6 +323,7 @@ export const SECCIONES = [
           a('gestionar', 'Anular y abonar', 'Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar facturas, proformas y borradores. Diego, 19/11/2026: también las gestoras, cualquier factura de su campus.', [...ADMIN, 'gestor']),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
           a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
+          a('automatica', 'Ver la facturación automática', 'Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos.', [...ADMIN, 'gestor']),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', [...ADMIN, 'gestor']),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', [...ADMIN_SOPORTE, 'gestor']),
           a('configurar', 'Configurar la facturación', 'Empresas emisoras, regímenes, plantillas, series y ajustes.', ADMIN_SOPORTE),

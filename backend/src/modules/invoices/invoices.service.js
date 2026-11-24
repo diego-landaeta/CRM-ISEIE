@@ -821,6 +821,18 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const datosFiscales = await estadosParaCola([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
   // Con la facturación pausada (#765) nada sale solo: la etiqueta lo dice.
   const pausada = datosFiscales.size ? !!(await pausaAbierta()) : false;
+  // «Enviar factura automáticamente: Sí / No» y su correo (#764, 24/11), por venta.
+  // Solo con la factura automática encendida: apagada, nada sale solo.
+  const { activa: facturaAutoActiva } = await import('../factura-automatica/factura-automatica.config.js');
+  let envios = new Map();
+  if (facturaAutoActiva()) {
+    try {
+      const { envioDeVentas } = await import('../factura-automatica/factura-automatica.envio.js');
+      envios = await envioDeVentas([...new Set(cola.slice(0, 200).map((p) => Number(p.conversion_id)))]);
+    } catch (err) {
+      logger.warn({ err: err.message, projectId }, 'no se pudo leer el envío de la factura de la cola');
+    }
+  }
   return {
     ...estado,
     pagos_sin_factura: cola.length,
@@ -846,6 +858,7 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       datos_fiscales: comoVaEnLaCola(datosFiscales.get(Number(p.conversion_id)), {
         posibleDuplicada: duplicadas.has(Number(p.payment_id)), pausada,
       }),
+      envio_factura: envios.get(Number(p.conversion_id)) || null,
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
       const d = String(p.fecha).slice(0, 10);

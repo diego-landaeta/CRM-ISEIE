@@ -120,6 +120,8 @@ const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPa
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 // El formulario de datos fiscales de la factura automática (#452): sin sesión, desde el correo.
 const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
+// Facturas › Facturación automática (#452, 24/11): formularios, facturas solas y la auditoría.
+const FacturacionAutomaticaPage = lazy(() => import('./modules/factura-automatica/pages/FacturacionAutomaticaPage'));
 // La confirmación de los datos del diploma (gemela de CRM#847): sin sesión, desde el correo.
 const ConfirmarDiplomaPage = lazy(() => import('./modules/diploma-confirmacion/pages/ConfirmarDiplomaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
@@ -361,6 +363,7 @@ function App() {
           </Route>
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
           <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
+          <Route path="/accounting/facturas/automatica" element={<FacturacionAutomaticaPage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />
           <Route path="/accounting/facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           {/* Facturas de colaboradores (#202): en evaluación, solo en /staging y en local, como en MultiCRM. */}

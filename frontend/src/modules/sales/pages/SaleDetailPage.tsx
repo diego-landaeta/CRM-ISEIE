@@ -20,6 +20,8 @@ import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
 import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
 import CobroAutomaticoVenta from '@/modules/links-pago/components/CobroAutomaticoCuotas';
+// «Enviar factura automáticamente: Sí / No» y el correo (#764, 24/11).
+import FacturaAutomaticaVentaCard from '@/modules/factura-automatica/components/FacturaAutomaticaVentaCard';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -48,6 +50,8 @@ type Pago = {
   id: number; importe: string | number; fecha: string; notas: string | null; metodo: string | null;
   cuota_numero: number | string | null; pagado_por_stripe?: boolean;
   factura_id?: number | null; factura_codigo?: string | null; factura_estado?: string | null;
+  /** «No se envía automáticamente: la envía la gestora» (#764, 24/11). */
+  factura_envio_nota?: string | null;
 };
 type Venta = {
   id: number; lead_id: number; producto_contratado: string;
@@ -226,6 +230,7 @@ export default function SaleDetailPage() {
 
         {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
         <RepartoVentaCard conversionId={venta.id} />
+        <FacturaAutomaticaVentaCard conversionId={venta.id} />
         {venta.project_id != null && (
           <LinksDePagoCard projectId={venta.project_id} leadId={venta.lead_id} conversionId={venta.id} conRecorrido />
         )}
@@ -318,6 +323,9 @@ export default function SaleDetailPage() {
                       {pg.factura_codigo
                         ? <span className="font-mono text-[11px]">{pg.factura_codigo}</span>
                         : <Chip tone="warn">Sin factura</Chip>}
+                      {pg.factura_envio_nota && (
+                        <span className="block text-[10px] text-warning-soft-foreground">{pg.factura_envio_nota}</span>
+                      )}
                     </td>
                     <td className="py-2 text-[11px] text-muted-foreground max-w-[240px] truncate" title={pg.notas || ''}>{pg.notas || '—'}</td>
                   </tr>

@@ -14,6 +14,12 @@ router.use(verifyToken);
 router.get('/interruptor', puede('facturas.view'), ctrl.interruptor);
 router.get('/venta/:conversionId', puede('facturas.view'), ventaDelParametro, ctrl.estado);
 router.post('/venta/:conversionId/reenviar', puede('facturas.cola'), ventaDelParametro, ctrl.reenviar);
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (24/11):
+// verlo, quien ve la venta; cambiarlo, quien la edita (una gestora, las suyas).
+router.get('/venta/:conversionId/envio', puede('facturas.view'), ventaDelParametro, ctrl.verEnvio);
+router.put('/venta/:conversionId/envio', puede('conversions.edit'), ventaDelParametro, ctrl.guardarEnvio);
+// La pantalla de la facturación automática (Finanzas › Facturas › Facturación automática).
+router.get('/panel', puede('facturas.automatica'), ctrl.panel);
 
 // Sin sesión: el formulario. El enlace es la llave; el límite por IP es lo que
 // impide probar enlaces a ciegas (además de la firma y de los intentos por enlace).

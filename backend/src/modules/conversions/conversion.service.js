@@ -94,6 +94,8 @@ async function validarFechaNoAnteriorAlLead(leadId, fechaConversion) {
 export async function create(data, userId, opciones = {}) {
   const forzar = Boolean(data.forzar);
   delete data.forzar;
+  const envioFactura = data.envio_factura || null;
+  delete data.envio_factura;
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
@@ -172,6 +174,18 @@ export async function create(data, userId, opciones = {}) {
   if (repetida && !forzar) throw errorVentaYaExiste(repetida);
 
   const conv = await conversionModel.create({ ...data, changed_by: userId });
+
+  // «Enviar factura automáticamente» y «Enviar a este correo» (#764, 24/11):
+  // antes de que el primer cobro llegue a la factura automática (más abajo,
+  // `autoInvoice`), para que el formulario vaya ya al correo confirmado.
+  if (envioFactura) {
+    try {
+      const { guardarEnLaVenta } = await import('../factura-automatica/factura-automatica.envio.js');
+      await guardarEnLaVenta(conv.id, envioFactura, userId);
+    } catch (err) {
+      logger.warn({ err: err.message, conversionId: conv.id }, 'no se pudo guardar el envío de la factura (no bloqueante)');
+    }
+  }
 
   if (repetida && forzar) {
     await apuntarForzada(conv.id, repetida.id, userId);

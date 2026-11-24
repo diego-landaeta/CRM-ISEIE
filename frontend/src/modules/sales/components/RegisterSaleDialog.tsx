@@ -15,6 +15,9 @@ import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from '@/modules/conversions/components/VentaYaExisteAviso';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+import EnvioFacturaCampos from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
 
 // Las notas y la dirección: la clase común, con la altura que pidan sus filas.
 const textareaClass = `${inputClass} h-auto py-2 resize-none`;
@@ -88,6 +91,9 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   const [clientResults, setClientResults] = useState<LeadLite[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedClient, setSelectedClient] = useState<LeadLite | null>(null);
+  // El correo de la ficha (o el escrito para un cliente nuevo), para «Enviar a este correo».
+  const emailDeLaFicha = ((mode === 'existing' || mode === 'otra_gestora') ? selectedClient?.email : email)?.trim() || null;
+  const envioFactura = useEnvioFacturaAlta(emailDeLaFicha, { sinCorreoVale: true });
 
   // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC) — opcional
   const [identificacionFiscal, setIdentificacionFiscal] = useState('');
@@ -274,6 +280,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     setIntentado(true);
     const falta = avisoDeLoQueFalta(faltan);
     if (falta) { toast(falta); return; }
+    const faltaEnvio = envioFactura.falta();
+    if (faltaEnvio) { toast({ ...faltaEnvio, variant: 'destructive' }); return; }
     const pagadoNum = importePagado === '' ? totalNum : parseFloat(importePagado);
     if (pagadoNum < 0 || pagadoNum > totalNum) {
       toast({ title: 'El importe pagado no cuadra', description: `Tiene que estar entre 0 y el importe total (${totalNum.toFixed(2)}). Si lo dejas vacío, se toma el total.`, variant: 'destructive' }); return;
@@ -313,6 +321,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
         fecha_pago: fecha,
         fecha_inicio: fechaInicio || null,
         notas: notas.trim() || null,
+        // Sin la factura automática encendida, no va (undefined).
+        envio_factura: envioFactura.cuerpo(),
       };
       if (metodo === 'fraccionado' && installments.length >= 2) {
         body.installments = installments.map(it => ({
@@ -777,6 +787,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
                 </div>
               )}
 
+              {envioFactura.visible && (
+                <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                  emailFicha={emailDeLaFicha} idBase="registrar-envio-factura" sinCorreoVale />
+              )}
               <Field label="Notas (opcional)" htmlFor="venta-notas">
                 <textarea autoComplete="off" id="venta-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
                   placeholder="Comentarios sobre la venta…"

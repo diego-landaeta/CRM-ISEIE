@@ -10,6 +10,7 @@ router.use(verifyToken);
 
 router.get('/estado',     puede('facturas.auditoria'), ctrl.estado);
 router.get('/historial',  puede('facturas.auditoria'), ctrl.historial);
+router.get('/simular',    puede('facturas.auditoria'), ctrl.simular);
 router.post('/auditar',   puede('facturas.auditoria'), ctrl.auditar);
 router.post('/reanudar',  puede('facturas.auditoria'), ctrl.reanudar);
 
