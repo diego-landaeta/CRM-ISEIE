@@ -34,8 +34,11 @@ export async function bajarPdf(version: string, crm: string) {
   const a = document.createElement('a');
   a.href = url;
   a.download = `novedades-${crm.toLowerCase().replace(/\s+/g, '-')}-${version}.pdf`;
+  document.body.appendChild(a);
   a.click();
-  URL.revokeObjectURL(url);
+  a.remove();
+  // Soltarlo enseguida puede cortar la descarga en algunos navegadores.
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }
 
 export async function enviarNovedades(version: string, body: { alcance: 'prueba' | 'equipo'; correo?: string | null }) {
