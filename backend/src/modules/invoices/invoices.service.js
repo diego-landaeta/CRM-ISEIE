@@ -1043,14 +1043,16 @@ export async function emitirColaHasta(projectId, hasta, userId) {
 
 // Se llama antes de emitir una factura automatica. Solo sale sola si es la
 // primera de la cola: si hay algo anterior esperando, esta espera tambien.
-export async function puedeFacturarAhora(projectId, fechaPago, paymentId = null) {
+// `opciones.saltarEsperandoDatos`: lo usa la emisión automática (CRM#764 /
+// ISEIE#452); ver `hayPendientesAnteriores`.
+export async function puedeFacturarAhora(projectId, fechaPago, paymentId = null, opciones = {}) {
   if (!projectId || !fechaPago) return true;
   try {
     const { al_dia_hasta } = await model.getFacturacionAlDia(projectId);
     // Sin marca de "al dia", se comporta como siempre: factura al momento.
     if (!al_dia_hasta) return true;
     if (String(fechaPago).slice(0, 10) <= String(al_dia_hasta).slice(0, 10)) return false;
-    return !(await model.hayPendientesAnteriores(projectId, fechaPago, paymentId));
+    return !(await model.hayPendientesAnteriores(projectId, fechaPago, paymentId, opciones));
   } catch {
     return true;   // ante la duda, no bloquear la facturacion
   }

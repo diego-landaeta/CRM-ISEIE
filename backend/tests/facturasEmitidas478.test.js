@@ -128,8 +128,14 @@ describe('#793 · una emitida no se borra ni se cambia', () => {
     expect((await factura(EMITIDA_4)).numero).toBe(4);
   });
 
-  it('cambiarle las fechas: el admin sí (Diego 19/11)', async () => {
-    const id = await nueva({ numero: 8, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
+  it('cambiarle las fechas: el admin sí (Diego 19/11), en el orden de la serie (CRM#764)', async () => {
+    // En la serie «X…» ya está la 7, de hoy: la 8 no puede irse a 2020.
+    const enMedio = await nueva({ numero: 8, serie: `X${SERIE.slice(1)}`, prefijo: 'X-' });
+    const fuera = await request.patch(`/api/invoices/${enMedio}/fechas`).set(como(ADMIN)).send({ fechaEmision: '2020-01-01' });
+    expect(fuera.status).toBe(409);
+    expect(fuera.body.code).toBe('FECHA_FUERA_DE_ORDEN');
+    // Sola en su serie, sí.
+    const id = await nueva({ numero: 8, serie: `Y${SERIE.slice(1)}`, prefijo: 'Y-' });
     const r = await request.patch(`/api/invoices/${id}/fechas`).set(como(ADMIN)).send({ fechaEmision: '2020-01-01' });
     expect(r.status).toBe(200);
     expect(String((await factura(id)).fecha_emision.toISOString?.() ?? (await factura(id)).fecha_emision).slice(0, 10)).toBe('2020-01-01');

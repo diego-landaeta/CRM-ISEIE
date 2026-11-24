@@ -18,6 +18,9 @@ export const marcaDe = (v) => ({ id: v.project_id, nombre: v.campus, slug: v.slu
 
 const primerNombre = (n) => String(n || '').trim().split(/\s+/)[0] || null;
 
+/** Lo que queda guardado en lugar del enlace. */
+export const ENLACE_NO_GUARDADO = 'enlace-personal-no-se-guarda';
+
 /** La dirección del formulario: una pantalla pública del CRM. */
 export const urlDelFormulario = (token) => P.enlace(`datos-fiscales/${token}`);
 
@@ -38,7 +41,10 @@ export function armarPeticion({ v, token, caducaAt, reenvio = false }) {
         + 'Si no lo completas, haremos la factura con los datos que ya tenemos de ti.'),
     ],
   });
-  return { asunto: `${v.campus || 'Tu pago'} · tus datos para la factura`, htmlContent, textContent };
+  // Lo que se guarda del correo: el mismo sin el enlace, que es la llave del
+  // formulario (CRM#764, 24/11; como el de la contraseña, #767).
+  const htmlGuardado = token ? htmlContent.split(String(token)).join(ENLACE_NO_GUARDADO) : htmlContent;
+  return { asunto: `${v.campus || 'Tu pago'} · tus datos para la factura`, htmlContent, textContent, htmlGuardado };
 }
 
 /** El correo con la factura en PDF. `inv`: la factura recién emitida. */
