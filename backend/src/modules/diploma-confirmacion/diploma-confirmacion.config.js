@@ -16,6 +16,10 @@
                                          simulado y a quien lo pidió se le da el
                                          enlace para probarlo. Encender solo cuando
                                          Manuel/Diego den el OK a que salga solo.
+    DIPLOMA_CONFIRMACION_AUTO            1 para pedirla SOLA cuando Moodle avisa de
+                                         que el alumno terminó el curso con todo
+                                         corregido (plugin local_crm 1.14.0, paso 1).
+                                         Sin él, se pide a mano como hasta ahora.
 
   Encendido en un campus, ese campus ya no emite sin la confirmación del alumno
   (o sin que hayan pasado los 7 días): lo mira `prepararEmision` de Certifex.
@@ -27,6 +31,9 @@
 const si = (v) => ['1', 'true', 'si', 'sí', 'yes'].includes(String(v || '').trim().toLowerCase());
 
 export const activa = () => si(process.env.DIPLOMA_CONFIRMACION_ACTIVA);
+
+/** ¿Se pide sola cuando Moodle avisa de que terminó? Además hace falta `activa()`. */
+export const automatica = () => activa() && si(process.env.DIPLOMA_CONFIRMACION_AUTO);
 
 const compacto = (s) => String(s || '').trim().toUpperCase();
 
