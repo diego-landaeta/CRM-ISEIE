@@ -9,7 +9,6 @@ import { toast } from '@/shared/hooks/useToast';
 import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import Iniciales from '@/shared/components/ui/Iniciales';
-// El recorrido guiado de la pantalla (#941, tanda D).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { cn } from '@/shared/lib/utils';
 import {
@@ -122,9 +121,8 @@ function ConEnlaces({ texto, claro }: { texto: string; claro: boolean }) {
   );
 }
 
-/** `data-recorrido`: si la señala el recorrido de la pantalla (#941). */
-const Cabecera = ({ children, className, ...resto }: { children: React.ReactNode; className?: string; 'data-recorrido'?: string }) => (
-  <div {...resto} className={cn('flex h-14 shrink-0 items-center gap-2 border-b border-border px-4', className)}>{children}</div>
+const Cabecera = ({ children, className }: { children: React.ReactNode; className?: string }) => (
+  <div className={cn('flex h-14 shrink-0 items-center gap-2 border-b border-border px-4', className)}>{children}</div>
 );
 
 /** Un apartado de la ficha, plegable: así la ficha no satura y cada una abre lo que necesita. */
@@ -201,9 +199,6 @@ function Bandeja({ actual, puedes, plazoHoras, version }: { actual: number; pued
       <Cabecera>
         <h2 className="flex-1 text-normal font-semibold text-foreground">Pendientes</h2>
         {lista && <span className="rounded-full bg-muted px-2 py-0.5 text-secundario font-medium tabular-nums text-muted-foreground">{lista.length}</span>}
-        {/* «Ver recorrido» (#941), aquí: la cabecera de la conversación no tiene sitio
-            con la ficha abierta. En el móvil (sin bandeja), «Recorrido» de arriba. */}
-        <VerRecorrido id="consulta" compacto />
       </Cabecera>
       <ul className="min-h-0 flex-1 overflow-y-auto py-1">
         {!lista && [0, 1, 2].map((i) => (
@@ -688,7 +683,7 @@ export default function ConsultaPage() {
             </>
           ) : (
             <>
-              <Cabecera className="gap-3" data-recorrido="consulta-cabecera">
+              <Cabecera className="gap-2 sm:gap-3">
                 <Link to="/consultas" aria-label="Volver a Consultas" className="-ml-1 inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden">
                   <ArrowLeft size={16} aria-hidden />
                 </Link>
@@ -705,7 +700,13 @@ export default function ConsultaPage() {
                 <span className="hidden shrink-0 whitespace-nowrap 2xl:inline-flex"><Plazo c={c} plazoHoras={c.plazoHoras} /></span>
                 <span aria-hidden className="mx-1 hidden h-5 w-px bg-border 2xl:block" />
                 <div className="flex items-center gap-0.5">
-                  <VerRecorrido id="consulta-responder" listo={!!c} compacto />
+                  {/* «Ver recorrido», solo con la brújula donde la cabecera no tiene sitio
+                      (el nombre sigue en su aria-label y su title): en el móvil y con la ficha
+                      abierta al lado (1280-1535 px). Con el texto, «Cerrar» se salía de la
+                      pantalla a 375 px y se quedaba debajo de la ficha a 1280. */}
+                  <span className="inline-flex max-sm:[&>button]:gap-0 max-sm:[&>button]:px-2 max-sm:[&>button]:text-[0px] xl:max-2xl:[&>button]:gap-0 xl:max-2xl:[&>button]:px-2 xl:max-2xl:[&>button]:text-[0px]">
+                    <VerRecorrido id="consulta-responder" listo={!!c} compacto />
+                  </span>
                   {ctx?.conversacionUrl && (
                     <BotonIcono etiqueta="Abrir esta conversación en Moodle" href={ctx.conversacionUrl}><ArrowSquareOut size={16} aria-hidden /></BotonIcono>
                   )}
@@ -834,7 +835,7 @@ export default function ConsultaPage() {
               )}
 
               {(puedeEscribir || c.puedes === 'admin') && (
-                <form onSubmit={(e) => { e.preventDefault(); enviar(false); }} noValidate data-recorrido="consulta-respuesta" className="relative border-t border-border p-3 sm:px-8 sm:py-4">
+                <form onSubmit={(e) => { e.preventDefault(); enviar(false); }} noValidate className="relative border-t border-border p-3 sm:px-8 sm:py-4">
                   {c.grupo_tipo === 'curso' && modoReal !== 'nota' && <AvisoGrupoDelCurso />}
                   {verGuardadas && (
                     <Guardadas lista={guardadas} texto={texto} alElegir={insertar} alCrear={crearGuardada} alBorrar={borrarGuardada} alCerrar={() => setVerGuardadas(false)} />

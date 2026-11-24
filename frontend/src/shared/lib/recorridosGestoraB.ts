@@ -10,9 +10,13 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  *    le deja hueco;
  *  · la Conexión de WhatsApp, donde cada una enlaza su número. El chat ya tiene
  *    su recorrido (`whatsapp/components/Tour.tsx`, «Tutorial») y Plantillas el
- *    suyo: no se repiten;
- *  · las Consultas de los alumnos, la bandeja y la consulta abierta, que son del
- *    día a día de una tutora.
+ *    suyo: no se repiten.
+ *
+ * Las Consultas (la bandeja y una consulta) ya tenían recorrido en main:
+ * `consultas-chat` y `consulta-responder`, en `recorridosNovedades301.ts` (#740).
+ * Lo que traía esta tanda y aquellos no (las pestañas, «Mis consultas / Todas», la
+ * bandeja de la izquierda y la ficha del alumno) se sumó a esos dos,
+ * para que no salgan dos «Ver recorrido» en la misma pantalla (Diego, 24/11).
  *
  * El mismo modelo que `recorridosCobros.ts`, que es donde se registran: allí se
  * suman a `RECORRIDOS_COBROS`, y así `VerRecorrido`, el botón «Recorrido» de la
@@ -20,8 +24,7 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  * Ninguno se abre solo (#681).
  *
  *  · Cada paso apunta a un `data-recorrido` de su pantalla; lo que no está en ese
- *    momento (el aviso de antes de enlazar con el número ya enlazado, la bandeja
- *    de la izquierda en el móvil, «Leer el campus ahora» sin permiso) se salta solo.
+ *    momento (el aviso de antes de enlazar con el número ya enlazado) se salta solo.
  *  · El permiso de cada recorrido es el de la pantalla en el menú.
  *
  * Solo importa TIPOS de `recorridosCobros` (se borran al compilar): así no hay un
@@ -42,13 +45,11 @@ const EN_ESTE_CRM = {
 
 export type IdRecorridoGestoraB =
   | 'seguimiento-fin-de-mes'
-  | 'whatsapp-conexion'
-  | 'consultas'
-  | 'consulta';
+  | 'whatsapp-conexion';
 
 type RecorridoGestoraB = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoGestoraB };
 
-/** Por uso: Seguimiento de fin de mes, Conexión de WhatsApp y Consultas (bandeja y consulta). */
+/** Por uso: Seguimiento de fin de mes y Conexión de WhatsApp. */
 export const RECORRIDOS_GESTORA_B: Record<IdRecorridoGestoraB, RecorridoGestoraB> = {
   // ─── Hoy › Seguimiento de fin de mes ───────────────────────────────────────
   'seguimiento-fin-de-mes': {
@@ -140,95 +141,6 @@ export const RECORRIDOS_GESTORA_B: Record<IdRecorridoGestoraB, RecorridoGestoraB
         donde: anclaje('wa-conexion-llamadas'),
         titulo: 'Si te llaman',
         texto: 'Las llamadas se cogen en el móvil; el CRM las apunta y las perdidas salen en el chat. Si quieres, recházalas con un mensaje que escribes aquí.',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
-
-  // ─── Académico › Consultas (la bandeja) ────────────────────────────────────
-  consultas: {
-    id: 'consultas',
-    rutas: ['/consultas'],
-    titulo: 'Consultas de alumnos',
-    permiso: ['consultas.view', 'consultas.atender'],
-    pantalla: ['modules/consultas/pages/ConsultasPage.tsx'],
-    pasos: [
-      {
-        titulo: 'Las dudas de los alumnos',
-        texto: 'Lo que los alumnos escriben a su tutora en el campus. La tutora ve las suyas y responde desde aquí: le llega al alumno en el campus. Administración ve todas. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('consultas-pestanas'),
-        titulo: 'Las pestañas',
-        texto: 'Además de la bandeja: los alumnos que no han escrito nunca, tu carga si eres tutora, los tutores si llevas el equipo, las métricas y, si coordinas, las respuestas del campus.',
-      },
-      {
-        donde: anclaje('consultas-leer'),
-        permiso: 'consultas.gestionar',
-        titulo: 'Leer el campus ahora',
-        texto: 'El CRM lee los campus cada cinco minutos. Si un alumno dice que escribió y no sale, esto lo lee al momento.',
-      },
-      {
-        donde: anclaje('consultas-vista'),
-        titulo: 'Las tuyas o todas',
-        texto: 'Si eres tutora y además llevas el equipo: «Mis consultas» son las que te tocan responder; «Todas», las de todos los tutores.',
-      },
-      {
-        donde: anclaje('consultas-filtros'),
-        titulo: 'Estado y búsqueda',
-        texto: 'Pendientes, respondidas, cerradas o todas. Busca por alumno, correo o curso. Administración puede ver solo las que no tienen tutor.',
-      },
-      {
-        donde: anclaje('consultas-lista'),
-        titulo: 'La lista',
-        texto: 'Cada consulta con su alumno, el curso y lo último que escribió. La etiqueta es el plazo: verde en plazo, ámbar cerca y rojo fuera. Púlsala para abrirla.',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
-
-  // ─── Académico › Consultas › Una consulta ──────────────────────────────────
-  consulta: {
-    id: 'consulta',
-    rutas: ['/consultas/:id'],
-    titulo: 'Una consulta',
-    permiso: ['consultas.view', 'consultas.atender'],
-    pantalla: ['modules/consultas/pages/ConsultaPage.tsx'],
-    pasos: [
-      {
-        titulo: 'La conversación con el alumno',
-        texto: 'Todo lo que ha escrito el alumno y lo que le habéis respondido, como en un chat. Lo que respondes aquí le llega al campus. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('consulta-bandeja'),
-        titulo: 'Las pendientes',
-        texto: 'Las que esperan respuesta, con el plazo de cada una. Pulsa otra para pasar a ella sin volver a la lista.',
-      },
-      {
-        donde: anclaje('consulta-cabecera'),
-        titulo: 'El alumno y el plazo',
-        texto: 'Quién es, de qué curso y cómo va el plazo. A la derecha: abrirla en Moodle, copiar el enlace, ver su ficha y «Cerrar» cuando esté resuelta.',
-      },
-      {
-        donde: anclaje('consulta-mensajes'),
-        titulo: 'Los mensajes',
-        texto: 'Del más antiguo al más nuevo. Las notas internas van en amarillo y el alumno no las ve. Si una respuesta no llegó al campus, lo dice debajo con «Reintentar».',
-      },
-      {
-        donde: anclaje('consulta-respuesta'),
-        titulo: 'Responder',
-        texto: 'Escribe y «Enviar» (Ctrl + Intro). El lápiz cambia a nota interna; el marcador trae tus respuestas guardadas y el clip adjunta. Administración solo deja notas.',
-      },
-      {
-        donde: anclaje('consulta-ficha'),
-        titulo: 'La ficha del alumno',
-        texto: 'Quién la atiende, sus entregas sin corregir, sus cursos, sus otras consultas y su actividad, por apartados. Si llevas el equipo, aquí está «Reasignar» a otro tutor.',
       },
       {
         titulo: 'Y listo',

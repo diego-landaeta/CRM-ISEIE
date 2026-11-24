@@ -9,9 +9,14 @@ import path from 'path';
 /*
   #619, tanda D (gemela de CRM#941; Diego, 19/11: «las que son así, dáselas a
   Ángel CEDIA»): «Ver recorrido» en las siguientes por uso después de la tanda
-  C: el Seguimiento de fin de mes, la Conexión de WhatsApp (el chat y Plantillas
-  ya tienen el suyo) y las Consultas de los alumnos, la bandeja y la consulta
-  abierta.
+  C: el Seguimiento de fin de mes y la Conexión de WhatsApp (el chat y
+  Plantillas ya tienen el suyo).
+
+  Las Consultas (la bandeja y una consulta) ya tenían recorrido en main
+  (`consultas-chat` y `consulta-responder`, `recorridosNovedades301.ts`, #740):
+  los pasos que traía esta tanda se sumaron a esos dos y los de la tanda se
+  quitaron, para que cada pantalla ofrezca UN «Ver recorrido» (Diego, 24/11).
+  Aquí se recorren también, con lo que se les sumó.
 
   Se pinta cada pantalla de verdad, con datos en los que sale todo, y se recorre
   entera: cada paso encuentra su sitio y ninguno se salta. Lo que esa persona no
@@ -43,6 +48,7 @@ vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 
 const { RECORRIDOS_COBROS, claveRecorrido, pasosPara } = await import('@/shared/lib/recorridosCobros');
 const { RECORRIDOS_GESTORA_B } = await import('@/shared/lib/recorridosGestoraB');
+const { RECORRIDOS_NOVEDADES_301 } = await import('@/shared/lib/recorridosNovedades301');
 const { recorridosDeLaRuta } = await import('@/shared/lib/recorridosPorRuta');
 const { default: SeguimientoPage } = await import('@/modules/proceso/pages/SeguimientoPage');
 const { default: ConexionPage } = await import('@/modules/whatsapp/pages/ConexionPage');
@@ -118,7 +124,7 @@ const responder = async (url) => {
 const PANTALLAS = {
   'seguimiento-fin-de-mes': { pintar: () => <SeguimientoPage />, cargada: 'Ana Pérez', empresa: true },
   'whatsapp-conexion': { pintar: () => <ConexionPage />, cargada: 'Todavía no has enlazado tu número.' },
-  consultas: {
+  'consultas-chat': {
     pintar: () => <ConsultasPage />,
     cargada: 'Bea Ruiz',
     // Tutora y administración a la vez: abre en «Mis consultas»; en «Todas» sale además «Leer el campus ahora».
@@ -127,19 +133,20 @@ const PANTALLAS = {
       await screen.findByRole('button', { name: /Leer el campus ahora/ });
     },
   },
-  consulta: {
+  'consulta-responder': {
     pintar: () => <Routes><Route path="/consultas/:id" element={<ConsultaPage />} /></Routes>,
     ruta: '/consultas/7',
     cargada: 'Ficha del alumno',
   },
 };
 const IDS = Object.keys(PANTALLAS);
-const boton = (id) => `Ver recorrido: ${RECORRIDOS_GESTORA_B[id].titulo}`;
+const DE_LA_TANDA = Object.keys(RECORRIDOS_GESTORA_B);
+const boton = (id) => `Ver recorrido: ${RECORRIDOS_COBROS[id].titulo}`;
 const pintar = (id) => {
   if (PANTALLAS[id].empresa) ambito.current = EMPRESA;
   return render(<MemoryRouter initialEntries={[PANTALLAS[id].ruta || '/']}>{PANTALLAS[id].pintar()}</MemoryRouter>);
 };
-const titulos = (id, fuera = []) => RECORRIDOS_GESTORA_B[id].pasos.map((p) => p.titulo).filter((t) => !fuera.includes(t));
+const titulos = (id, fuera = []) => RECORRIDOS_COBROS[id].pasos.map((p) => p.titulo).filter((t) => !fuera.includes(t));
 const cargada = (id) => screen.findAllByText(PANTALLAS[id].cargada, {}, { timeout: 5000 });
 
 /** Recorre el recorrido abierto pulsando «Siguiente» y devuelve los títulos vistos. */
@@ -165,6 +172,10 @@ async function abrirYRecorrer(id) {
 // Lo que se ve de la Conexión según esté o no enlazado el número.
 const SOLO_ENLAZADO = ['Lo que ha entrado', 'Si te llaman'];
 const SOLO_SIN_ENLAZAR = ['Antes de enlazar, lee esto', 'Qué te traes del móvil'];
+// Una consulta: lo que no ve administración (solo deja notas: ni el cambio a nota, ni guardadas, ni adjuntar)
+// y lo que no está sin la caja de escribir.
+const SOLO_TUTORA = ['Nota interna', 'Respuestas guardadas', 'Adjuntar'];
+const SIN_CAJA = ['Escribe la respuesta', 'Nota interna', 'Respuestas guardadas', 'Adjuntar', 'Enviar', 'Cerrar'];
 
 beforeEach(() => {
   localStorage.clear();
@@ -180,28 +191,47 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('el día a día, segunda tanda, en el modelo (#619, tanda D)', () => {
-  it('son cuatro, por uso, y están registrados con los demás (VerRecorrido y la prueba a 375 los ven)', () => {
-    expect(Object.keys(RECORRIDOS_GESTORA_B)).toEqual(['seguimiento-fin-de-mes', 'whatsapp-conexion', 'consultas', 'consulta']);
-    for (const id of IDS) expect(RECORRIDOS_COBROS[id]).toBe(RECORRIDOS_GESTORA_B[id]);
+  it('son dos, por uso, y están registrados con los demás (VerRecorrido y la prueba a 375 los ven)', () => {
+    expect(DE_LA_TANDA).toEqual(['seguimiento-fin-de-mes', 'whatsapp-conexion']);
+    for (const id of DE_LA_TANDA) expect(RECORRIDOS_COBROS[id]).toBe(RECORRIDOS_GESTORA_B[id]);
+  });
+
+  it('Consultas no tiene dos: los de la tanda se quitaron y sus pasos están en los de main', () => {
+    expect(RECORRIDOS_COBROS.consultas).toBeUndefined();
+    expect(RECORRIDOS_COBROS.consulta).toBeUndefined();
+    expect(RECORRIDOS_COBROS['consultas-chat']).toBe(RECORRIDOS_NOVEDADES_301['consultas-chat']);
+    expect(RECORRIDOS_COBROS['consulta-responder']).toBe(RECORRIDOS_NOVEDADES_301['consulta-responder']);
+    const anclajes = (id) => RECORRIDOS_COBROS[id].pasos.map((p) => p.donde).filter(Boolean);
+    expect(anclajes('consultas-chat')).toEqual(expect.arrayContaining(['[data-recorrido="consultas-pestanas"]', '[data-recorrido="consultas-vista"]']));
+    expect(anclajes('consulta-responder')).toEqual(expect.arrayContaining(['[data-recorrido="consulta-bandeja"]', '[data-recorrido="consulta-ficha"]']));
+    // Ninguna otra entrada del registro reclama las dos rutas de Consultas.
+    const deLaRuta = (ruta) => Object.values(RECORRIDOS_COBROS).filter((r) => r.rutas.includes(ruta)).map((r) => r.id);
+    expect(deLaRuta('/consultas')).toEqual(['consultas-chat']);
+    expect(deLaRuta('/consultas/:id')).toEqual(['consulta-responder']);
   });
 
   it('cada uno con el permiso con el que el menú y el servidor dejan ver su pantalla', () => {
-    expect(Object.fromEntries(Object.values(RECORRIDOS_GESTORA_B).map((r) => [r.id, r.permiso]))).toEqual({
+    expect(Object.fromEntries(IDS.map((id) => [id, RECORRIDOS_COBROS[id].permiso]))).toEqual({
       'seguimiento-fin-de-mes': 'proceso.view',
       'whatsapp-conexion': 'whatsapp.usar',
-      consultas: ['consultas.view', 'consultas.atender'],
-      consulta: ['consultas.view', 'consultas.atender'],
+      'consultas-chat': ['consultas.view', 'consultas.atender'],
+      'consulta-responder': ['consultas.view', 'consultas.atender'],
     });
   });
 
-  it.each(IDS)('%s: de 5 a 8 pasos, y su pantalla lo ofrece con «Ver recorrido»', (id) => {
+  it.each(DE_LA_TANDA)('%s: de 5 a 8 pasos', (id) => {
     const r = RECORRIDOS_GESTORA_B[id];
     expect(r.pasos.length).toBeGreaterThanOrEqual(5);
     expect(r.pasos.length).toBeLessThanOrEqual(8);
+  });
+
+  it.each(IDS)('%s: su pantalla lo ofrece con UN «Ver recorrido», el suyo', (id) => {
+    const r = RECORRIDOS_COBROS[id];
     const codigo = r.pantalla.map((f) => fs.readFileSync(path.join(SRC, f), 'utf8')).join('\n');
+    expect(codigo.match(/<VerRecorrido\b/g)).toHaveLength(1);
     expect(codigo).toMatch(new RegExp(`<VerRecorrido id="${id}"`));
     // La consulta abierta no se desplaza (va a pantalla entera): no le hace falta el margen.
-    if (id !== 'consulta') expect(codigo).toContain('[&_[data-recorrido]]:scroll-mt-40');
+    if (id !== 'consulta-responder') expect(codigo).toContain('[&_[data-recorrido]]:scroll-mt-40');
   });
 
   it('el chat de WhatsApp y Plantillas no se repiten: ya tienen el suyo', () => {
@@ -211,9 +241,10 @@ describe('el día a día, segunda tanda, en el modelo (#619, tanda D)', () => {
   });
 
   it('sin «consultas.gestionar», no sale «Leer el campus ahora»', () => {
-    const vistos = pasosPara(RECORRIDOS_GESTORA_B.consultas, (k) => k === 'consultas.atender').map((p) => p.titulo);
+    const r = RECORRIDOS_COBROS['consultas-chat'];
+    const vistos = pasosPara(r, (k) => k === 'consultas.atender').map((p) => p.titulo);
     expect(vistos).not.toContain('Leer el campus ahora');
-    expect(vistos).toHaveLength(RECORRIDOS_GESTORA_B.consultas.pasos.length - 1);
+    expect(vistos).toHaveLength(r.pasos.length - 1);
   });
 });
 
@@ -221,9 +252,10 @@ describe('el botón «Recorrido» de la cabecera los encuentra por su ruta', () 
   it('cada pantalla, el suyo', () => {
     expect(recorridosDeLaRuta('/leads/seguimiento')).toEqual(['seguimiento-fin-de-mes']);
     expect(recorridosDeLaRuta('/whatsapp/conexion')).toEqual(['whatsapp-conexion']);
-    expect(recorridosDeLaRuta('/consultas')).toEqual(['consultas']);
-    expect(recorridosDeLaRuta('/consultas/7')).toEqual(['consulta']);
-    expect(recorridosDeLaRuta('/consultas/7/')).toEqual(['consulta']);
+    // Uno solo en cada una: el botón de la cabecera no ofrece dos.
+    expect(recorridosDeLaRuta('/consultas')).toEqual(['consultas-chat']);
+    expect(recorridosDeLaRuta('/consultas/7')).toEqual(['consulta-responder']);
+    expect(recorridosDeLaRuta('/consultas/7/')).toEqual(['consulta-responder']);
   });
 
   it('una pantalla con nombre no es una ficha: «/consultas/metricas» no ofrece el de la consulta', () => {
@@ -244,6 +276,8 @@ describe.each(IDS)('%s: la pantalla de verdad, recorrida entera', (id) => {
     await new Promise((r) => setTimeout(r, 1200));
     expect(screen.queryByRole('dialog', { name: titulos(id)[0] })).toBeNull();
     await PANTALLAS[id].preparar?.();
+    // Un solo «Ver recorrido» en la pantalla (Diego, 24/11).
+    expect(screen.getAllByRole('button', { name: /^Ver recorrido/ })).toHaveLength(1);
     expect(localStorage.getItem(claveRecorrido(id, 41))).toBeNull();
     // La Conexión, sin enlazar: lo de después de enlazar se salta (se recorre enlazado abajo).
     const fuera = id === 'whatsapp-conexion' ? SOLO_ENLAZADO : [];
@@ -278,29 +312,29 @@ describe('lo que no está, se salta solo', () => {
     yo.current = { id: 41, role: 'tutor', roles_extra: [] };
     permisos.delete('consultas.view');
     permisos.delete('consultas.gestionar');
-    pintar('consultas');
-    await cargada('consultas');
-    expect(await abrirYRecorrer('consultas')).toEqual(titulos('consultas', ['Leer el campus ahora', 'Las tuyas o todas']));
+    pintar('consultas-chat');
+    await cargada('consultas-chat');
+    expect(await abrirYRecorrer('consultas-chat')).toEqual(titulos('consultas-chat', ['Leer el campus ahora', 'Las tuyas o todas']));
   });
 
-  it('una consulta vista por administración: la caja va en modo nota y el recorrido sale entero', async () => {
-    // Administración solo deja notas: la caja sigue (en modo nota) y el paso también.
+  it('una consulta vista por administración: la caja va en modo nota y se salta lo que solo hace la tutora', async () => {
+    // Administración solo deja notas: la caja y «Guardar nota» siguen, y sus pasos también.
     api.get.mockImplementation(async (url) => (String(url).split('?')[0] === '/consultas/7'
       ? { success: true, data: { ...(await responder(url)).data, puedes: 'admin' } }
       : responder(url)));
-    pintar('consulta');
-    await cargada('consulta');
+    pintar('consulta-responder');
+    await cargada('consulta-responder');
     await screen.findByText('Guardar nota', {}, { timeout: 5000 });
-    expect(await abrirYRecorrer('consulta')).toEqual(titulos('consulta'));
+    expect(await abrirYRecorrer('consulta-responder')).toEqual(titulos('consulta-responder', SOLO_TUTORA));
   });
 
-  it('una consulta cerrada de una tutora: sin la caja, se salta «Responder»', async () => {
+  it('una consulta cerrada de una tutora: sin la caja, se salta lo de escribir', async () => {
     api.get.mockImplementation(async (url) => (String(url).split('?')[0] === '/consultas/7'
       ? { success: true, data: { ...(await responder(url)).data, estado: 'cerrada' } }
       : responder(url)));
-    pintar('consulta');
+    pintar('consulta-responder');
     await screen.findByText(/Consulta cerrada/, {}, { timeout: 5000 });
-    expect(await abrirYRecorrer('consulta')).toEqual(titulos('consulta', ['Responder']));
+    expect(await abrirYRecorrer('consulta-responder')).toEqual(titulos('consulta-responder', SIN_CAJA));
   });
 
   it('sin «whatsapp.usar», la Conexión no ofrece recorrido', async () => {

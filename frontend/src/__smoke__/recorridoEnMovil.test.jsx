@@ -191,7 +191,7 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   });
 
   it('entre ellos, los del día a día, segunda tanda (#619, tanda D), con todos sus pasos', () => {
-    expect(Object.keys(RECORRIDOS_GESTORA_B)).toEqual(['seguimiento-fin-de-mes', 'whatsapp-conexion', 'consultas', 'consulta']);
+    expect(Object.keys(RECORRIDOS_GESTORA_B)).toEqual(['seguimiento-fin-de-mes', 'whatsapp-conexion']);
     for (const r of Object.values(RECORRIDOS_GESTORA_B)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();

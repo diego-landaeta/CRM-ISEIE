@@ -170,7 +170,6 @@ export default function ConsultasPage() {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <VerRecorrido id="consultas-chat" listo={!cargando} />
-            <VerRecorrido id="consultas" listo={!cargando} />
             {puedeLeerElCampus && vista === 'todas' && (
               <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo} data-recorrido="consultas-leer">
                 <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
@@ -193,7 +192,7 @@ export default function ConsultasPage() {
         </div>
       )}
 
-      <div data-recorrido="consultas-filtros" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div role="tablist" aria-label="Estado" className="flex flex-wrap gap-1" data-recorrido="consultas-estado">
           {PESTANAS.map((p) => (
             <button key={p.clave} type="button" role="tab" aria-selected={pestana === p.clave} onClick={() => setPestana(p.clave)}

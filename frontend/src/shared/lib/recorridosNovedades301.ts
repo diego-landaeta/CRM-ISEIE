@@ -6,7 +6,10 @@ import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
  * y que los recorridos estén actualizados»): los de lo que trajeron la 2.9.8 y la
  * 3.0.0 y aún no tenía recorrido.
  *
- *  1. Consultas y el chat del campus (3.0.0).
+ *  1. Consultas y el chat del campus (3.0.0). Los dos de Consultas llevan además
+ *     los pasos de la tanda D de recorridos (#619 / CRM#941): las pestañas,
+ *     «Mis consultas / Todas», la bandeja de la izquierda y la ficha del alumno.
+ *     Un solo «Ver recorrido» por pantalla.
  *  2. Conciliación › Facturas y cobros (2.9.8, CRM#905).
  *  3. El avance del alumno en la pestaña «Campus» de su ficha (3.0.0, #532).
  *
@@ -34,9 +37,19 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         texto: 'Lo que el alumno escribe en el chat de Moodle llega aquí. Se contesta desde el CRM y la respuesta le sale en Moodle, a nombre de su tutora. Son {pasos} pasos.',
       },
       {
+        donde: anclaje('consultas-pestanas'),
+        titulo: 'Las pestañas',
+        texto: 'Además de la bandeja: los alumnos que no han escrito nunca, tu carga si eres tutora, los tutores si llevas el equipo, las métricas y, si coordinas, las respuestas del campus.',
+      },
+      {
+        donde: anclaje('consultas-vista'),
+        titulo: 'Las tuyas o todas',
+        texto: 'Si eres tutora y además llevas el equipo: «Mis consultas» son las que te tocan responder; «Todas», las de todos los tutores.',
+      },
+      {
         donde: anclaje('consultas-estado'),
         titulo: 'Pendientes primero',
-        texto: '«Pendientes» son las que esperan respuesta. El color dice cuánto llevan esperando: verde, a tiempo; ámbar, cerca del plazo; rojo, pasado el plazo.',
+        texto: '«Pendientes» son las que esperan respuesta. El color dice cuánto llevan esperando: verde, a tiempo; ámbar, cerca del plazo; rojo, pasado el plazo. En «Todas», «Solo sin tutor» deja las que no tienen a nadie.',
       },
       {
         donde: anclaje('consultas-buscar'),
@@ -143,6 +156,11 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         texto: 'Lo que escribes aquí le llega al alumno en el chat de Moodle, a nombre de su tutora. Son {pasos} pasos.',
       },
       {
+        donde: anclaje('consulta-bandeja'),
+        titulo: 'Las pendientes',
+        texto: 'Las que esperan respuesta, con el plazo de cada una. Pulsa otra para pasar a ella sin volver a la lista.',
+      },
+      {
         donde: anclaje('consulta-mensajes'),
         titulo: 'La conversación',
         texto: 'Todo lo que se han escrito, por días. La doble marca quiere decir que la respuesta ya está en el campus. Si no llegó, sale un aviso con «Reintentar».',
@@ -180,6 +198,11 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         donde: anclaje('consulta-cerrar'),
         titulo: 'Cerrar',
         texto: 'Cuando ya está resuelta. Si el alumno vuelve a escribirte por privado, se abre sola (lo que escriba en el grupo del curso no la reabre).',
+      },
+      {
+        donde: anclaje('consulta-ficha'),
+        titulo: 'La ficha del alumno',
+        texto: 'Quién la atiende, sus entregas sin corregir, sus cursos, sus otras consultas y su actividad, por apartados. Si llevas el equipo, aquí está «Reasignar» a otro tutor.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],
