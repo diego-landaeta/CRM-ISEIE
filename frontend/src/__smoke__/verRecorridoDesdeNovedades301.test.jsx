@@ -111,4 +111,20 @@ describe('RecorridoDeLaDireccion', () => {
     await act(async () => { vi.advanceTimersByTime(1000); });
     expect(screen.getAllByTestId('activo').every((n) => n.textContent === 'ninguno')).toBe(true);
   });
+
+  it('el del tablero, que apunta su pantalla, también se abre por su id', async () => {
+    vi.useFakeTimers();
+    const abrir = vi.fn();
+    function Tablero() { lanzador.useRegistrarRecorrido({ id: 'tablero', titulo: 'El tablero del equipo', abrir }); return null; }
+    render(
+      <MemoryRouter initialEntries={['/tareas?recorrido=tablero']}>
+        <RecorridoDeLaDireccion />
+        <Tablero />
+        <Routes><Route path="*" element={<Direccion />} /></Routes>
+      </MemoryRouter>,
+    );
+    await act(async () => { vi.advanceTimersByTime(1000); });
+    expect(abrir).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId('dir').textContent).toBe('/tareas');
+  });
 });

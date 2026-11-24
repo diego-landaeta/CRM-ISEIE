@@ -8,12 +8,13 @@ import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
  *
  *  1. Consultas y el chat del campus (3.0.0).
  *  2. Conciliación › Facturas y cobros (2.9.8, CRM#905).
+ *  3. El avance del alumno en la pestaña «Campus» de su ficha (3.0.0, #532).
  *
  * Como los demás, se suman a `RECORRIDOS_COBROS`: el botón «Recorrido» de la
  * cabecera, «Ver recorrido» de cada pantalla y de Novedades, y las pruebas de
  * siempre los ven. Solo importa TIPOS de `recorridosCobros` (sin ciclo).
  */
-export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas';
+export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas' | 'avance-alumno';
 
 type RecorridoNovedades301 = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoNovedades301 };
 
@@ -87,6 +88,44 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         donde: anclaje('conciliacion-todas'),
         titulo: 'Enlazar todas las seguras',
         texto: 'Las parejas «seguras» (la factura solo casa con ese cobro y el cobro solo con esa factura) se enlazan de una vez. Antes te pide confirmar.',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+  // ─── Ficha del cliente › pestaña «Campus»: su avance en Moodle (#532) ───────
+  'avance-alumno': {
+    id: 'avance-alumno',
+    rutas: ['/clients/:id'],
+    titulo: 'El avance del alumno en Moodle',
+    permiso: 'clients.view',
+    pantalla: [
+      'modules/clients/pages/ClientDetailPage.tsx',
+      'modules/clients/components/AvanceMoodle.tsx',
+    ],
+    pasos: [
+      {
+        titulo: 'Cómo va en el campus',
+        texto: 'En la ficha del cliente se ve lo que dice Moodle de él, sin entrar en Moodle: cada curso, cuándo entró por última vez, cuánto lleva hecho y sus notas. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('ficha-pestana-campus'),
+        titulo: 'La pestaña «Campus»',
+        texto: 'Sale cuando su campus tiene Moodle conectado. Púlsala para ver su avance; si ya estás en ella, sigue.',
+      },
+      {
+        donde: anclaje('avance-campus'),
+        titulo: 'Cada campus, con su alumno',
+        texto: 'Arriba, cuándo entró por última vez y el enlace a su perfil en Moodle. Debajo, sus cursos.',
+      },
+      {
+        donde: anclaje('avance-curso'),
+        titulo: 'Cada curso',
+        texto: 'Cuándo se matriculó, su último acceso y el % hecho. «Sin seguimiento» quiere decir que ese curso no tiene activada la finalización de actividades en Moodle.',
+      },
+      {
+        donde: anclaje('avance-actualizar'),
+        titulo: 'Actualizar',
+        texto: 'Se lee de Moodle al abrir la pestaña. Si el alumno acaba de entregar algo, pulsa «Actualizar».',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

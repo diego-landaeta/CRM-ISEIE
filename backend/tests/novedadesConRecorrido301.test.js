@@ -17,6 +17,16 @@ const idsDelFrontal = new Set(
     .flatMap((f) => [...fs.readFileSync(path.join(lib, f), 'utf8').matchAll(/^\s+id: '([a-z0-9-]+)',/gm)].map((m) => m[1])),
 );
 
+// Los que apunta su pantalla al montarse (el tablero): `useRegistrarRecorrido({ id: '…' })`.
+const modulos = path.resolve(aqui, '../../frontend/src/modules');
+const deLasPantallas = (dir) => fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+  const f = path.join(dir, e.name);
+  if (e.isDirectory()) return deLasPantallas(f);
+  if (!/\.(tsx|jsx)$/.test(e.name)) return [];
+  return [...fs.readFileSync(f, 'utf8').matchAll(/useRegistrarRecorrido\(\{ id: '([a-z0-9-]+)'/g)].map((m) => m[1]);
+});
+for (const id of deLasPantallas(modulos)) idsDelFrontal.add(id);
+
 const conRecorrido = VERSIONES.flatMap((v) => v.grupos.flatMap((g) => g.items.filter((it) => it.recorrido).map((it) => ({ v: v.version, ...it }))));
 
 describe('Novedades con «Ver recorrido» (3.0.0)', () => {
