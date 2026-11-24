@@ -83,7 +83,7 @@ export const RECORRIDOS_LINKS: Record<IdRecorridoLinks, RecorridoLinks> = {
       {
         titulo: 'Al registrar la venta, sale solo',
         permiso: 'links_pago.crear',
-        texto: 'Lo más rápido: al registrar la venta deja marcado «Generar link de pago de Stripe». Si va a plazos, te pregunta «¿Se cobra con link de pago?»: con «Sí», un link por cuota con su fecha, y eliges si la inicial va con el link o ya la pagó con otro link o por transferencia (con su referencia); con «No», ningún link. Al terminar te los da todos para copiar.',
+        texto: 'Lo más rápido: al registrar la venta. Si paga de una vez, deja marcado «Generar link de pago de Stripe». Si va a plazos, te pregunta «¿Se cobra con link de pago?»: con «Sí», un link por cuota y eliges cómo paga la inicial; con «No», ninguno. Al terminar te los da para copiar.',
       },
       // El embudo por gestora y por campus (CRM#987).
       {
