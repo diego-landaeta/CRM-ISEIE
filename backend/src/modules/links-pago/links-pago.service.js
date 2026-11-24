@@ -1,6 +1,7 @@
 import * as model from './links-pago.model.js';
 import * as stripe from './links-pago.stripe.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
+import { duenoDeLaCuenta, prestadoDe } from '../stripe-payments/stripe-prestado.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -29,9 +30,14 @@ export function entorno(env = process.env) {
   return env.NODE_ENV === 'production' ? 'produccion' : 'local';
 }
 
-/** La clave de escritura del campus, o null. Solo `stripe_links`. */
+/**
+ * La clave de escritura del campus, o null. Solo `stripe_links`. Si el campus
+ * usa la cuenta de Stripe de otro de su empresa (Stripe prestado, 332), la de
+ * ese: el link se crea en esa cuenta con la marca de ESTE campus (`marca`), y
+ * su cobro vuelve aquí (`stripe-prestado.js`).
+ */
 export async function claveDeEscritura(projectId) {
-  const row = await integrationsModel.get(projectId, 'stripe_links');
+  const row = await integrationsModel.get(await duenoDeLaCuenta(projectId), 'stripe_links');
   if (!row?.encrypted_value) return null;
   try {
     return decrypt(row.encrypted_value, row.iv, row.auth_tag);
@@ -630,7 +636,8 @@ export const EVENTOS_DE_LOS_LINKS = [
  * de uno nuevo no se podría guardar sin pasar por el panel de Stripe.
  */
 export async function idDelWebhook(projectId) {
-  const row = await integrationsModel.get(projectId, 'stripe');
+  // Con la cuenta prestada (332), el webhook es el de la cuenta: el del dueño.
+  const row = await integrationsModel.get(await duenoDeLaCuenta(projectId), 'stripe');
   const id = row?.config_public?.webhook_endpoint_id;
   return typeof id === 'string' && /^we_[A-Za-z0-9]{6,}$/.test(id) ? id : null;
 }
@@ -670,6 +677,12 @@ export async function verWebhook(projectId, { campusVisibles = null } = {}) {
  * varios campus la comparten, les afecta a todos (la tarjeta lo dice).
  */
 export async function cambiarWebhook(projectId, accion, { campusVisibles = null } = {}) {
+  // El webhook de una cuenta prestada (332) es del dueño: se cambia desde allí.
+  const dueno = await prestadoDe(projectId);
+  if (dueno) {
+    throw new AppError(`Este campus usa el Stripe de ${dueno.nombre}: su webhook se cambia desde ${dueno.nombre}.`,
+      409, 'STRIPE_PRESTADO');
+  }
   const endpointId = await idDelWebhook(projectId);
   if (!endpointId) {
     throw new AppError('Este campus no tiene webhook de Stripe vinculado (falta su id en la tarjeta «Stripe»). No se crea uno nuevo.',
