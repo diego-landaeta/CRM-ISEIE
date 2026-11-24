@@ -222,9 +222,22 @@ describe('pintadas de verdad, se recorren enteras', () => {
     expect(recorrer(7)).toEqual(titulos('facturas-colaboradores', ['Validar antes de pagar']));
   });
 
-  it('Mi campus (tutora): con «Ver recorrido» pasa por los ocho', async () => {
+  it('Mi campus (tutora) con un solo campus: pasa por todos menos «Tus campus» (no hay selector)', async () => {
     rol.current = 'tutor';
     permisos.add('tutores.mis_cursos');
+    pintar(MiCampusPage, '/mis-cursos/campus');
+    await screen.findByTestId('resumen-mi-campus');
+    await abrir('mi-campus');
+    await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
+    expect(recorrer(8)).toEqual(titulos('mi-campus', ['Tus campus']));
+  });
+
+  it('Mi campus con dos campus (gemela de CRM#1084): también «Tus campus», el selector', async () => {
+    rol.current = 'tutor_redactor';
+    permisos.add('tutores.mis_cursos');
+    api.miCampus.mockResolvedValue({ success: true, data: {
+      ...MI_CAMPUS, todosLosCampus: [{ projectId: 3, campus: 'Fono' }, { projectId: 5, campus: 'ISEF' }], elegidos: null,
+    } });
     pintar(MiCampusPage, '/mis-cursos/campus');
     await screen.findByTestId('resumen-mi-campus');
     await abrir('mi-campus');
@@ -240,7 +253,7 @@ describe('pintadas de verdad, se recorren enteras', () => {
     await screen.findByTestId('resumen-mi-campus');
     await abrir('mi-campus');
     await screen.findByRole('dialog', { name: 'Tu campus' }, { timeout: 3000 });
-    expect(recorrer(8)).toEqual(titulos('mi-campus', ['Campus sin conectar']));
+    expect(recorrer(8)).toEqual(titulos('mi-campus', ['Campus sin conectar', 'Tus campus']));
   });
 
   it('Incidencias (admin): en la lista pasa por todo menos las cifras', async () => {
