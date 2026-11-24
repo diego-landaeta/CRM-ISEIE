@@ -210,6 +210,13 @@ export interface MiCampusAlumno {
   progreso?: number | null;
 }
 export interface MiCampusDuda { consultaId: number; alumnoId: number | null; alumno: string | null; desde: string | null }
+/**
+ * Un mensaje privado de Moodle que espera su respuesta (el último es del alumno), de
+ * cualquier fecha: también los de antes de conectar el campus. Se contesta en Moodle.
+ */
+export interface MiCampusMensaje {
+  conversacionId: number; alumnoId: number; alumno: string | null; desde: string | null; responderUrl: string;
+}
 export interface MiCampusTarea {
   id: number; nombre: string | null; entrega: string | null;
   /** La tarea en el calificador de Moodle (para lo que no se corrige desde el CRM). */
@@ -225,10 +232,18 @@ export interface MiCampusCurso {
   /** Por qué no se ha leído el % de sus alumnos (demasiados, o Moodle no contesta). */
   avisoProgreso?: string | null;
   alumnos: MiCampusAlumno[]; dudas: MiCampusDuda[]; tareas: MiCampusTarea[];
+  /** Sus mensajes de Moodle sin responder de alumnos de este curso. */
+  sinResponder?: MiCampusMensaje[];
 }
 export interface MiCampusCampus {
   projectId: number; campus: string; url: string | null; error: string | null;
   cursos: MiCampusCurso[]; dudasSinCurso: MiCampusDuda[];
+  /** Lo que dijo la última comprobación de su cuenta (p. ej. que el correo apunta a otra). */
+  aviso?: string | null;
+  /** Mensajes sin responder de alguien que no está en sus cursos. */
+  sinResponderSinCurso?: MiCampusMensaje[];
+  /** Por qué no se han podido leer sus mensajes de Moodle. */
+  avisoMensajes?: string | null;
 }
 export interface MiCampusPendiente {
   id: number; nombre: string; tipo: string; estado: string; campus: string; fechaComprometida: string | null;

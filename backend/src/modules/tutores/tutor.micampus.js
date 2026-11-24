@@ -19,16 +19,38 @@
   Uno o varios campus (Diego, 24/11: «que las tutoras redactoras puedan ver entre
   uno y varios campus»): con `campus` se leen solo los elegidos (de los suyos; lo
   que no es suyo se ignora) y `todosLosCampus` dice cuáles tiene, para el selector.
+
+  TODO lo pendiente, de cualquier fecha (Diego, 24/11: «tienen que tener TODAS las
+  pendientes, no solamente desde que se subió el campus»):
+    · las entregas sin corregir nunca han tenido corte de fecha; lo que faltaba eran
+      las de los cursos cuyos alumnos no se pudieron leer (la base del campus llena,
+      «Database connection failed»): ahora se lee de 2 en 2 y se repite (moodle.client);
+    · los mensajes privados de Moodle cuyo último mensaje es del alumno salen aquí
+      aunque sean de antes de «Leer las consultas» (`sinResponder`): solo se leen,
+      no se crea ninguna consulta ni se escribe a nadie. Lo que ya está en el CRM
+      (ese mensaje entró en una consulta, o el alumno tiene una duda abierta) no se
+      repite.
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
   cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno, esRolDeTutora,
+  conversacionesSinResponder,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 
 const CACHE_MS = 2 * 60 * 1000;
-const PARALELO = 4;
+/** Lo leído con algún fallo se guarda menos: al volver a entrar se intenta otra vez. */
+const CACHE_CON_FALLOS_MS = 15 * 1000;
+/**
+ * Llamadas a la vez a un campus. Eran 4: el servidor de los campus de CEDIA (Psiko, ISAEG…)
+ * tiene pocas conexiones a su base y, con 4, contestaba «Database connection failed» en 14 a
+ * 40 de los 96 cursos de una tutora (24/11). Con 2, ninguno. `MI_CAMPUS_PARALELO` lo cambia.
+ */
+const paralelo = () => {
+  const n = parseInt(process.env.MI_CAMPUS_PARALELO || '2', 10);
+  return Number.isInteger(n) && n > 0 ? Math.min(n, 8) : 2;
+};
 /**
  * Cursos por llamada al leer las tareas. Todos en una sola llamada pasaba del tiempo de
  * espera con una tutora de muchos cursos, y entonces NINGÚN curso enseñaba sus tareas.
@@ -78,7 +100,7 @@ export async function progresoDeAlumnos(conexion, cursos, opciones) {
     return { porAlumno, aviso: `Con más de ${maxProgreso()} alumnos en el campus no se lee el % hecho de cada uno.` };
   }
   let fallos = 0;
-  await enTandas(ids, PARALELO, async (id) => {
+  await enTandas(ids, paralelo(), async (id) => {
     try {
       const suyos = await cursosDe(conexion, id, opciones);
       porAlumno.set(id, new Map(suyos.filter((k) => conSeguimiento.has(k.id)).map((k) => [k.id, k.progreso])));
@@ -107,11 +129,16 @@ const mensaje = (err, porDefecto) => (err instanceof MoodleError ? err.message :
 /** Los campus de la tutora, con su usuario de Moodle. */
 async function campusDeLaTutora(tutorId) {
   const { rows } = await query(
-    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus
+    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error
        FROM tutor_campus tc JOIN projects p ON p.id = tc.project_id AND p.active
       WHERE tc.tutor_id = $1 AND tc.estado = 'activa' AND tc.moodle_user_id IS NOT NULL
       ORDER BY p.nombre`, [tutorId]);
-  return rows.map((r) => ({ projectId: Number(r.project_id), moodleId: Number(r.moodle_user_id), campus: r.campus }));
+  return rows.map((r) => ({
+    projectId: Number(r.project_id), moodleId: Number(r.moodle_user_id), campus: r.campus,
+    // Lo que dijo la última comprobación (p. ej. «el correo apunta a otra cuenta»): con la
+    // cuenta vinculada equivocada no sale ningún curso, y la tutora tiene que saber por qué.
+    aviso: r.error || null,
+  }));
 }
 
 /**
@@ -162,9 +189,36 @@ async function pendientesDeDesarrollar(tutorId) {
   }));
 }
 
+/**
+ * Los mensajes privados de Moodle que esperan su respuesta y que el CRM no tiene ya (ese
+ * último mensaje no está en ninguna consulta y el alumno no tiene una duda abierta con ella,
+ * que ya sale como duda). Si Moodle no los da, se dice y el resto del campus sigue.
+ */
+async function mensajesSinResponder(conexion, c, dudas, opciones) {
+  let lista;
+  try {
+    lista = await conversacionesSinResponder(conexion, c.moodleId, opciones);
+  } catch (err) {
+    return { lista: [], aviso: `No se han podido leer tus mensajes de Moodle: ${mensaje(err, 'el campus no ha contestado.')}` };
+  }
+  if (!lista.length) return { lista, aviso: null };
+  const { rows } = await query(
+    `SELECT externo_id FROM consulta_mensajes WHERE project_id = $1 AND externo_id = ANY($2::bigint[])`,
+    [c.projectId, lista.map((x) => x.mensajeId)]);
+  const enElCrm = new Set(rows.map((r) => Number(r.externo_id)));
+  const conDuda = new Set(dudas.map((d) => d.alumnoId).filter(Boolean));
+  return {
+    lista: lista.filter((x) => !enElCrm.has(x.mensajeId) && !conDuda.has(x.alumnoId)),
+    aviso: null,
+  };
+}
+
 /** Un campus: sus cursos de profesora, cada uno con alumnos, dudas y tareas por corregir. */
-async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
-  const base = { projectId: c.projectId, campus: c.campus, url: null, error: null, cursos: [], dudasSinCurso: [] };
+async function unCampus(tutorId, c, { conProgreso = true, conMensajes = true, ...opciones } = {}) {
+  const base = {
+    projectId: c.projectId, campus: c.campus, url: null, error: null, aviso: c.aviso || null,
+    cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+  };
   const conexion = await conexionDelCampus(c.projectId);
   if (!conexion) return { ...base, error: 'Este campus no está conectado en Integraciones.' };
   if (conexion.error) return { ...base, error: conexion.error };
@@ -179,7 +233,7 @@ async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
   }
 
   // Los matriculados de cada curso; solo quedan los cursos donde es profesora.
-  const conGente = await enTandas(cursos, PARALELO, async (curso) => {
+  const conGente = await enTandas(cursos, paralelo(), async (curso) => {
     try {
       const gente = await matriculadosDe(conexion, curso.id, opciones);
       const yo = gente.find((g) => g.id === c.moodleId);
@@ -199,11 +253,19 @@ async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
     : { porAlumno: new Map(), aviso: null };
 
   const dudas = await dudasAbiertas(tutorId, c.projectId);
+  const { lista: mensajes, aviso: avisoMensajes } = conMensajes
+    ? await mensajesSinResponder(conexion, c, dudas, opciones)
+    : { lista: [], aviso: null };
+  base.avisoMensajes = avisoMensajes;
   const usadas = new Set();
+  const mensajesUsados = new Set();
   base.cursos = imparte.map((curso) => {
     const alumnos = new Map(curso.alumnos.map((a) => [a.id, a]));
     const susDudas = dudas.filter((d) => d.alumnoId && alumnos.has(d.alumnoId) && !usadas.has(d.consultaId));
     susDudas.forEach((d) => usadas.add(d.consultaId));
+    // Cada mensaje en el primer curso suyo donde está el alumno (como las dudas).
+    const susMensajes = mensajes.filter((m) => alumnos.has(m.alumnoId) && !mensajesUsados.has(m.conversacionId));
+    susMensajes.forEach((m) => mensajesUsados.add(m.conversacionId));
     const susTareas = (tareas.get(curso.id) || []).map((t) => {
       const sin = (entregas.get(t.id) || []).filter((e) => alumnos.has(e.alumnoId))
         .map((e) => ({
@@ -235,12 +297,27 @@ async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
         }))
         .sort((a, b) => String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es')),
       dudas: susDudas,
+      sinResponder: susMensajes.map((m) => mensajeParaVer(m, url, alumnos)),
       tareas: susTareas,
     };
   }).sort((a, b) => porHacer(b) - porHacer(a)
     || String(a.nombre || '').localeCompare(String(b.nombre || ''), 'es'));
   base.dudasSinCurso = dudas.filter((d) => !usadas.has(d.consultaId));
+  // De alguien que no está (o ya no está) en sus cursos: también espera, sale aparte.
+  base.sinResponderSinCurso = mensajes.filter((m) => !mensajesUsados.has(m.conversacionId))
+    .map((m) => mensajeParaVer(m, url, new Map()));
   return base;
+}
+
+/** Un mensaje sin responder tal como lo enseña «Mi campus»: quién, desde cuándo y dónde contestarlo. */
+function mensajeParaVer(m, url, alumnos) {
+  return {
+    conversacionId: m.conversacionId, alumnoId: m.alumnoId,
+    alumno: alumnos.get(m.alumnoId)?.nombre || m.alumno || null,
+    desde: m.desde,
+    // La conversación, abierta en la mensajería del campus.
+    responderUrl: `${url}/message/index.php?convid=${m.conversacionId}`,
+  };
 }
 
 /**
@@ -269,8 +346,9 @@ export async function tareasPorTandas(conexion, cursoIds, opciones) {
   return { tareas, entregas, sinPermiso, errorDe };
 }
 
-/** Lo que tiene pendiente un curso: entregas por corregir y dudas abiertas. */
-const porHacer = (curso) => curso.tareas.reduce((n, t) => n + t.sinCorregir.length, 0) + curso.dudas.length;
+/** Lo que tiene pendiente un curso: entregas por corregir, dudas abiertas y mensajes sin responder. */
+const porHacer = (curso) => curso.tareas.reduce((n, t) => n + t.sinCorregir.length, 0) + curso.dudas.length
+  + (curso.sinResponder?.length || 0);
 
 /** Tras corregir: que «Mi campus» no enseñe la copia de antes de la nota (de ningún campus suyo). */
 export function olvidarMiCampus(tutorId) {
@@ -285,13 +363,20 @@ async function leerUnCampus(tutorId, c, opciones) {
     return await unCampus(tutorId, c, opciones);
   } catch (err) {
     logger.warn({ tutorId, projectId: c.projectId, err: err.message }, 'tutores/mi-campus: fallo al leer el campus');
-    return { projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', cursos: [], dudasSinCurso: [] };
+    return {
+      projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', aviso: c.aviso || null,
+      cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+    };
   }
 }
 
+/** ¿Algo de lo leído ha fallado? Entonces la copia dura poco: al volver se lee otra vez. */
+export const conFallos = (datos) => Boolean(datos.error || datos.avisoMensajes || datos.cursos.some((k) => k.error));
+
 /**
  * Sus campus leídos de Moodle, sin copia. Con `conProgreso: false`, sin el % hecho de cada
- * alumno (una llamada por alumno): el aviso de entregas sin corregir no lo necesita.
+ * alumno (una llamada por alumno): el aviso de entregas sin corregir no lo necesita. Con
+ * `conMensajes: false`, sin leer sus mensajes privados.
  */
 export async function leerSusCampus(tutorId, opciones = {}) {
   const campus = [];
@@ -306,15 +391,21 @@ export async function leerSusCampus(tutorId, opciones = {}) {
  */
 async function sinLasYaAtendidas(tutorId, datos) {
   const { rows } = await query(
-    `SELECT id FROM consultas WHERE tutor_id = $1 AND estado = 'abierta'`, [tutorId]);
+    `SELECT id, project_id, alumno_moodle_id FROM consultas WHERE tutor_id = $1 AND estado = 'abierta'`, [tutorId]);
   const abiertas = new Set(rows.map((r) => Number(r.id)));
   const espera = (d) => abiertas.has(d.consultaId);
+  // Un mensaje de Moodle cuyo alumno ya tiene una duda abierta con ella sale como esa duda.
+  const conDuda = new Set(rows.filter((r) => r.alumno_moodle_id != null).map((r) => `${r.project_id}:${r.alumno_moodle_id}`));
+  const sinDuda = (projectId) => (m) => !conDuda.has(`${projectId}:${m.alumnoId}`);
   return {
     ...datos,
     campus: datos.campus.map((c) => ({
       ...c,
       dudasSinCurso: c.dudasSinCurso.filter(espera),
-      cursos: c.cursos.map((k) => ({ ...k, dudas: k.dudas.filter(espera) })),
+      sinResponderSinCurso: (c.sinResponderSinCurso || []).filter(sinDuda(c.projectId)),
+      cursos: c.cursos.map((k) => ({
+        ...k, dudas: k.dudas.filter(espera), sinResponder: (k.sinResponder || []).filter(sinDuda(c.projectId)),
+      })),
     })),
   };
 }
@@ -343,7 +434,8 @@ export async function miCampus(tutorId, { refrescar = false, campus: pedidos = n
     const clave = `${tutorId}:${c.projectId}`;
     const guardado = cache.get(clave);
     let entrada = guardado;
-    if (refrescar || !guardado || Date.now() - guardado.at >= CACHE_MS) {
+    const dura = guardado && conFallos(guardado.datos) ? CACHE_CON_FALLOS_MS : CACHE_MS;
+    if (refrescar || !guardado || Date.now() - guardado.at >= dura) {
       entrada = { at: Date.now(), datos: await leerUnCampus(tutorId, c, opciones) };
       cache.set(clave, entrada);
     }

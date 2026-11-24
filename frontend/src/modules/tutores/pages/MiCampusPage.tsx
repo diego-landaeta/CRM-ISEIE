@@ -11,7 +11,7 @@ import Iniciales from '@/shared/components/ui/Iniciales';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import {
-  tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente,
+  tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente, type MiCampusMensaje,
 } from '../api/tutores.api';
 // Lo que hay que hacer en un solo sitio y el selector de campus (Diego, 24/11).
 import {
@@ -42,6 +42,10 @@ import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const fechaCorta = (iso: string | null) => (iso
   ? new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })
+  : '—');
+/** Con el año: un mensaje sin responder puede ser de hace meses. */
+const fechaLarga = (iso: string | null) => (iso
+  ? new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
   : '—');
 
 function ultimoAcceso(iso: string | null) {
@@ -79,6 +83,8 @@ function sinProgreso(curso: MiCampusCurso) {
 }
 
 const porCorregirDe = (k: MiCampusCurso) => k.tareas.reduce((s, t) => s + t.sinCorregir.length, 0);
+/** Sus mensajes de Moodle sin responder (también los de antes de conectar el campus). */
+const mensajesDe = (k: MiCampusCurso) => k.sinResponder ?? [];
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
 const accion = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-secundario font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
@@ -102,12 +108,26 @@ function PorHacer({ tono, icono, titulo, detalle, children }: {
   );
 }
 
+/** Un mensaje de Moodle sin responder: se contesta en la mensajería del campus. */
+function MensajeSinResponder({ mensaje }: { mensaje: MiCampusMensaje }) {
+  return (
+    <PorHacer tono="duda" icono={<ChatCircleText size={15} weight="bold" />}
+      titulo={mensaje.alumno || 'Alumno'} detalle={`Mensaje en Moodle sin responder desde el ${fechaLarga(mensaje.desde)}`}>
+      <a href={mensaje.responderUrl} target="_blank" rel="noopener noreferrer"
+        className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
+        Responder en Moodle <ArrowSquareOut size={12} aria-hidden />
+      </a>
+    </PorHacer>
+  );
+}
+
 function Curso({ projectId, curso, abierto, alternar }: { projectId: number; curso: MiCampusCurso; abierto: boolean; alternar: () => void }) {
   const corregir = (tareaId: number) => `/mis-cursos/campus/tarea/${projectId}/${curso.id}/${tareaId}`;
   const conEntregas = curso.tareas.filter((t) => t.sinCorregir.length > 0);
   const porCorregir = porCorregirDe(curso);
   const dudas = curso.dudas.length;
-  const alDia = porCorregir === 0 && dudas === 0;
+  const mensajes = mensajesDe(curso);
+  const alDia = porCorregir === 0 && dudas === 0 && mensajes.length === 0;
   const panel = `curso-${curso.id}`;
   return (
     <li data-testid="curso-campus">
@@ -121,6 +141,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
           <span className="flex flex-wrap gap-x-3 text-secundario">
             {porCorregir > 0 && <span className="font-medium text-warning">{plural(porCorregir, 'entrega por corregir', 'entregas por corregir')}</span>}
             {dudas > 0 && <span className="font-medium text-info-soft-foreground">{plural(dudas, 'duda', 'dudas')}</span>}
+            {mensajes.length > 0 && <span className="font-medium text-info-soft-foreground">{plural(mensajes.length, 'mensaje sin responder', 'mensajes sin responder')}</span>}
             {alDia && <span className="inline-flex items-center gap-1 text-muted-foreground"><CheckCircle size={12} weight="fill" className="text-success" aria-hidden /> Al día</span>}
             <span className="text-muted-foreground">{plural(curso.alumnos.length, 'alumno', 'alumnos')}</span>
             {curso.alumnos.some((a) => sinEntrar(a.ultimoAcceso)) && (
@@ -158,6 +179,7 @@ function Curso({ projectId, curso, abierto, alternar }: { projectId: number; cur
                   <Link to={`/consultas/${d.consultaId}`} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>Responder</Link>
                 </PorHacer>
               ))}
+              {mensajes.map((m) => <MensajeSinResponder key={`m-${m.conversacionId}`} mensaje={m} />)}
             </ul>
           )}
 
@@ -390,7 +412,7 @@ export default function MiCampusPage() {
         // De entrada, abiertos los cursos con algo que hacer.
         if (!refrescar) {
           setAbiertos(new Set(r.data.campus.flatMap((c) => c.cursos
-            .filter((k) => porCorregirDe(k) || k.dudas.length).map((k) => `${c.projectId}-${k.id}`))));
+            .filter((k) => porCorregirDe(k) || k.dudas.length || mensajesDe(k).length).map((k) => `${c.projectId}-${k.id}`))));
         }
         // Lo guardado ya no es suyo (otro campus, otra persona en este navegador): todos.
         if (elegidosRef.current.length && r.data.elegidos === null) {
@@ -436,8 +458,11 @@ export default function MiCampusPage() {
     return {
       porCorregir: cursos.reduce((s, k) => s + porCorregirDe(k), 0),
       // Las dudas, las de Consultas en cuanto se han leído (las mismas que la lista de abajo).
-      dudas: porResponder !== null ? porResponder.length
-        : cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0),
+      dudas: (porResponder !== null ? porResponder.length
+        : cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0))
+        // Y sus mensajes de Moodle sin responder, también los de antes de conectar el campus.
+        + cursos.reduce((s, k) => s + mensajesDe(k).length, 0)
+        + (datos?.campus.reduce((s, c) => s + (c.sinResponderSinCurso?.length ?? 0), 0) || 0),
     };
   }, [datos, porResponder]);
   const todosLosCampus = datos?.todosLosCampus || datos?.campus.map((c) => ({ projectId: c.projectId, campus: c.campus })) || [];
@@ -559,6 +584,11 @@ export default function MiCampusPage() {
                       <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {c.error}
                     </p>
                   )}
+                  {(c.aviso || c.avisoMensajes) && (
+                    <p role="status" className="m-4 flex items-start gap-2 rounded-md bg-warning-soft dark:bg-transparent dark:ring-1 dark:ring-inset dark:ring-warning/35 px-3 py-2 text-secundario text-warning-soft-foreground">
+                      <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {[c.aviso, c.avisoMensajes].filter(Boolean).join(' ')}
+                    </p>
+                  )}
                   {!c.error && c.cursos.length === 0 && (
                     <p className="px-4 py-8 text-center text-secundario text-muted-foreground">No figuras como profesora en ningún curso de este campus.</p>
                   )}
@@ -568,6 +598,14 @@ export default function MiCampusPage() {
                         <Curso key={k.id} projectId={c.projectId} curso={k} abierto={abiertos.has(`${c.projectId}-${k.id}`)} alternar={() => alternar(`${c.projectId}-${k.id}`)} />
                       ))}
                     </ul>
+                  )}
+                  {(c.sinResponderSinCurso?.length ?? 0) > 0 && (
+                    <div className="border-t border-border px-4 py-1">
+                      <h3 className="py-1.5 text-tabla uppercase text-muted-foreground">Mensajes sin responder de quien no está en tus cursos</h3>
+                      <ul className="divide-y divide-border">
+                        {c.sinResponderSinCurso!.map((m) => <MensajeSinResponder key={`m-${m.conversacionId}`} mensaje={m} />)}
+                      </ul>
+                    </div>
                   )}
                   {c.dudasSinCurso.length > 0 && (
                     <p className="border-t border-border px-4 py-2.5 text-secundario text-muted-foreground">
