@@ -18,7 +18,7 @@ import {
   matriculadosDe, tareasDeCursos, entregasDeTarea, notasDeTarea, calificarComoTutora,
   textoDeMoodle, urlDelCampus, porCorregir, contenidoDelCurso, entregasSinCorregir, cursosDe, MoodleError, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
-import { conexionDelCampus, SOLO_DESDE_MOODLE } from './tutor.campus.js';
+import { conexionDelCampus, SOLO_DESDE_MOODLE, soloDesdeMoodle as esSoloDesdeMoodle } from './tutor.campus.js';
 import { olvidarMiCampus, alumnosDe } from './tutor.micampus.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
@@ -28,13 +28,12 @@ const comoAppError = (err, porDefecto) => new AppError(err instanceof MoodleErro
 /** La conexión del campus y la tutora como profesora de ese curso, o 403/404. */
 async function comoProfesora(tutorId, projectId, cursoId) {
   const { rows } = await query(
-    `SELECT moodle_user_id, admin_sitio_excepcion_at FROM tutor_campus
-      WHERE tutor_id = $1 AND project_id = $2 AND estado = 'activa' AND moodle_user_id IS NOT NULL`,
+    `SELECT moodle_user_id FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2 AND estado = 'activa' AND moodle_user_id IS NOT NULL`,
     [tutorId, projectId]);
   if (!rows[0]) throw new AppError('No estás dada de alta en este campus', 403, 'FORBIDDEN');
   const moodleId = Number(rows[0].moodle_user_id);
   // Con la cuenta de administración del sitio (excepción): leer sí; la nota, en Moodle.
-  const soloDesdeMoodle = rows[0].admin_sitio_excepcion_at != null;
+  const soloDesdeMoodle = await esSoloDesdeMoodle(tutorId, projectId);
   const conexion = await conexionDelCampus(projectId);
   if (!conexion || conexion.error) throw new AppError(conexion?.error || 'El campus no está conectado', 409, 'SIN_CONEXION');
   let gente;
