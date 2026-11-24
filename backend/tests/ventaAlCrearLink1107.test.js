@@ -269,7 +269,7 @@ describe('link sin pagar con su venta: aviso a quien lo creó, la venta no se to
 
     const avisos = await avisosDe(link.id);
     expect(avisos).toHaveLength(1);
-    expect(avisos[0]).toMatchObject({ target_user_ids: [p.gestora.id], link_path: `/prospectos/${lead}` });
+    expect(avisos[0]).toMatchObject({ target_user_ids: [p.gestora.id], link_path: `/leads/${lead}` });
     expect(avisos[0].message).toMatch(new RegExp(`venta n\\.º ${ventaId}`));
     const rec = await one(`SELECT created_by, fecha_recordatorio::text AS dia, notificado_at IS NOT NULL AS avisado, completado, nota
                              FROM lead_reminders WHERE lead_id = $1`, [lead]);

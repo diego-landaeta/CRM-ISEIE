@@ -199,7 +199,7 @@ export async function avisarSinPagar(linkId, motivo) {
       type: 'link_pago_sin_pagar',
       title: t.title,
       message: t.message,
-      link_path: l.lead_id ? `/prospectos/${l.lead_id}` : '/links-pago',
+      link_path: l.lead_id ? `/leads/${l.lead_id}` : '/links-pago',
       metadata: { payment_link_id: l.id, conversion_id: l.conversion_id, lead_id: l.lead_id, motivo },
     });
     // El recordatorio de hoy, para quien creó el link: sale en «Tu día» (Dashboard y
