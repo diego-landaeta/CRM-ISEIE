@@ -275,6 +275,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Matrícula en Moodle lista', agrupa: false,
     descripcion: 'Un alumno ya ha pagado, ha llegado su día y toca matricularle en Moodle',
   },
+  // CRM#531: Moodle (plugin 1.13.0) avisa de que un alumno ha quedado suspendido —su
+  // cuenta o un curso—, casi siempre por un impago que suspende Make. A su gestora (sin
+  // gestora, a administración del campus): pide llamarle. Uno por cambio.
+  moodle_alumno_suspendido: {
+    clase: ACCION, etiqueta: 'Alumno suspendido en Moodle', agrupa: false,
+    descripcion: 'Un alumno tuyo ha quedado suspendido en Moodle (la cuenta o un curso), con el motivo que deduce el CRM',
+  },
   matricula_moodle_fallo: {
     clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
     descripcion: 'No se pudo preparar la matrícula de un alumno en Moodle (con el motivo)',
@@ -306,6 +313,11 @@ export const TIPOS = {
   link_pago_abierto: {
     clase: ACCION, etiqueta: 'Link de pago abierto sin pagar', agrupa: false,
     descripcion: 'Tu alumno abrió el link de pago y no lo ha pagado',
+  },
+  // CRM#531: y cuando se le reactiva (normalmente porque ha pagado). Solo lo cuenta.
+  moodle_alumno_reactivado: {
+    clase: AVISO, etiqueta: 'Alumno reactivado en Moodle', agrupa: false,
+    descripcion: 'Un alumno tuyo vuelve a estar activo en Moodle tras una suspensión',
   },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
