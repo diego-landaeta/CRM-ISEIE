@@ -8,10 +8,11 @@ import type { CampusSinTutor } from '../api/consultas.api';
   consultas de ese campus entran sin asignar.
 */
 
-export default function CampusSinTutorAviso({ campus }: { campus: CampusSinTutor[] }) {
+/** `data-recorrido`: si lo señala el recorrido de la pantalla (#941, tanda E). */
+export default function CampusSinTutorAviso({ campus, ...resto }: { campus: CampusSinTutor[]; 'data-recorrido'?: string }) {
   if (!campus.length) return null;
   return (
-    <div role="status" className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
+    <div {...resto} role="status" className="flex items-start gap-2 rounded-md border border-warning bg-warning-soft px-3 py-2 text-sm text-warning-soft-foreground">
       <Warning size={16} weight="bold" className="mt-0.5 shrink-0" aria-hidden="true" />
       <div>
         <p className="font-semibold">

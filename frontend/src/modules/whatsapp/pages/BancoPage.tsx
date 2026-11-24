@@ -4,6 +4,8 @@ import {
   UsersThree, Table as TablaIcono, ListNumbers, Warning,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
 import { runExport, type ExportFormat } from '@/shared/lib/export';
@@ -179,34 +181,39 @@ export default function BancoPage() {
   // fechas y la lista del desplegable los pinta el navegador y no siguen los
   // tokens; sin esto salian claros (#128).
   return (
-    <div className="space-y-4 pb-8 dark:[color-scheme:dark]">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 dark:[color-scheme:dark] [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Banco de mensajes"
         subtitle="Todo lo que ha pasado por WhatsApp, para buscarlo y guardarlo. No depende de que la sesión siga enlazada."
         actions={
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              disabled={descargando}
-              onClick={() => descargar('csv')}
-              className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
-            >
-              <DownloadSimple size={15} weight="bold" /> CSV
-            </button>
-            <button
-              type="button"
-              disabled={descargando}
-              onClick={() => descargar('xlsx')}
-              className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
-            >
-              <DownloadSimple size={15} weight="bold" />
-              {descargando ? 'Preparando…' : 'Excel'}
-            </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <div data-recorrido="wa-banco-descargar" className="flex items-center gap-2">
+              <button
+                type="button"
+                disabled={descargando}
+                onClick={() => descargar('csv')}
+                className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <DownloadSimple size={15} weight="bold" /> CSV
+              </button>
+              <button
+                type="button"
+                disabled={descargando}
+                onClick={() => descargar('xlsx')}
+                className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50 inline-flex items-center gap-1.5"
+              >
+                <DownloadSimple size={15} weight="bold" />
+                {descargando ? 'Preparando…' : 'Excel'}
+              </button>
+            </div>
+            <VerRecorrido id="whatsapp-banco" listo={!cargando} />
           </div>
         }
       />
 
-      <div className="flex items-center gap-1">
+      <div data-recorrido="wa-banco-vista" className="flex items-center gap-1">
         {([['mensajes', 'Mensajes', TablaIcono], ['numeros', 'Por número', ListNumbers]] as const).map(
           ([id, texto, Icono]) => (
             <button
@@ -223,7 +230,7 @@ export default function BancoPage() {
         )}
       </div>
 
-      <div className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center gap-2">
+      <div data-recorrido="wa-banco-filtros" className="bg-card border border-border rounded-xl p-3 flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px]">
           <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -288,7 +295,7 @@ export default function BancoPage() {
       )}
 
       {vista === 'numeros' ? (
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div data-recorrido="wa-banco-lista" className="bg-card border border-border rounded-xl overflow-hidden">
           {cargando ? (
             <p className="text-sm text-muted-foreground text-center py-10">Cargando…</p>
           ) : !numeros.length ? (
@@ -347,7 +354,7 @@ export default function BancoPage() {
         </div>
       ) : (
         <>
-          <div className="bg-card border border-border rounded-xl overflow-hidden">
+          <div data-recorrido="wa-banco-lista" className="bg-card border border-border rounded-xl overflow-hidden">
             {cargando ? (
               <p className="text-sm text-muted-foreground text-center py-10">Cargando…</p>
             ) : !filas.length ? (

@@ -7,6 +7,8 @@ import { Button } from '@/shared/components/ui/button';
 import { inputClass } from '@/shared/lib/ui';
 import { consultasApi, type MiCarga, type NivelCarga, type DatosReales } from '../api/consultas.api';
 import ConsultasNav, { mensajeDeError } from '../components/ConsultasNav';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   «Mi carga de trabajo» (#189): el tutor escribe en qué está y elige un nivel.
@@ -85,10 +87,13 @@ export default function MiCargaPage() {
   }
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ConsultasNav />
       <PageHeader title="Mi carga de trabajo"
-        subtitle="Cuéntale a administración en qué estás y cuánta carga tienes. Actualízala al menos una vez por semana." />
+        subtitle="Cuéntale a administración en qué estás y cuánta carga tienes. Actualízala al menos una vez por semana."
+        actions={<VerRecorrido id="consultas-carga" listo={!!datos} />} />
 
       {error && !datos ? (
         <p role="alert" className="text-sm text-destructive">No se ha podido cargar tu carga de trabajo: {error}</p>
@@ -112,7 +117,7 @@ export default function MiCargaPage() {
               <Field label="Nivel de carga" required
                 error={faltaNivel ? 'Falta el nivel: elige baja, media, alta o completa en «Nivel de carga».' : undefined}
                 hint="Con «Completa» no te llegan consultas nuevas si hay otro tutor en el campus.">
-                <div role="radiogroup" aria-label="Nivel de carga" className="flex flex-wrap gap-1">
+                <div role="radiogroup" aria-label="Nivel de carga" data-recorrido="consultas-carga-nivel" className="flex flex-wrap gap-1">
                   {NIVELES.map((n) => (
                     <button key={n.valor} type="button" role="radio" aria-checked={nivel === n.valor}
                       onClick={() => { setNivel(n.valor); setFaltaNivel(false); }}
@@ -126,7 +131,7 @@ export default function MiCargaPage() {
                 <textarea id="carga-texto" rows={4} value={texto} maxLength={2000} onChange={(e) => setTexto(e.target.value)}
                   className={`${inputClass} h-auto py-2`} />
               </Field>
-              <div className="flex items-center justify-between gap-2">
+              <div data-recorrido="consultas-carga-guardar" className="flex items-center justify-between gap-2">
                 <span className="text-xs text-muted-foreground">
                   {datos.actual ? `Última actualización: ${fechaHora(datos.actual.created_at)}` : 'Sin actualizar todavía'}
                 </span>
@@ -134,7 +139,7 @@ export default function MiCargaPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-border bg-card">
+            <div data-recorrido="consultas-carga-historial" className="rounded-lg border border-border bg-card">
               <h2 className="px-4 py-2 text-sm font-semibold border-b border-border">Historial</h2>
               {datos.historial.length === 0 ? (
                 <p className="px-4 py-3 text-sm text-muted-foreground">Sin cambios todavía.</p>
@@ -154,7 +159,7 @@ export default function MiCargaPage() {
             </div>
           </section>
 
-          <aside className="space-y-2">
+          <aside data-recorrido="consultas-carga-datos" className="space-y-2">
             <h2 className="text-sm font-semibold">Tus datos reales</h2>
             <p className="text-xs text-muted-foreground">Los cuenta el CRM, al lado de lo que tú indicas.</p>
             <DatosRealesTutor d={datos.datosReales} />

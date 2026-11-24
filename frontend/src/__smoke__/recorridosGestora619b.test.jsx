@@ -259,8 +259,9 @@ describe('el botón «Recorrido» de la cabecera los encuentra por su ruta', () 
   });
 
   it('una pantalla con nombre no es una ficha: «/consultas/metricas» no ofrece el de la consulta', () => {
-    for (const ruta of ['/consultas/alumnos', '/consultas/carga', '/consultas/tutores', '/consultas/metricas', '/consultas/respuestas']) {
-      expect(recorridosDeLaRuta(ruta), ruta).toEqual([]);
+    // Desde la tanda E cada pestaña tiene el suyo (recorridosGestora619c), y solo ese: ni el de la consulta ni el de la bandeja (los de main, consulta-responder y consultas-chat).
+    for (const pestana of ['alumnos', 'carga', 'tutores', 'metricas', 'respuestas']) {
+      expect(recorridosDeLaRuta(`/consultas/${pestana}`), pestana).toEqual([`consultas-${pestana}`]);
     }
     // Lo mismo con la ficha del prospecto (tanda C): Proceso comercial y Convocatorias no son un prospecto.
     expect(recorridosDeLaRuta('/leads/proceso')).toEqual([]);

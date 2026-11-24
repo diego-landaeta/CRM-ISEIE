@@ -10,6 +10,8 @@ import { Button } from '@/shared/components/ui/button';
 import { inputClass } from '@/shared/lib/ui';
 import { consultasApi, type AlumnoSinMensajes, type Color } from '../api/consultas.api';
 import ConsultasNav, { useQuienSoy, VistaMiasTodas, mensajeDeError, fechaCorta, useUltimaPeticion } from '../components/ConsultasNav';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   «Alumnos sin mensajes» (#189): los alumnos matriculados de cada tutor con los
@@ -136,23 +138,30 @@ export default function AlumnosSinMensajesPage() {
   const deTodos = vista === 'todas';
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ConsultasNav />
       <PageHeader
         title="Alumnos sin mensajes"
         subtitle={deTodos
           ? 'Alumnos matriculados con los que su tutor aún no ha hablado. Los más antiguos arriba.'
           : 'Tus alumnos matriculados con los que aún no has hablado. Los más antiguos arriba: escríbeles desde aquí.'}
-        actions={esAdmin && deTodos ? (
-          <Button variant="outline" size="sm" onClick={sincronizar} disabled={sincronizando}>
-            <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
-          </Button>
-        ) : undefined}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {esAdmin && deTodos && (
+              <Button variant="outline" size="sm" onClick={sincronizar} disabled={sincronizando} data-recorrido="consultas-alumnos-sincronizar">
+                <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {sincronizando ? 'Sincronizando…' : 'Sincronizar ahora'}
+              </Button>
+            )}
+            <VerRecorrido id="consultas-alumnos" listo={!cargando} />
+          </div>
+        )}
       />
 
-      {esTutor && esAdmin && <VistaMiasTodas vista={vista} onChange={setVista} textoMias="Mis alumnos" />}
+      {esTutor && esAdmin && <div data-recorrido="consultas-alumnos-vista"><VistaMiasTodas vista={vista} onChange={setVista} textoMias="Mis alumnos" /></div>}
 
-      <p className="text-xs text-muted-foreground">
+      <p data-recorrido="consultas-alumnos-colores" className="text-xs text-muted-foreground">
         Días sin contacto desde la matrícula: ámbar desde el día {dias.ambar} y rojo desde el {dias.rojo}.
         La lista se actualiza con el campus una vez al día.
       </p>
@@ -169,7 +178,9 @@ export default function AlumnosSinMensajesPage() {
         <EmptyState icon={UserCircleMinus} title="Nadie sin contactar"
           description={deTodos ? 'Todos los alumnos matriculados tienen ya una conversación con su tutor.' : 'Ya has hablado con todos tus alumnos.'} />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        // `relative`: el «Acción» solo para lectores de pantalla (`sr-only`, absoluto) se salía
+        // del scroll de la tabla y ensanchaba la página a 522 px en un móvil de 375 (#941, tanda E).
+        <div data-recorrido="consultas-alumnos-lista" className="relative overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>

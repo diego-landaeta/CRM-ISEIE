@@ -8,6 +8,8 @@ import { inputClass } from '@/shared/lib/ui';
 import { cn } from '@/shared/lib/utils';
 import { consultasApi, type RespuestaGuardada } from '../api/consultas.api';
 import ConsultasNav, { mensajeDeError, useQuienSoy } from '../components/ConsultasNav';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   RESPUESTAS DEL CAMPUS (#679): las que coordinación deja preparadas para todas las
@@ -101,14 +103,21 @@ export default function RespuestasCampusPage() {
   }
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ConsultasNav />
       <PageHeader title="Respuestas del campus"
         subtitle={activeProject ? `Las que tienen preparadas todas las tutoras de ${activeProject.nombre}` : 'Elige un campus arriba'}
-        actions={activeProject && !editando && (
-          <Button size="sm" className="h-8" onClick={() => setEditando({ id: null, titulo: '', texto: '' })}>
-            <Plus size={14} weight="bold" className="mr-1.5" aria-hidden /> Nueva
-          </Button>
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {activeProject && !editando && (
+              <Button size="sm" className="h-8" onClick={() => setEditando({ id: null, titulo: '', texto: '' })} data-recorrido="consultas-respuestas-nueva">
+                <Plus size={14} weight="bold" className="mr-1.5" aria-hidden /> Nueva
+              </Button>
+            )}
+            <VerRecorrido id="consultas-respuestas" listo={!!todas} />
+          </div>
         )} />
 
       {!activeProject && (
@@ -120,7 +129,7 @@ export default function RespuestasCampusPage() {
       {activeProject && editando && !editando.id && formulario}
 
       {activeProject && todas && delCampus.length === 0 && !editando && (
-        <div className="rounded-lg border border-dashed border-border px-6 py-10 text-center">
+        <div data-recorrido="consultas-respuestas-lista" className="rounded-lg border border-dashed border-border px-6 py-10 text-center">
           <BookmarkSimple size={22} className="mx-auto text-muted-foreground" aria-hidden />
           <p className="mt-2 text-normal font-semibold text-foreground">Este campus aún no tiene respuestas preparadas</p>
           <p className="mx-auto mt-1 max-w-sm text-secundario text-muted-foreground">Las que añadas aquí les saldrán a todas sus tutoras en el chat, en «Respuestas guardadas».</p>
@@ -128,7 +137,7 @@ export default function RespuestasCampusPage() {
       )}
 
       {activeProject && delCampus.length > 0 && (
-        <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
+        <ul data-recorrido="consultas-respuestas-lista" className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-card">
           {delCampus.map((r) => (
             <li key={r.id} className="px-4 py-3">
               {editando?.id === r.id ? formulario : (
