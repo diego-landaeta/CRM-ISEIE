@@ -9,6 +9,7 @@ import { inputClass } from '@/shared/lib/ui';
 import {
   campusTutorApi, type CampusDelTutor, type CuentaMoodle, type EstadoMatricula, type PanelCampusTutor,
 } from '../api/campusTutor.api';
+import { AVISO_EXCEPCION_ADMIN, SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
 import { consultasApi, type TokenDelTutor } from '@/modules/consultas/api/consultas.api';
 
 /*
@@ -219,14 +220,23 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
                 <span className="text-xs text-muted-foreground sm:text-sm">
                   {c.via === 'empresa' ? `Por la empresa ${c.empresa || ''}` : 'Campus asignado'}
                 </span>
-                <span><Matricula c={c} /></span>
+                <span>
+                  <Matricula c={c} />
+                  {c.admin_sitio_excepcion && (
+                    // La excepción confirmada (24/11): que se vea en la ficha y por qué.
+                    <span data-testid={`excepcion-admin-${c.project_id}`} className="mt-1 block text-xs text-warning-soft-foreground">
+                      {SOLO_DESDE_MOODLE}
+                    </span>
+                  )}
+                </span>
                 <span className="text-xs text-muted-foreground">
                   {c.comprobado_at ? `Comprobado el ${fecha(c.comprobado_at)}` : ''}
                   {c.error && <span className="block text-destructive">{c.error}</span>}
                   {/* Solo en los campus de quien mira: el vínculo de otra empresa no se toca (#689, punto 2). */}
                   {puedeGestionar && c.gestionable !== false && c.campus_conectado && c.estado !== 'activa' && !c.error?.includes('Vincular de nuevo') && (
                     <VincularAMano tutorId={tutorId} c={c} ocupado={ocupado}
-                      alVincular={(id) => hacer(() => campusTutorApi.vincular(tutorId, c.project_id, id), `Vinculada en ${c.campus}`)} />
+                      alVincular={(id, excepcion) => hacer(() => campusTutorApi.vincular(tutorId, c.project_id, id, excepcion),
+                        excepcion ? `Vinculada en ${c.campus} (excepción: cuenta de administración del sitio)` : `Vinculada en ${c.campus}`)} />
                   )}
                   {puedeGestionar && c.gestionable !== false && c.error?.includes('Vincular de nuevo') && (
                     <button type="button" className="mt-1 text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
@@ -352,23 +362,27 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
  * las consultas del campus.
  */
 function VincularAMano({ tutorId, c, ocupado, alVincular }: {
-  tutorId: number; c: CampusDelTutor; ocupado: boolean; alVincular: (moodleUserId: number) => void;
+  tutorId: number; c: CampusDelTutor; ocupado: boolean; alVincular: (moodleUserId: number, excepcionAdminDelSitio: boolean) => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [q, setQ] = useState('');
   const [buscando, setBuscando] = useState(false);
   const [cuenta, setCuenta] = useState<CuentaMoodle | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
+  // La cuenta de administración del sitio (24/11): solo se enlaza confirmando la excepción.
+  const [cuentaAdmin, setCuentaAdmin] = useState<CuentaMoodle | null>(null);
+  const [confirmada, setConfirmada] = useState(false);
 
   async function buscar(e: React.FormEvent) {
     e.preventDefault();
-    setBuscando(true); setError(null); setCuenta(undefined);
+    setBuscando(true); setError(null); setCuenta(undefined); setCuentaAdmin(null); setConfirmada(false);
     try {
       const r = await campusTutorApi.buscarCuenta(tutorId, c.project_id, q.trim());
       setCuenta(r.data ?? null);
     } catch (err) {
-      const x = err as { data?: { error?: string }; message?: string };
-      setError(x?.data?.error || x?.message || 'No se ha podido buscar.');
+      const x = err as { data?: { error?: string; code?: string; data?: { cuenta?: CuentaMoodle } }; message?: string };
+      if (x?.data?.code === 'ADMIN_DEL_SITIO' && x.data.data?.cuenta) setCuentaAdmin(x.data.data.cuenta);
+      else setError(x?.data?.error || x?.message || 'No se ha podido buscar.');
     } finally { setBuscando(false); }
   }
 
@@ -399,10 +413,30 @@ function VincularAMano({ tutorId, c, ocupado, alVincular }: {
             <span className="font-medium text-foreground">{cuenta.nombre || 'Sin nombre'}</span>
             <span className="text-muted-foreground"> · {cuenta.email || 'sin correo visible'}{cuenta.suspendido ? ' · suspendida' : ''}</span>
           </span>
-          <Button type="button" size="sm" className="h-7 text-xs" disabled={ocupado} onClick={() => alVincular(cuenta.id)}>Es ella: vincular</Button>
+          <Button type="button" size="sm" className="h-7 text-xs" disabled={ocupado} onClick={() => alVincular(cuenta.id, false)}>Es ella: vincular</Button>
         </div>
       )}
-      <button type="button" onClick={() => { setAbierto(false); setCuenta(undefined); setQ(''); }} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
+      {cuentaAdmin && (
+        <div role="alert" data-testid="excepcion-admin" className="space-y-2 rounded border border-warning/40 bg-warning-soft px-2.5 py-2 text-xs text-warning-soft-foreground">
+          <p className="flex items-start gap-1.5 font-semibold">
+            <Warning size={14} weight="fill" className="mt-0.5 shrink-0" aria-hidden /> {AVISO_EXCEPCION_ADMIN}
+          </p>
+          <p>
+            <span className="font-medium">{cuentaAdmin.nombre || 'Sin nombre'}</span> · {cuentaAdmin.email || 'sin correo visible'}.
+            {' '}Desde el CRM verá sus cursos, tareas, entregas y dudas, pero responderá y corregirá desde Moodle:
+            el plugin del CRM no envía ni califica como el administrador del sitio.
+          </p>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" checked={confirmada} onChange={(e) => setConfirmada(e.target.checked)} className="mt-0.5" />
+            <span>Lo confirmo: ella da clase con esta cuenta y se enlaza como excepción.</span>
+          </label>
+          <Button type="button" size="sm" className="h-7 text-xs" disabled={ocupado || !confirmada}
+            onClick={() => alVincular(cuentaAdmin.id, true)}>
+            Enlazar como excepción
+          </Button>
+        </div>
+      )}
+      <button type="button" onClick={() => { setAbierto(false); setCuenta(undefined); setCuentaAdmin(null); setConfirmada(false); setQ(''); }} className="text-xs text-muted-foreground hover:text-foreground">Cancelar</button>
     </form>
   );
 }

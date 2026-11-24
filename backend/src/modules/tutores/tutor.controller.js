@@ -912,7 +912,10 @@ export async function buscarCuentaMoodle(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId } — vincular a mano esa cuenta
+// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId, excepcionAdminDelSitio? } — vincular a mano esa cuenta
+// `excepcionAdminDelSitio: true` (Diego, 24/11): enlazar igual la cuenta de administración del
+// sitio porque ella da clase con ella. Solo `true` de verdad cuenta como confirmación; la ruta ya
+// pide `tutores.gestionar`, y queda anotado quién lo confirmó.
 export async function vincularCuentaMoodle(req, res, next) {
   try {
     const id = await exigirTutorGestionable(req);
@@ -920,8 +923,11 @@ export async function vincularCuentaMoodle(req, res, next) {
     const moodleUserId = parseInt(req.body?.moodleUserId);
     if (!Number.isInteger(moodleUserId) || moodleUserId <= 0) throw new AppError('Cuenta de Moodle no válida', 400, 'VALIDATION_ERROR');
     await exigirCampusMio(req, projectId);
-    await campusTutor.vincularAMano(id, projectId, moodleUserId);
-    res.json({ success: true, data: await panelDelTutor(req, id, []) });
+    const cuenta = await campusTutor.vincularAMano(id, projectId, moodleUserId, {
+      excepcionAdminDelSitio: req.body?.excepcionAdminDelSitio === true,
+      porQuien: Number.isInteger(req.user?.userId) && req.user.userId > 0 ? req.user.userId : null,
+    });
+    res.json({ success: true, data: { ...(await panelDelTutor(req, id, [])), admin_del_sitio: Boolean(cuenta?.adminDelSitio) } });
   } catch (err) { next(err); }
 }
 
