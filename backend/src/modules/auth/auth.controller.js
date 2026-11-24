@@ -10,7 +10,7 @@ import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSc
 import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
-import { pluginMoodleActivo, linksPagoActivos } from '../../shared/config/soloEnPruebas.js';
+import { pluginMoodleActivo, linksPagoActivos, suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
 
 // /api/auth/me devuelve el mapa de `permissions` calculado (rol, rol a medida
 // y lo dado a una persona suelta), igual que MultiCRM. `view` sigue vacío: la
@@ -232,6 +232,9 @@ export async function me(req, res, next) {
             // aquí dice que sí: en producción, con LINKS_PAGO_EN_PRODUCCION=1; en /staging y
             // en local, siempre. Quién los usa lo dicen después los permisos `links_pago.*`.
             links_pago: linksPagoActivos(),
+            // Las suspensiones de Moodle en la ficha (gemela de CRM#531), con
+            // SUSPENSIONES_MOODLE_EN_PRODUCCION.
+            suspensiones_moodle: suspensionesMoodleActivas(),
           },
         },
         permissions,

@@ -12,6 +12,7 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo, alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { avanceDelAlumno } from './avance-moodle.js';
+import { suspensionesDelAlumno, suspensionesListas } from './suspensiones-moodle.js';
 
 // ============================================================
 // WEBHOOK (publico, autenticado por API key en header)
@@ -279,6 +280,28 @@ export async function avanceEnMoodle(req, res, next) {
     const refrescar = ['1', 'true'].includes(String(req.query.refrescar || ''));
     const data = await avanceDelAlumno(rows[0], { campusPermitidos, refrescar });
     res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+/**
+ * Sus suspensiones y reactivaciones en Moodle (gemela de CRM#531): el estado por campus y
+ * el historial, de lo que avisa el plugin. Los mismos permisos que el avance en Moodle: su
+ * ficha (una gestora, solo los suyos) y, dentro, solo los campus de quien mira. Con
+ * SUSPENSIONES_MOODLE_EN_PRODUCCION apagado (o sin la migración 333), `disponible: false`.
+ */
+export async function suspensionesEnMoodle(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
+    if (!(await suspensionesListas())) {
+      return res.json({ success: true, data: { disponible: false, suspendido: false, campus: [], historial: [] } });
+    }
+    const { rows } = await query('SELECT id, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!rows[0]) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
+    await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
+    const campusPermitidos = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
+    res.json({ success: true, data: await suspensionesDelAlumno(id, { campusPermitidos }) });
   } catch (err) { next(err); }
 }
 

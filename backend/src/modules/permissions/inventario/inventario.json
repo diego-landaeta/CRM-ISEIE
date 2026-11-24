@@ -8673,6 +8673,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/leads/:id/suspensiones-moodle",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/:id/suspensiones-moodle",
+  "relativa": "GET /:id/suspensiones-moodle",
+  "controlador": "suspensionesEnMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/leads/:id/merge",
   "tipo": "ruta",
   "modulo": "leads",
