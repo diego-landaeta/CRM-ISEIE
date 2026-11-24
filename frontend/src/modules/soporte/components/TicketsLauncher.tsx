@@ -192,7 +192,7 @@ function TicketCard({ ticket }) {
   const queSePide = esAcceso ? resumenDeAcceso(ticket.acceso) : [];
 
   function cycleStatus() {
-    const order: Array<'open' | 'in_review' | 'resolved' | 'closed'> = ['open', 'in_review', 'resolved', 'closed'];
+    const order: Array<'open' | 'in_review' | 'follow_up' | 'resolved' | 'closed'> = ['open', 'in_review', 'follow_up', 'resolved', 'closed'];
     const idx = order.indexOf(ticket.status);
     const next = order[(idx + 1) % order.length];
     // Una petición de acceso se mueve por su ruta, que pide «Gestionar las peticiones de acceso».

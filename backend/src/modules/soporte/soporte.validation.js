@@ -15,7 +15,7 @@ import { z } from 'zod';
 const KIND = ['bug', 'feature', 'question', 'access'];
 const KIND_DEL_FORMULARIO = ['bug', 'feature', 'question'];
 const SEVERITY = ['low', 'medium', 'high', 'critical'];
-const ESTADO = ['open', 'in_review', 'resolved', 'closed'];
+const ESTADO = ['open', 'in_review', 'follow_up', 'resolved', 'closed'];
 
 /** Texto largo opcional: el formulario manda cadena vacia cuando no se rellena. */
 const textoLargo = z.string().max(20000).optional().nullable()
