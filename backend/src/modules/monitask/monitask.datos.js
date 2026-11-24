@@ -127,6 +127,15 @@ export function camposDe(items) {
   return [...set].sort();
 }
 
+/**
+ * El aviso cuando Monitask devuelve datos y el CRM no entiende ninguno: con los
+ * NOMBRES de sus campos (nunca valores), para poder adaptar la lectura.
+ */
+export function avisoDeFormato(que, cuantas, campos = []) {
+  const lista = (campos || []).slice(0, 25).join(', ') || 'ninguno';
+  return `Monitask devolvió ${cuantas} ${que} y el CRM no ha sabido leer ninguna. Campos que trae: ${lista}.`;
+}
+
 const esCorreo = (v) => typeof v === 'string' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
 
 export function normalizarUsuario(u) {
