@@ -377,7 +377,7 @@ export const tutoresApi = {
    *  está, se le da de alta ahí en el mismo paso (#223). Sin él, ese caso es un
    *  409 `OTRO_PROYECTO` con el campus en `data`. */
   crearColaboracion: (datos: {
-    tutorId: number; productId: number; pct: number; desde: string; hasta?: string | null; notas?: string;
+    tutorId: number; productId: number; pct?: number; desde: string; hasta?: string | null; notas?: string;
     anadirAlCampus?: boolean;
   }) => client.post('/tutores/colaboraciones', datos) as Promise<ApiResponse<Colaboracion & {
     campusAnadido?: { projectId: number; proyecto: string | null };

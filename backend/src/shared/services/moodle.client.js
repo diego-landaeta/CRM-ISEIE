@@ -788,6 +788,56 @@ export async function guardarCursoEnMoodle(conexion, {
 }
 
 /**
+ * Lo que hace falta saber del campus para crear en él el curso de una formación
+ * (CRM#1113, fase 2): sus categorías y los nombres cortos que ya están cogidos. SOLO LEE.
+ *
+ * Los nombres cortos salen de `core_course_get_courses_by_field`, que está en el servicio
+ * del plugin. Las categorías, con su árbol entero, de `core_course_get_categories`; pero el
+ * servicio del plugin (1.11.x) no la tiene, y entonces salen de los mismos cursos: solo las
+ * que tienen alguno, sin su categoría padre (por eso pueden repetirse nombres, como las
+ * facultades de ISEIE, y la pantalla enseña el id al lado).
+ *
+ * Devuelve { fuente: 'moodle' | 'cursos', categorias: [{ id, nombre, ruta, cursos }], cortos: [] }.
+ */
+export async function categoriasDelCampus(conexion, opciones) {
+  const r = await llamar(conexion, 'core_course_get_courses_by_field', {}, opciones);
+  const cursos = (Array.isArray(r?.courses) ? r.courses : []).filter((c) => c && c.format !== 'site' && Number(c.id) > 1);
+  const cortos = cursos.map((c) => String(c.shortname || '').trim()).filter(Boolean);
+  let categorias = null;
+  try {
+    const cats = await llamar(conexion, 'core_course_get_categories', {}, opciones);
+    if (Array.isArray(cats)) {
+      const porId = new Map(cats.map((c) => [Number(c.id), c]));
+      const ruta = (c) => {
+        const partes = [];
+        for (let x = c, n = 0; x && n < 20; x = porId.get(Number(x.parent)), n += 1) partes.unshift(String(x.name));
+        return partes.join(' › ');
+      };
+      categorias = cats.map((c) => ({
+        id: Number(c.id), nombre: String(c.name), ruta: ruta(c), profundidad: Number(c.depth) || 1, cursos: Number(c.coursecount) || 0,
+      }));
+    }
+  } catch (err) {
+    // Al token le falta la función: no es que el campus falle. Lo demás, sí se dice.
+    if (!(err instanceof MoodleError) || !['PERMISO', 'SIN_FUNCION'].includes(err.codigo)) throw err;
+  }
+  const fuente = categorias ? 'moodle' : 'cursos';
+  if (!categorias) {
+    const porId = new Map();
+    for (const c of cursos) {
+      const id = Number(c.categoryid);
+      if (!(id > 0)) continue;
+      const o = porId.get(id) || { id, nombre: String(c.categoryname || `Categoría ${id}`), ruta: null, profundidad: null, cursos: 0 };
+      o.cursos += 1;
+      porId.set(id, o);
+    }
+    categorias = [...porId.values()];
+  }
+  categorias.sort((a, b) => (a.ruta || a.nombre).localeCompare(b.ruta || b.nombre, 'es') || a.id - b.id);
+  return { fuente, categorias, cortos };
+}
+
+/**
  * Las entregas POR CORREGIR de esas tareas: { tareaId: [{ alumnoId, entregadaAt }] }.
  * Por tandas de `TAREAS_POR_LLAMADA` (entregas y notas de cada tanda a la vez).
  */

@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-921 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+924 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -527,6 +527,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | salud | `GET /api/integrations/salud` | (no existía) | (ruta nueva) | `integrations.salud` |
 | comprobar | `POST /api/integrations/salud/comprobar` | (no existía) | (ruta nueva) | `integrations.salud` |
+| ver | `GET /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.view` |
+| guardar | `PUT /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.edit` |
 | getOne | `GET /api/integrations/:provider` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | upsert | `PUT /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
 | test | `POST /api/integrations/:provider/test` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
@@ -914,6 +916,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | verFormacion | `GET /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.view` |
 | crearFormacion | `POST /api/products/formacion` | (no existía) | (ruta nueva) | `products.create` |
 | guardarFormacion | `PUT /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.edit` |
+| verMoodle | `GET /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
 | llevarAMoodle | `POST /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
 
 ## project-channels

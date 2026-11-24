@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
+import CategoriasFormacionesMoodle from '../components/CategoriasFormacionesMoodle';
 import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
@@ -1233,6 +1234,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
             <p className="text-xs text-muted-foreground">Leyendo desde el {fmt(String(data.config_public.consultas_desde))}.</p>
           )}
         </div>
+
+        {/* CRM#1113, fase 2: la categoría de cada tipo para «Crear en Moodle» en Formaciones. */}
+        {data?.has_secret && <CategoriasFormacionesMoodle projectId={projectId} />}
 
         <TestStatus data={data} aviso={faltas.length > 0} />
         {funcionesProbadas?.grupos && (
