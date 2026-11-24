@@ -203,8 +203,16 @@ const RECOVERY_EXPIRY_HOURS = 24;
 /** Minutos durante los que un enlace recien emitido impide emitir otro. */
 const RECOVERY_REENVIO_MIN = 5;
 
-/** ¿Es tutor (o tutor redactor), de rol principal o de mas? Para el freno. */
-const esTutor = (u) => [u?.role, ...(u?.roles_extra || [])].some((r) => ROLES_DE_TUTOR.includes(r));
+/**
+ * ¿La para el freno de los tutores? Solo a la tutora «normal», la que trabaja en
+ * Moodle y en el CRM es solo un registro. La tutora REDACTORA entra y trabaja en
+ * el CRM: «el olvidar contraseña debe funcionar» (Diego, 24/11/2026), también si
+ * además es tutora. Por eso ya no vale con tener cualquiera de ROLES_DE_TUTOR.
+ */
+const esTutor = (u) => {
+  const suyos = [u?.role, ...(u?.roles_extra || [])];
+  return suyos.some((r) => ROLES_DE_TUTOR.includes(r)) && !suyos.includes('tutor_redactor');
+};
 
 /**
  * «He olvidado la contraseña» (#37).

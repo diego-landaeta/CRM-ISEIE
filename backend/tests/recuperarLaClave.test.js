@@ -240,6 +240,20 @@ describe('el freno de los tutores (NO_ESCRIBIR_A_TUTORES)', () => {
     expect(enviado).not.toHaveBeenCalled();
   });
 
+  it('a la tutora REDACTORA sí le llega: trabaja en el CRM (Diego, 24/11), de rol principal o de más', async () => {
+    for (const quien of [
+      { ...TUTORA, role: 'tutor_redactor', roles_extra: [] },
+      { ...TUTORA, role: 'tutor', roles_extra: ['tutor_redactor'] },
+      { ...TUTORA, role: 'colaborador', roles_extra: ['tutor_redactor'] },
+    ]) {
+      modelo.setRecoveryToken.mockClear(); enviado.mockClear();
+      modelo.findActiveUserByEmail.mockResolvedValue(quien);
+      await pedirRecuperacion(TUTORA.email);
+      expect(modelo.setRecoveryToken).toHaveBeenCalled();
+      expect(enviado).toHaveBeenCalled();
+    }
+  });
+
   it('a quien no es tutor si le llega el enlace', async () => {
     modelo.findActiveUserByEmail.mockResolvedValue({ ...LAURA, role: 'gestor', roles_extra: [] });
     await pedirRecuperacion(LAURA.email);
