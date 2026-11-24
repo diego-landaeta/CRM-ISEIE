@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
-import { esSoloRedactora } from '@/shared/lib/roles';
+import { soloEsTutorRedactor } from '@/shared/lib/roles';
 import {
   ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, ListBullets, Warning,
 } from '@phosphor-icons/react';
@@ -353,7 +353,7 @@ function Resumen({ porCorregir, dudas, porDesarrollar, conCampus }: { porCorregi
 export default function MiCampusPage() {
   // La redactora no tiene comisiones: sin el enlace (Diego, 24/11/2026).
   const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
-  const soloRedactora = esSoloRedactora(user);
+  const soloRedactora = soloEsTutorRedactor(user);
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);

@@ -110,13 +110,3 @@ export function tieneWhatsapp(
   if (user?.usa_whatsapp === false) return false;
   return permissions[PERMISO_DEL_AVISO] === true;
 }
-
-/**
- * ¿Es SOLO tutora redactora? Como el menú (Sidebar): sin otro rol que se lo dé.
- * La redactora cobra por su factura del mes, no por comisiones: no ve «Mis cursos y
- * comisiones» (Diego, 24/11/2026). Una tutora que además es redactora sí la ve.
- */
-export function esSoloRedactora(user: { role?: string; roles_extra?: string[] } | null | undefined): boolean {
-  const suyos = [user?.role, ...(Array.isArray(user?.roles_extra) ? user.roles_extra : [])].filter(Boolean);
-  return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
-}

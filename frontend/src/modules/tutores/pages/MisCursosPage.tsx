@@ -4,7 +4,7 @@ import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
 import { useAuth } from '@/contexts/AuthContext';
-import { tieneRol, ROLES_DE_TUTOR, esSoloRedactora } from '@/shared/lib/roles';
+import { tieneRol, ROLES_DE_TUTOR, soloEsTutorRedactor } from '@/shared/lib/roles';
 import { Navigate } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
@@ -59,7 +59,7 @@ function mesActual() {
 /** La redactora no tiene comisiones: /mis-cursos la lleva a Mi campus (Diego, 24/11/2026). */
 export default function MisCursosPage() {
   const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
-  if (esSoloRedactora(user)) return <Navigate to="/mis-cursos/campus" replace />;
+  if (soloEsTutorRedactor(user)) return <Navigate to="/mis-cursos/campus" replace />;
   return <MisCursosContenido />;
 }
 

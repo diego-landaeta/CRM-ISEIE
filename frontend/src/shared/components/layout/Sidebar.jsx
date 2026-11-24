@@ -14,7 +14,7 @@ import {
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
-import { rolesDe } from '@/shared/lib/roles';
+import { rolesDe, soloEsTutorRedactor } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 import ContadorConsultas from './ContadorConsultas';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -129,6 +129,8 @@ export const SECCIONES_DE_ANTES = [
   // mismo y nadie tiene una bandeja de «por aprobar» (tampoco Carlos).
   {
     label: 'Equipo de Desarrollo',
+    // Para quien es solo tutora redactora, «Mis tareas»: funciona igual (Diego, 24/11/2026).
+    labelRedactora: 'Mis tareas',
     items: [
       // El tutor, su tablero de tutores (Diego, 04/11): con «Ver su tablero».
       { to: '/tareas', label: 'Mi tablero', icon: Kanban, roles: [...ROLES_TAREAS, 'tutor'], end: true, permiso: 'tasks.view_own', oPermiso: 'tasks.view_own' },
@@ -832,7 +834,7 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
               aria-expanded={open}
               className="w-full flex items-center justify-between px-3 py-1.5 rounded-md text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70 hover:text-foreground hover:bg-secondary/40 transition-colors select-none"
             >
-              <span>{section.label}</span>
+              <span>{nombreDeSeccion(section, permisos)}</span>
               <CaretDown
                 size={10}
                 weight="bold"
@@ -853,6 +855,11 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
 
 /** ¿Se ve el menú fijo del PC (`lg`, 1024 px)? El mismo corte que AppLayout. */
 const PC = '(min-width: 1024px)';
+/** El nombre de una sección del menú: la tutora redactora ve el suyo si lo tiene (Diego, 24/11/2026). */
+export function nombreDeSeccion(section, user) {
+  return section.labelRedactora && soloEsTutorRedactor(user) ? section.labelRedactora : section.label;
+}
+
 function useEsPC() {
   const mq = () => (typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia(PC) : null);
   const [esPC, setEsPC] = useState(() => !!mq()?.matches);
