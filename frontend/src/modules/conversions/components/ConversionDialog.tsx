@@ -1170,9 +1170,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                     <LinkIcon size={13} weight="bold" /> Generar link de pago de Stripe
                   </span>
                   <span className="block text-[12px] text-info-soft-foreground">
-                    {form.metodo_pago === 'fraccionado' && installments.length >= 1
-                      ? `Un link por cada cuota (${installments.length}), con su importe y su fecha. Al pagar uno, se salda esa cuota.`
-                      : `Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
+                    {/* Fraccionado lo decide «¿Se cobra con link de pago?»: aquí, pago único. */}
+                    {`Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
                     {' '}Te los damos al registrar, listos para copiar, y quedan en la ficha de la venta.
                   </span>
                 </span>
