@@ -132,6 +132,12 @@ describe('Mi campus · por corregir', () => {
     ]);
   });
 
+  it('los cursos con algo que hacer empiezan abiertos, como antes (Diego, 24/11)', async () => {
+    pintar();
+    expect(await screen.findByRole('button', { name: /Curso de Fono/ })).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getByRole('button', { name: /Curso de ISEF/ })).toHaveAttribute('aria-expanded', 'true');
+  });
+
   it('la pantalla de corregir abre la entrega pedida con ?alumno=', async () => {
     api.verTarea.mockResolvedValue({ success: true, data: {
       tarea: { id: 77, nombre: 'Caso práctico', notaMax: 10, entrega: null, enunciado: '', comentarios: true, moodleUrl: '#', calificable: true, enGrupo: false },

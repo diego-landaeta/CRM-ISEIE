@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
+import { render, screen, cleanup, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /*
@@ -9,7 +9,7 @@ import { MemoryRouter } from 'react-router-dom';
     · arriba, «X entregas por corregir, Y dudas sin contestar y Z cursos por desarrollar»;
     · arriba, todo junto (gemela de CRM#1084): las consultas por responder y las entregas
       por corregir, que se corrigen DESDE EL CRM (la pantalla de corregir, con el plugin);
-    · por curso (se abre al pulsarlo): sus tareas y los alumnos con su último acceso y su
+    · por curso (abierto de entrada si tiene algo que hacer): sus tareas y los alumnos con su último acceso y su
       % hecho («—» si Moodle no lo da, no 0 %);
     · al lado, lo que tiene por desarrollar, con su fecha.
 */
@@ -108,8 +108,8 @@ describe('Mi campus (#408)', () => {
   it('cada alumno con su último acceso y su % hecho; sin dato, «—» y no 0 %', async () => {
     pintar();
     await screen.findByTestId('resumen-mi-campus');
-    // Los cursos empiezan cerrados: lo que hay que hacer ya está arriba.
-    fireEvent.click(screen.getByRole('button', { name: /Máster en Psicología/ }));
+    // El curso con algo que hacer empieza abierto, como antes.
+    expect(screen.getByRole('button', { name: /Máster en Psicología/ })).toHaveAttribute('aria-expanded', 'true');
     const filas = screen.getAllByTestId('alumno-campus');
     const de = (n) => filas.find((f) => f.textContent.includes(n));
     expect(within(de('Ana Prueba')).getByTestId('progreso-alumno')).toHaveTextContent('63%');

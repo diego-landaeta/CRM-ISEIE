@@ -352,7 +352,8 @@ export default function MiCampusPage() {
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
-  // Los cursos empiezan cerrados: lo que hay que hacer ya está arriba, todo junto.
+  // Los cursos con algo que hacer empiezan abiertos, como antes (Diego, 24/11: «todo abierto
+  // como antes, no minimizado»), aunque lo pendiente también esté arriba, todo junto.
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
   // Los campus que ve: [] = todos. Se recuerda en este navegador.
   const [elegidos, setElegidos] = useState<number[]>(leerCampusElegidos);
@@ -381,6 +382,11 @@ export default function MiCampusPage() {
       const r = await tutoresApi.miCampus(refrescar, elegidosRef.current);
       if (r.success && r.data) {
         setDatos(r.data); setError(null);
+        // De entrada, abiertos los cursos con algo que hacer.
+        if (!refrescar) {
+          setAbiertos(new Set(r.data.campus.flatMap((c) => c.cursos
+            .filter((k) => porCorregirDe(k) || k.dudas.length).map((k) => `${c.projectId}-${k.id}`))));
+        }
         // Lo guardado ya no es suyo (otro campus, otra persona en este navegador): todos.
         if (elegidosRef.current.length && r.data.elegidos === null) {
           setElegidos([]); guardarCampusElegidos([]);
