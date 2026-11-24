@@ -437,7 +437,7 @@ describe('anular (POST /api/links-pago/:id/anular)', () => {
     expect(r.body.data).toMatchObject({ estado: 'anulado', anulado_por: p.gestora1.id, motivo_anulacion: 'Se equivocó de curso' });
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].cuerpo).toEqual({ active: 'false' });
-    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [id])).map((e) => e.tipo)).toEqual(['creado', 'anulado']);
+    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [id])).map((e) => e.tipo)).toEqual(['creado', 'venta_del_link', 'anulado']);
     // Otra vez: ya no se puede.
     expect((await api.post(`/api/links-pago/${id}/anular`).set(como(p.gestora1)).send({ motivo: 'otra vez' })).status).toBe(409);
   });

@@ -317,9 +317,9 @@ describe('el cobro del link usado, al pago inicial de la venta', { timeout: 60_0
   const conCargos = () => [
     ['GET', '/v1/charges', 200, (l) => ({ data: [...cargos.values()].filter((c) => c.payment_intent === l.query.payment_intent) })],
     ['GET', /^\/v1\/charges\/[^/]+$/, 200, (l) => cargos.get(l.ruta.split('/').pop()) || { __status: 404, error: { message: 'No such charge' } }],
-    ['GET', '/v1/payment_links', 200, { data: [{ id: `plink_usado_${MARCA}`, url: `https://buy.stripe.com/test_usado_${m}` }], has_more: false }],
+    ['GET', '/v1/payment_links', 200, { data: [{ id: `plink_usado${MARCA}`, url: `https://buy.stripe.com/test_usado_${m}` }], has_more: false }],
     ['GET', '/v1/checkout/sessions', 200, (l) => ({
-      data: l.query.payment_link === `plink_usado_${MARCA}` ? [{ id: 'cs_test_x', payment_status: 'paid', payment_intent: `pi_usado_${MARCA}` }] : [],
+      data: l.query.payment_link === `plink_usado${MARCA}` ? [{ id: 'cs_test_x', payment_status: 'paid', payment_intent: `pi_usado${MARCA}` }] : [],
     })],
   ];
   beforeEach(() => { respuestas = [...BASICAS(), ...conCargos()]; });
@@ -327,11 +327,11 @@ describe('el cobro del link usado, al pago inicial de la venta', { timeout: 60_0
   it('con el pi_: se trae el cargo y se une al pago inicial, aunque el correo sea otro; sin otro cobro', async () => {
     const lead = await nuevoLead({ email: `ficha.pi@${m}.test` });
     const v = await nuevaVenta(lead, { total: 900, pagado: 300 });
-    const ch = cargoDe({ id: `ch_pi_${MARCA}`, importe: 300, email: 'otra.persona@example.com' });
-    ch.payment_intent = `pi_pi_${MARCA}`;
+    const ch = cargoDe({ id: `ch_pago${MARCA}`, importe: 300, email: 'otra.persona@example.com' });
+    ch.payment_intent = `pi_pago${MARCA}`;
     cargos.set(ch.id, ch);
     const r = await unirCargoDeLaReferencia({
-      projectId: A, referencia: `pi_pi_${MARCA}`, importe: 300, conversionId: v.id, conversionPaymentId: v.cp, userId: p.gestora.id,
+      projectId: A, referencia: `pi_pago${MARCA}`, importe: 300, conversionId: v.id, conversionPaymentId: v.cp, userId: p.gestora.id,
     });
     expect(r.estado, r.mensaje).toBe('unido');
     expect(r.mensaje).toMatch(/otra\.persona@example\.com/);
@@ -340,7 +340,7 @@ describe('el cobro del link usado, al pago inicial de la venta', { timeout: 60_0
     expect(await q('SELECT importe::float8 AS importe FROM conversion_payments WHERE conversion_id = $1', [v.id])).toEqual([{ importe: 300 }]);
 
     // Otra vez: ya está.
-    const otra = await unirCargoDeLaReferencia({ projectId: A, referencia: `pi_pi_${MARCA}`, importe: 300, conversionId: v.id, conversionPaymentId: v.cp });
+    const otra = await unirCargoDeLaReferencia({ projectId: A, referencia: `pi_pago${MARCA}`, importe: 300, conversionId: v.id, conversionPaymentId: v.cp });
     expect(otra.estado).toBe('ya_unido');
 
     // El mismo cobro pegado en OTRA venta: avisa y no lo mueve.
@@ -352,8 +352,8 @@ describe('el cobro del link usado, al pago inicial de la venta', { timeout: 60_0
   });
 
   it('con el link de buy.stripe.com: lo encuentra por sus sesiones pagadas (y «Buscar en Stripe» no une nada)', async () => {
-    const ch = cargoDe({ id: `ch_usado_${MARCA}`, importe: 250 });
-    ch.payment_intent = `pi_usado_${MARCA}`;
+    const ch = cargoDe({ id: `ch_usado${MARCA}`, importe: 250 });
+    ch.payment_intent = `pi_usado${MARCA}`;
     cargos.set(ch.id, ch);
     const ver = await api.get('/api/links-pago/buscar-cobro')
       .query({ projectId: A, referencia: `https://buy.stripe.com/test_usado_${m}`, importe: 250 }).set(como(p.gestora));
