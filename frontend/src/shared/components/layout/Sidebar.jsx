@@ -10,7 +10,7 @@ import {
   Receipt, Coins, Wrench, ShoppingBag, ChatCircleText, Wallet, Bank, Shuffle, Clock, GitMerge, CopySimple,
   UsersThree, CloudArrowDown,
   GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond, ArrowsLeftRight,
-  CalendarCheck, ArrowCounterClockwise, LinkSimple } from '@phosphor-icons/react';
+  CalendarCheck, ArrowCounterClockwise, LinkSimple, EnvelopeSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
@@ -317,6 +317,9 @@ export const SECCIONES_DE_ANTES = [
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos
       // del sistema. Los mismos roles que exige el servidor.
       { to: '/registro',       label: 'Registro',         icon: ClipboardText, roles: ['superadmin', 'admin'], permiso: 'registro.view' },
+      // La Bandeja de correos (#701, gemela de CRM#146 y CRM#1032): lo que llega a los
+      // buzones conectados. Los mismos roles que el Registro: enseña el TEXTO de correos.
+      { to: '/correos',        label: 'Correos',          icon: EnvelopeSimple, roles: ['superadmin', 'admin'], permiso: 'correos.view' },
     ],
   },
 ];
