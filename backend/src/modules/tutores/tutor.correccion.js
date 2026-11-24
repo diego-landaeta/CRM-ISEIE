@@ -18,7 +18,7 @@ import {
   matriculadosDe, tareasDeCursos, entregasDeTarea, notasDeTarea, calificarComoTutora,
   textoDeMoodle, urlDelCampus, porCorregir, contenidoDelCurso, entregasSinCorregir, cursosDe, MoodleError, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
-import { conexionDelCampus } from './tutor.campus.js';
+import { conexionDelCampus, SOLO_DESDE_MOODLE } from './tutor.campus.js';
 import { olvidarMiCampus, alumnosDe } from './tutor.micampus.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
@@ -28,17 +28,20 @@ const comoAppError = (err, porDefecto) => new AppError(err instanceof MoodleErro
 /** La conexión del campus y la tutora como profesora de ese curso, o 403/404. */
 async function comoProfesora(tutorId, projectId, cursoId) {
   const { rows } = await query(
-    `SELECT moodle_user_id FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2 AND estado = 'activa' AND moodle_user_id IS NOT NULL`,
+    `SELECT moodle_user_id, admin_sitio_excepcion_at FROM tutor_campus
+      WHERE tutor_id = $1 AND project_id = $2 AND estado = 'activa' AND moodle_user_id IS NOT NULL`,
     [tutorId, projectId]);
   if (!rows[0]) throw new AppError('No estás dada de alta en este campus', 403, 'FORBIDDEN');
   const moodleId = Number(rows[0].moodle_user_id);
+  // Con la cuenta de administración del sitio (excepción): leer sí; la nota, en Moodle.
+  const soloDesdeMoodle = rows[0].admin_sitio_excepcion_at != null;
   const conexion = await conexionDelCampus(projectId);
   if (!conexion || conexion.error) throw new AppError(conexion?.error || 'El campus no está conectado', 409, 'SIN_CONEXION');
   let gente;
   try { gente = await matriculadosDe(conexion, cursoId); } catch (err) { throw comoAppError(err, 'No se ha podido leer el curso.'); }
   const yo = gente.find((g) => g.id === moodleId);
   if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) throw new AppError('No eres profesora de este curso', 403, 'FORBIDDEN');
-  return { conexion, moodleId, alumnos: alumnosDe(gente, yo) };
+  return { conexion, moodleId, alumnos: alumnosDe(gente, yo), soloDesdeMoodle };
 }
 
 /** La tarea, si es de ese curso (o 404). */
@@ -50,7 +53,7 @@ async function tareaDelCurso(conexion, cursoId, tareaId) {
 
 /** La tarea con TODAS las entregas de sus alumnos (también quien no ha entregado). */
 export async function verTarea(tutorId, projectId, cursoId, tareaId) {
-  const { conexion, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
+  const { conexion, alumnos, soloDesdeMoodle } = await comoProfesora(tutorId, projectId, cursoId);
   let tarea; let entregas; let notas;
   try {
     tarea = await tareaDelCurso(conexion, cursoId, tareaId);
@@ -92,6 +95,8 @@ export async function verTarea(tutorId, projectId, cursoId, tareaId) {
       id: tarea.id, nombre: tarea.nombre, notaMax: tarea.notaMax, entrega: tarea.entrega, comentarios: Boolean(tarea.comentarios),
       // Lo que no se puede corregir desde el CRM (se dice y se enlaza a Moodle).
       calificable: Boolean(tarea.calificable), enGrupo: Boolean(tarea.enGrupo),
+      // La cuenta de administración del sitio (excepción): la nota se pone en Moodle.
+      soloDesdeMoodle,
       enunciado: tarea.enunciado ? textoDeMoodle(tarea.enunciado) : '',
       moodleUrl: `${base}/mod/assign/view.php?id=${tarea.cmid}&action=grading`,
     },
@@ -104,7 +109,7 @@ export async function verTarea(tutorId, projectId, cursoId, tareaId) {
  * actividades, y en las tareas cuántas tiene por corregir. Solo para la profesora del curso.
  */
 export async function verCurso(tutorId, projectId, cursoId) {
-  const { conexion, moodleId, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
+  const { conexion, moodleId, alumnos, soloDesdeMoodle } = await comoProfesora(tutorId, projectId, cursoId);
   const base = urlDelCampus(conexion.url);
   let secciones; let tareas; let entregas; let suyos;
   try {
@@ -137,7 +142,7 @@ export async function verCurso(tutorId, projectId, cursoId) {
           tarea: tarea ? {
             id: tarea.id,
             porCorregir: tarea.enGrupo ? 0 : (entregas.get(tarea.id) || []).filter((e) => misAlumnos.has(e.alumnoId)).length,
-            corregibleEnElCrm: Boolean(tarea.calificable && !tarea.enGrupo),
+            corregibleEnElCrm: Boolean(tarea.calificable && !tarea.enGrupo && !soloDesdeMoodle),
           } : null,
         };
       }),
@@ -147,7 +152,9 @@ export async function verCurso(tutorId, projectId, cursoId) {
 
 /** Pone la nota (y el comentario) a nombre de la tutora. */
 export async function calificar(tutorId, projectId, cursoId, tareaId, { alumnoId, nota, comentario }) {
-  const { conexion, moodleId, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
+  const { conexion, moodleId, alumnos, soloDesdeMoodle } = await comoProfesora(tutorId, projectId, cursoId);
+  // El plugin no califica como el administrador del sitio (1.10.1): se dice, sin intentarlo.
+  if (soloDesdeMoodle) throw new AppError(SOLO_DESDE_MOODLE, 409, 'RESPONDE_DESDE_MOODLE');
   if (!alumnos.some((a) => a.id === Number(alumnoId))) throw new AppError('Ese alumno no está entre los tuyos en este curso (o es de otro grupo)', 404, 'NOT_FOUND');
   let tarea;
   try { tarea = await tareaDelCurso(conexion, cursoId, tareaId); } catch (err) {

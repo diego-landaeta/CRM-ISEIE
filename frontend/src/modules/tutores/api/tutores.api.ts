@@ -244,6 +244,11 @@ export interface MiCampusCampus {
   sinResponderSinCurso?: MiCampusMensaje[];
   /** Por qué no se han podido leer sus mensajes de Moodle. */
   avisoMensajes?: string | null;
+  /**
+   * Su cuenta de este campus es la de administración del sitio (excepción, 24/11): se lee
+   * todo, pero responde y corrige desde Moodle (el plugin no lo hace como el administrador).
+   */
+  soloDesdeMoodle?: boolean;
 }
 export interface MiCampusPendiente {
   id: number; nombre: string; tipo: string; estado: string; campus: string; fechaComprometida: string | null;
@@ -266,6 +271,8 @@ export interface TareaParaCorregir {
     id: number; nombre: string | null; notaMax: number; entrega: string | null; enunciado: string; moodleUrl: string; comentarios: boolean;
     /** Con escala o sin nota, o en grupo: se corrige en Moodle, no aquí. */
     calificable: boolean; enGrupo: boolean;
+    /** Con la cuenta de administración del sitio (excepción): la nota se pone en Moodle. */
+    soloDesdeMoodle?: boolean;
   };
   entregas: EntregaDeTarea[];
 }

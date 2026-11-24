@@ -28,6 +28,12 @@ export interface CampusDelTutor {
    * otra empresa llega sin su error.
    */
   gestionable?: boolean;
+  /**
+   * Enlazada con la cuenta de administración del sitio, como excepción confirmada (24/11):
+   * en ese campus responde y corrige desde Moodle.
+   */
+  admin_sitio_excepcion?: boolean;
+  admin_sitio_excepcion_at?: string | null;
 }
 
 /** Una cuenta de Moodle encontrada al vincular a mano. */
@@ -64,9 +70,13 @@ export const campusTutorApi = {
   /** Buscar su cuenta de Moodle por su correo de Moodle (cuando no es el mismo que el del CRM). */
   buscarCuenta: (tutorId: number, projectId: number, q: string) =>
     client.get(`/tutores/${tutorId}/campus/${projectId}/buscar-cuenta?q=${encodeURIComponent(q)}`) as Promise<ApiResponse<CuentaMoodle | null>>,
-  /** Vincularla a mano: desde entonces la comprobación de cada hora mira esa cuenta. */
-  vincular: (tutorId: number, projectId: number, moodleUserId: number) =>
-    client.post(`/tutores/${tutorId}/campus/${projectId}/vincular`, { moodleUserId }) as Promise<ApiResponse<PanelCampusTutor>>,
+  /**
+   * Vincularla a mano: desde entonces la comprobación de cada hora mira esa cuenta. Con
+   * `excepcionAdminDelSitio`, la cuenta de administración del sitio, confirmada en la ficha.
+   */
+  vincular: (tutorId: number, projectId: number, moodleUserId: number, excepcionAdminDelSitio = false) =>
+    client.post(`/tutores/${tutorId}/campus/${projectId}/vincular`,
+      excepcionAdminDelSitio ? { moodleUserId, excepcionAdminDelSitio: true } : { moodleUserId }) as Promise<ApiResponse<PanelCampusTutor>>,
   /** Su cuenta de Moodle cambió de verdad: olvidar la vinculada y buscarla por su correo. */
   vincularDeNuevo: (tutorId: number, projectId: number) =>
     client.post(`/tutores/${tutorId}/campus/${projectId}/desvincular`, {}) as Promise<ApiResponse<PanelCampusTutor>>,

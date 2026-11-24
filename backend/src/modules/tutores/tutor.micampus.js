@@ -129,7 +129,7 @@ const mensaje = (err, porDefecto) => (err instanceof MoodleError ? err.message :
 /** Los campus de la tutora, con su usuario de Moodle. */
 async function campusDeLaTutora(tutorId) {
   const { rows } = await query(
-    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error
+    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error, tc.admin_sitio_excepcion_at
        FROM tutor_campus tc JOIN projects p ON p.id = tc.project_id AND p.active
       WHERE tc.tutor_id = $1 AND tc.estado = 'activa' AND tc.moodle_user_id IS NOT NULL
       ORDER BY p.nombre`, [tutorId]);
@@ -138,6 +138,9 @@ async function campusDeLaTutora(tutorId) {
     // Lo que dijo la última comprobación (p. ej. «el correo apunta a otra cuenta»): con la
     // cuenta vinculada equivocada no sale ningún curso, y la tutora tiene que saber por qué.
     aviso: r.error || null,
+    // Enlazada con la cuenta de administración del sitio (excepción, 24/11): se lee todo,
+    // pero responder y corregir van en Moodle (el plugin no lo hace como el administrador).
+    soloDesdeMoodle: r.admin_sitio_excepcion_at != null,
   }));
 }
 
@@ -218,6 +221,7 @@ async function unCampus(tutorId, c, { conProgreso = true, conMensajes = true, ..
   const base = {
     projectId: c.projectId, campus: c.campus, url: null, error: null, aviso: c.aviso || null,
     cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+    soloDesdeMoodle: Boolean(c.soloDesdeMoodle),
   };
   const conexion = await conexionDelCampus(c.projectId);
   if (!conexion) return { ...base, error: 'Este campus no está conectado en Integraciones.' };
@@ -366,6 +370,7 @@ async function leerUnCampus(tutorId, c, opciones) {
     return {
       projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', aviso: c.aviso || null,
       cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+      soloDesdeMoodle: Boolean(c.soloDesdeMoodle),
     };
   }
 }
