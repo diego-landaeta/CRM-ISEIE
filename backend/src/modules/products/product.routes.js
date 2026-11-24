@@ -95,5 +95,8 @@ router.post('/:id/modules/reorder', puede('products.edit'), projectAccess, Modul
 router.get('/:id/formacion', puede('products.view'), projectAccess, FormacionController.verFormacion);
 router.post('/formacion', puede('products.create'), projectAccess, FormacionController.crearFormacion);
 router.put('/:id/formacion', puede('products.edit'), projectAccess, FormacionController.guardarFormacion);
+// Fase 2: crear o actualizar su curso de Moodle (escribe en el Moodle del campus). Apagado en
+// producción hasta FORMACIONES_MOODLE_EN_PRODUCCION=1; permiso propio, `moodle.crear_cursos`.
+router.post('/:id/formacion/moodle', puede('moodle.crear_cursos'), projectAccess, FormacionController.llevarAMoodle);
 
 export default router;

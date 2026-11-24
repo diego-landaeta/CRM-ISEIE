@@ -59,6 +59,19 @@ export interface Formacion {
   horas_de_los_modulos: number;
   tutoras: TutoraFormacion[];
   cursos_moodle: Array<{ curso_moodle_id: number; curso_nombre: string | null }>;
+  /** Fase 2: `disponible` = interruptor + plugin + permiso `moodle.crear_cursos`; `conectado` = el campus tiene su Moodle. */
+  moodle?: { disponible: boolean; conectado: boolean };
+}
+
+export interface CursoGuardado {
+  cursoId: number;
+  nombre: string;
+  nombreCorto: string;
+  creado: boolean;
+  visible: boolean;
+  secciones: Array<{ numero: number; id: number }>;
+  /** Secciones del curso de más, que no se han tocado. */
+  sobran: number;
 }
 
 export interface DatosFormacion {
@@ -80,4 +93,7 @@ export const formacionesApi = {
     client.post('/products/formacion', { ...datos, projectId }) as Promise<ApiResponse<Formacion>>,
   guardar: (id: number, projectId: number, datos: DatosFormacion) =>
     client.put(`/products/${id}/formacion`, { ...datos, projectId }) as Promise<ApiResponse<Formacion>>,
+  /** Fase 2: crea o actualiza su curso de Moodle, con una sección por módulo. */
+  llevarAMoodle: (id: number, projectId: number) =>
+    client.post(`/products/${id}/formacion/moodle`, { projectId }) as Promise<ApiResponse<{ curso: CursoGuardado; formacion: Formacion }>>,
 };

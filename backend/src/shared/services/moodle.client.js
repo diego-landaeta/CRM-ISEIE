@@ -682,6 +682,42 @@ export async function contenidoDelCurso(conexion, cursoId, opciones) {
 const TAREAS_POR_LLAMADA = 20;
 
 /**
+ * Crea en el campus el curso de una formación del CRM, o lo actualiza, con una sección
+ * por módulo (CRM#1113, plugin local_crm 1.12.0: `local_crm_curso_guardar`). Escribe en
+ * Moodle: detrás de PLUGIN_MOODLE_EN_PRODUCCION, como corregir; y quien lo llama, detrás
+ * de su propio interruptor (FORMACIONES_MOODLE_EN_PRODUCCION).
+ *
+ * `secciones`: [{ nombre, resumen }] en orden; el resumen, en HTML. Devuelve
+ * { cursoId, nombre, nombreCorto, creado, visible, secciones: [{ numero, id }], sobran }.
+ */
+export async function guardarCursoEnMoodle(conexion, {
+  cursoId = 0, idnumber = '', nombre, nombreCorto = '', categoria = 0, resumen = '', inicio = 0, fin = 0, visible = false, secciones = [],
+}, opciones) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const params = {
+    cursoid: cursoId || 0, idnumber, nombre, nombrecorto: nombreCorto, categoria: categoria || 0,
+    resumen, inicio: inicio || 0, fin: fin || 0, visible: visible ? 1 : 0,
+  };
+  secciones.forEach((s, i) => {
+    params[`secciones[${i}][nombre]`] = s.nombre;
+    params[`secciones[${i}][resumen]`] = s.resumen || '';
+  });
+  const r = await llamar(conexion, 'local_crm_curso_guardar', params, opciones);
+  if (!r?.cursoid) throw new MoodleError('El campus no ha devuelto el curso.', 'SIN_CURSO');
+  return {
+    cursoId: Number(r.cursoid),
+    nombre: r.nombre,
+    nombreCorto: r.nombrecorto,
+    creado: Boolean(r.creado),
+    visible: Boolean(r.visible),
+    secciones: (r.secciones || []).map((x) => ({ numero: Number(x.numero), id: Number(x.id) })),
+    sobran: Number(r.sobran) || 0,
+  };
+}
+
+/**
  * Las entregas POR CORREGIR de esas tareas: { tareaId: [{ alumnoId, entregadaAt }] }.
  * Por tandas de `TAREAS_POR_LLAMADA` (entregas y notas de cada tanda a la vez).
  */

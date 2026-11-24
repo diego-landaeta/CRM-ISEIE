@@ -13322,6 +13322,32 @@
   "puertas": []
  },
  {
+  "id": "POST /api/products/:id/formacion/moodle",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "POST",
+  "ruta": "/api/products/:id/formacion/moodle",
+  "relativa": "POST /:id/formacion/moodle",
+  "controlador": "llevarAMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.crear_cursos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/project-channels/",
   "tipo": "ruta",
   "modulo": "project-channels",

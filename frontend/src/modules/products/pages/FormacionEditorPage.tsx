@@ -265,8 +265,10 @@ export default function FormacionEditorPage() {
               ) : (
                 <p className="text-sm text-muted-foreground">Sin curso de Moodle unido.</p>
               )}
+              <LlevarAMoodle formacion={formacion} campusId={campusId} pendiente={cambiado}
+                alGuardar={(f) => { setFormacion(f); setForm(formDesde(f)); setCambiado(false); }} />
               <p className="text-xs text-muted-foreground">
-                Se une en <Link to="/products/cursos-moodle" className="font-semibold underline">Cursos de Moodle</Link>. Crear el curso desde aquí, con una sección por módulo, es la fase siguiente.
+                También se une a mano en <Link to="/products/cursos-moodle" className="font-semibold underline">Cursos de Moodle</Link>.
               </p>
             </section>
           )}
@@ -378,5 +380,66 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
         confirmLabel="Quitar" onConfirm={quitar} onCancel={() => setQuitando(null)} loading={enviando}
       />
     </section>
+  );
+}
+
+/**
+ * Fase 2 (CRM#1113): «Crear en Moodle» / «Actualizar en Moodle». Crea en el Moodle del
+ * campus el curso de la formación (oculto a los alumnos) con una sección por módulo, o
+ * actualiza el que tiene unido; y lo deja unido al producto. Solo sale con el interruptor
+ * encendido, el permiso `moodle.crear_cursos` y el Moodle del campus conectado.
+ */
+function LlevarAMoodle({ formacion, campusId, pendiente, alGuardar }: {
+  formacion: Formacion; campusId: number; pendiente: boolean; alGuardar: (f: Formacion) => void;
+}) {
+  const [preguntando, setPreguntando] = useState(false);
+  const [enviando, setEnviando] = useState(false);
+  if (!formacion.moodle?.disponible) return null;
+  if (!formacion.moodle.conectado) {
+    return <p className="text-xs text-muted-foreground">Este campus no tiene su Moodle conectado: no se puede crear el curso desde aquí.</p>;
+  }
+  const actualizar = formacion.cursos_moodle.length > 0;
+  const sinModulos = formacion.modulos.length === 0;
+  const motivo = pendiente ? 'Guarda antes los cambios.' : (sinModulos ? 'Añade al menos un módulo.' : null);
+
+  async function llevar() {
+    setEnviando(true);
+    try {
+      const r = await formacionesApi.llevarAMoodle(formacion.id, campusId);
+      const c = r.data?.curso;
+      toast({
+        title: c?.creado ? 'Curso creado en Moodle' : 'Curso actualizado en Moodle',
+        description: [
+          c?.nombre,
+          c ? `${c.secciones.length} secciones` : null,
+          c && !c.visible ? 'oculto a los alumnos' : null,
+          c?.sobran ? `${c.sobran} secciones de más sin tocar` : null,
+        ].filter(Boolean).join(' · '),
+      });
+      setPreguntando(false);
+      if (r.data?.formacion) alGuardar(r.data.formacion);
+    } catch (e) {
+      toast({ title: 'No se ha podido llevar a Moodle', description: (e as Error).message, variant: 'destructive' });
+    } finally { setEnviando(false); }
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <button type="button" onClick={() => setPreguntando(true)} disabled={Boolean(motivo) || enviando} title={motivo || undefined}
+        className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
+        <GraduationCap size={14} aria-hidden="true" />
+        {actualizar ? 'Actualizar en Moodle' : 'Crear en Moodle'}
+      </button>
+      {motivo && <span className="text-xs text-muted-foreground">{motivo}</span>}
+      <ConfirmDialog
+        open={preguntando}
+        title={actualizar ? 'Actualizar el curso en Moodle' : 'Crear el curso en Moodle'}
+        message={actualizar
+          ? `Se cambian el nombre, las fechas y las secciones del curso unido para que sean los ${formacion.modulos.length} módulos de la formación. Las secciones de más no se borran.`
+          : `Se crea el curso «${formacion.nombre}» con ${formacion.modulos.length} secciones (una por módulo), oculto a los alumnos, y queda unido a esta formación.`}
+        confirmLabel={actualizar ? 'Actualizar' : 'Crear curso'}
+        onConfirm={llevar} onCancel={() => setPreguntando(false)} loading={enviando}
+      />
+    </div>
   );
 }
