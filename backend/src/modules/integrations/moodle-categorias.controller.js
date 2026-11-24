@@ -47,7 +47,9 @@ export async function ver(req, res, next) {
   } catch (err) { next(err); }
 }
 
-const idOVacio = z.union([z.coerce.number().int().nonnegative().max(2147483647), z.null()]).optional();
+// null primero: `z.coerce.number()` convierte null en 0, y «proponer por el nombre» se
+// guardaba como «la de por defecto».
+const idOVacio = z.union([z.null(), z.coerce.number().int().nonnegative().max(2147483647)]).optional();
 const guardarSchema = z.object({
   projectId: z.coerce.number().int().positive(),
   categorias: z.object({ curso: idOVacio, diplomado: idOVacio, master: idOVacio }).strict(),
