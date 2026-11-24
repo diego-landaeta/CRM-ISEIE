@@ -23,11 +23,10 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno,
+  cursosDe, matriculadosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError, esAlumno, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 
-const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 const CACHE_MS = 2 * 60 * 1000;
 const PARALELO = 4;
 /**
@@ -184,7 +183,7 @@ async function unCampus(tutorId, c, { conProgreso = true, ...opciones } = {}) {
     try {
       const gente = await matriculadosDe(conexion, curso.id, opciones);
       const yo = gente.find((g) => g.id === c.moodleId);
-      if (!yo || !yo.roles.some((r) => ROLES_PROFESOR.has(r))) return null;
+      if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) return null;
       return { ...curso, alumnos: alumnosDe(gente, yo), error: null };
     } catch (err) {
       return { ...curso, alumnos: [], error: mensaje(err, 'No se han podido leer sus alumnos.') };

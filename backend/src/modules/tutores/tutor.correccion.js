@@ -16,14 +16,13 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import {
   matriculadosDe, tareasDeCursos, entregasDeTarea, notasDeTarea, calificarComoTutora,
-  textoDeMoodle, urlDelCampus, porCorregir, contenidoDelCurso, entregasSinCorregir, cursosDe, MoodleError,
+  textoDeMoodle, urlDelCampus, porCorregir, contenidoDelCurso, entregasSinCorregir, cursosDe, MoodleError, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
 import { olvidarMiCampus, alumnosDe } from './tutor.micampus.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
 
-const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 const comoAppError = (err, porDefecto) => new AppError(err instanceof MoodleError ? err.message : porDefecto, 502, 'MOODLE');
 
 /** La conexión del campus y la tutora como profesora de ese curso, o 403/404. */
@@ -38,7 +37,7 @@ async function comoProfesora(tutorId, projectId, cursoId) {
   let gente;
   try { gente = await matriculadosDe(conexion, cursoId); } catch (err) { throw comoAppError(err, 'No se ha podido leer el curso.'); }
   const yo = gente.find((g) => g.id === moodleId);
-  if (!yo || !yo.roles.some((r) => ROLES_PROFESOR.has(r))) throw new AppError('No eres profesora de este curso', 403, 'FORBIDDEN');
+  if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) throw new AppError('No eres profesora de este curso', 403, 'FORBIDDEN');
   return { conexion, moodleId, alumnos: alumnosDe(gente, yo) };
 }
 
