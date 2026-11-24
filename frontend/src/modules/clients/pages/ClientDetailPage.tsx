@@ -25,6 +25,8 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
+import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
 const ConversionsTab = lazy(() => import('@/modules/conversions/components/ConversionsTab'));
@@ -136,6 +138,8 @@ export default function ClientDetailPage() {
   // Su avance en Moodle (#532). Se pide al abrir la ficha; la pestaña solo sale si el
   // servidor lo tiene encendido (el plugin del CRM aprobado en ese entorno).
   const avance = useAvanceMoodle(id);
+  // Sus suspensiones en Moodle (gemela de CRM#531): solo lee el CRM; si está apagado, disponible: false.
+  const suspensiones = useSuspensionesMoodle(id);
 
   // El gestor puede gestionar sus propios clientes (registrar pagos, fraccionar,
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
@@ -239,6 +243,7 @@ export default function ClientDetailPage() {
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
               <CheckCircle size={11} weight="fill" /> Cliente
             </span>
+            <EtiquetaSuspendido datos={suspensiones.datos} />
             {lead.origen && <ChannelBadge channel={lead.origen} />}
           </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-sm text-muted-foreground">
@@ -349,7 +354,7 @@ export default function ClientDetailPage() {
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
-                ...(avance.datos?.disponible ? [{ id: 'campus', label: 'Campus', icon: GraduationCap }] : []),
+                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspendido' : 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
@@ -357,6 +362,7 @@ export default function ClientDetailPage() {
                     key={t.id}
                     onClick={() => setTab(t.id)}
                     aria-pressed={tab === t.id}
+                    data-recorrido={t.id === 'campus' ? 'ficha-pestana-campus' : undefined}
                     className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
                       tab === t.id
                         ? 'border-primary text-primary'
@@ -381,12 +387,18 @@ export default function ClientDetailPage() {
                 </Suspense>
               )}
               {tab === 'campus' && (
-                <AvanceMoodleBloque
-                  datos={avance.datos}
-                  cargando={avance.cargando}
-                  error={avance.error}
-                  onActualizar={avance.actualizar}
-                />
+                <div className="space-y-4">
+                  {/* Arriba, si está suspendido y por qué (gemela de CRM#531); debajo, su avance (#532). */}
+                  <SuspensionesMoodleBloque datos={suspensiones.datos} cargando={suspensiones.cargando} error={suspensiones.error} />
+                  {avance.datos?.disponible !== false && (
+                    <AvanceMoodleBloque
+                      datos={avance.datos}
+                      cargando={avance.cargando}
+                      error={avance.error}
+                      onActualizar={avance.actualizar}
+                    />
+                  )}
+                </div>
               )}
               {tab === 'interacciones' && (
                 <div>

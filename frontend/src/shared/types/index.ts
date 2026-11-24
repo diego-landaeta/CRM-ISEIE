@@ -160,6 +160,8 @@ export interface Client {
   cuotas_pendientes: number;
   total_pagos: number;
   proximo_vencimiento?: string | null;
+  // Sigue suspendido en Moodle (gemela de CRM#531). Solo viene con las suspensiones encendidas.
+  suspendido_moodle?: boolean;
   last_interaction_at?: string | null;
   origen?: LeadOrigen | null;
   notas?: string | null;

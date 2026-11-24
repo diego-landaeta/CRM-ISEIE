@@ -67,10 +67,11 @@ export const REUBICACIONES = [
   ['Tutores › Comisiones', 'Finanzas › Comisiones de tutores', { despuesDe: 'Comisiones' }],
   ['Tutores', 'Académico'],
   // CONFIGURACIÓN: integraciones y conexiones juntas, y lo de administrar.
-  // (En ISEIE no hay «Claves y variables» ni «Correos» en Sistema.)
+  // (En ISEIE no hay «Claves y variables» en Sistema; «Correos» llegó con la #701.)
   ['Finanzas › Integraciones', 'Configuración › Integraciones'],
   ['Conexión', 'Configuración'],
   ['Sistema › Registro', 'Configuración › Registro'],
+  ['Sistema › Correos', 'Configuración › Correos'],
   ['Sistema › Status', 'Configuración › Status'],
 ];
 
@@ -134,6 +135,8 @@ export function reagruparMenu(secciones, bloques = {}, reubicaciones = REUBICACI
         // Una sección que no cambia de nombre conserva lo suyo; en una nueva,
         // lo que impusiera cada sección de antes va ya en cada entrada.
         ...(vieja?.salvoTipo && !reubicaciones.some(([a]) => a === nombre) ? { salvoTipo: vieja.salvoTipo } : {}),
+        // El nombre que ve la tutora redactora («Mis tareas», Diego 24/11): sin esto se perdía al reagrupar.
+        ...(vieja?.labelRedactora ? { labelRedactora: vieja.labelRedactora } : {}),
         items: [],
       });
     }

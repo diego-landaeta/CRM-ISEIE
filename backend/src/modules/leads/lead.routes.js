@@ -56,6 +56,8 @@ router.delete('/:id/products/:lpId',     puede('leads.edit'), leadController.rem
 router.get('/:id', puede('leads.view'), leadController.getById);
 // Su avance en Moodle (#532): último acceso, % hecho y notas, curso a curso. Solo lee.
 router.get('/:id/campus', puede('leads.view'), leadController.avanceEnMoodle);
+// Sus suspensiones y reactivaciones en Moodle (gemela de CRM#531): estado e historial. Solo lee el CRM.
+router.get('/:id/suspensiones-moodle', puede('leads.view'), leadController.suspensionesEnMoodle);
 router.post('/:id/merge', puede('leads.edit'), leadController.mergeLeads);
 
 // Creacion manual (formulario interno)

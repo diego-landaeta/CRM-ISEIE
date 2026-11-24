@@ -127,7 +127,7 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
       {
         donde: anclaje('hoy-plegados'),
         titulo: 'Lo demás, plegado',
-        texto: 'El equipo este mes, los productos vendidos, el embudo, ayer y hoy y los prospectos recientes. Ábrelos cuando te hagan falta: cada bloque recuerda cómo lo dejaste.',
+        texto: 'Los productos vendidos, el embudo, ayer y hoy y los prospectos recientes. Tu puesto en el ranking va arriba, siempre a la vista. Ábrelos cuando te hagan falta: cada bloque recuerda cómo lo dejaste.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

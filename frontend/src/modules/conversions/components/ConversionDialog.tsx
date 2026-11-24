@@ -20,6 +20,9 @@ import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { crearLink, generarPlan } from '@/modules/links-pago/api/linksPago.api';
 import { errorDe } from '@/modules/links-pago/components/CrearLinkAsistente';
 import LinksRecienCreados, { type ResultadoLinks } from '@/modules/links-pago/components/LinksRecienCreados';
+import AvisoComoSeCobra from '@/modules/links-pago/components/AvisoComoSeCobra';
+import type { DatosDelAviso } from '@/modules/links-pago/lib/avisoCuotas';
+import { useRecordatoriosLinks } from '@/shared/lib/recordatoriosLinks';
 import EmitirFacturaCobro, { AvisoCobroEnCola, QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
@@ -173,8 +176,30 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   // —que venía marcado— y la venta salió sin cobro, sin factura y sin aviso a Make. Ya no
   // viene nada marcado (null): hay que decir si ha pagado antes de registrar.
   const [pagoMode, setPagoMode] = useState<'none' | 'parcial' | 'total' | null>(null);
-  // La inicial por link (19/11): con «Parcial», si se paga con link no está cobrada todavía.
-  const [inicialPorLink, setInicialPorLink] = useState(true);
+  // FRACCIONADO: ¿se cobra con link de pago? (Diego, 24/11: «no siempre pagan con
+  // link de pago»). Sin marcar: hay que elegir. Con «No», no se genera ninguno.
+  const [usarLink, setUsarLink] = useState<'si' | 'no' | null>(null);
+  // Con link, cómo paga la INICIAL: con el link (aún no pagada, va como cuota 1),
+  // ya pagada con OTRO link de pago, o ya pagada por transferencia.
+  const [comoInicial, setComoInicial] = useState<'link' | 'otro_link' | 'transferencia' | null>(null);
+  // La referencia de la inicial ya pagada: nº de operación o el link/cobro de Stripe.
+  const [refInicial, setRefInicial] = useState('');
+  /*
+    MÉTODO «TARJETA (STRIPE)» (Diego, 24/11): el alumno pudo pagar ya con otro
+    link desde el cliente. Se pregunta «¿La inicial ya fue pagada?»:
+      · Sí → «¿Necesitas enlace de las cuotas?». Es el fraccionado con la inicial
+        «ya pagada con otro link» (`comoInicial = 'otro_link'`): con Sí, los links
+        (o el cobro automático) de las cuotas pendientes con `generarPlan`, sin
+        volver a cobrar la inicial; con No, ninguno.
+      · No → lo de siempre: un link por todo, o «inicial + cuotas» con el link de
+        la inicial (`comoInicial = 'link'`).
+    No hay un camino nuevo: se ponen las respuestas del fraccionado que ya existe.
+  */
+  const [inicialStripe, setInicialStripe] = useState<'si' | 'no' | null>(null);
+  const [formaStripe, setFormaStripe] = useState<'unico' | 'cuotas'>('unico');
+  const recordatoriosEncendidos = useRecordatoriosLinks();
+  // La inicial por link (19/11): solo si se eligió «Sí» y «con el link».
+  const inicialPorLink = usarLink === 'si' && comoInicial === 'link';
   const inicialConLink = pagoMode === 'parcial' && inicialPorLink && puedeLinks;
   const hayPago = (pagoMode === 'parcial' && !inicialConLink) || pagoMode === 'total';
   // Método REAL con el que se cobró la inicial cuando la venta es fraccionada.
@@ -297,11 +322,25 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       setInstallmentsDirty(false);
       setInstallments([]);
     }
+    // Las respuestas de «Tarjeta (Stripe)» valen mientras siga en Stripe o en su
+    // fraccionado; con otro método, se olvidan.
+    if (form.metodo_pago !== 'fraccionado' && form.metodo_pago !== 'tarjeta_stripe') setInicialStripe(null);
   }, [form.metodo_pago]);
 
   // Pago recibido HOY (parcial o total). El plan de cuotas reparte el PENDIENTE
   // (total − pago inicial), NO el total: si pagas 500 de 1500, las cuotas suman
   // 1000, no 1500. Así el inicial + cuotas = total del programa.
+  const esFrac = form.metodo_pago === 'fraccionado';
+  const preguntaLink = puedeLinks && esFrac && pagoMode !== 'total';
+  // «Tarjeta (Stripe)»: la pregunta de la inicial (24/11). Con sus respuestas ya
+  // en el fraccionado, se sigue viendo aquí y lleva ella «¿Necesitas enlace…?».
+  const preguntaStripe = puedeLinks && pagoMode !== 'total'
+    && (form.metodo_pago === 'tarjeta_stripe' || (esFrac && inicialStripe !== null));
+  // Fraccionado: lo decide la pregunta. Si no, la casilla de siempre.
+  const generarLink = esFrac ? usarLink === 'si' : generarLinkStripe;
+  const inicialYaPagada = usarLink === 'si' && (comoInicial === 'otro_link' || comoInicial === 'transferencia');
+  const metodoInicialReal: MetodoPago = usarLink === 'si' && comoInicial === 'otro_link' ? 'tarjeta_stripe'
+    : usarLink === 'si' && comoInicial === 'transferencia' ? 'transferencia' : metodoInicial;
   const pagadoInicial = pagoMode === 'total' ? calc.total : (pagoMode === 'parcial' && !inicialConLink) ? Number(form.importe_pagado || 0) : 0;
   const pendienteFrac = Math.max(0, Number((calc.total - pagadoInicial).toFixed(2)));
   // La inicial que se cobra con link: cuota 1, hoy; el resto, en las cuotas.
@@ -403,6 +442,59 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
 
   const update = <K extends keyof ConversionForm>(k: K, v: ConversionForm[K]): void =>
     setForm(f => ({ ...f, [k]: v }));
+
+  // «Tarjeta (Stripe)» (24/11): cada respuesta pone las del fraccionado de siempre.
+  function stripeInicialPagada() {
+    setInicialStripe('si');
+    setPagoMode('parcial');
+    update('metodo_pago', 'fraccionado');
+    setMetodoInicial('tarjeta_stripe');
+    setComoInicial('otro_link');
+    setUsarLink(null);
+    setInstallmentsDirty(false);
+  }
+  function stripeUnLinkPorTodo() {
+    setInicialStripe('no');
+    setFormaStripe('unico');
+    setPagoMode('none');
+    update('metodo_pago', 'tarjeta_stripe');
+    setUsarLink(null);
+    setComoInicial(null);
+    setGenerarLinkStripe(true);
+  }
+  function stripeInicialConLink() {
+    setInicialStripe('no');
+    setFormaStripe('cuotas');
+    setPagoMode('parcial');
+    update('metodo_pago', 'fraccionado');
+    setMetodoInicial('tarjeta_stripe');
+    setUsarLink('si');
+    setComoInicial('link');
+    setInstallmentsDirty(false);
+  }
+
+  /*
+    «CÓMO SE COBRA» (Diego, 24/11): con link y cuotas, un recuadro siempre a la
+    vista antes de registrar, con las cifras del plan: un solo enlace y Stripe
+    cobra solo cada cuota, o un enlace por cuota.
+  */
+  const cobroAutoElegido = puedeCobroAuto && cobroAutoStripe;
+  const avisoCobro: DatosDelAviso | null = esFrac && puedeLinks && generarLink && pagoMode !== 'total'
+    && pendienteFrac > 0 && installments.length >= 1
+    ? {
+      automatico: cobroAutoElegido,
+      primero: {
+        importe: Number(installments[0].importe_previsto) || 0,
+        vence: installments[0].fecha_vencimiento || null,
+        esInicial: inicialLink > 0,
+      },
+      despues: installments.slice(1).map((c) => ({ importe: Number(c.importe_previsto) || 0, vence: c.fecha_vencimiento || null })),
+      yaPagado: pagadoInicial > 0 ? pagadoInicial : 0,
+      total: calc.total,
+      linksDeCuotas: 'al_registrar',
+      recordatorio: recordatoriosEncendidos,
+    }
+    : null;
 
   /*
     Los límites de cada casilla (min, max y los céntimos de step="0.01").
@@ -517,6 +609,24 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
         return;
       }
     }
+    if (preguntaStripe && inicialStripe === null) {
+      toast({ title: 'Falta decir si la inicial ya fue pagada', description: 'En «¿La inicial ya fue pagada?», elige «Sí» o «No».', variant: 'destructive' });
+      return;
+    }
+    if (preguntaStripe && inicialStripe === 'si' && !(Number(form.importe_pagado) > 0)) {
+      toast({ title: 'Falta lo que pagó de inicial', description: 'Escríbelo en «Pago recibido hoy»: la inicial que ya pagó con Stripe.', variant: 'destructive' });
+      return;
+    }
+    if (preguntaLink && usarLink === null) {
+      toast(inicialStripe === 'si'
+        ? { title: 'Falta decir si necesitas enlace de las cuotas', description: 'En «¿Necesitas enlace de las cuotas?», elige «Sí» o «No».', variant: 'destructive' }
+        : { title: 'Falta decir si se cobra con link de pago', description: 'En «¿Se cobra con link de pago?», elige «Sí» o «No»: no siempre pagan con link.', variant: 'destructive' });
+      return;
+    }
+    if (preguntaLink && usarLink === 'si' && pagoMode === 'parcial' && comoInicial === null) {
+      toast({ title: 'Falta decir cómo paga la inicial', description: 'Con el link de pago, ya pagada con otro link o por transferencia.', variant: 'destructive' });
+      return;
+    }
     if (!pagoMode) {
       toast({ title: 'Falta decir si ha pagado', description: 'Elige «Sin pago», «Parcial» o «Pagó TODO». La forma de pago sola no registra el cobro.', variant: 'destructive' });
       return;
@@ -535,7 +645,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       metodo_pago: form.metodo_pago,
       // Método real del pago inicial: si la venta es fraccionada, el usuario
       // elige con qué se cobró la inicial (no "fraccionado", que es el plan).
-      metodo_pago_inicial: form.metodo_pago === 'fraccionado' ? metodoInicial : form.metodo_pago,
+      metodo_pago_inicial: form.metodo_pago === 'fraccionado' ? metodoInicialReal : form.metodo_pago,
+      referencia_pago_inicial: hayPago && refInicial.trim() ? refInicial.trim() : null,
       fecha_compromiso_pago: form.fecha_compromiso_pago || null,
       fecha_conversion: form.fecha_conversion,
       fecha_inicio: form.fecha_inicio || null,
@@ -600,7 +711,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
         }
       }
       // El link (o los de cada cuota), con la venta ya creada: va a ESTA venta.
-      if (puedeLinks && generarLinkStripe && pendienteFrac > 0) {
+      if (puedeLinks && generarLink && pendienteFrac > 0) {
         try {
           if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
             if (puedeCobroAuto && cobroAutoStripe) {
@@ -889,10 +1000,12 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
               <Field label="Pago recibido hoy"
                 hint={pagoMode === 'total' ? `Se registrará el pago completo: ${calc.total.toFixed(2)} €` : undefined}>
                 <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold">
-                  <button type="button" onClick={() => setPagoMode('none')}
+                  {/* Tocar el pago a mano deja sin contestar «¿La inicial ya fue pagada?» (24/11). */}
+                  <button type="button" onClick={() => { setPagoMode('none'); setInicialStripe(null); }}
                     className={`flex-1 h-9 ${pagoMode === 'none' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sin pago</button>
                   <button type="button" onClick={() => {
                       setPagoMode('parcial');
+                      setInicialStripe(null);
                       // Pago parcial ⇒ el resto se cobra a plazos: método = fraccionado
                       // (muestra el plan de cuotas). El método real de cada abono se
                       // indica al registrar cada cuota.
@@ -901,6 +1014,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                     className={`flex-1 h-9 border-x border-border ${pagoMode === 'parcial' ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Parcial</button>
                   <button type="button" onClick={() => {
                       setPagoMode('total');
+                      setInicialStripe(null);
                       // Venia de «Parcial», que deja el metodo en fraccionado y un
                       // plan montado. Si no se limpia aqui, se registra una venta
                       // pagada entera CON plan de cuotas, que es imposible.
@@ -919,17 +1033,57 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                   <input autoComplete="off" type="number" step="0.01" min="0" value={form.importe_pagado} onChange={e => update('importe_pagado', e.target.value)}
                     placeholder={inicialConLink ? '¿De cuánto es la inicial?' : '¿Cuánto pagó?'} aria-label="Cuánto pagó hoy" className={inputClass + ' mt-1.5'} autoFocus />
                 )}
-                {pagoMode === 'parcial' && puedeLinks && (
-                  <label className="mt-1.5 flex items-start gap-2 text-[11px] leading-snug cursor-pointer" data-recorrido="venta-inicial-por-link">
-                    <input type="checkbox" checked={inicialPorLink} onChange={(e) => { setInicialPorLink(e.target.checked); setInstallmentsDirty(false); }} className="mt-0.5" />
-                    <span>La inicial se paga con <b>link de pago</b> (todavía no la ha pagado): va como cuota 1, hoy, con su link, y las demás cuotas con el suyo.</span>
-                  </label>
-                )}
               </Field>
             </FilaCampos>
             {/* Con plan fraccionado, el pago inicial necesita su método real
                 (la factura de ese pago lo usará; 'fraccionado' es el plan). */}
+            {/* FRACCIONADO: ¿con link de pago? (Diego, 24/11). Sin nada marcado. */}
+            {preguntaLink && !preguntaStripe && (
+              <div className="rounded-lg border border-info/30 bg-info-soft/40 p-3 space-y-2" data-recorrido="venta-usar-link">
+                <p className="text-sm font-semibold text-foreground" id="venta-usar-link-titulo">¿Se cobra con link de pago?</p>
+                <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold" role="group" aria-labelledby="venta-usar-link-titulo">
+                  <button type="button" aria-pressed={usarLink === 'si'} onClick={() => { setUsarLink('si'); setInstallmentsDirty(false); }}
+                    className={`flex-1 h-9 ${usarLink === 'si' ? 'bg-info-soft text-info-soft-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sí, con link</button>
+                  <button type="button" aria-pressed={usarLink === 'no'} onClick={() => { setUsarLink('no'); setComoInicial(null); setInstallmentsDirty(false); }}
+                    className={`flex-1 h-9 border-l border-border ${usarLink === 'no' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>No</button>
+                </div>
+                {usarLink === null && (
+                  <p className="text-[10px] text-warning-soft-foreground font-medium">Elige si se cobra con link: no siempre pagan así.</p>
+                )}
+                {usarLink === 'no' && (
+                  <p className="text-[11px] text-muted-foreground">No se genera ningún link. Las cuotas quedan en el plan y cada cobro se apunta al recibirlo.</p>
+                )}
+                {usarLink === 'si' && pagoMode === 'parcial' && (
+                  <fieldset className="space-y-1.5" data-recorrido="venta-como-inicial">
+                    <legend className="text-xs font-semibold text-foreground">¿Cómo paga la inicial?</legend>
+                    {([
+                      ['link', 'Con el link de pago (aún no la ha pagado): va como cuota 1, hoy, con su link.'],
+                      ['otro_link', 'Ya la pagó con otro link de pago.'],
+                      ['transferencia', 'Ya la pagó por transferencia.'],
+                    ] as Array<['link' | 'otro_link' | 'transferencia', string]>).map(([v, t]) => (
+                      <label key={v} className="flex items-start gap-2 text-[11px] leading-snug cursor-pointer">
+                        <input type="radio" name="venta-como-inicial" value={v} checked={comoInicial === v}
+                          onChange={() => { setComoInicial(v); setInstallmentsDirty(false); }} className="mt-0.5" />
+                        <span>{t}</span>
+                      </label>
+                    ))}
+                  </fieldset>
+                )}
+                {usarLink === 'si' && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Se genera un link por cada cuota pendiente{inicialPorLink ? ' (la inicial, la primera)' : ''}. Te los damos al registrar, listos para copiar.
+                  </p>
+                )}
+              </div>
+            )}
+            {/* La inicial ya pagada: su referencia (nº de operación, o el link/cobro de Stripe). */}
             {hayPago && form.metodo_pago === 'fraccionado' && (
+              <Field label={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'El link o el cobro de Stripe de la inicial (opcional)' : 'Referencia del pago inicial (opcional)'}
+                htmlFor="venta-ref-inicial" hint={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'Para encontrarlo luego en Stripe.' : 'El nº de operación de la transferencia o del depósito.'}>
+                <input id="venta-ref-inicial" autoComplete="off" value={refInicial} onChange={(e) => setRefInicial(e.target.value)} maxLength={120} className={inputClass} />
+              </Field>
+            )}
+            {hayPago && form.metodo_pago === 'fraccionado' && !inicialYaPagada && (
               <Field label="Método del pago inicial" htmlFor="venta-metodo-inicial">
                 <Select<MetodoPago>
                   id="venta-metodo-inicial"
@@ -997,6 +1151,53 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                 <input id="venta-fecha-pago" type="date" value={form.fecha_conversion} onChange={e => update('fecha_conversion', e.target.value)} className={inputClass} />
               </Field>
             </FilaCampos>
+
+            {/* «Tarjeta (Stripe)»: ¿la inicial ya fue pagada? (Diego, 24/11) */}
+            {preguntaStripe && (
+              <div className="rounded-lg border border-info/30 bg-info-soft/40 p-3 space-y-2" data-recorrido="venta-stripe-inicial">
+                <p className="text-sm font-semibold text-foreground" id="venta-stripe-inicial-titulo">¿La inicial ya fue pagada?</p>
+                <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold" role="group" aria-labelledby="venta-stripe-inicial-titulo">
+                  <button type="button" aria-pressed={inicialStripe === 'si'} onClick={stripeInicialPagada}
+                    className={`flex-1 h-9 ${inicialStripe === 'si' ? 'bg-info-soft text-info-soft-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sí, ya la pagó</button>
+                  <button type="button" aria-pressed={inicialStripe === 'no'} onClick={stripeUnLinkPorTodo}
+                    className={`flex-1 h-9 border-l border-border ${inicialStripe === 'no' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>No, aún no</button>
+                </div>
+                {inicialStripe === null && (
+                  <p className="text-[10px] text-warning-soft-foreground font-medium">Elige si ya pagó la inicial con otro link de Stripe.</p>
+                )}
+                {inicialStripe === 'si' && (
+                  <>
+                    <p className="text-[11px] text-muted-foreground">Escribe en «Pago recibido hoy» cuánto pagó; no se le vuelve a cobrar.</p>
+                    <p className="text-xs font-semibold text-foreground pt-1" id="venta-stripe-cuotas-titulo">¿Necesitas enlace de las cuotas?</p>
+                    <div className="flex rounded-lg border border-border overflow-hidden text-xs font-semibold" role="group" aria-labelledby="venta-stripe-cuotas-titulo">
+                      <button type="button" aria-pressed={usarLink === 'si'} onClick={() => { setUsarLink('si'); setInstallmentsDirty(false); }}
+                        className={`flex-1 h-9 ${usarLink === 'si' ? 'bg-info-soft text-info-soft-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>Sí, enlace de las cuotas</button>
+                      <button type="button" aria-pressed={usarLink === 'no'} onClick={() => { setUsarLink('no'); setInstallmentsDirty(false); }}
+                        className={`flex-1 h-9 border-l border-border ${usarLink === 'no' ? 'bg-muted text-foreground' : 'bg-card text-muted-foreground hover:bg-muted/50'}`}>No</button>
+                    </div>
+                    {usarLink === 'si' && (
+                      <p className="text-[11px] text-muted-foreground">Se generan los enlaces (o el cobro automático) de las cuotas pendientes del plan de abajo, sin volver a cobrar la inicial.</p>
+                    )}
+                    {usarLink === 'no' && (
+                      <p className="text-[11px] text-muted-foreground">No se genera ningún enlace: las cuotas quedan en el plan y cada cobro se apunta al recibirlo.</p>
+                    )}
+                  </>
+                )}
+                {inicialStripe === 'no' && (
+                  <fieldset className="space-y-1.5">
+                    <legend className="text-xs font-semibold text-foreground">¿Cómo paga?</legend>
+                    <label className="flex items-start gap-2 text-[11px] leading-snug cursor-pointer">
+                      <input type="radio" name="venta-stripe-forma" checked={formaStripe === 'unico'} onChange={stripeUnLinkPorTodo} className="mt-0.5" />
+                      <span>Todo de una vez: un link de pago por el total.</span>
+                    </label>
+                    <label className="flex items-start gap-2 text-[11px] leading-snug cursor-pointer">
+                      <input type="radio" name="venta-stripe-forma" checked={formaStripe === 'cuotas'} onChange={stripeInicialConLink} className="mt-0.5" />
+                      <span>Inicial + cuotas: el link cobra la inicial (escríbela en «Pago recibido hoy») y el resto va en el plan de cuotas.</span>
+                    </label>
+                  </fieldset>
+                )}
+              </div>
+            )}
 
             {form.metodo_pago === 'fraccionado' && (
               <div className="space-y-3 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900">
@@ -1098,7 +1299,7 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
             )}
 
             {/* Link de pago de Stripe al registrar (Diego, 19/11/2026). */}
-            {puedeLinks && pagoMode !== 'total' && (
+            {puedeLinks && pagoMode !== 'total' && form.metodo_pago !== 'fraccionado' && (
               <label className="flex items-start gap-2.5 p-3 rounded-lg bg-info-soft border border-info/30 cursor-pointer" data-recorrido="venta-generar-link">
                 <input type="checkbox" checked={generarLinkStripe} onChange={(e) => setGenerarLinkStripe(e.target.checked)} className="mt-0.5 h-4 w-4" />
                 <span className="min-w-0">
@@ -1106,15 +1307,14 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                     <LinkIcon size={13} weight="bold" /> Generar link de pago de Stripe
                   </span>
                   <span className="block text-[12px] text-info-soft-foreground">
-                    {form.metodo_pago === 'fraccionado' && installments.length >= 1
-                      ? `Un link por cada cuota (${installments.length}), con su importe y su fecha. Al pagar uno, se salda esa cuota.`
-                      : `Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
+                    {/* Fraccionado lo decide «¿Se cobra con link de pago?»: aquí, pago único. */}
+                    {`Un link por lo que queda por pagar${pendienteFrac > 0 ? ` (${pendienteFrac.toFixed(2)} €)` : ''}. Al pagarlo, el cobro entra en esta venta.`}
                     {' '}Te los damos al registrar, listos para copiar, y quedan en la ficha de la venta.
                   </span>
                 </span>
               </label>
             )}
-            {puedeCobroAuto && generarLinkStripe && pagoMode !== 'total' && form.metodo_pago === 'fraccionado' && installments.length >= 1 && (
+            {puedeCobroAuto && generarLink && pagoMode !== 'total' && form.metodo_pago === 'fraccionado' && installments.length >= 1 && (
               <label className="flex items-start gap-2.5 -mt-1 p-3 rounded-lg bg-info-soft/60 border border-info/30 cursor-pointer" data-recorrido="venta-cobro-automatico">
                 <input type="checkbox" checked={cobroAutoStripe} onChange={(e) => setCobroAutoStripe(e.target.checked)} className="mt-0.5 h-4 w-4" />
                 <span className="min-w-0 text-[12px] text-info-soft-foreground">
@@ -1123,6 +1323,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                 </span>
               </label>
             )}
+            {/* Cómo se cobra (24/11): siempre, con link y cuotas, antes de registrar. */}
+            {avisoCobro && <AvisoComoSeCobra datos={avisoCobro} />}
 
             {/* Selector de enlace de pago Stripe (CRM-140): los enlaces fijos del producto, si los links están apagados. */}
             {!puedeLinks && (productLinks.length > 0 || form.producto_contratado) && (

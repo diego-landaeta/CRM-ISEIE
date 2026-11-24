@@ -593,6 +593,17 @@ export const SECCIONES = [
         ],
       },
       {
+        // La Bandeja de correos (CRM-ISEIE#701, gemela de CRM#146 y CRM#1032): lo que
+        // llega a los buzones conectados. Solo leer: el envío sigue por Brevo.
+        clave: 'correos', nombre: 'Correos', acciones: [
+          a('view', 'Ver correos', 'Los correos que llegan a los buzones (los de sus campus).', yPM(ADMIN_SOPORTE)),
+          a('sincronizar', 'Traer correos', 'Leer ahora los buzones, sin esperar a la siguiente vuelta.', ADMIN_SOPORTE),
+          // Diego (CRM#1058): de serie para admin y soporte, cada uno en sus campus.
+          // Las credenciales se guardan cifradas y no se ven nunca, ni con este permiso.
+          a('buzones', 'Conectar buzones', 'Conectar, probar, cambiar y quitar los buzones de correo que lee la Bandeja. Un admin, los de sus campus.', ADMIN_SOPORTE),
+        ],
+      },
+      {
         clave: 'status', nombre: 'Estado del sistema', acciones: [
           a('view', 'Ver el estado', 'Errores, piezas y correos del sistema.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Apuntar incidencias', 'Abrir y cerrar incidencias y cambiar el estado de cada pieza.', ADMIN_SOPORTE),

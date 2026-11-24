@@ -6,6 +6,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import * as model from './disputas.model.js';
 import * as pagosModel from './stripe-payments.model.js';
 import { getStripeKey, stripeGet } from './stripe-payments.service.js';
+import { duenoDeLaCuenta, quienesLaUsan, elegirCampus, campusDeLaMarca, campusDelCliente } from './stripe-prestado.js';
 
 /*
   DISPUTAS DE STRIPE, ABIERTAS Y CON AVISO (#396).
@@ -220,6 +221,17 @@ export async function desdeElWebhook(projectId, obj) {
   return guardar(projectId, obj, { origen: 'webhook', cargoCrm });
 }
 
+/**
+ * El campus de una disputa de la cuenta de `dueno` (Stripe prestado, 332): el
+ * de su cargo (la marca, o el cliente de una cuota de cobro automático).
+ */
+async function campusDeLaDisputa(dueno, prestados, obj) {
+  if (!prestados.length) return dueno;
+  const cargo = obj?.charge && typeof obj.charge === 'object' ? obj.charge : null;
+  const cliente = campusDeLaMarca(cargo?.metadata) == null ? await campusDelCliente(cargo?.customer, prestados) : null;
+  return elegirCampus(dueno, prestados, { metadata: cargo?.metadata, campusDelCliente: cliente });
+}
+
 /* ─── Sondeo ──────────────────────────────────────────────────────────────── */
 
 const ventanaDias = () => {
@@ -233,6 +245,10 @@ const MAX_PAGINAS = 20;
  * `stripe_sync_state.disputes_last_error` (la hora del ultimo bueno no se toca).
  */
 export async function sincronizar(projectId, { ahora = Date.now() } = {}) {
+  // Stripe prestado (332): las disputas de la cuenta se traen una vez, desde el
+  // dueño, y cada una va al campus de su cargo.
+  const dueno = await duenoDeLaCuenta(projectId);
+  if (dueno !== projectId) return sincronizar(dueno, { ahora });
   try {
     const r = await sincroniza(projectId, ahora);
     await pagosModel.upsertSyncState(projectId, { disputes_synced_at: new Date(ahora).toISOString(), disputes_last_error: null });
@@ -251,6 +267,7 @@ async function sincroniza(projectId, ahora) {
   const apiKey = await getStripeKey(projectId);
   // Sin clave no es un fallo del servidor: es un campus sin Stripe configurado (409, no 500).
   if (!apiKey) throw new AppError('Stripe API key no configurada para este proyecto', 409, 'STRIPE_SIN_CLAVE');
+  const prestados = await quienesLaUsan(projectId);
   const desde = Math.floor(ahora / 1000) - ventanaDias() * 86400;
 
   const res = { vistas: 0, nuevas: 0, avisadas: 0, revisadas: 0 };
@@ -263,7 +280,7 @@ async function sincroniza(projectId, ahora) {
     const lista = data?.data || [];
     for (const obj of lista) {
       try {
-        const g = await guardar(projectId, obj, { origen: 'sondeo' });
+        const g = await guardar(await campusDeLaDisputa(projectId, prestados, obj), obj, { origen: 'sondeo' });
         vistas.add(obj.id);
         res.vistas++;
         if (g.nueva) res.nuevas++;
@@ -278,11 +295,11 @@ async function sincroniza(projectId, ahora) {
 
   // Las que siguen abiertas y son anteriores a la ventana: una a una, para que
   // su estado no se quede congelado.
-  for (const id of await model.abiertasAnterioresA(projectId, new Date(desde * 1000).toISOString())) {
+  for (const pid of [projectId, ...prestados]) for (const id of await model.abiertasAnterioresA(pid, new Date(desde * 1000).toISOString())) {
     if (vistas.has(id)) continue;
     try {
       const obj = await stripeGet(apiKey, `/v1/disputes/${encodeURIComponent(id)}`, { 'expand[]': 'charge' });
-      await guardar(projectId, obj, { origen: 'sondeo' });
+      await guardar(pid, obj, { origen: 'sondeo' });
       res.revisadas++;
     } catch (e) {
       logger.warn({ projectId, disputeId: id, err: e.message }, 'Disputa de Stripe: no se pudo revisar');

@@ -78,8 +78,8 @@ beforeEach(() => {
 });
 
 describe('los catálogos, que no han cambiado', () => {
-  it('TICKET_STATUS tiene 4 estados con label + tone', () => {
-    expect(Object.keys(TICKET_STATUS)).toEqual(['open', 'in_review', 'resolved', 'closed']);
+  it('TICKET_STATUS tiene 5 estados con label + tone (24/11: «En seguimiento»)', () => {
+    expect(Object.keys(TICKET_STATUS)).toEqual(['open', 'in_review', 'follow_up', 'resolved', 'closed']);
     for (const v of Object.values(TICKET_STATUS)) {
       expect(v.label).toBeTruthy();
       expect(v.tone).toBeTruthy();
@@ -98,7 +98,7 @@ describe('los catálogos, que no han cambiado', () => {
   it('coinciden con lo que acepta el servidor', () => {
     // Si aquí se añadiera un estado que la migración 172 no tiene en su CHECK,
     // la pantalla lo ofrecería y el servidor lo rechazaría con un 500.
-    expect(Object.keys(TICKET_STATUS)).toEqual(['open', 'in_review', 'resolved', 'closed']);
+    expect(Object.keys(TICKET_STATUS)).toEqual(['open', 'in_review', 'follow_up', 'resolved', 'closed']);
     // Y el tipo, con el CHECK de la migración 294 (CRM#820).
     expect(Object.keys(TICKET_KIND)).toEqual(['bug', 'feature', 'question', 'access']);
   });

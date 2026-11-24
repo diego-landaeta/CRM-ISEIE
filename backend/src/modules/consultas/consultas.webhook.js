@@ -15,8 +15,9 @@ import { AppError } from '../../shared/utils/AppError.js';
  *
  *  - POST /conectar     el plugin se presenta con el código de un solo uso que da el
  *                       CRM; la puerta es el código (y que el Moodle conteste con el token).
- *  - POST /:projectId   cada mensaje privado del campus; la puerta es la FIRMA
- *                       (`X-Crm-Firma`), que obliga a leer el cuerpo en bruto.
+ *  - POST /:projectId   cada mensaje privado del campus y, desde el plugin 1.13.0, cada
+ *                       suspensión o reactivación de un alumno (CRM#531); la puerta es
+ *                       la FIRMA (`X-Crm-Firma`), que obliga a leer el cuerpo en bruto.
  *
  * Solo se monta con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION, app.js). Todo lleva
  * un límite de ritmo por IP, y los cuerpos se validan con Zod (consultas.validation.js):

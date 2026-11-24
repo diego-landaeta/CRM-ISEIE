@@ -49,6 +49,8 @@ export const createConversionSchema = z.object({
   importe_pagado: z.number().min(0).default(0),
   metodo_pago: z.enum(PAYMENT_METHODS).optional().nullable(),
   metodo_pago_inicial: z.enum(PAYMENT_METHODS).optional().nullable(),
+  // Su referencia (24/11): nº de operación, o el link/cobro de Stripe si la pagó con otro link.
+  referencia_pago_inicial: referencia,
   fecha_compromiso_pago: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional().nullable(),
   fecha_conversion: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Formato fecha: YYYY-MM-DD').optional(),
   notas_pago: z.string().max(2000).optional().nullable(),

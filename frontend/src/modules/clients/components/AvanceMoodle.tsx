@@ -5,6 +5,7 @@ import { formatDate } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/utils';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import ProgresoCurso from '@/modules/moodle/components/ProgresoCurso';
 import type { AvanceMoodle, CampusDelAlumno, CursoDelAlumno } from '../api/avanceMoodle.api';
 
@@ -96,7 +97,7 @@ function FilaCurso({ curso }: { curso: CursoDelAlumno }) {
         </a>
         <Estado curso={curso} />
       </div>
-      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-3">
+      <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-3" data-recorrido="avance-curso">
         <div>
           <dt className="text-muted-foreground">Matriculado</dt>
           <dd className="text-foreground">{curso.matriculadoEl ? formatDate(curso.matriculadoEl) : '—'}</dd>
@@ -123,7 +124,7 @@ function FilaCurso({ curso }: { curso: CursoDelAlumno }) {
 
 function BloqueCampus({ c }: { c: CampusDelAlumno }) {
   return (
-    <section aria-label={`Campus ${c.campus}`} className="rounded-xl border border-border p-4 space-y-3">
+    <section aria-label={`Campus ${c.campus}`} className="rounded-xl border border-border p-4 space-y-3" data-recorrido="avance-campus">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h4 className="text-sm font-bold text-foreground">{c.campus}</h4>
         {c.alumno && (
@@ -168,8 +169,9 @@ export default function AvanceMoodleBloque({
           {datos?.diasSinAccesoMaximos ? ` · «sin acceso» a partir de ${datos.diasSinAccesoMaximos} días` : ''}
         </p>
         <EtiquetaEnPruebas />
+        <VerRecorrido id="avance-alumno" listo={!cargando} compacto />
       </div>
-      <button type="button" onClick={onActualizar} disabled={cargando}
+      <button type="button" onClick={onActualizar} disabled={cargando} data-recorrido="avance-actualizar"
         className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40">
         <ArrowsClockwise size={13} className={cn(cargando && 'animate-spin')} aria-hidden />
         {cargando ? 'Leyendo…' : 'Actualizar'}

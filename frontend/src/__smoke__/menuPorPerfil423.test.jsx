@@ -42,6 +42,7 @@ const mapaDeAhora = (p) => resolverPermisos({
 // 2.6.0 (03/11/2026): a la foto se le sumaron las pantallas NUEVAS (Consultas, Moodle,
 // Cursos pendientes, Pregunta a tus datos). Son entradas que antes no existían, no cambios
 // de acceso: lo de antes sigue igual y lo aprobado sigue en `cambios-aprobados.js`.
+// Igual con «Sistema › Correos» (#701, 24/11/2026): la Bandeja de los buzones, pantalla nueva.
 const FOTO = path.resolve(__dirname, 'fixtures/menu-por-perfil-423.json');
 
 const persona = (role, extra = {}) => ({

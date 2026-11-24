@@ -43,7 +43,7 @@ const FILTROS: Array<{ v: EstadoLink | ''; t: string }> = [
 export default function LinksDePagoPage() {
   const { can } = usePermission();
   const encendidos = useLinksPagoEncendidos();
-  const { activeProject, activeIssuerId } = useProjectContext();
+  const { activeProject, activeIssuerId, projects } = useProjectContext();
   // El id y no el objeto: un objeto nuevo en cada pintada volvería a pedir la lista sin fin.
   const proyectoId = activeProject?.id ?? null;
   const puedeCrear = can('links_pago.crear');
@@ -134,7 +134,7 @@ export default function LinksDePagoPage() {
 
       {conectar?.activo === false && <AvisoCobroAutoApagado motivo={conectar.motivo} />}
       {conectar?.activo === true && Array.isArray(conectar.campus) && conectar.campus.length > 0 && (
-        <AvisoConectarStripe campus={conectar.campus} />
+        <AvisoConectarStripe campus={conectar.campus} proyectos={projects} />
       )}
 
       {/*

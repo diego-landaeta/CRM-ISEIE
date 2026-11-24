@@ -13,6 +13,8 @@ import {
 import * as campusTutor from './tutor.campus.js';
 import * as campusDeLaTutora from './tutor.micampus.js';
 import { redaccionEnMoodle } from './tutor.redaccion.js';
+// Corregir desde el CRM (#408, gemela de CRM#681): la tarea, el curso, el archivo y la nota.
+import * as correccion from './tutor.correccion.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
@@ -596,7 +598,59 @@ export async function cursoDetalle(req, res, next) {
 export async function miCampus(req, res, next) {
   try {
     const refrescar = req.query.refrescar === '1';
-    res.json({ success: true, data: await campusDeLaTutora.miCampus(req.user.userId, { refrescar }) });
+    // ?campus=3,7: solo esos campus suyos (el selector de Mi campus). Lo que no es un id, fuera.
+    const campus = String(req.query.campus || '').split(',').map((x) => parseInt(x, 10))
+      .filter((n) => Number.isInteger(n) && n > 0).slice(0, 50);
+    res.json({ success: true, data: await campusDeLaTutora.miCampus(req.user.userId, { refrescar, campus }) });
+  } catch (err) { next(err); }
+}
+
+const entero = (v) => { const n = parseInt(v); if (!Number.isInteger(n) || n <= 0) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR'); return n; };
+
+// GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId — la tarea con sus entregas (#681)
+export async function verTarea(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    res.json({ success: true, data: await correccion.verTarea(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/cursos/:projectId/:cursoId — el curso entero: temas y actividades
+export async function verCurso(req, res, next) {
+  try {
+    const { projectId, cursoId } = req.params;
+    res.json({ success: true, data: await correccion.verCurso(req.user.userId, entero(projectId), entero(cursoId)) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar — { alumnoId, nota, comentario }
+// ESCRIBE en Moodle: la ruta solo se monta con el plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION).
+export async function calificar(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    const { alumnoId, nota, comentario } = req.body || {};
+    const n = Number(nota);
+    if (!Number.isFinite(n) || n < 0) throw new AppError('La nota tiene que ser un número de 0 en adelante', 400, 'VALIDATION_ERROR');
+    if (comentario != null && (typeof comentario !== 'string' || comentario.length > 20000)) throw new AppError('Comentario no válido', 400, 'VALIDATION_ERROR');
+    res.json({ success: true, data: await correccion.calificar(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId), { alumnoId: entero(alumnoId), nota: n, comentario: comentario || '' }) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo?alumnoId=&n= — un archivo
+// entregado, sin enseñar el token del campus. Lo que no es PDF, imagen o texto se descarga:
+// un HTML o un SVG que suba un alumno nunca se ejecuta con la sesión de la tutora.
+export async function archivoEntregado(req, res, next) {
+  try {
+    const { projectId, cursoId, tareaId } = req.params;
+    const n = Number(req.query.n);
+    if (!Number.isInteger(n) || n < 0 || n > 1000) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR');
+    const a = await correccion.archivo(req.user.userId, entero(projectId), entero(cursoId), entero(tareaId), entero(req.query.alumnoId), n);
+    res.setHeader('Content-Type', a.tipo);
+    res.setHeader('Content-Disposition', `${a.enLinea ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(a.nombre)}`);
+    res.setHeader('Content-Security-Policy', "sandbox; default-src 'none'");
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.send(a.cuerpo);
   } catch (err) { next(err); }
 }
 

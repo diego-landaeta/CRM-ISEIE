@@ -1,5 +1,7 @@
 // Filtros operativos de Clientes. Mantiene el patrón visual de Prospectos,
 // pero evita importes y estados de venta: solo contacto, programa y cuotas.
+// Y los suspendidos en Moodle (gemela de CRM#531): server-side, solo si el servidor
+// lo tiene encendido.
 
 import { useEffect, useRef, useState } from 'react';
 import { Funnel, MagnifyingGlass, X, CaretDown } from '@phosphor-icons/react';
@@ -22,6 +24,9 @@ interface Props {
   gestores: Gestor[];
   productos: Producto[];
   totalBackend: number;
+  /** Gemela de CRM#531: «suspendidos» o vacío. Sin setFilterMoodle (apagado en el servidor), no sale. */
+  filterMoodle?: string;
+  setFilterMoodle?: (value: string) => void;
 }
 
 const INSTALLMENT_LABELS: Record<string, string> = {
@@ -53,6 +58,8 @@ export default function ClientsFiltersBar(props: Props) {
     gestores,
     productos,
     totalBackend,
+    filterMoodle = '',
+    setFilterMoodle,
   } = props;
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
 
@@ -104,12 +111,16 @@ export default function ClientsFiltersBar(props: Props) {
       onClear: () => setFilterInstallments(''),
     });
   }
+  if (filterMoodle && setFilterMoodle) {
+    activePills.push({ key: 'moodle', label: 'Suspendidos en Moodle', onClear: () => setFilterMoodle('') });
+  }
 
   function clearAll() {
     setSearch('');
     setFilterResp('');
     setFilterProducto('');
     setFilterInstallments('');
+    setFilterMoodle?.('');
   }
 
   return (
@@ -204,6 +215,20 @@ export default function ClientsFiltersBar(props: Props) {
                     ))}
                   </select>
                 </Row>
+
+                {setFilterMoodle && (
+                  <Row label="Moodle">
+                    <select
+                      value={filterMoodle}
+                      onChange={(event) => setFilterMoodle(event.target.value)}
+                      aria-label="Estado en Moodle"
+                      className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
+                    >
+                      <option value="">Todos</option>
+                      <option value="suspendidos">Suspendidos en Moodle</option>
+                    </select>
+                  </Row>
+                )}
 
                 <Row label="Orden">
                   <select

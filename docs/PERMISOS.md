@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-910 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+926 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -280,6 +280,22 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | descargar | `GET /api/copia-diaria/descarga/:fichero` | (no existía) | (ruta nueva) | — |
+
+## correos
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/correos/` | (no existía) | (ruta nueva) | `correos.view` |
+| recuento | `GET /api/correos/recuento` | (no existía) | (ruta nueva) | `correos.view` |
+| sincronizar | `POST /api/correos/sincronizar` | (no existía) | (ruta nueva) | `correos.sincronizar` |
+| listar | `GET /api/correos/buzones` | (no existía) | (ruta nueva) | `correos.view` |
+| crear | `POST /api/correos/buzones` | (no existía) | (ruta nueva) | `correos.buzones` |
+| probar | `POST /api/correos/buzones/probar` | (no existía) | (ruta nueva) | `correos.buzones` |
+| cambiar | `PATCH /api/correos/buzones/:id` | (no existía) | (ruta nueva) | `correos.buzones` |
+| quitar | `DELETE /api/correos/buzones/:id` | (no existía) | (ruta nueva) | `correos.buzones` |
+| probar | `POST /api/correos/buzones/:id/probar` | (no existía) | (ruta nueva) | `correos.buzones` |
+| usarComoCorreoDeEmpresa | `POST /api/correos/buzones/:id/correo-de-empresa` | (no existía) | (ruta nueva) | `correos.buzones` |
+| uno | `GET /api/correos/:id` | (no existía) | (ruta nueva) | `correos.view` |
 
 ## credentials
 
@@ -609,6 +625,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | removeLeadProduct | `DELETE /api/leads/:id/products/:lpId` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | getById | `GET /api/leads/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.view` |
 | avanceEnMoodle | `GET /api/leads/:id/campus` | (no existía) | (ruta nueva) | `leads.view` |
+| suspensionesEnMoodle | `GET /api/leads/:id/suspensiones-moodle` | (no existía) | (ruta nueva) | `leads.view` |
 | mergeLeads | `POST /api/leads/:id/merge` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.edit` |
 | createManual | `POST /api/leads/` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.create` |
 | bulkCreate | `POST /api/leads/bulk` | sesión | superadmin, admin, gestor, soporte, project_manager | `leads.create` |
@@ -1127,6 +1144,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | cursoDetalle | `GET /api/tutores/curso/:productId` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
 | miRedaccionMoodle | `GET /api/tutores/mi-campus/redaccion-moodle` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
 | brochureDelCurso | `GET /api/tutores/curso/:productId/brochure` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | buscar | `GET /api/tutores/buscar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
@@ -1777,6 +1798,14 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte, Project manager |  |
 | Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
+
+### Correos
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver correos | `correos.view` | Los correos que llegan a los buzones (los de sus campus). | Admin, Soporte, Project manager |  |
+| Traer correos | `correos.sincronizar` | Leer ahora los buzones, sin esperar a la siguiente vuelta. | Admin, Soporte | `correos.view` |
+| Conectar buzones | `correos.buzones` | Conectar, probar, cambiar y quitar los buzones de correo que lee la Bandeja. Un admin, los de sus campus. | Admin, Soporte | `correos.view` |
 
 ### Estado del sistema
 

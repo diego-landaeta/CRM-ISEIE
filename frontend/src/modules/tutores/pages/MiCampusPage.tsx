@@ -1,15 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { soloEsTutorRedactor } from '@/shared/lib/roles';
 import {
-  ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, Warning,
+  ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, ListBullets, Warning,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { Button } from '@/shared/components/ui/button';
+import Iniciales from '@/shared/components/ui/Iniciales';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import {
   tutoresApi, type MiCampus, type MiCampusCurso, type MiCampusPendiente,
 } from '../api/tutores.api';
+// Lo que hay que hacer en un solo sitio y el selector de campus (Diego, 24/11).
+import {
+  SelectorCampus, PorResponder, PorCorregir, entregasPorCorregir, leerCampusElegidos, guardarCampusElegidos,
+} from '../components/BandejaMiCampus';
+import { consultasApi, type ConsultaFila } from '@/modules/consultas/api/consultas.api';
 // El % hecho con su barra: el mismo componente que la ficha del cliente (gemela de CRM#871).
 import Progreso from '@/modules/moodle/components/ProgresoCurso';
 // El recorrido guiado de la pantalla (#611): solo con el botón (#681).
@@ -21,13 +29,18 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 /*
   «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene que hacer hoy en Moodle.
 
-  Arriba, el resumen que pidió Carlos (entregas por corregir, dudas sin contestar y cursos
-  por desarrollar). Después, curso a curso, lo que pide acción con su botón; como consulta,
-  sus alumnos con el último acceso y el % hecho; y al lado, lo que tiene por desarrollar.
-  Las cifras se leen de Moodle en el momento (copia de dos minutos en el servidor).
+  Jerarquía: primero lo que pide acción, todo junto (Diego, 24/11: un solo sitio para
+  la tutora redactora): las consultas por responder, que se contestan aquí mismo, y
+  las entregas por corregir, cada una con su «Corregir». Después, curso a curso, sus
+  tareas y sus alumnos; y al lado, lo que tiene pendiente por desarrollar. Arriba, el
+  selector de campus: todos juntos o uno o varios, y se recuerda. Las cifras se leen
+  de Moodle en el momento (copia de dos minutos por campus en el servidor).
 
-  GEMELA: en el 360 se corrige desde el CRM (CorregirTareaPage, con el plugin de Moodle).
-  Aquí ese plugin llega con la #406: cada entrega abre el calificador de Moodle.
+  Sistema: la escala de texto del CRM, filas con separadores finos (no tarjetas
+  dentro de tarjetas), controles de 32 px y color solo para el estado y la acción.
+
+  GEMELA de CRM#1084: aquí también se corrige desde el CRM (CorregirTareaPage, con el
+  plugin de Moodle). «Mis cursos y comisiones» es un enlace de la cabecera, no una pestaña.
 */
 
 const fechaCorta = (iso: string | null) => (iso
@@ -68,20 +81,10 @@ function sinProgreso(curso: MiCampusCurso) {
   return 'Moodle no da su avance: el curso no tiene actividades con finalización';
 }
 
-/** Las iniciales del alumno, para reconocerlo de un vistazo en la lista. */
-function Iniciales({ nombre }: { nombre: string | null }) {
-  const letras = String(nombre || '?').trim().split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase() || '').join('') || '?';
-  return (
-    <span aria-hidden className="grid h-6 w-6 shrink-0 place-items-center rounded-full bg-muted text-[10px] font-semibold text-muted-foreground">
-      {letras}
-    </span>
-  );
-}
-
 const porCorregirDe = (k: MiCampusCurso) => k.tareas.reduce((s, t) => s + t.sinCorregir.length, 0);
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 
-const accion = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-secundario font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
+const accion = 'inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-3 text-secundario font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1';
 
 /** Una fila de «Por hacer»: qué es, de quién y el botón que lo resuelve. */
 function PorHacer({ tono, icono, titulo, detalle, children }: {
@@ -102,22 +105,13 @@ function PorHacer({ tono, icono, titulo, detalle, children }: {
   );
 }
 
-/** Abre Moodle en otra pestaña: aquí se corrige allí (el plugin para corregir desde el CRM es la #406). */
-function EnMoodle({ href, children, etiqueta }: { href: string; children: React.ReactNode; etiqueta?: string }) {
-  return (
-    <a href={href} target="_blank" rel="noopener noreferrer" aria-label={etiqueta} className={accion}>
-      {children} <ArrowSquareOut size={12} aria-hidden />
-    </a>
-  );
-}
-
-function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: boolean; alternar: () => void }) {
+function Curso({ projectId, curso, abierto, alternar }: { projectId: number; curso: MiCampusCurso; abierto: boolean; alternar: () => void }) {
+  const corregir = (tareaId: number) => `/mis-cursos/campus/tarea/${projectId}/${curso.id}/${tareaId}`;
   const conEntregas = curso.tareas.filter((t) => t.sinCorregir.length > 0);
   const porCorregir = porCorregirDe(curso);
   const dudas = curso.dudas.length;
   const alDia = porCorregir === 0 && dudas === 0;
   const panel = `curso-${curso.id}`;
-  const sinEntrarN = curso.alumnos.filter((a) => sinEntrar(a.ultimoAcceso)).length;
   return (
     <li data-testid="curso-campus">
       <button type="button" onClick={alternar} data-recorrido="mi-campus-curso" aria-expanded={abierto} aria-controls={panel}
@@ -132,9 +126,9 @@ function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: bo
             {dudas > 0 && <span className="font-medium text-info-soft-foreground">{plural(dudas, 'duda', 'dudas')}</span>}
             {alDia && <span className="inline-flex items-center gap-1 text-muted-foreground"><CheckCircle size={12} weight="fill" className="text-success" aria-hidden /> Al día</span>}
             <span className="text-muted-foreground">{plural(curso.alumnos.length, 'alumno', 'alumnos')}</span>
-            {sinEntrarN > 0 && (
+            {curso.alumnos.some((a) => sinEntrar(a.ultimoAcceso)) && (
               <span className="text-muted-foreground" title={`Llevan ${DIAS_SIN_ENTRAR} días o más sin entrar al curso, o no han entrado nunca`}>
-                · <span className="font-medium text-foreground">{sinEntrarN} sin entrar</span> hace +{DIAS_SIN_ENTRAR} días
+                · <span className="font-medium text-foreground">{curso.alumnos.filter((a) => sinEntrar(a.ultimoAcceso)).length} sin entrar</span> hace +{DIAS_SIN_ENTRAR} días
               </span>
             )}
           </span>
@@ -156,21 +150,26 @@ function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: bo
                 <PorHacer key={`t-${t.id}`} tono="corregir" icono={<ClipboardText size={15} weight="bold" />}
                   titulo={t.nombre || 'Tarea'}
                   detalle={`${t.sinCorregir.map((e) => e.alumno || 'Alumno').join(', ')} · entregada ${fechaCorta(t.sinCorregir[0]?.entregadaAt ?? null)}${t.entrega ? ` · fecha límite ${fechaCorta(t.entrega)}` : ''}`}>
-                  {/* Una entrega: directa al calificador con ese alumno. Varias: la lista de la tarea. */}
-                  <EnMoodle href={t.sinCorregir.length === 1 ? t.sinCorregir[0].corregirUrl : t.corregirUrl}
-                    etiqueta={`Corregir ${t.nombre || 'la tarea'} en Moodle (se abre en otra pestaña)`}>
+                  <Link to={corregir(t.id)} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>
                     Corregir{t.sinCorregir.length > 1 ? ` (${t.sinCorregir.length})` : ''}
-                  </EnMoodle>
+                  </Link>
                 </PorHacer>
               ))}
               {curso.dudas.map((d) => (
                 <PorHacer key={`d-${d.consultaId}`} tono="duda" icono={<ChatCircleText size={15} weight="bold" />}
                   titulo={d.alumno || 'Alumno'} detalle={`Espera respuesta desde el ${fechaCorta(d.desde)}`}>
-                  <Link to={`/consultas/${d.consultaId}`} className={accion}>Responder</Link>
+                  <Link to={`/consultas/${d.consultaId}`} className={cn(accion, 'border border-border bg-card text-foreground hover:bg-muted')}>Responder</Link>
                 </PorHacer>
               ))}
             </ul>
           )}
+
+          <Link to={`/mis-cursos/campus/curso/${projectId}/${curso.id}`}
+            className="-mx-2 mt-2 flex items-center gap-3 rounded-md px-2 py-2.5 text-secundario font-medium text-primary hover:bg-muted/60">
+            <ListBullets size={15} className="shrink-0" aria-hidden />
+            <span className="flex-1">Ver el curso completo <span className="font-normal text-muted-foreground">· temas y todas las actividades</span></span>
+            <CaretRight size={12} className="shrink-0" aria-hidden />
+          </Link>
 
           {curso.tareas.length > 0 && (
             <div className="mt-2">
@@ -178,17 +177,14 @@ function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: bo
               <ul className="divide-y divide-border">
                 {curso.tareas.map((t) => (
                   <li key={t.id}>
-                    <a href={t.corregirUrl} target="_blank" rel="noopener noreferrer"
-                      className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/60">
+                    <Link to={corregir(t.id)} className="-mx-2 flex items-center gap-3 rounded-md px-2 py-2 hover:bg-muted/60">
                       <ClipboardText size={15} className="shrink-0 text-muted-foreground" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-secundario font-medium text-foreground">{t.nombre}</span>
-                      {t.enGrupo
-                        ? <span className="shrink-0 text-secundario text-muted-foreground">En grupo: se revisa en Moodle</span>
-                        : t.sinCorregir.length > 0
-                          ? <span className="shrink-0 text-secundario font-medium text-warning">{t.sinCorregir.length} por corregir</span>
-                          : <span className="shrink-0 text-secundario text-muted-foreground">{t.entrega ? `Fecha límite ${fechaCorta(t.entrega)}` : 'Al día'}</span>}
-                      <ArrowSquareOut size={12} className="shrink-0 text-muted-foreground" aria-hidden />
-                    </a>
+                      {t.sinCorregir.length > 0
+                        ? <span className="shrink-0 text-secundario font-medium text-warning">{plural(t.sinCorregir.length, 'por corregir', 'por corregir')}</span>
+                        : <span className="shrink-0 text-secundario text-muted-foreground">{t.entrega ? `Fecha límite ${fechaCorta(t.entrega)}` : 'Al día'}</span>}
+                      <CaretRight size={12} className="shrink-0 text-muted-foreground" aria-hidden />
+                    </Link>
                   </li>
                 ))}
               </ul>
@@ -226,7 +222,7 @@ function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: bo
                     <tr key={a.id} data-testid="alumno-campus">
                       <td className="py-2 pr-3">
                         <span className="flex items-center gap-2.5">
-                          <Iniciales nombre={a.nombre} />
+                          <Iniciales nombre={a.nombre} tamano="xs" />
                           <span className="min-w-0">
                             <span className="block truncate text-secundario font-medium text-foreground">{a.nombre || 'Sin nombre'}</span>
                             <span className="block truncate text-secundario text-muted-foreground sm:hidden">
@@ -259,18 +255,6 @@ function Curso({ curso, abierto, alternar }: { curso: MiCampusCurso; abierto: bo
   );
 }
 
-function Hito({ hecho, texto }: { hecho: boolean; texto: string }) {
-  return (
-    <li className={cn('inline-flex items-center gap-1.5', hecho ? 'text-foreground' : 'text-muted-foreground')}>
-      {hecho
-        ? <CheckCircle size={14} weight="fill" className="text-success" aria-hidden />
-        : <span aria-hidden className="h-3.5 w-3.5 rounded-full border-[1.5px] border-dashed border-muted-foreground/60" />}
-      {texto}<span className="sr-only">{hecho ? ': listo' : ': falta'}</span>
-    </li>
-  );
-}
-
-/** Lo que tiene por desarrollar en Moodle (Cursos pendientes, #336), con su fecha y su avance. */
 function PorDesarrollar({ lista }: { lista: MiCampusPendiente[] }) {
   return (
     <section aria-labelledby="mi-campus-pendientes" data-recorrido="mi-campus-por-desarrollar" className="rounded-lg border border-border bg-card">
@@ -313,6 +297,17 @@ function PorDesarrollar({ lista }: { lista: MiCampusPendiente[] }) {
         </ul>
       )}
     </section>
+  );
+}
+
+function Hito({ hecho, texto }: { hecho: boolean; texto: string }) {
+  return (
+    <li className={cn('inline-flex items-center gap-1.5', hecho ? 'text-foreground' : 'text-muted-foreground')}>
+      {hecho
+        ? <CheckCircle size={14} weight="fill" className="text-success" aria-hidden />
+        : <span aria-hidden className="h-3.5 w-3.5 rounded-full border-[1.5px] border-dashed border-muted-foreground/60" />}
+      {texto}<span className="sr-only">{hecho ? ': listo' : ': falta'}</span>
+    </li>
   );
 }
 
@@ -359,21 +354,50 @@ function Resumen({ porCorregir, dudas, porDesarrollar, conCampus }: { porCorregi
 }
 
 export default function MiCampusPage() {
+  // La redactora no tiene comisiones: sin el enlace (Diego, 24/11/2026).
+  const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
+  const soloRedactora = soloEsTutorRedactor(user);
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
+  // Los cursos con algo que hacer empiezan abiertos, como antes (Diego, 24/11: «todo abierto
+  // como antes, no minimizado»), aunque lo pendiente también esté arriba, todo junto.
   const [abiertos, setAbiertos] = useState<Set<string>>(new Set());
+  // Los campus que ve: [] = todos. Se recuerda en este navegador.
+  const [elegidos, setElegidos] = useState<number[]>(leerCampusElegidos);
+  const elegidosRef = useRef(elegidos);
+  elegidosRef.current = elegidos;
+  // Sus consultas abiertas, las de Consultas (no la copia de Moodle): se contestan aquí.
+  const [consultas, setConsultas] = useState<ConsultaFila[] | null>(null);
+  const [plazoHoras, setPlazoHoras] = useState(24);
+  const [errorConsultas, setErrorConsultas] = useState<string | null>(null);
+
+  const cargarConsultas = useCallback(async () => {
+    try {
+      const r = await consultasApi.mias({ estado: 'pendientes' });
+      if (!Array.isArray(r?.data?.consultas)) throw new Error('Respuesta sin consultas');
+      setConsultas(r.data.consultas.filter((c) => c.estado === 'abierta'));
+      if (r?.data?.plazoHoras) setPlazoHoras(r.data.plazoHoras);
+      setErrorConsultas(null);
+    } catch {
+      setErrorConsultas('No se han podido leer tus consultas.');
+    }
+  }, []);
 
   const cargar = useCallback(async (refrescar = false) => {
     setCargando(true);
     try {
-      const r = await tutoresApi.miCampus(refrescar);
+      const r = await tutoresApi.miCampus(refrescar, elegidosRef.current);
       if (r.success && r.data) {
         setDatos(r.data); setError(null);
         // De entrada, abiertos los cursos con algo que hacer.
         if (!refrescar) {
           setAbiertos(new Set(r.data.campus.flatMap((c) => c.cursos
             .filter((k) => porCorregirDe(k) || k.dudas.length).map((k) => `${c.projectId}-${k.id}`))));
+        }
+        // Lo guardado ya no es suyo (otro campus, otra persona en este navegador): todos.
+        if (elegidosRef.current.length && r.data.elegidos === null) {
+          setElegidos([]); guardarCampusElegidos([]);
         }
       }
     } catch (e) {
@@ -382,15 +406,44 @@ export default function MiCampusPage() {
       if (refrescar) toast({ title: 'No se ha podido actualizar', variant: 'destructive' });
     } finally { setCargando(false); }
   }, []);
-  useEffect(() => { cargar(); }, [cargar]);
+  // Se vuelve a leer al cambiar de campus.
+  const claveCampus = elegidos.join(',');
+  useEffect(() => { cargar(); }, [cargar, claveCampus]);
+  useEffect(() => { cargarConsultas(); }, [cargarConsultas]);
+
+  const elegirCampus = (ids: number[]) => { setElegidos(ids); guardarCampusElegidos(ids); };
+  const actualizar = () => { cargar(true); cargarConsultas(); };
+
+  // Lo que se ve: los campus elegidos (el servidor dice cuáles ha leído).
+  const porResponder = useMemo(() => {
+    if (consultas === null) return null;
+    const filtro = datos?.elegidos?.length ? new Set(datos.elegidos) : null;
+    return consultas.filter((c) => !filtro || filtro.has(Number(c.project_id)));
+  }, [consultas, datos]);
+  const porCorregir = useMemo(() => entregasPorCorregir(datos), [datos]);
+  const respondida = (id: number) => {
+    setConsultas((l) => (l || []).filter((c) => c.id !== id));
+    // Y fuera también de su curso, sin esperar a la copia de Moodle.
+    setDatos((d) => (d ? {
+      ...d,
+      campus: d.campus.map((c) => ({
+        ...c,
+        dudasSinCurso: c.dudasSinCurso.filter((x) => x.consultaId !== id),
+        cursos: c.cursos.map((k) => ({ ...k, dudas: k.dudas.filter((x) => x.consultaId !== id) })),
+      })),
+    } : d));
+  };
 
   const totales = useMemo(() => {
     const cursos = datos?.campus.flatMap((c) => c.cursos) || [];
     return {
       porCorregir: cursos.reduce((s, k) => s + porCorregirDe(k), 0),
-      dudas: cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0),
+      // Las dudas, las de Consultas en cuanto se han leído (las mismas que la lista de abajo).
+      dudas: porResponder !== null ? porResponder.length
+        : cursos.reduce((s, k) => s + k.dudas.length, 0) + (datos?.campus.reduce((s, c) => s + c.dudasSinCurso.length, 0) || 0),
     };
-  }, [datos]);
+  }, [datos, porResponder]);
+  const todosLosCampus = datos?.todosLosCampus || datos?.campus.map((c) => ({ projectId: c.projectId, campus: c.campus })) || [];
 
   const alternar = (clave: string) => setAbiertos((s) => {
     const n = new Set(s);
@@ -412,10 +465,12 @@ export default function MiCampusPage() {
             <VerRecorrido id="mi-campus" listo={!cargando} compacto />
             {/* En ISEIE «Mis cursos y comisiones» es un enlace, no una pestaña como
                 en el 360: el paso del recorrido lo señala a él. */}
+            {!soloRedactora && (
             <Link to="/mis-cursos" data-recorrido="mi-campus-comisiones" className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-secundario font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
               <Coins size={14} aria-hidden /> Mis cursos y comisiones
             </Link>
-            <Button data-recorrido="mi-campus-actualizar" variant="outline" size="sm" disabled={cargando} onClick={() => cargar(true)} className="h-8 text-secundario">
+            )}
+            <Button data-recorrido="mi-campus-actualizar" variant="outline" size="sm" disabled={cargando} onClick={actualizar} className="h-8 text-secundario">
               <ArrowsClockwise size={14} className={cn('mr-1.5', cargando && 'animate-spin')} aria-hidden />
               {cargando ? 'Leyendo…' : 'Actualizar'}
             </Button>
@@ -443,6 +498,11 @@ export default function MiCampusPage() {
 
       {datos && (
         <>
+          {/* Uno o varios campus (Diego, 24/11): solo con más de uno. */}
+          {todosLosCampus.length > 1 && (
+            <SelectorCampus todos={todosLosCampus} elegidos={elegidos} cambiar={elegirCampus} cargando={cargando} />
+          )}
+
           {/* Sin ningún campus conectado no se dice «estás al día»: no se sabe. */}
           <Resumen porCorregir={totales.porCorregir} dudas={totales.dudas} porDesarrollar={datos.pendientes.length} conCampus={datos.campus.length > 0} />
 
@@ -465,7 +525,7 @@ export default function MiCampusPage() {
           )}
 
           <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1fr)_20rem]">
-            <div className="min-w-0 space-y-6">
+            <div className={cn("min-w-0 space-y-6", datos.campus.length === 0 && (datos.sinConectar?.length ?? 0) > 0 && "hidden lg:block")}>
               {datos.campus.length === 0 && !(datos.sinConectar?.length) && (
                 <div className="rounded-lg border border-dashed border-border px-6 py-12 text-center">
                   <GraduationCap size={24} className="mx-auto text-muted-foreground" aria-hidden />
@@ -474,6 +534,15 @@ export default function MiCampusPage() {
                     Cuando administración te dé de alta en el Moodle de un campus, aquí verás tus cursos, lo que tienes por corregir y tus alumnos.
                   </p>
                 </div>
+              )}
+
+              {/* Lo que hay que hacer, todo junto: responder y corregir sin ir curso a curso. */}
+              {(datos.campus.length > 0 || (porResponder?.length ?? 0) > 0) && (
+                <section aria-label="Por hacer" data-testid="bandeja-mi-campus" className="rounded-lg border border-border bg-card px-4 py-2">
+                  <PorResponder consultas={porResponder} plazoHoras={plazoHoras} error={errorConsultas} respondida={respondida} />
+                  <div className="my-1 border-t border-border" />
+                  <PorCorregir entregas={porCorregir} />
+                </section>
               )}
 
               {datos.campus.map((c) => (
@@ -499,7 +568,7 @@ export default function MiCampusPage() {
                   {c.cursos.length > 0 && (
                     <ul className="divide-y divide-border">
                       {c.cursos.map((k) => (
-                        <Curso key={k.id} curso={k} abierto={abiertos.has(`${c.projectId}-${k.id}`)} alternar={() => alternar(`${c.projectId}-${k.id}`)} />
+                        <Curso key={k.id} projectId={c.projectId} curso={k} abierto={abiertos.has(`${c.projectId}-${k.id}`)} alternar={() => alternar(`${c.projectId}-${k.id}`)} />
                       ))}
                     </ul>
                   )}
