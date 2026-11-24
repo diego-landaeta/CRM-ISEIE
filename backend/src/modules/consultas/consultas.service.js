@@ -40,7 +40,7 @@ import {
 } from '../../shared/services/email-plantilla.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import {
-  conversacionesDe, mensajesDeConversacion, usuarioPorId, enviarMensaje, enviarComoTutor, matriculadosDe, cursosDe, MoodleError,
+  conversacionesDe, mensajesDeConversacion, usuarioPorId, enviarMensaje, enviarComoTutor, matriculadosDe, cursosDe, MoodleError, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { pluginActivo, campusConPluginAlDia } from './consultas.plugin.js';
@@ -178,7 +178,7 @@ export async function tutorasDelCurso(projectId, { cursoId = null, alumnoMoodleI
     const profesoras = new Set();
     for (const id of cursos) {
       const ids = await desdeLaCopia(`${projectId}:curso:${id}`, fresco, async () => (await matriculadosDe(conexion, id, opciones))
-        .filter((g) => g.roles.some((r) => r === 'editingteacher' || r === 'teacher')).map((g) => g.id));
+        .filter((g) => g.roles.some((r) => esRolDeTutora(r))).map((g) => g.id));
       ids.forEach((x) => profesoras.add(x));
     }
     const { rows } = await query(

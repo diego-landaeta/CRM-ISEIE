@@ -489,6 +489,19 @@ export function progresoDeMoodle(c) {
   return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : null;
 }
 
+/**
+ * Con qué roles del curso da clase una tutora: «Profesor» y «Profesor sin permiso de
+ * edición», y los que añada `MOODLE_ROLES_TUTORA` (nombres cortos separados por comas).
+ * En ISEIE las tutoras redactoras están como «Gestor» (`manager`) en sus cursos, y Diego
+ * pidió que cuente (24/11/2026): allí `MOODLE_ROLES_TUTORA=manager`. Se lee en cada
+ * llamada, para que el .env mande sin reiniciar nada más.
+ */
+export function esRolDeTutora(rol, env = process.env) {
+  if (rol === 'editingteacher' || rol === 'teacher') return true;
+  const extra = String(env.MOODLE_ROLES_TUTORA || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return extra.includes(rol);
+}
+
 /** Roles (nombre corto) del equipo del curso: quien tiene uno de estos no es alumno. */
 export const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
 
