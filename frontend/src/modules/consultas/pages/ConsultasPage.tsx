@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowsClockwise, ChatCircleText, LockKey, MagnifyingGlass } from '@phosphor-icons/react';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -15,8 +16,6 @@ import {
 } from '../api/consultas.api';
 import ConsultasNav from '../components/ConsultasNav';
 import CampusSinTutorAviso from '../components/CampusSinTutorAviso';
-// El recorrido guiado de la pantalla (#941, tanda D).
-import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   Consultas de alumnos (#188).
@@ -170,12 +169,13 @@ export default function ConsultasPage() {
           : `Todas las consultas de ${activeIssuerId ? 'la empresa elegida' : activeProject?.id && activeProject.id > 0 ? activeProject.nombre : 'tus campus'}.`}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="consultas-chat" listo={!cargando} />
+            <VerRecorrido id="consultas" listo={!cargando} />
             {puedeLeerElCampus && vista === 'todas' && (
               <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo} data-recorrido="consultas-leer">
                 <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
               </Button>
             )}
-            <VerRecorrido id="consultas" listo={!cargando} />
           </div>
         )}
       />
@@ -194,7 +194,7 @@ export default function ConsultasPage() {
       )}
 
       <div data-recorrido="consultas-filtros" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-        <div role="tablist" aria-label="Estado" className="flex flex-wrap gap-1">
+        <div role="tablist" aria-label="Estado" className="flex flex-wrap gap-1" data-recorrido="consultas-estado">
           {PESTANAS.map((p) => (
             <button key={p.clave} type="button" role="tab" aria-selected={pestana === p.clave} onClick={() => setPestana(p.clave)}
               className={`h-8 px-3 rounded-md text-sm font-semibold border ${pestana === p.clave ? 'border-primary bg-primary text-primary-foreground' : 'border-border bg-card text-muted-foreground hover:bg-muted'}`}>
@@ -207,7 +207,7 @@ export default function ConsultasPage() {
             </label>
           )}
         </div>
-        <div className="relative sm:w-72">
+        <div className="relative sm:w-72" data-recorrido="consultas-buscar">
           <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
           <input value={buscar} onChange={(e) => setBuscar(e.target.value)} autoComplete="off"
             placeholder="Buscar alumno, correo o curso" aria-label="Buscar alumno, correo o curso"
@@ -227,7 +227,7 @@ export default function ConsultasPage() {
             Se ven {lista.length} de {total}. Para encontrar una que no sale, búscala por el alumno, el correo o el curso.
           </p>
         )}
-        <ul data-recorrido="consultas-lista" className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Consultas">
+        <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Consultas" data-recorrido="consultas-lista">
           {lista.map((c) => (
             <li key={c.id}>
               <Link to={`/consultas/${c.id}`} className="block px-4 py-3 hover:bg-muted/50">

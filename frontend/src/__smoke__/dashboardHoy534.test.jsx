@@ -110,7 +110,7 @@ describe('Productos vendidos: top 10 y «Ver todos»', () => {
   });
 });
 
-describe('el Dashboard: cifras, cola y lo demás plegado', () => {
+describe('el Dashboard: cifras, cola y lo demás en plegables abiertos', () => {
   const src = fs.readFileSync(path.resolve(__dirname, '..', 'shared/pages/DashboardPage.jsx'), 'utf8');
   const devuelve = src.slice(src.indexOf('<AvisoHuecosFacturas'));
 
@@ -127,9 +127,16 @@ describe('el Dashboard: cifras, cola y lo demás plegado', () => {
     expect(devuelve).toMatch(/\{PROCESO_EN_PRUEBAS && <ParaHoyYManana/);
   });
 
-  it('el ranking, los productos, el embudo, ayer y hoy y los recientes, plegados y cerrados de entrada', () => {
+  it('el ranking («Cómo voy») arriba y a la vista, fuera de los plegables, como en la versión anterior (Diego, 24/11)', () => {
+    const comoVoy = devuelve.indexOf('<ComoVoy');
+    expect(comoVoy).toBeGreaterThan(0);
+    expect(comoVoy).toBeLessThan(devuelve.indexOf('<BloquePlegable'));
+    expect(devuelve).not.toContain('clave="dashboard-equipo"');
+  });
+
+  it('los productos, el embudo, ayer y hoy y los recientes, plegables y abiertos de entrada', () => {
     for (const [clave, dentro] of [
-      ['dashboard-equipo', '<ComoVoy'], ['dashboard-productos', '<CursosVendidosCard'],
+      ['dashboard-productos', '<CursosVendidosCard'],
       ['dashboard-embudo', '<ConversionFunnel'], ['dashboard-ayer-hoy', 'Tu día de hoy'],
       ['dashboard-recientes', 'Prospectos recientes'],
     ]) {
@@ -137,7 +144,7 @@ describe('el Dashboard: cifras, cola y lo demás plegado', () => {
       const b = devuelve.indexOf('</BloquePlegable>', a);
       expect(a, clave).toBeGreaterThan(0);
       expect(devuelve.slice(a, b), clave).toContain(dentro);
-      expect(devuelve.slice(a, devuelve.indexOf('>', a)), clave).toContain('abiertoPorDefecto={false}');
+      expect(devuelve.slice(a, devuelve.indexOf('>', a)), clave).not.toContain('abiertoPorDefecto={false}');
     }
   });
 

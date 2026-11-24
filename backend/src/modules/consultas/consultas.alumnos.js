@@ -18,7 +18,7 @@
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDe, matriculadosDe, conversacionesDe, MoodleError, esAlumno,
+  cursosDe, matriculadosDe, conversacionesDe, MoodleError, esAlumno, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from '../tutores/tutor.campus.js';
 import { campusConConsultas, enviarAlCampus } from './consultas.service.js';
@@ -26,7 +26,6 @@ import { campusConConsultas, enviarAlCampus } from './consultas.service.js';
 export const DIAS_AMBAR = Number(process.env.CONSULTAS_SIN_MENSAJES_AMBAR || 5);
 export const DIAS_ROJO = Number(process.env.CONSULTAS_SIN_MENSAJES_ROJO || 7);
 
-const ROLES_PROFESOR = new Set(['editingteacher', 'teacher']);
 
 /** Los tutores matriculados en ese campus, con su id de Moodle. */
 async function tutoresDelCampus(projectId) {
@@ -72,7 +71,7 @@ export async function sincronizarAlumnos(projectId, opciones = {}) {
       }
       // Solo los cursos que imparte (donde es profesor), no en los que está de alumno.
       const yo = gente.find((g) => g.id === tutor.moodleId);
-      if (!yo || !yo.roles.some((r) => ROLES_PROFESOR.has(r))) continue;
+      if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) continue;
       // Alumno = cualquier rol que no sea del equipo, como en «Mi campus»: con solo
       // «student», un campus con su propio rol de alumno no salía aquí.
       for (const a of gente.filter((g) => g.id !== tutor.moodleId && esAlumno(g))) {

@@ -116,7 +116,8 @@ describe('las cuotas, con o sin cobro automático', () => {
     const deSerie = fechasMensuales(hoy(), 4).slice(1);
     expect([1, 2, 3].map((k) => within(d).getByLabelText(`Fecha de la cuota ${k}`).value)).toEqual(deSerie);
     expect([1, 2, 3].map((k) => within(d).getByLabelText(`Importe de la cuota ${k}`).value)).toEqual(['250', '250', '250']);
-    expect(within(d).getByText(/se crea un link por cuota, que vence en su fecha/)).toBeTruthy();
+    // El aviso «cómo se cobra» (24/11), con las cifras del plan.
+    expect(within(d).getByTestId('aviso-como-se-cobra').textContent).toMatch(/Hoy se cobra la inicial \(250 €\) con este enlace\. Cada cuota tendrá su propio enlace \(250 € el .*\), que se crea al pagar la inicial/);
 
     // La gestora mueve la 2 y cambia importes: si no suman lo que queda, no deja.
     const [a, m] = deSerie[1].split('-');
@@ -144,7 +145,7 @@ describe('las cuotas, con o sin cobro automático', () => {
   it('con cobro automático: el texto de siempre, sin el aviso', async () => {
     cuotas = { disponible: true, automatico: true, codigo: null, motivo: null, cuotas_max: 6 };
     const d = await abrir({ formaInicial: 'cuotas' });
-    await vi.waitFor(() => expect(within(d).getByText(/Stripe cobra cada cuota sola en su fecha/)).toBeTruthy());
+    await vi.waitFor(() => expect(within(d).getByTestId('aviso-como-se-cobra').textContent).toMatch(/Un solo enlace\. Hoy se cobran 250 €\. Después, Stripe cobra solo 250 € el .* con la misma tarjeta\. Total: 1\.000 €\./));
     expect(within(d).queryByTestId('aviso-cuotas-sin-auto')).toBeNull();
   });
 

@@ -17,7 +17,7 @@
 
 import client from '@/shared/api/client';
 
-export type TicketStatus = 'open' | 'in_review' | 'resolved' | 'closed';
+export type TicketStatus = 'open' | 'in_review' | 'follow_up' | 'resolved' | 'closed';
 export type TicketSeverity = 'low' | 'medium' | 'high' | 'critical';
 // 'access' (CRM#820): una petición de acceso. Se crea solo con «Pedir acceso o
 // permiso» (lib/accesos.ts), no con el formulario de siempre.
@@ -62,7 +62,8 @@ const STORAGE_KEY = 'crm.support-tickets';
 
 export const TICKET_STATUS: Record<TicketStatus, { label: string; tone: string }> = {
   open:        { label: 'Abierto',        tone: 'amber' },
-  in_review:   { label: 'En revisión',    tone: 'blue' },
+  in_review:   { label: 'En proceso',     tone: 'blue' },
+  follow_up:   { label: 'En seguimiento', tone: 'violet' },
   resolved:    { label: 'Resuelto',       tone: 'emerald' },
   closed:      { label: 'Cerrado',        tone: 'zinc' },
 };

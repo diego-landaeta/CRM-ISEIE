@@ -489,6 +489,19 @@ export function progresoDeMoodle(c) {
   return Number.isFinite(n) ? Math.min(100, Math.max(0, Math.round(n))) : null;
 }
 
+/**
+ * Con qué roles del curso da clase una tutora: «Profesor» y «Profesor sin permiso de
+ * edición», y los que añada `MOODLE_ROLES_TUTORA` (nombres cortos separados por comas).
+ * En ISEIE las tutoras redactoras están como «Gestor» (`manager`) en sus cursos, y Diego
+ * pidió que cuente (24/11/2026): allí `MOODLE_ROLES_TUTORA=manager`. Se lee en cada
+ * llamada, para que el .env mande sin reiniciar nada más.
+ */
+export function esRolDeTutora(rol, env = process.env) {
+  if (rol === 'editingteacher' || rol === 'teacher') return true;
+  const extra = String(env.MOODLE_ROLES_TUTORA || '').split(',').map((x) => x.trim()).filter(Boolean);
+  return extra.includes(rol);
+}
+
 /** Roles (nombre corto) del equipo del curso: quien tiene uno de estos no es alumno. */
 export const ROLES_DE_EQUIPO = new Set(['editingteacher', 'teacher', 'manager', 'coursecreator']);
 
@@ -541,10 +554,9 @@ export async function matriculadosDe(conexion, cursoId, opciones) {
 
 // ─── Las tareas (#457, de la parte 7 de la #681 y la #769 del CRM 360) ─────────
 //
-// Solo LECTURA, con el token del campus: lo que necesitan el aviso de entregas sin
-// corregir (#457) y la ficha del alumno en Consultas (#406). En el 360 aquí van también
-// `entregasDeTarea`, `notasDeTarea`, `contenidoDelCurso` y `calificarComoTutora`
-// (corregir desde el CRM, parte 4 de la #689); llegan con el porte de la #408.
+// Todo LEE salvo `calificarComoTutora`, que escribe la nota en Moodle y solo va con el
+// plugin aprobado (PLUGIN_MOODLE_EN_PRODUCCION). Corregir desde el CRM (#408, gemela de
+// CRM#681) llega con «Mi campus» de las redactoras (gemela de CRM#1084).
 
 /** Las tareas (mod_assign) de esos cursos, en UNA llamada: { cursoId: [{ id, cmid, nombre, entrega }] }. */
 export async function tareasDeCursos(conexion, cursoIds, opciones) {
@@ -583,6 +595,28 @@ export async function tareasDeCursos(conexion, cursoIds, opciones) {
   return porCurso;
 }
 
+/**
+ * TODAS las entregas de una tarea, con lo entregado (#681: corregir desde el CRM):
+ * el texto en línea y los archivos (con su dirección de Moodle, que solo se abre con
+ * el token: el CRM la sirve por su cuenta, el navegador nunca ve el token).
+ */
+export async function entregasDeTarea(conexion, tareaId, opciones) {
+  const r = await llamar(conexion, 'mod_assign_get_submissions', { 'assignmentids[0]': tareaId }, opciones);
+  const subs = (r?.assignments || []).find((a) => Number(a.assignmentid) === Number(tareaId))?.submissions || [];
+  return subs.map((s) => {
+    const plugins = s.plugins || [];
+    const texto = plugins.flatMap((p) => p.editorfields || []).map((e) => e.text).filter(Boolean).join('\n\n');
+    const archivos = plugins.flatMap((p) => (p.fileareas || []).flatMap((fa) => fa.files || []))
+      .filter((f) => f.filename && f.filename !== '.')
+      .map((f) => ({ nombre: f.filename, tamano: Number(f.filesize) || null, tipo: f.mimetype || null, url: f.fileurl }));
+    return {
+      alumnoId: Number(s.userid), estado: s.status, gradingstatus: s.gradingstatus || null,
+      entregadaAt: Number(s.timemodified) > 0 ? new Date(Number(s.timemodified) * 1000) : null,
+      texto, archivos,
+    };
+  });
+}
+
 /** Estados de `gradingstatus` que son «ya corregida» (sin flujo: graded; con flujo: los de después de calificar). */
 export const YA_CORREGIDA = new Set(['graded', 'released', 'readyforrelease']);
 
@@ -600,6 +634,11 @@ async function notasDeTareas(conexion, tareaIds, opciones) {
   return porTarea;
 }
 
+/** Las notas puestas en una tarea: { alumnoId: { nota, at } }. */
+export async function notasDeTarea(conexion, tareaId, opciones) {
+  return (await notasDeTareas(conexion, [tareaId], opciones)).get(Number(tareaId)) || new Map();
+}
+
 /**
  * ¿Está por corregir? Entregada y, o sin corregir, o vuelta a entregar después de la
  * nota (Moodle la sigue llamando «graded» aunque la entrega sea posterior).
@@ -608,6 +647,35 @@ export function porCorregir(entrega, nota) {
   if (entrega?.estado !== 'submitted') return false;
   if (!YA_CORREGIDA.has(entrega.gradingstatus) && !nota) return true;
   return Boolean(nota?.at && entrega.entregadaAt && entrega.entregadaAt > nota.at);
+}
+
+/**
+ * El curso entero, como lo ve la profesora en Moodle: sus secciones (temas) en orden y,
+ * en cada una, sus actividades y recursos (tareas, cuestionarios, foros, archivos…), con
+ * si están ocultos y sus fechas. Sin los archivos de cada recurso (`excludecontents`):
+ * solo la estructura. Los bloques de texto sueltos (`label`) no son actividades y no salen.
+ */
+export async function contenidoDelCurso(conexion, cursoId, opciones) {
+  const r = await llamar(conexion, 'core_course_get_contents', {
+    courseid: cursoId, 'options[0][name]': 'excludecontents', 'options[0][value]': 1,
+  }, opciones);
+  return (Array.isArray(r) ? r : []).map((s) => ({
+    id: Number(s.id),
+    numero: Number(s.section) || 0,
+    nombre: s.name || null,
+    visible: Number(s.visible ?? 1) !== 0,
+    actividades: (s.modules || []).filter((m) => m.modname !== 'label').map((m) => ({
+      cmid: Number(m.id),
+      instancia: Number(m.instance) || null,
+      tipo: m.modname || null,
+      nombre: m.name || null,
+      url: m.url || null,
+      visible: Number(m.visible ?? 1) !== 0,
+      restringida: Boolean(m.availabilityinfo),
+      fechas: (m.dates || []).filter((d) => Number(d.timestamp) > 0)
+        .map((d) => ({ etiqueta: d.label || null, at: new Date(Number(d.timestamp) * 1000) })),
+    })),
+  }));
 }
 
 /** Tareas por llamada a Moodle: con muchas a la vez, una sola llamada pasa del tiempo de espera. */
@@ -639,4 +707,19 @@ export async function entregasSinCorregir(conexion, tareaIds, opciones) {
     }
   }
   return porTarea;
+}
+
+/**
+ * Califica a nombre de la tutora, por el plugin (`local_crm_calificar`). ESCRIBE en
+ * Moodle: solo en pruebas mientras no se apruebe (PLUGIN_MOODLE_EN_PRODUCCION). Apagado
+ * no llama a nadie y falla con 'APAGADO', aunque quien llame se haya saltado su propia
+ * comprobación (como `enviarComoTutor`).
+ */
+export async function calificarComoTutora(conexion, { desde, tarea, alumno, nota, comentario }, opciones) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const r = await llamar(conexion, 'local_crm_calificar', { desde, tarea, alumno, nota, comentario: comentario || '' }, opciones);
+  if (!r?.ok) throw new MoodleError('El campus no ha guardado la nota.', 'NO_CALIFICADO');
+  return { nota: Number(r.nota), maxima: Number(r.maxima), comentario: Boolean(r.comentario) };
 }

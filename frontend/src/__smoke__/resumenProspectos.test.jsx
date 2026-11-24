@@ -15,7 +15,7 @@ import SiguientesAcciones from '@/modules/leads/components/SiguientesAcciones';
   Se prueba con las mismas props que le pone LeadsPage.
 */
 
-const ALMACEN = 'crm.bloque.prospectos-resumen';
+const ALMACEN = 'crm.bloque.v2.prospectos-resumen';
 
 function Resumen() {
   return (

@@ -6,6 +6,7 @@ import { RECORRIDOS_FINANZAS, type IdRecorridoFinanzas } from '@/shared/lib/reco
 import { RECORRIDOS_NOVEDADES, type IdRecorridoNovedades } from '@/shared/lib/recorridosNovedades';
 // Los de las novedades del 18/11 (#611, tanda B; gemela de CRM#928), en su propio fichero.
 import { RECORRIDOS_NOVEDADES_B, type IdRecorridoNovedadesB } from '@/shared/lib/recorridosNovedadesB';
+import { RECORRIDOS_NOVEDADES_301, type IdRecorridoNovedades301 } from '@/shared/lib/recorridosNovedades301';
 // Los del día a día de una gestora (#619, tanda C; gemela de CRM#941), en su propio fichero.
 import { RECORRIDOS_GESTORA, type IdRecorridoGestora } from '@/shared/lib/recorridosGestora';
 // Los del día a día, segunda tanda (#619, tanda D; gemela de CRM#941: Seguimiento, Conexión de WhatsApp y Consultas).
@@ -67,6 +68,7 @@ export type IdRecorridoCobros =
   | IdRecorridoFinanzas
   | IdRecorridoNovedades
   | IdRecorridoNovedadesB
+  | IdRecorridoNovedades301
   | IdRecorridoGestora
   | IdRecorridoGestoraB
   | IdRecorridoLinks;
@@ -116,6 +118,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
     pantalla: [
       'modules/accounting/pages/IntegrationsPage.tsx',
       'modules/links-pago/components/ConfigLinksPago.tsx',
+      // Los códigos promocionales (#986): pieza aparte que pinta la pantalla.
+      'modules/links-pago/components/CodigosPromocionales.tsx',
     ],
     pasos: [
       {
@@ -155,6 +159,12 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
         permiso: 'links_pago.configurar',
         titulo: 'Seguimiento de los no pagados',
         texto: 'A las cuántas horas se avisa a la gestora si el alumno abrió el link y no pagó, y si se le recuerda el pago por correo a las 24 y a las 72 horas.',
+      },
+      {
+        donde: anclaje('links-codigos'),
+        permiso: 'links_pago.configurar',
+        titulo: 'Códigos promocionales',
+        texto: 'Los códigos de campaña del campus (por ejemplo, BLACKFRIDAY): el descuento en € o en %, hasta qué fecha valen y cuántas veces se pueden usar. El alumno lo escribe al pagar el link. Se crean en Stripe desde aquí.',
       },
       {
         donde: anclaje('links-webhook'),
@@ -485,6 +495,7 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   ...RECORRIDOS_NOVEDADES,
   // ─── 9 · Las novedades del 18/11 (#611, tanda B; la A va en el 8): `recorridosNovedadesB.ts` ───
   ...RECORRIDOS_NOVEDADES_B,
+  ...RECORRIDOS_NOVEDADES_301,
 
   // ─── 9 · El día a día de una gestora (#619, tanda C): `recorridosGestora.ts` ───
   ...RECORRIDOS_GESTORA,

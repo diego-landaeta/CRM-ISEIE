@@ -19,6 +19,7 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { cobroAutomaticoActivo } from '../../shared/config/soloEnPruebas.js';
 import { listaDelAmbito, campusDeTodos, campusParaRecortar, exigirCampusSuyo } from '../../shared/utils/ambito.js';
 import { alcanceComercial, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
+import { prestadoDe } from '../stripe-payments/stripe-prestado.js';
 
 /*
   QUIÉN VE QUÉ LINK (CRM#680, criterio 6 de Diego).
@@ -133,8 +134,12 @@ export async function verConfig(req, res, next) {
     if (!parsed.success) throw fallo(parsed);
     const cfg = await model.config(parsed.data.projectId);
     if (!cfg) throw new AppError('Campus no encontrado', 404, 'NOT_FOUND');
-    const aviso_clave = await service.avisoDeClave(parsed.data.projectId);
-    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg, aviso_clave } });
+    const [aviso_clave, stripe_prestado_de] = await Promise.all([
+      service.avisoDeClave(parsed.data.projectId),
+      // Stripe prestado (332): { id, nombre } del campus cuya cuenta usa este, o null.
+      prestadoDe(parsed.data.projectId),
+    ]);
+    res.json({ success: true, data: { project_id: parsed.data.projectId, ...cfg, aviso_clave, stripe_prestado_de } });
   } catch (err) { next(err); }
 }
 
@@ -566,8 +571,11 @@ export async function verWebhook(req, res, next) {
   try {
     const parsed = configQuerySchema.safeParse({ projectId: req.projectId });
     if (!parsed.success) throw fallo(parsed);
-    const data = await service.verWebhook(parsed.data.projectId, { campusVisibles: await campusParaRecortar(req) });
-    res.json({ success: true, data });
+    const [data, stripe_prestado_de] = await Promise.all([
+      service.verWebhook(parsed.data.projectId, { campusVisibles: await campusParaRecortar(req) }),
+      prestadoDe(parsed.data.projectId),
+    ]);
+    res.json({ success: true, data: { ...data, stripe_prestado_de } });
   } catch (err) { next(err); }
 }
 
