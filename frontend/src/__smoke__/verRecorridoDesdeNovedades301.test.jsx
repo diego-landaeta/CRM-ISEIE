@@ -4,7 +4,7 @@ import { render, screen, act, cleanup } from '@testing-library/react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router-dom';
 
 /**
- * v3.0.1 · «Ver recorrido» desde Novedades (Diego, 24/11: «actualiza Novedades
+ * 3.0.0 · «Ver recorrido» desde Novedades (Diego, 24/11: «actualiza Novedades
  * para ver y que los recorridos estén actualizados»).
  *
  *  · La novedad con recorrido trae «Ver recorrido», que va a SU pantalla con
@@ -18,9 +18,9 @@ vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => p
 vi.mock('@/modules/novedades/api/novedades.api', () => ({
   traerNovedades: vi.fn(async () => ({
     crm: { nombre: 'CRM', color: '#123456' },
-    actual: '3.0.1',
+    actual: '3.0.0',
     versiones: [{
-      version: '3.0.1', fecha: '2026-11-24', titulo: 'Versión 3.0.1', intro: 'Lo nuevo.', arreglos: [],
+      version: '3.0.0', fecha: '2026-11-24', titulo: 'Versión 3.0.0', intro: 'Lo nuevo.', arreglos: [],
       grupos: [{ titulo: 'Recorridos', items: [
         { titulo: 'Links', texto: 'Los links.', roles: ['admin'], ruta: '/links-pago', boton: 'Ir a Links', recorrido: 'links-pago' },
         { titulo: 'Conciliación', texto: 'Cuadrar.', roles: ['admin'], ruta: '/accounting/conciliacion', boton: 'Ir', recorrido: 'conciliacion-facturas' },

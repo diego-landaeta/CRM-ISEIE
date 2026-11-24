@@ -6,7 +6,7 @@ import { RECORRIDOS_COBROS, claveRecorrido, pasosPara, tienePermiso, type Recorr
 import { abrirRecorrido } from '@/shared/lib/lanzadorRecorridos';
 
 /**
- * «VER RECORRIDO» DESDE NOVEDADES (v3.0.1; Diego, 24/11: «actualiza Novedades
+ * «VER RECORRIDO» DESDE NOVEDADES (3.0.0; Diego, 24/11: «actualiza Novedades
  * para ver y que los recorridos estén actualizados»).
  *
  * Cada novedad con recorrido lleva un botón «Ver recorrido» que va a su pantalla

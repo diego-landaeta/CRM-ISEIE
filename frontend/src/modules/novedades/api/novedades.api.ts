@@ -3,7 +3,7 @@ import client from '@/shared/api/client';
 export type Novedad = {
   titulo: string; texto: string; roles: string[];
   ruta: string | null; boton?: string | null;
-  /** Id de su recorrido guiado: «Ver recorrido» lo abre en su pantalla (v3.0.1). */
+  /** Id de su recorrido guiado: «Ver recorrido» lo abre en su pantalla (3.0.0). */
   recorrido?: string | null;
 };
 export type Version = {

@@ -2,7 +2,7 @@ import type { RecorridoCobros } from '@/shared/lib/recorridosCobros';
 import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
 
 /**
- * LOS RECORRIDOS NUEVOS DE LA 3.0.1 (Diego, 24/11: «actualiza Novedades para ver
+ * LOS RECORRIDOS NUEVOS DE LA 3.0.0 (Diego, 24/11: «actualiza Novedades para ver
  * y que los recorridos estén actualizados»): los de lo que trajeron la 2.9.8 y la
  * 3.0.0 y aún no tenía recorrido.
  *
