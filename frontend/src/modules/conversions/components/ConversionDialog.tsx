@@ -11,6 +11,7 @@ import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phos
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { invoicesApi, invoiceFaltantes, type Invoice, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
+import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
@@ -25,6 +26,10 @@ import AvisoComoSeCobra from '@/modules/links-pago/components/AvisoComoSeCobra';
 import type { DatosDelAviso } from '@/modules/links-pago/lib/avisoCuotas';
 import { useRecordatoriosLinks } from '@/shared/lib/recordatoriosLinks';
 import EmitirFacturaCobro, { AvisoCobroEnCola, QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+import EnvioFacturaCampos from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
+import { useFacturaAutomaticaActiva } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
@@ -225,6 +230,17 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   useEffect(() => () => {
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
   }, []);
+  // El correo de la ficha, para «Enviar a este correo» (#764, 24/11). Solo con
+  // la factura automática encendida: apagada, no se pregunta nada.
+  const facturaAuto = useFacturaAutomaticaActiva();
+  const [emailFicha, setEmailFicha] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (facturaAuto !== true || !lead?.id) return;
+    client.get<{ email?: string | null }>(`/leads/${lead.id}`)
+      .then((r) => setEmailFicha(r?.data?.email || null))
+      .catch(() => setEmailFicha(null));
+  }, [facturaAuto, lead?.id]);
+  const envioFactura = useEnvioFacturaAlta(emailFicha, { sinCorreoVale: true });
   // Al cerrar, resetea el paso de documento para que una próxima apertura arranque limpia.
   useEffect(() => {
     if (!open) { setDocPhase('idle'); setCreated(null); setEmitInv(null); setVentaExistente(null); setIntentado(false); notifiedRef.current = false; }
@@ -628,6 +644,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       toast({ title: 'Falta decir cómo paga la inicial', description: 'Con el link de pago, ya pagada con otro link o por transferencia.', variant: 'destructive' });
       return;
     }
+    const faltaEnvio = envioFactura.falta();
+    if (faltaEnvio) { toast({ ...faltaEnvio, variant: 'destructive' }); return; }
     if (!pagoMode) {
       toast({ title: 'Falta decir si ha pagado', description: 'Elige «Sin pago», «Parcial» o «Pagó TODO». La forma de pago sola no registra el cobro.', variant: 'destructive' });
       return;
@@ -664,6 +682,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       descuento_tipo: form.descuento_tipo,
       descuento_valor: form.descuento_tipo === 'none' ? 0 : Number(form.descuento_valor || 0),
       subtotal_bruto: calc.bruto,
+      // Sin la factura automática encendida, no va (undefined).
+      envio_factura: envioFactura.cuerpo(),
     } as any;
     setSaving(true);
     try {
@@ -1391,6 +1411,11 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                   </p>
                 )}
               </div>
+            )}
+
+            {envioFactura.visible && emailFicha !== undefined && (
+              <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                emailFicha={emailFicha} idBase="venta-envio-factura" sinCorreoVale />
             )}
 
             <Field label="Notas" htmlFor="venta-notas">

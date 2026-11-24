@@ -158,12 +158,60 @@ export async function auditar({ origen = 'programada', userId = null, pausarSiFa
   const auditoria = await model.guardarAuditoria({ origen, empezo, limpia, incidencias, resumen, userId });
 
   let pausaNueva = null;
-  if (!limpia && !pausa && pausarSiFalla) {
+  if (!limpia && !pausa && pausarSiFalla && cfg.pausar !== false) {
     pausaNueva = await pausar({ auditoria, incidencias, resumen });
+  } else if (!limpia && cfg.pausar === false && origen === 'programada') {
+    await avisarSinPausar({ auditoria, resumen });
   }
   logger[limpia ? 'info' : 'warn']({ origen, auditoriaId: auditoria.id, ...resumen, pausada: !!(pausa || pausaNueva) },
     limpia ? 'auditoría de facturación: limpia' : 'auditoría de facturación: con errores');
   return { auditoria, limpia, incidencias, resumen, pausa: pausaNueva || pausa };
+}
+
+/*
+  MODO AVISO (FACTURACION_AUDITORIA_PAUSAR=0, 24/11). Audita y lo apunta, pero
+  no pausa. Para que alguien se entere sin avisar cada 2 horas, un aviso en la
+  campana solo cuando la vuelta anterior salió limpia (o no había ninguna).
+*/
+async function avisarSinPausar({ auditoria, resumen }) {
+  try {
+    const anterior = await model.vueltaAnterior(auditoria.id);
+    if (anterior && !anterior.limpia) return;
+    await notifyAdmins({
+      type: 'facturacion_pausada',
+      title: 'La auditoría de facturación ha encontrado errores',
+      message: `${motivoDe(resumen)}. Modo aviso: la facturación NO se pausa. Míralo en Facturas › Facturación automática.`,
+      link_path: `${CRM_CORREOS.rutas.facturas}/automatica`,
+      metadata: { auditoria_id: auditoria.id, modo: 'aviso', ...resumen },
+    });
+  } catch (err) {
+    logger.warn({ err: err.message, auditoriaId: auditoria.id }, 'auditoría de facturación: no se pudo avisar (modo aviso)');
+  }
+}
+
+// ── La pasada en seco ───────────────────────────────────────────────────────
+
+/**
+ * Las mismas tres comprobaciones, sin guardar nada: ni la vuelta, ni la pausa,
+ * ni el «desde», ni avisos. Funciona también con la auditoría apagada, para
+ * ver qué saldría ANTES de encenderla (24/11). `desde`: la fecha de corte que
+ * se quiere probar; sin ella, la que usaría la auditoría (la del .env, la
+ * guardada o, si nunca ha dado una vuelta, hoy).
+ */
+export async function simular({ desde = null, cfg = leerConfig(), ahora = new Date() } = {}) {
+  const hoy = hoyEnMadrid(ahora);
+  const corte = desde || cfg.desde || await model.auditarDesdeLeido() || hoy;
+  const hasta = restarDias(hoy, cfg.dias);
+  const incidencias = [
+    ...await comprobarNumerosRepetidos({ desde: corte }),
+    ...await comprobarDatosFiscales({ desde: corte, hasta }),
+    ...await comprobarCobrosSinFactura({ desde: corte, hasta }),
+  ];
+  const resumen = {
+    desde: corte, dias: cfg.dias,
+    ...Object.fromEntries(Object.keys(TIPOS).map((t) => [t, incidencias.filter((i) => i.tipo === t).length])),
+  };
+  return { desde: corte, hasta, limpia: incidencias.length === 0, pausaria: incidencias.length > 0 && cfg.pausar !== false, resumen, incidencias };
 }
 
 export function motivoDe(resumen) {
@@ -199,13 +247,16 @@ async function pausar({ auditoria, incidencias, resumen }) {
 // ── El estado, para el aviso del CRM ────────────────────────────────────────
 
 export async function estado({ cfg = leerConfig() } = {}) {
+  // Apagada no consulta nada (lo que saldría al encenderla, en `simular`).
   if (!cfg.activa) return { activa: false };
-  const [pausa, ultima, cola] = await Promise.all([
-    pausaAbierta({ cfg }), model.ultimaAuditoria(), model.colaPendiente(),
+  const [pausa, ultima, cola, desde] = await Promise.all([
+    pausaAbierta({ cfg }), model.ultimaAuditoria(), model.colaPendiente(), model.auditarDesdeLeido(),
   ]);
   return {
     activa: true,
     dias: cfg.dias,
+    pausar: cfg.pausar !== false,
+    desde: cfg.desde || desde,
     pausada: !!pausa,
     pausa,
     ultima,

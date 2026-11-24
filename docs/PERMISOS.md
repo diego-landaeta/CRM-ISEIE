@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-917 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+921 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -386,6 +386,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | interruptor | `GET /api/factura-automatica/interruptor` | (no existía) | (ruta nueva) | `facturas.view` |
 | estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
+| verEnvio | `GET /api/factura-automatica/venta/:conversionId/envio` | (no existía) | (ruta nueva) | `facturas.view` |
+| guardarEnvio | `PUT /api/factura-automatica/venta/:conversionId/envio` | (no existía) | (ruta nueva) | `conversions.edit` |
+| panel | `GET /api/factura-automatica/panel` | (no existía) | (ruta nueva) | `facturas.automatica` |
 | formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
 | responder | `POST /api/fd/:token` | (no existía) | (ruta nueva) | — |
 
@@ -395,6 +398,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | estado | `GET /api/facturacion-auditoria/estado` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | historial | `GET /api/facturacion-auditoria/historial` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| simular | `GET /api/facturacion-auditoria/simular` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | auditar | `POST /api/facturacion-auditoria/auditar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | reanudar | `POST /api/facturacion-auditoria/reanudar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 
@@ -1539,6 +1543,7 @@ lo que pide para tener sentido (editar pide ver).
 | Anular y abonar | `facturas.gestionar` | Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar facturas, proformas y borradores. Diego, 19/11/2026: también las gestoras, cualquier factura de su campus. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
 | Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
+| Ver la facturación automática | `facturas.automatica` | Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Editar facturas | `facturas.edit` | Cambiar cualquier dato de una factura. | Admin, Soporte, Gestora, Líder de equipo | `facturas.view` |
 | Configurar la facturación | `facturas.configurar` | Empresas emisoras, regímenes, plantillas, series y ajustes. | Admin, Soporte | `facturas.view` |

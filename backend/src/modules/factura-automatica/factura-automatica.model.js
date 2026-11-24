@@ -11,6 +11,7 @@ import { query } from '../../shared/config/db.js';
 export async function venta(conversionId) {
   const { rows } = await query(
     `SELECT c.id, c.project_id, c.lead_id, c.producto_contratado,
+            c.factura_envio_auto, c.factura_envio_email,
             l.nombre, l.email, l.cliente_tipo, l.custom_fields,
             l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal,
             l.codigo_postal_fiscal, l.pais_fiscal, l.responsable_id,

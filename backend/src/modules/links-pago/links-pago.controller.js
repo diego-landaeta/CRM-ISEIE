@@ -336,7 +336,23 @@ export async function crear(req, res, next) {
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
       prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento, codigosPromo,
     });
-    if (!ventaDelLink) return res.status(201).json({ success: true, data: link });
+    // «Enviar factura automáticamente» y su correo (#764, 24/11). No bloquea: el link
+    // ya está creado. En la venta si la hay (la de antes o la de CRM#1107); si no,
+    // en el link, y pasa a la venta que nazca al pagarlo.
+    const guardarEnvio = async (conversionId) => {
+      if (!b.envio_factura) return;
+      try {
+        const envio = await import('../factura-automatica/factura-automatica.envio.js');
+        if (conversionId) await envio.guardarEnLaVenta(conversionId, b.envio_factura, Number(req.user.userId));
+        else await envio.guardarEnElLink(link.id, b.envio_factura);
+      } catch (err) {
+        logger.warn({ err: err.message, linkId: link?.id }, 'links de pago: no se pudo guardar el envío de la factura');
+      }
+    };
+    if (!ventaDelLink) {
+      await guardarEnvio(destino.conversionId);
+      return res.status(201).json({ success: true, data: link });
+    }
     // La venta del link (CRM#1107): la que ya había, o la nueva. Si la nueva no se
     // puede crear, el link vale igual y su venta se crea al pagarse (y se dice).
     let venta;
@@ -348,6 +364,7 @@ export async function crear(req, res, next) {
       await ventaAlCrear.anotarVentaUsada(link.id, ventaDelLink.conversionId, req.user.userId);
       venta = { conversionId: ventaDelLink.conversionId, creada: false };
     }
+    await guardarEnvio(venta.conversionId || null);
     const ahora = venta.conversionId ? await model.porId(link.id) : link;
     res.status(201).json({
       success: true,

@@ -132,6 +132,10 @@ async function crearVentaDelLink(projectId, payment, link, leadId) {
       // sale en Ventas · «Posibles repetidas».
       comprobarRepetida: false,
     });
+    // «Enviar factura automáticamente» y su correo, si se eligieron al crear el
+    // link (#764, 24/11): antes de apuntar el cobro, que es lo que pide los datos.
+    const envio = await import('../factura-automatica/factura-automatica.envio.js');
+    await envio.delLinkALaVenta(link, venta.conversion_id);
     // El precio original y el descuento del link (CRM#982), en la venta. Si no se
     // pudiera apuntar, la venta sigue bien: su total es el del link.
     await model.descuentoEnLaVenta(venta.conversion_id, link).catch((e) => logger.warn({ err: e.message, linkId: link.id },

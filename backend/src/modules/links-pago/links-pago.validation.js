@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envioFacturaSchema } from '../factura-automatica/factura-automatica.validation.js';
 
 /** Los estados de un link (CHECK de la migración 314). */
 export const ESTADOS = ['creado', 'abierto', 'pagado', 'pagado_parcial', 'caducado', 'anulado'];
@@ -194,6 +195,9 @@ export const crearSchema = z.object({
   codigos_promo: z.boolean({ invalid_type_error: 'Códigos promocionales: sí o no' }).optional(),
   // CRM#1107: el alumno ya tiene una venta de ese programa y la gestora crea otra igualmente.
   forzar: z.boolean({ invalid_type_error: 'Forzar: sí o no' }).optional(),
+  // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+  // Con venta, se guarda en ella; sin venta, en el link y pasa a la que nazca al pagarlo.
+  envio_factura: envioFacturaSchema.optional(),
 }).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
   .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
   .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»')

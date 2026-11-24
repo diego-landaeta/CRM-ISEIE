@@ -21,6 +21,10 @@ import {
 } from '../api/linksPago.api';
 import { useWhatsappConectado, enviarPorWhatsapp, copiarMensaje } from './EnviarLink';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from '@/modules/conversions/components/VentaYaExisteAviso';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11):
+// pasa a la venta que nazca al pagarlo (o a la venta elegida).
+import EnvioFacturaCampos, { SIN_CORREO_LINK } from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
 
 /*
   «CREAR LINK DE PAGO», EN UNA PANTALLA (Carlos y Diego, 20/11/2026).
@@ -333,6 +337,7 @@ export default function CrearLinkAsistente({
   const [error, setError] = useState<string | null>(null);
   const [hecho, setHecho] = useState<LinkDePago | null>(null);
   const [correoAbierto, setCorreoAbierto] = useState(false);
+  const envioFactura = useEnvioFacturaAlta(prospecto?.lead.email ?? null, { sinCorreoVale: true });
 
   // Buscar prospectos (solo si se abre «para un prospecto» y no viene elegido).
   const idsDeCampus = campusPosibles.map((c) => c.id).join(',');
@@ -513,6 +518,7 @@ export default function CrearLinkAsistente({
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
+  if (envioFactura.falta()) motivos.push('Confirma el correo de la factura en «Enviar a este correo».');
   if (paraAlguien && consulta && cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (paraAlguien && !consulta && !campusElegido) motivos.push('Elige el campus, o busca el prospecto.');
   else if (!projectId) motivos.push('Elige el campus.');
@@ -578,6 +584,8 @@ export default function CrearLinkAsistente({
         } : { moneda }),
         // CRM#986: solo donde caben (pago único, sin venta y el campus los admite).
         ...(cfg?.codigos_promo && !enCuotas && !venta ? { codigos_promo: codigosPromo } : {}),
+        // Sin la factura automática encendida, no va.
+        ...(envioFactura.cuerpo() ? { envio_factura: envioFactura.cuerpo() } : {}),
       });
       if (r.data) { setYaTiene(null); setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
     } catch (e) {
@@ -1017,6 +1025,11 @@ export default function CrearLinkAsistente({
                 )}
               </section>
 
+              {envioFactura.visible && !sinClave && (
+                <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                  emailFicha={prospecto?.lead.email ?? null} idBase="link-envio-factura" sinCorreoVale
+                  textoSinCorreo={SIN_CORREO_LINK} compacto />
+              )}
               {/* Cómo se cobra (24/11): siempre, con cuotas, justo antes de «Crear link». */}
               {avisoCobro && !sinClave && <AvisoComoSeCobra datos={avisoCobro} />}
               {motivos.length > 0 && !cargandoProspecto && !sinClave && (

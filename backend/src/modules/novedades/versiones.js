@@ -102,6 +102,28 @@ const LISTA = [
         "titulo": "Facturas",
         "items": [
           {
+            "titulo": "Facturación automática, encendida",
+            "texto": "Desde el 24/11, en todos los campus. Al entrar un cobro, el alumno recibe un correo con un formulario para sus datos fiscales. Al contestarlo, la factura sale sola, con el número siguiente de la serie, y le llega en PDF. A los 7 días sin respuesta sale con su ficha si está completa; si no, el cobro se queda en la cola y te avisamos. Las cuotas reutilizan los mismos datos.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática",
+            "recorrido": "facturacion-automatica"
+          },
+          {
+            "titulo": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo»",
+            "texto": "Al registrar la venta (también al crear un link de pago), en la ficha de la venta y en la cola de facturación. Sí, de serie: el CRM le manda el PDF. No: la factura se emite igual, pero no se manda y lleva «No se envía automáticamente: la envía la gestora». El correo del alumno sale ya relleno: «Confirmar» o «Editar»; el formulario y el PDF van a ese.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Dónde se ve: Facturas › Facturación automática",
+            "texto": "Los formularios enviados, contestados y vencidos; las facturas que salieron solas, con su número y a qué correo fue el PDF; y las que necesitan a una persona (en revisión, posible duplicada…), con su motivo y qué hacer. La administración ve además la auditoría y su «Pasada en seco».",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
             "titulo": "Aviso de posible duplicada más claro",
             "texto": "Dice de quién es la otra factura y en qué se parece: la misma venta, el mismo NIF o el mismo nombre. Si es otra, «Es otra, emitir igualmente».",
             "roles": ["gestor", "admin", "superadmin"],

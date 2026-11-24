@@ -107,6 +107,8 @@ export interface Invoice {
   /** Solo en GET /:id de un borrador: qué falta para poder emitir. */
   faltantes?: string[];
   sent_at: string | null;
+  /** La factura salió sola sin mandarse: «No se envía automáticamente: la envía la gestora» (#764). */
+  envio_nota?: string | null;
   notas?: string | null;
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
