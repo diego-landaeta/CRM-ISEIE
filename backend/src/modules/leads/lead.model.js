@@ -3,6 +3,7 @@ import { PASO_CERRADO } from '../../shared/utils/pasoCerrado.js';
 import { EN_EL_PROCESO } from '../../shared/utils/enElProceso.js';
 import { recolocarPasos } from '../../shared/utils/recolocarPasos.js';
 import { logger } from '../../shared/utils/logger.js';
+import { esRolDeGestora } from '../../shared/utils/roles.js';
 import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
 import { gestoresDelReparto } from './reparto.js';
 import { telefonoParaGuardar } from '../../shared/utils/normalizePhone.js';
@@ -490,7 +491,7 @@ export async function createLeadWithRoundRobin({ projectId, nombre, email, telef
       const { rows: access } = await client.query(
         `SELECT u.id FROM users u
          JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active = true
-         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'superadmin')
+         WHERE u.id = $2 AND u.active = true AND u.role IN ('admin', 'gestor', 'lider_equipo', 'superadmin')
            AND NOT COALESCE(u.gestor_colaboraciones, false)`,
         [projectId, forcedResponsableId]
       );
@@ -1430,7 +1431,7 @@ export async function getTodaySummary({ userId, role, soloSuyo, personas, projec
   // ella y su equipo (`alcanceComercial`)--. null = sin límite por persona.
   const userIdParam = personas !== undefined
     ? (Array.isArray(personas) && personas.length ? personas.map(Number) : null)
-    : ((soloSuyo ?? role === 'gestor') ? [Number(userId)] : null);
+    : ((soloSuyo ?? esRolDeGestora(role)) ? [Number(userId)] : null);
   // Uno o varios campus en la MISMA consulta (#224). Con una empresa elegida
   // el Dashboard pedia esto una vez por campus —siete con CEDIA, cada una con
   // seis consultas seguidas— y sumaba en el navegador. Ahora es una sola

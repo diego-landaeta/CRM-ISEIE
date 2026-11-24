@@ -74,7 +74,7 @@ export async function get(req, res, next) {
       `SELECT u.id, u.nombre, u.role
          FROM users u
         WHERE u.active = TRUE
-          AND u.role IN ('gestor', 'admin', 'superadmin')
+          AND u.role IN ('gestor', 'lider_equipo', 'admin', 'superadmin')
           AND EXISTS (SELECT 1 FROM user_projects up
                        WHERE up.user_id = u.id AND up.active = TRUE
                          AND up.project_id = $1)

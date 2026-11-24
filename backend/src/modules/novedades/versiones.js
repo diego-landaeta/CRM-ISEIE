@@ -80,6 +80,13 @@ const LISTA = [
             "recorrido": "tablero"
           },
           {
+            "titulo": "Rol nuevo: Líder de equipo",
+            "texto": "Para quien lleva un equipo comercial sin ser administradora: ve lo suyo y lo de las gestoras de su equipo (prospectos, ventas, la cola y el ranking en «Cómo voy», con su propio puesto) y puede pasar un prospecto a otra de su equipo. Nada de administración. Se da en Usuarios, y su equipo se elige en su ficha.",
+            "roles": ["lider_equipo", "admin", "superadmin"],
+            "ruta": "/",
+            "boton": "Ir al Dashboard"
+          },
+          {
             "titulo": "Recorridos, solo cuando los pides",
             "texto": "Ningún recorrido se abre solo. «Recorrido», arriba, abre el de la pantalla en la que estás o el general de tu rol, y «Ver recorrido» está en Ventas, Finanzas, Clientes, la ficha del prospecto y La cola del día.",
             "roles": ["gestor", "admin", "superadmin"]

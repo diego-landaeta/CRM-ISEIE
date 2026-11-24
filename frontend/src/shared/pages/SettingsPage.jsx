@@ -578,12 +578,14 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
               ariaLabel="Rol"
               options={[
                 { value: 'gestor', label: 'Gestor' },
+                // CRM-ISEIE#761: lo de una gestora y lo de su equipo comercial (se elige más abajo).
+                { value: 'lider_equipo', label: 'Líder de equipo' },
                 { value: 'admin', label: 'Admin' },
                 { value: 'soporte', label: 'Soporte' },
                 { value: 'colaborador', label: 'Colaborador' },
                 { value: 'tutor_redactor', label: 'Tutor redactor' },
                 // Un rol que no está en la lista (super admin, tutor…): se enseña el suyo, no un hueco.
-                ...(['gestor', 'admin', 'soporte', 'colaborador', 'tutor_redactor'].includes(role) ? [] : [{ value: role, label: NOMBRE_ROL[role] || role }]),
+                ...(['gestor', 'lider_equipo', 'admin', 'soporte', 'colaborador', 'tutor_redactor'].includes(role) ? [] : [{ value: role, label: NOMBRE_ROL[role] || role }]),
               ]}
             />
           </div>
@@ -593,7 +595,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                 clase no tiene que elegir. Solo SUMAN permisos; el principal
                 sigue siendo el de arriba. */}
             <div className="flex flex-wrap gap-1.5">
-              {['gestor', 'admin', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'].filter((r) => r !== role).map((r) => {
+              {['gestor', 'lider_equipo', 'admin', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'].filter((r) => r !== role).map((r) => {
                 const puesto = rolesExtra.includes(r);
                 return (
                   <button
@@ -604,7 +606,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
                     className={'rounded-md border px-2.5 py-1 text-xs transition-colors focus:outline-none focus:ring-2 focus:ring-primary/40 '
                       + (puesto ? 'border-primary bg-primary/10 font-semibold text-primary' : 'border-border hover:bg-muted')}
                   >
-                    {r === 'gestor' ? 'Gestor' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : r === 'colaborador' ? 'Colaborador' : r === 'tutor_redactor' ? 'Tutor redactor' : 'Tutor'}
+                    {r === 'gestor' ? 'Gestor' : r === 'lider_equipo' ? 'Líder de equipo' : r === 'admin' ? 'Admin' : r === 'soporte' ? 'Soporte' : r === 'colaborador' ? 'Colaborador' : r === 'tutor_redactor' ? 'Tutor redactor' : 'Tutor'}
                   </button>
                 );
               })}
@@ -675,6 +677,7 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
 // Los roles que se ofrecen al invitar, con lo que hace cada uno.
 const ROLES_ALTA = [
   ['gestor', 'Gestor — solo sus proyectos y leads'],
+  ['lider_equipo', 'Líder de equipo — lo suyo y lo de las gestoras de su equipo, sin administración'],
   ['admin', 'Admin — acceso operativo completo'],
   ['soporte', 'Soporte — tickets y consultas'],
   ['colaborador', 'Colaborador — solo su tablero de Tareas'],
@@ -742,7 +745,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
     else if (nombre.trim().length < 2) faltan.push({ title: 'Nombre demasiado corto', description: 'En «Nombre y apellido», al menos 2 caracteres.', que: 'un nombre de al menos 2 letras en «Nombre y apellido»' });
     if (!email.trim()) faltan.push({ title: 'Falta el email', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'el email en «Email»' });
     else if (!EMAIL_RE.test(email.trim())) faltan.push({ title: 'Email no válido', description: 'Escríbelo en «Email» como nombre@dominio.com.', que: 'un email válido en «Email» (nombre@dominio.com)' });
-    if ((role === 'admin' || role === 'gestor') && projList.length === 0 && !conEmpresa) {
+    if (['admin', 'gestor', 'lider_equipo'].includes(role) && projList.length === 0 && !conEmpresa) {
       faltan.push({
         title: 'Falta el campus',
         description: role === 'admin' && puedeDarEmpresas ? 'Marca al menos un campus o una empresa entera.' : 'Marca al menos un campus.',
@@ -812,7 +815,7 @@ export function InviteUserModal({ projects, onClose, onCreated, empresas, faltaM
             )}
           </div>
           <div>
-            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados{(role === 'admin' || role === 'gestor') && ' *'}</label>
+            <label className="text-xs text-muted-foreground mb-1 block">Proyectos asignados{['admin', 'gestor', 'lider_equipo'].includes(role) && ' *'}</label>
             {/* Agrupados por empresa, con «Marcar todos» y, para un admin, la
                 empresa entera con los campus que se creen (#220). */}
             <CampusPorEmpresa

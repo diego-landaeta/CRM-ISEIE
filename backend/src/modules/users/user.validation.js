@@ -19,6 +19,10 @@ const empresaIdsSchema = z.array(z.number().int().positive()).max(50).optional()
 
 const tieneCampus = (d) => d.projectIds?.length > 0 || d.projects?.length > 0;
 
+// Los roles que se dan desde Usuarios (el superadmin no: se pone a mano). La
+// líder de equipo (CRM#1105 / ISEIE#761): lo de una gestora y lo de su equipo comercial.
+const ROLES_QUE_SE_DAN = ['admin', 'gestor', 'lider_equipo', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'];
+
 /**
  * Quién puede tener una empresa entera: el admin (#220, con sus campus) y el
  * colaborador —rol principal o añadido— (Diego, 26/10/2026: el equipo de
@@ -30,9 +34,9 @@ export const puedeTenerEmpresa = (role, rolesExtra = []) =>
 export const createUserSchema = z.object({
   nombre: z.string().min(2, 'Nombre minimo 2 caracteres').max(200),
   email: z.string().email('Email invalido').transform((v) => v.toLowerCase().trim()),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'], { message: 'Rol debe ser admin, gestor, soporte, tutor, colaborador o tutor redactor' }),
+  role: z.enum(ROLES_QUE_SE_DAN, { message: 'Rol debe ser admin, gestor, líder de equipo, soporte, tutor, colaborador o tutor redactor' }),
   // Roles de MAS. Superadmin no cabe: un rol añadido no puede dar acceso total.
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
+  roles_extra: z.array(z.enum(ROLES_QUE_SE_DAN)).optional(),
   // Legacy: lista de ids (recibe_leads queda en false).
   projectIds: z.array(z.number().int().positive()).optional().default([]),
   // Nuevo: lista con flag recibe_leads por proyecto.
@@ -44,7 +48,7 @@ export const createUserSchema = z.object({
   // Las comprueba el controlador con las reglas de la ficha.
   excepciones: z.record(z.boolean()).optional(),
 }).refine(
-  (d) => d.role !== 'gestor' || tieneCampus(d),
+  (d) => !['gestor', 'lider_equipo'].includes(d.role) || tieneCampus(d),
   {
     message: 'Una gestora sin campus no ve nada: elige al menos uno',
     path: ['projectIds'],
@@ -95,8 +99,8 @@ export const updateUserSchema = z.object({
   // Con el correo nuevo, mandarle el enlace para poner contraseña allí (#246).
   // A un tutor no le sale nada mientras siga el freno.
   reenviarEnlace: z.boolean().optional(),
-  role: z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
-  roles_extra: z.array(z.enum(['admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor'])).optional(),
+  role: z.enum(ROLES_QUE_SE_DAN).optional(),
+  roles_extra: z.array(z.enum(ROLES_QUE_SE_DAN)).optional(),
   // «Se dedica solo a colaboraciones»: no da permisos (eso es «Gestionar
   // colaboraciones»), cambia lo que le toca: no entra en el reparto ni en las
   // listas de gestoras.
@@ -132,7 +136,7 @@ export const buscarUsersSchema = z.object({
 
 export const listUsersSchema = z.object({
   active: z.enum(['true', 'false']).optional(),
-  role: z.enum(['superadmin', 'admin', 'gestor', 'soporte', 'tutor', 'colaborador', 'tutor_redactor']).optional(),
+  role: z.enum(['superadmin', ...ROLES_QUE_SE_DAN]).optional(),
   projectId: z.coerce.number().int().positive().optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),

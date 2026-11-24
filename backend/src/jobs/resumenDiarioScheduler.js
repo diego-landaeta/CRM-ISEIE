@@ -1,5 +1,6 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
+import { ROLES_DE_GESTORA } from '../shared/utils/roles.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import { vigilar } from './latido.js';
 // Por el espacio de nombres: el repaso mensual de la base (#132) solo existe en
@@ -75,7 +76,7 @@ async function destinatariosDelPlan(aviso) {
           SELECT 1 FROM avisos_apagados a
            WHERE a.user_id = u.id AND a.aviso = $1
         )
-        AND (u.role = 'gestor'
+        AND (u.role IN ('gestor', 'lider_equipo')
           OR EXISTS (
             SELECT 1 FROM lead_reminders r JOIN leads l ON l.id = r.lead_id
              WHERE l.responsable_id = u.id AND l.deleted_at IS NULL
@@ -227,7 +228,7 @@ async function vuelta() {
       if (leadModel.sePuedeRevisar && await leadModel.sePuedeRevisar()) {
         const r = await mandar(
           'validacion_mensual',
-          ['gestor'],
+          ROLES_DE_GESTORA,
           '[CRM] Toca repasar tu base',
           loDeLaBase, textoValidacion,
           hoy().slice(0, 7),

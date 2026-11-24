@@ -27,6 +27,7 @@ export const NOMBRE_DEL_ROL: Record<string, string> = {
   superadmin: 'Superadmin',
   admin: 'Admin',
   gestor: 'Gestora',
+  lider_equipo: 'Líder de equipo',
   soporte: 'Soporte',
   project_manager: 'Project manager',
   tutor: 'Tutor',
@@ -54,6 +55,8 @@ export const CADA_DIA: Record<string, string> = {
   superadmin: 'Cada día: «Hoy» para las cifras y las alertas, Comercial para el equipo y Finanzas para la cola de facturación y los cobros de Stripe. Solo tú creas y desactivas usuarios y cambias los roles (Configuración).',
   admin: 'Cada día: «Hoy» para las cifras y las alertas de tus campus, Comercial para los prospectos y las ventas del equipo, y Finanzas para facturar y revisar los cobros. Las integraciones, en Configuración.',
   gestor: 'Cada mañana: «Hoy», y en él «La cola del día» con los prospectos que te tocan (un paso por contacto y día). Cuando alguien compra, registra la venta y mándale el link de pago desde «Links de pago» o desde su ficha.',
+  // CRM-ISEIE#761: una gestora que además lleva un equipo comercial.
+  lider_equipo: 'Cada mañana, como una gestora: «Hoy» y «La cola del día» con lo tuyo. Además, lo de tu equipo: en Prospectos y en la cola eliges a una de tus gestoras, «Cómo voy» enseña el ranking de tu equipo con tu puesto, y en Reportes y Ventas ves sus cifras.',
   soporte: 'Tu día: Incidencias y Soporte para lo que llega del equipo, y Configuración y Sistema (registro, correos, estado) para ver qué pasa. Ves todos los campus.',
   project_manager: 'Tu día: las solicitudes de cambio y, como una gestora, tus prospectos y tus ventas. Las demás pantallas de tus campus las ves sin tocarlas.',
   tutor: 'Tu día: «Mi campus» para corregir tareas y ver a tus alumnos, Consultas para responderles y tus comisiones cuando toca cobrar.',

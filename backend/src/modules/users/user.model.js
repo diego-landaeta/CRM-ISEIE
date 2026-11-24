@@ -161,7 +161,7 @@ export async function avisoCambioCorreo(id) {
     `SELECT u.email,
             (SELECT COUNT(*)::int FROM user_projects up
               WHERE up.user_id = u.id AND up.active = true
-                AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+                AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin','lider_equipo') AND up.recibe_leads = TRUE))
                 AND NOT COALESCE(u.gestor_colaboraciones, false)) AS campus_en_reparto,
             (SELECT COUNT(*)::int FROM leads l WHERE l.responsable_id = u.id) AS prospectos_asignados,
             (SELECT COUNT(*)::int FROM make_webhook_deliveries d

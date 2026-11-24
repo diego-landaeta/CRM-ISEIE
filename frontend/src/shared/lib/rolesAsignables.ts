@@ -24,7 +24,7 @@ export interface RolAsignable {
 
 /** Como se llama cada rol en Configuración › Usuarios. */
 export const NOMBRE_ROL: Record<string, string> = {
-  superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador',
+  superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', lider_equipo: 'Líder de equipo', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador',
 };
 
 /** Qué roles puede dar en un alta quien pregunta. La misma regla que al guardar. */

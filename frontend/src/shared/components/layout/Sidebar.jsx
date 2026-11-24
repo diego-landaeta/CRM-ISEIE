@@ -14,7 +14,7 @@ import {
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
-import { rolesDe, soloEsTutorRedactor } from '@/shared/lib/roles';
+import { rolesDe, soloEsTutorRedactor, ROLES_DE_GESTORA } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 import ContadorConsultas from './ContadorConsultas';
 import { useTheme } from '@/contexts/ThemeContext';
@@ -28,7 +28,7 @@ import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { reagruparMenu } from './bloquesDelMenu';
 
-const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
+const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', lider_equipo: 'Líder de equipo', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend (#210).
 // El tutor redactor (CRM-ISEIE#420) tiene su tablero como un colaborador.
@@ -180,7 +180,7 @@ export const SECCIONES_DE_ANTES = [
       // productos», pero sus avisos («Te han asignado un curso») llevan aquí. Con
       // «Sus cursos» la pantalla se les abre (`rutaPermitida`); el menú no cambia,
       // porque la entrada sigue pidiendo `products.view` para salir.
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', ...ROLES_DE_GESTORA, 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto; sin él, la
@@ -216,7 +216,7 @@ export const SECCIONES_DE_ANTES = [
       { to: '/accounting/income',    label: 'Ingresos', seguirPorRol: true,           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
       { to: '/revenue',              label: 'Conversiones', seguirPorRol: true,       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'expenses.view' },
-      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
+      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', ...ROLES_DE_GESTORA], permiso: 'accounting.por_cobrar' },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'commissions.view' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
@@ -232,7 +232,7 @@ export const SECCIONES_DE_ANTES = [
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
-      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], sectionPrefixes: ['/accounting/facturas'], permiso: ['facturas.emitir', 'facturas.configurar'], oPermiso: 'facturas.emitir' },
+      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', ...ROLES_DE_GESTORA], sectionPrefixes: ['/accounting/facturas'], permiso: ['facturas.emitir', 'facturas.configurar'], oPermiso: 'facturas.emitir' },
       // Facturas de colaboradores (#202): en evaluación, solo en /staging y en local.
       { to: '/accounting/facturas-colaboradores', label: 'Facturas de colaboradores', icon: Receipt, roles: ['admin', 'superadmin'], permiso: 'facturas_colaborador.ver_todas' },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'integrations.view' },
@@ -304,17 +304,17 @@ export const SECCIONES_DE_ANTES = [
     items: [
       // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
       // en pruebas: sale con ello.
-      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' }] : []),
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'soporte'], permiso: 'novedades.view' }] : []),
       // El chat interno del equipo, como en MultiCRM.
       { to: '/mensajes', label: 'Mensajes', icon: ChatsCircle, permiso: 'mensajes.usar' },
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
+      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       // Incidencias (gemela de CRM#612), al lado de Soporte. Los mismos roles
       // que traen `incidencias.view` de serie (la gestora ve las suyas).
-      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
+      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'soporte'], permiso: 'incidencias.view' },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos

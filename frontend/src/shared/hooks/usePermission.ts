@@ -28,6 +28,8 @@ export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
   { key: 'admin',      label: 'Admin',      desc: 'Acceso operativo completo, no gestiona usuarios.', color: 'violet' },
   { key: 'gestor',     label: 'Gestor',     desc: 'Solo sus leads asignados.', color: 'sky' },
+  // CRM-ISEIE#761: una gestora que además lleva un equipo comercial.
+  { key: 'lider_equipo', label: 'Líder de equipo', desc: 'Lo suyo y lo de las gestoras de su equipo. Sin administración.', color: 'sky' },
   // El tutor no entra al CRM normal: solo ve sus formaciones y lo suyo.
   { key: 'tutor',      label: 'Tutor',      desc: 'Colaborador externo. Solo sus formaciones y sus comisiones.', color: 'violet' },
   { key: 'soporte',    label: 'Soporte',    desc: 'Acceso de solo lectura para soporte técnico.', color: 'emerald' },

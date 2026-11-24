@@ -24,7 +24,8 @@ import { explicarPermisosRecordados } from '../permissions/permissions.service.j
  * decision de negocio y no tecnica — si manana se decide lo contrario, se
  * cambia AQUI y funciona en todas partes.
  */
-export const ROLES_CON_WHATSAPP = ['superadmin', 'admin', 'gestor', 'soporte'];
+// La líder de equipo (CRM#1105 / ISEIE#761) atiende sus prospectos como una gestora.
+export const ROLES_CON_WHATSAPP = ['superadmin', 'admin', 'gestor', 'lider_equipo', 'soporte'];
 
 /** Por que NO puede tener WhatsApp. null si si puede. */
 export function porQueNoPuede(usuario) {

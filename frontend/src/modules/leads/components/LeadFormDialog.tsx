@@ -17,6 +17,7 @@ import Field from '@/shared/components/ui/Field';
 import FilaCampos from '@/shared/components/ui/FilaCampos';
 import { inputClass } from '@/shared/lib/ui';
 import { rutaApp } from '@/shared/lib/rutaApp';
+import { esRolDeGestora } from '@/shared/lib/roles';
 
 interface CustomFieldDef {
   id: number;
@@ -52,7 +53,7 @@ export default function LeadFormDialog({ open, onClose, lead, onSubmit }: Props)
   const effectiveProject = activeProject;
 
   const { user } = useAuth() as any;
-  const isGestor = user?.role === 'gestor';
+  const isGestor = esRolDeGestora(user?.role);
   const { products, refetch: refetchProducts } = useProducts(effectiveProjectId);
   const isEdit = !!lead;
   const productoLabel = (effectiveProject as any)?.producto_label || 'Producto';

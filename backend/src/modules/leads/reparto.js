@@ -16,7 +16,7 @@ export async function gestoresDelReparto(ejecutar, projectId) {
        JOIN users u ON u.id = up.user_id
         AND u.active = true
         AND u.is_available = true
-        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))
+        AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin','lider_equipo') AND up.recibe_leads = TRUE))
         AND NOT COALESCE(u.gestor_colaboraciones, false)
       WHERE up.project_id = $1 AND up.active = true
         AND NOT EXISTS (
