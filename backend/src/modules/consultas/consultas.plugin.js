@@ -1,7 +1,7 @@
 /*
   EL PLUGIN DEL CRM EN CADA MOODLE (#679).
 
-  `local_crm` (tools/moodle-local-crm) avisa al CRM de cada mensaje privado del
+  `local_crm` (en molinangel/Campus-Moodle, #1037) avisa al CRM de cada mensaje privado del
   campus, firmado con la clave de ese campus. Aquí vive esa clave y el estado:
   si el plugin está activo y cuándo llegó el último aviso.
 
