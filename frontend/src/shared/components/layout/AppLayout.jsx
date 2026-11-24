@@ -13,6 +13,7 @@ import SectionTabs from './SectionTabs';
 // «Recorrido» arriba y el recorrido que se pide con él (#681, gemela de CRM#1012).
 import BotonRecorrido from './BotonRecorrido';
 import PresentadorRecorrido from './PresentadorRecorrido';
+import RecorridoDeLaDireccion from './RecorridoDeLaDireccion';
 import BetaDisclaimer from '@/shared/components/ui/BetaDisclaimer';
 import { useAuth } from '@/contexts/AuthContext';
 import { tieneWhatsapp } from '@/shared/lib/roles';
@@ -216,6 +217,8 @@ export default function AppLayout() {
       </main>
       {/* El recorrido que se pide con «Recorrido» (#681). */}
       <PresentadorRecorrido />
+      {/* «Ver recorrido» desde Novedades: abre el de ?recorrido= al llegar (v3.0.1). */}
+      <RecorridoDeLaDireccion />
 
       {/* Los avisos del CRM. Sin esto, `toast(...)` no pinta nada: el aviso se
           manda y no lo ve nadie. Estuvo asi hasta el 19/08 y por eso «guardar
