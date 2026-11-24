@@ -217,7 +217,7 @@ export default function AppLayout() {
       </main>
       {/* El recorrido que se pide con «Recorrido» (#681). */}
       <PresentadorRecorrido />
-      {/* «Ver recorrido» desde Novedades: abre el de ?recorrido= al llegar (v3.0.1). */}
+      {/* «Ver recorrido» desde Novedades: abre el de ?recorrido= al llegar (3.0.0). */}
       <RecorridoDeLaDireccion />
 
       {/* Los avisos del CRM. Sin esto, `toast(...)` no pinta nada: el aviso se

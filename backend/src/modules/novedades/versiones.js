@@ -13,53 +13,10 @@ export const CRM = { nombre: 'CRM ISEIE', color: '#002776' };
 
 const LISTA = [
   {
-    "version": "3.0.1",
-    "fecha": "2026-11-24",
-    "titulo": "Versión 3.0.1",
-    "intro": "«Ver recorrido» en cada novedad, y recorridos nuevos para Consultas y Conciliación.",
-    "grupos": [
-      {
-        "titulo": "Recorridos",
-        "items": [
-          {
-            "titulo": "«Ver recorrido» desde Novedades",
-            "texto": "Cada novedad que tiene recorrido trae su botón «Ver recorrido»: te lleva a la pantalla y te la enseña paso a paso. Solo se abre al pulsarlo.",
-            "roles": ["gestor", "admin", "superadmin", "tutor", "tutor_redactor"]
-          },
-          {
-            "titulo": "Consultas y el chat del campus",
-            "texto": "Recorrido nuevo: las pendientes y su color, buscar, contestar y «Leer el campus ahora».",
-            "roles": ["tutor", "admin", "superadmin"],
-            "ruta": "/consultas",
-            "boton": "Ir a Consultas",
-            "recorrido": "consultas-chat"
-          },
-          {
-            "titulo": "Conciliación de facturas y cobros",
-            "texto": "Recorrido nuevo: campus y mes, facturas sin cobro, cobros sin factura y «Enlazar todas las seguras».",
-            "roles": ["admin", "superadmin"],
-            "ruta": "/accounting/conciliacion/facturas",
-            "boton": "Ir a Conciliación",
-            "recorrido": "conciliacion-facturas"
-          },
-          {
-            "titulo": "Códigos promocionales y links creados en Stripe",
-            "texto": "El recorrido de Links de pago enseña ya los links creados directamente en Stripe y sus cobros por vincular, y el de Integraciones, los códigos promocionales.",
-            "roles": ["admin", "superadmin"],
-            "ruta": "/links-pago",
-            "boton": "Ir a Links de pago",
-            "recorrido": "links-pago"
-          }
-        ]
-      }
-    ],
-    "arreglos": []
-  },
-  {
     "version": "3.0.0",
     "fecha": "2026-11-24",
     "titulo": "Versión 3.0.0",
-    "intro": "Moodle dentro del CRM, tutoras redactoras, recorridos que solo se abren al pulsar y facturación más clara.",
+    "intro": "Moodle dentro del CRM, tutoras redactoras, recorridos que solo se abren al pulsar (y «Ver recorrido» en cada novedad) y facturación más clara.",
     "grupos": [
       {
         "titulo": "Moodle",
@@ -141,6 +98,40 @@ const LISTA = [
             "ruta": "/accounting/facturas-colaboradores",
             "boton": "Ir a Facturas de colaboradores",
             "recorrido": "facturas-colaboradores"
+          }
+        ]
+      },
+      {
+        "titulo": "Recorridos",
+        "items": [
+          {
+            "titulo": "«Ver recorrido» desde Novedades",
+            "texto": "Cada novedad que tiene recorrido trae su botón «Ver recorrido»: te lleva a la pantalla y te la enseña paso a paso. Solo se abre al pulsarlo.",
+            "roles": ["gestor", "admin", "superadmin", "tutor", "tutor_redactor"]
+          },
+          {
+            "titulo": "Consultas y el chat del campus",
+            "texto": "Recorrido nuevo: las pendientes y su color, buscar, contestar y «Leer el campus ahora».",
+            "roles": ["tutor", "admin", "superadmin"],
+            "ruta": "/consultas",
+            "boton": "Ir a Consultas",
+            "recorrido": "consultas-chat"
+          },
+          {
+            "titulo": "Conciliación de facturas y cobros",
+            "texto": "Recorrido nuevo: campus y mes, facturas sin cobro, cobros sin factura y «Enlazar todas las seguras».",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/accounting/conciliacion/facturas",
+            "boton": "Ir a Conciliación",
+            "recorrido": "conciliacion-facturas"
+          },
+          {
+            "titulo": "Códigos promocionales y links creados en Stripe",
+            "texto": "El recorrido de Links de pago enseña ya los links creados directamente en Stripe y sus cobros por vincular, y el de Integraciones, los códigos promocionales.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           }
         ]
       }

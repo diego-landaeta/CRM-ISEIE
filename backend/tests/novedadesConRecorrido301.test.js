@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { VERSIONES, ACTUAL } from '../src/modules/novedades/versiones.js';
 
 /**
- * v3.0.1 · cada novedad con «recorrido» apunta a un recorrido que EXISTE en el
+ * 3.0.0 · cada novedad con «recorrido» apunta a un recorrido que EXISTE en el
  * frontal, y lleva su pantalla («ruta»): sin ella no sale ni «Ir a…» ni
  * «Ver recorrido». Un id mal escrito daría un botón que no abre nada.
  */
@@ -19,9 +19,9 @@ const idsDelFrontal = new Set(
 
 const conRecorrido = VERSIONES.flatMap((v) => v.grupos.flatMap((g) => g.items.filter((it) => it.recorrido).map((it) => ({ v: v.version, ...it }))));
 
-describe('Novedades con «Ver recorrido» (3.0.1)', () => {
-  it('la actual es la 3.0.1 o posterior', () => {
-    expect(ACTUAL.version.localeCompare('3.0.1', undefined, { numeric: true })).toBeGreaterThanOrEqual(0);
+describe('Novedades con «Ver recorrido» (3.0.0)', () => {
+  it('la actual es la 3.0.0 o posterior', () => {
+    expect(ACTUAL.version.localeCompare('3.0.0', undefined, { numeric: true })).toBeGreaterThanOrEqual(0);
   });
 
   it('hay novedades con recorrido', () => {
