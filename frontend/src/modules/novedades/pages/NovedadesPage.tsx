@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { ArrowRight, Compass, DownloadSimple, PaperPlaneTilt, Sparkle, Wrench } from '@phosphor-icons/react';
-import { rutaConRecorrido } from '@/shared/components/layout/RecorridoDeLaDireccion';
+import { RECORRIDOS_DE_PANTALLA, rutaConRecorrido } from '@/shared/components/layout/RecorridoDeLaDireccion';
 import { RECORRIDOS_COBROS, tienePermiso, type RecorridoCobros } from '@/shared/lib/recorridosCobros';
 import usePermission from '@/shared/hooks/usePermission';
 
 /** La pantalla del recorrido (la suya, sin «:id»); si no tiene, la de la novedad. */
 const recorridoDe = (id: string) => (RECORRIDOS_COBROS as Record<string, RecorridoCobros | undefined>)[id];
 const pantallaDelRecorrido = (id: string, ruta: string) =>
-  recorridoDe(id)?.rutas.find((r) => !r.includes(':')) || ruta;
+  recorridoDe(id)?.rutas.find((r) => !r.includes(':')) || RECORRIDOS_DE_PANTALLA[id] || ruta;
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -47,7 +47,8 @@ export default function NovedadesPage() {
   const roles = rolesDe(user as never);
   const { can } = usePermission();
   /** «Ver recorrido» solo a quien puede verlo (el permiso del recorrido). */
-  const puedeVerRecorrido = (id: string) => { const r = recorridoDe(id); return !!r && tienePermiso(r.permiso, can); };
+  // Los de pantalla (el tablero) los filtra su pantalla: si la novedad te toca, sale.
+  const puedeVerRecorrido = (id: string) => { const r = recorridoDe(id); return r ? tienePermiso(r.permiso, can) : id in RECORRIDOS_DE_PANTALLA; };
   const dirige = roles.some((r) => r === 'superadmin' || r === 'soporte');
   const [datos, setDatos] = useState<Novedades | null>(null);
   const [version, setVersion] = useState<string | null>(null);

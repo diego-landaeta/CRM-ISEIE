@@ -50,11 +50,12 @@ const LISTA = [
             "texto": "Con el primer pago, el CRM programa la matrícula del alumno en su curso para el día antes del inicio. Por eso la fecha de inicio del curso es obligatoria al cerrar la venta. Llega campus a campus: hasta entonces, la matrícula sigue a mano.",
             "roles": ["gestor", "admin", "superadmin"],
             "ruta": "/ventas",
-            "boton": "Ir a Ventas"
+            "boton": "Ir a Ventas",
+            "recorrido": "cursos-producto"
           },
           {
             "titulo": "El avance del alumno en su ficha",
-            "texto": "En la pestaña «Campus» de la ficha del cliente: último acceso, % hecho, notas y estado de cada curso.",
+            "texto": "En la pestaña «Campus» de la ficha del cliente: último acceso, % hecho, notas y estado de cada curso. Su recorrido, con «Ver recorrido» dentro de la pestaña.",
             "roles": ["gestor", "admin", "superadmin"]
           }
         ]
@@ -67,7 +68,8 @@ const LISTA = [
             "texto": "Las tutoras redactoras tienen su tablero aparte y su ficha; el tablero se filtra por equipo.",
             "roles": ["admin", "superadmin", "tutor_redactor"],
             "ruta": "/tareas",
-            "boton": "Ir a Tareas"
+            "boton": "Ir a Tareas",
+            "recorrido": "tablero"
           },
           {
             "titulo": "Recorridos, solo cuando los pides",
@@ -132,6 +134,14 @@ const LISTA = [
             "ruta": "/links-pago",
             "boton": "Ir a Links de pago",
             "recorrido": "links-pago"
+          },
+          {
+            "titulo": "El tablero, también de las redactoras, y el avance del alumno",
+            "texto": "El recorrido del tablero enseña el filtro «Equipo de trabajo» (desarrollo o tutoras redactoras), y la pestaña «Campus» de la ficha del cliente tiene el suyo.",
+            "roles": ["admin", "superadmin", "tutor_redactor"],
+            "ruta": "/tareas",
+            "boton": "Ir a Tareas",
+            "recorrido": "tablero"
           }
         ]
       }

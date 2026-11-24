@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import usePermission from '@/shared/hooks/usePermission';
 import { RECORRIDOS_COBROS, claveRecorrido, pasosPara, tienePermiso, type RecorridoCobros } from '@/shared/lib/recorridosCobros';
-import { abrirRecorrido } from '@/shared/lib/lanzadorRecorridos';
+import { abrirRecorrido, useRecorridosApuntados } from '@/shared/lib/lanzadorRecorridos';
 
 /**
  * «VER RECORRIDO» DESDE NOVEDADES (3.0.0; Diego, 24/11: «actualiza Novedades
@@ -18,6 +18,14 @@ import { abrirRecorrido } from '@/shared/lib/lanzadorRecorridos';
  * permisos estén cargados. Sin permiso, o con un id que no existe, no abre nada.
  */
 export const PARAMETRO_RECORRIDO = 'recorrido';
+
+/**
+ * Los recorridos que no van en el registro por ruta: los apunta su pantalla al
+ * montarse (`useRegistrarRecorrido`). Desde Novedades se piden igual, por su id.
+ */
+export const RECORRIDOS_DE_PANTALLA: Record<string, string> = {
+  tablero: '/tareas',
+};
 
 /** La dirección de «Ver recorrido»: la pantalla con el recorrido pedido. */
 export function rutaConRecorrido(ruta: string, id: string): string {
@@ -37,6 +45,9 @@ export default function RecorridoDeLaDireccion() {
   canRef.current = can;
   const userRef = useRef(user);
   userRef.current = user;
+  const apuntados = useRecorridosApuntados();
+  const apuntadosRef = useRef(apuntados);
+  apuntadosRef.current = apuntados;
 
   useEffect(() => {
     const q = new URLSearchParams(search);
@@ -49,6 +60,8 @@ export default function RecorridoDeLaDireccion() {
         const pasos = pasosPara(r, puede);
         if (pasos.length) abrirRecorrido({ titulo: r.titulo, pasos, clave: claveRecorrido(r.id as Parameters<typeof claveRecorrido>[0], userRef.current?.id) });
       }
+      // Uno de los que apunta su pantalla (el tablero): lo abre ella, con sus permisos.
+      else if (!r) apuntadosRef.current.find((x) => x.id === id)?.abrir();
       q.delete(PARAMETRO_RECORRIDO);
       const resto = q.toString();
       navigate({ pathname, search: resto ? `?${resto}` : '', hash }, { replace: true });
