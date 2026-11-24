@@ -6835,6 +6835,58 @@
   "puertas": []
  },
  {
+  "id": "GET /api/integrations/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/moodle/categorias",
+  "relativa": "GET /moodle/categorias",
+  "controlador": "ver",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/integrations/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "PUT",
+  "ruta": "/api/integrations/moodle/categorias",
+  "relativa": "PUT /moodle/categorias",
+  "controlador": "guardar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/integrations/:provider",
   "tipo": "ruta",
   "modulo": "integrations",
@@ -13426,6 +13478,32 @@
     "tipo": "puede",
     "claves": [
      "products.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/:id/formacion/moodle",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion/moodle",
+  "relativa": "GET /:id/formacion/moodle",
+  "controlador": "verMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.crear_cursos"
     ]
    },
    {

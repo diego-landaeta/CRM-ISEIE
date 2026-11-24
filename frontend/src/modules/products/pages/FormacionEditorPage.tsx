@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import {
-  ArrowDown, ArrowLeft, ArrowUp, BookOpen, FloppyDisk, GraduationCap, Plus, Trash, UserPlus, Warning,
+  ArrowDown, ArrowLeft, ArrowSquareOut, ArrowUp, BookOpen, FloppyDisk, GraduationCap, Plus, Trash, UserPlus, Warning,
 } from '@phosphor-icons/react';
 import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
@@ -18,13 +18,15 @@ import {
   datosDeForm, formDesde, moduloVacio, moverModulo, problemaDelForm, sumaDeHoras, type FormacionForm, type ModuloForm,
 } from '../lib/formacionForm';
 import { RUTA_FORMACIONES, rutaDeFormacion } from '../lib/rutasFormacion';
+import LlevarAMoodle from '../components/LlevarAMoodle';
 
 /**
  * La ficha de una formación (CRM-ISEIE#767, gemela de CRM#1113): sus datos, sus módulos y sus tutoras,
  * en una pantalla. Al guardar va todo de una vez (datos y módulos en una
  * transacción). Las tutoras son las colaboraciones de Tutores: se añaden y se
- * quitan aquí mismo con las mismas reglas (el % es obligatorio; quitar una con
- * comisiones la cierra con fecha de fin, no la borra).
+ * quitan aquí mismo: solo la tutora y desde cuándo (sin «% de comisión», Diego
+ * 24/11; el % se pone en Tutores); quitar una con comisiones la cierra con fecha de
+ * fin, no la borra.
  *
  * Fases siguientes (en la misma pantalla): crear o actualizar su curso de Moodle
  * con una sección por módulo, y su ficha en la web.
@@ -259,7 +261,12 @@ export default function FormacionEditorPage() {
               {formacion.cursos_moodle.length > 0 ? (
                 <ul className="text-sm text-foreground">
                   {formacion.cursos_moodle.map((c) => (
-                    <li key={c.curso_moodle_id}>{c.curso_nombre || `Curso ${c.curso_moodle_id}`} <span className="text-xs text-muted-foreground">(id {c.curso_moodle_id})</span></li>
+                    <li key={c.curso_moodle_id}>
+                      {c.url
+                        ? <a href={c.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-semibold underline">{c.curso_nombre || `Curso ${c.curso_moodle_id}`} <ArrowSquareOut size={12} aria-hidden="true" /></a>
+                        : (c.curso_nombre || `Curso ${c.curso_moodle_id}`)}
+                      {' '}<span className="text-xs text-muted-foreground">(id {c.curso_moodle_id})</span>
+                    </li>
                   ))}
                 </ul>
               ) : (
@@ -287,7 +294,6 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
   const gestiona = can('tutores.gestionar');
   const [tutores, setTutores] = useState<Array<{ id: number; nombre: string }>>([]);
   const [tutorId, setTutorId] = useState<number | null>(null);
-  const [pct, setPct] = useState('');
   const [desde, setDesde] = useState(hoyEnMadrid());
   const [enviando, setEnviando] = useState(false);
   const [otroCampus, setOtroCampus] = useState<string | null>(null);
@@ -302,12 +308,14 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
   const opciones = tutores.filter((t) => !yaEstan.has(t.id)).map((t) => ({ value: t.id as number | null, label: t.nombre }));
 
   async function anadir(anadirAlCampus = false) {
-    if (!tutorId || pct === '') return;
+    if (!tutorId) return;
     setEnviando(true);
     try {
-      await tutoresApi.crearColaboracion({ tutorId, productId: formacion.id, pct: Number(pct), desde, anadirAlCampus });
+      // Sin «% de comisión» (Diego, 24/11: «no va»): solo la tutora y desde cuándo. El %,
+      // si hace falta, se pone en Tutores; sin él la colaboración no cobra (0 %).
+      await tutoresApi.crearColaboracion({ tutorId, productId: formacion.id, desde, anadirAlCampus });
       toast({ title: 'Tutora añadida', description: tutores.find((t) => t.id === tutorId)?.nombre });
-      setTutorId(null); setPct(''); setOtroCampus(null);
+      setTutorId(null); setOtroCampus(null);
       alCambiar();
     } catch (e) {
       // La tutora no está en el campus de la formación: se pregunta, como en Tutores (#384).
@@ -339,7 +347,6 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
           {formacion.tutoras.map((t) => (
             <li key={t.colaboracion_id} className="flex items-center gap-2 py-1.5">
               <span className="min-w-0 flex-1 truncate text-foreground">{t.nombre}</span>
-              {t.pct != null && <span className="shrink-0 text-xs tabular-nums text-muted-foreground">{t.pct} %</span>}
               {t.vigente_desde && <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">desde {t.vigente_desde}</span>}
               {gestiona && (
                 <button type="button" onClick={() => setQuitando({ colaboracion_id: t.colaboracion_id, nombre: t.nombre })}
@@ -356,13 +363,10 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
           <Field label="Tutora" className="min-w-48 flex-1">
             <Select<number | null> value={tutorId} onChange={setTutorId} options={opciones} placeholder="Elegir tutora" ariaLabel="Tutora" />
           </Field>
-          <Field label="% de comisión" className="w-28">
-            <input type="number" min={0} max={100} step="0.5" value={pct} onChange={(e) => setPct(e.target.value)} aria-label="% de comisión" className={inputClass} />
-          </Field>
           <Field label="Desde" className="w-40">
             <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} aria-label="Desde" className={inputClass} />
           </Field>
-          <button type="button" onClick={() => anadir()} disabled={!tutorId || pct === '' || enviando}
+          <button type="button" onClick={() => anadir()} disabled={!tutorId || enviando}
             className="inline-flex h-9 items-center gap-1 rounded-md border border-border bg-card px-3 text-xs font-semibold hover:bg-muted disabled:opacity-50">
             <UserPlus size={14} aria-hidden="true" /> Añadir
           </button>
@@ -380,66 +384,5 @@ function Tutoras({ formacion, campusId, alCambiar }: { formacion: Formacion; cam
         confirmLabel="Quitar" onConfirm={quitar} onCancel={() => setQuitando(null)} loading={enviando}
       />
     </section>
-  );
-}
-
-/**
- * Fase 2 (CRM#1113): «Crear en Moodle» / «Actualizar en Moodle». Crea en el Moodle del
- * campus el curso de la formación (oculto a los alumnos) con una sección por módulo, o
- * actualiza el que tiene unido; y lo deja unido al producto. Solo sale con el interruptor
- * encendido, el permiso `moodle.crear_cursos` y el Moodle del campus conectado.
- */
-function LlevarAMoodle({ formacion, campusId, pendiente, alGuardar }: {
-  formacion: Formacion; campusId: number; pendiente: boolean; alGuardar: (f: Formacion) => void;
-}) {
-  const [preguntando, setPreguntando] = useState(false);
-  const [enviando, setEnviando] = useState(false);
-  if (!formacion.moodle?.disponible) return null;
-  if (!formacion.moodle.conectado) {
-    return <p className="text-xs text-muted-foreground">Este campus no tiene su Moodle conectado: no se puede crear el curso desde aquí.</p>;
-  }
-  const actualizar = formacion.cursos_moodle.length > 0;
-  const sinModulos = formacion.modulos.length === 0;
-  const motivo = pendiente ? 'Guarda antes los cambios.' : (sinModulos ? 'Añade al menos un módulo.' : null);
-
-  async function llevar() {
-    setEnviando(true);
-    try {
-      const r = await formacionesApi.llevarAMoodle(formacion.id, campusId);
-      const c = r.data?.curso;
-      toast({
-        title: c?.creado ? 'Curso creado en Moodle' : 'Curso actualizado en Moodle',
-        description: [
-          c?.nombre,
-          c ? `${c.secciones.length} secciones` : null,
-          c && !c.visible ? 'oculto a los alumnos' : null,
-          c?.sobran ? `${c.sobran} secciones de más sin tocar` : null,
-        ].filter(Boolean).join(' · '),
-      });
-      setPreguntando(false);
-      if (r.data?.formacion) alGuardar(r.data.formacion);
-    } catch (e) {
-      toast({ title: 'No se ha podido llevar a Moodle', description: (e as Error).message, variant: 'destructive' });
-    } finally { setEnviando(false); }
-  }
-
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <button type="button" onClick={() => setPreguntando(true)} disabled={Boolean(motivo) || enviando} title={motivo || undefined}
-        className="inline-flex h-8 items-center gap-1 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50">
-        <GraduationCap size={14} aria-hidden="true" />
-        {actualizar ? 'Actualizar en Moodle' : 'Crear en Moodle'}
-      </button>
-      {motivo && <span className="text-xs text-muted-foreground">{motivo}</span>}
-      <ConfirmDialog
-        open={preguntando}
-        title={actualizar ? 'Actualizar el curso en Moodle' : 'Crear el curso en Moodle'}
-        message={actualizar
-          ? `Se cambian el nombre, las fechas y las secciones del curso unido para que sean los ${formacion.modulos.length} módulos de la formación. Las secciones de más no se borran.`
-          : `Se crea el curso «${formacion.nombre}» con ${formacion.modulos.length} secciones (una por módulo), oculto a los alumnos, y queda unido a esta formación.`}
-        confirmLabel={actualizar ? 'Actualizar' : 'Crear curso'}
-        onConfirm={llevar} onCancel={() => setPreguntando(false)} loading={enviando}
-      />
-    </div>
   );
 }

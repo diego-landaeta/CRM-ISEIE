@@ -2,7 +2,7 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as Formacion from './formacion.service.js';
-import { campusConectado, llevarAMoodle as llevar, moodleDisponible } from './formacion.moodle.js';
+import { campusConectado, enlaceAlCurso, llevarAMoodle as llevar, moodleDisponible, vistaPrevia } from './formacion.moodle.js';
 
 /**
  * Productos › Formaciones (CRM#1113): crear y editar una formación con sus
@@ -18,7 +18,12 @@ const ver = async (req, id) => {
   ]);
   // Fase 2: si se puede llevar a Moodle desde aquí (interruptor + plugin + permiso) y si el
   // campus tiene su Moodle conectado. La pantalla solo enseña el botón con las dos cosas.
-  return { ...formacion, moodle: { disponible: moodleDisponible() && puedeMoodle, conectado } };
+  // Con la dirección del campus, el enlace a cada curso unido.
+  return {
+    ...formacion,
+    cursos_moodle: formacion.cursos_moodle.map((c) => ({ ...c, url: enlaceAlCurso(conectado.url, Number(c.curso_moodle_id)) })),
+    moodle: { disponible: moodleDisponible() && puedeMoodle, conectado: conectado.conectado },
+  };
 };
 
 // GET /api/products/:id/formacion?projectId=
@@ -45,16 +50,31 @@ export async function guardarFormacion(req, res, next) {
   } catch (err) { next(err); }
 }
 
-const moodleSchema = z.object({ categoria: z.coerce.number().int().nonnegative().optional() });
+// Lo que se puede elegir en la ficha antes de crear: la categoría (0 = la de por defecto del
+// Moodle) y el nombre corto. Sin ellos, los del campus (Integraciones) y la regla.
+const moodleSchema = z.object({
+  categoria: z.coerce.number().int().nonnegative().max(2147483647).nullable().optional(),
+  nombre_corto: z.string().trim().max(250).nullable().optional(),
+});
 
-// POST /api/products/:id/formacion/moodle  { projectId, categoria? }
+// GET /api/products/:id/formacion/moodle?projectId=
+// Fase 2: qué se va a crear o actualizar en Moodle, antes de pulsar. Solo lee.
+export async function verMoodle(req, res, next) {
+  try {
+    res.json({ success: true, data: await vistaPrevia(Number(req.params.id), req.projectId) });
+  } catch (err) { next(err); }
+}
+
+// POST /api/products/:id/formacion/moodle  { projectId, categoria?, nombre_corto? }
 // Fase 2 (CRM#1113): crea o actualiza su curso de Moodle, con una sección por módulo.
 export async function llevarAMoodle(req, res, next) {
   try {
     const d = moodleSchema.safeParse(req.body || {});
-    if (!d.success) throw new AppError('Categoría inválida', 400, 'VALIDATION_ERROR');
+    if (!d.success) throw new AppError('La categoría o el nombre corto no son válidos', 400, 'VALIDATION_ERROR');
     const id = Number(req.params.id);
-    const curso = await llevar(id, req.projectId, { categoria: d.data.categoria || 0, userId: req.user?.userId, ip: req.ip });
+    const curso = await llevar(id, req.projectId, {
+      categoria: d.data.categoria ?? null, nombreCorto: d.data.nombre_corto || null, userId: req.user?.userId, ip: req.ip,
+    });
     res.json({ success: true, data: { curso, formacion: await ver(req, id) } });
   } catch (err) { next(err); }
 }
