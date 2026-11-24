@@ -145,6 +145,9 @@ const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
 const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
 // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto (lo lee la matrícula automática).
 const CursosDeProductosPage = lazy(() => import('./modules/moodle/pages/CursosDeProductosPage'));
+// Gemela de CRM#1113 (CRM-ISEIE#767): crear y editar una formación con sus módulos.
+const FormacionesPage = lazy(() => import('./modules/products/pages/FormacionesPage'));
+const FormacionEditorPage = lazy(() => import('./modules/products/pages/FormacionEditorPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -221,6 +224,7 @@ const ROUTE_TITLES = {
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
   '/products/cursos-moodle':          'Cursos de Moodle',
+  '/products/formaciones':           'Formaciones',
   '/soporte':                         'Soporte',
   '/incidencias':                     'Incidencias',
   '/conexion/conectores':             'Conectores',
@@ -333,6 +337,8 @@ function App() {
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/cursos-moodle" element={<CursosDeProductosPage />} />
+          <Route path="/products/formaciones" element={<FormacionesPage />} />
+          <Route path="/products/formaciones/:id" element={<FormacionEditorPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
           {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}

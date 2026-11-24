@@ -522,6 +522,9 @@ export const SECCIONES = [
           // CRM#957: qué curso de Moodle es cada producto del catálogo, para la matrícula
           // automática (#767). Otra pantalla (Académico › Cursos de Moodle): no pide `moodle.view`.
           a('cursos_producto', 'Unir productos con cursos de Moodle', 'Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus.', ADMIN_SOPORTE, { independiente: true }),
+          // Gemela de CRM#1113, fase 2: desde Productos › Formaciones, crear en el Moodle del campus
+          // el curso de una formación, o actualizarlo, con una sección por módulo. Escribe en Moodle.
+          a('crear_cursos', 'Crear cursos en Moodle', 'Crear o actualizar en el Moodle de sus campus el curso de una formación, con una sección por módulo.', ADMIN_SOPORTE, { independiente: true }),
         ],
       },
       {
