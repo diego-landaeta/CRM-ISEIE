@@ -8,6 +8,8 @@ import { RECORRIDOS_NOVEDADES, type IdRecorridoNovedades } from '@/shared/lib/re
 import { RECORRIDOS_NOVEDADES_B, type IdRecorridoNovedadesB } from '@/shared/lib/recorridosNovedadesB';
 // Los del día a día de una gestora (#619, tanda C; gemela de CRM#941), en su propio fichero.
 import { RECORRIDOS_GESTORA, type IdRecorridoGestora } from '@/shared/lib/recorridosGestora';
+// Los del día a día, segunda tanda (#619, tanda D; gemela de CRM#941: Seguimiento, Conexión de WhatsApp y Consultas).
+import { RECORRIDOS_GESTORA_B, type IdRecorridoGestoraB } from '@/shared/lib/recorridosGestoraB';
 // Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
 import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
@@ -66,6 +68,7 @@ export type IdRecorridoCobros =
   | IdRecorridoNovedades
   | IdRecorridoNovedadesB
   | IdRecorridoGestora
+  | IdRecorridoGestoraB
   | IdRecorridoLinks;
 
 export interface RecorridoCobros {
@@ -485,6 +488,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
 
   // ─── 9 · El día a día de una gestora (#619, tanda C): `recorridosGestora.ts` ───
   ...RECORRIDOS_GESTORA,
+  // ─── 9 · El día a día, segunda tanda (#619, tanda D): `recorridosGestoraB.ts` ───
+  ...RECORRIDOS_GESTORA_B,
 
   // ─── Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
   ...RECORRIDOS_LINKS,

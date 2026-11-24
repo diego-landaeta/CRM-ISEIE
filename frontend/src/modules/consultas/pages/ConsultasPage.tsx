@@ -15,6 +15,8 @@ import {
 } from '../api/consultas.api';
 import ConsultasNav from '../components/ConsultasNav';
 import CampusSinTutorAviso from '../components/CampusSinTutorAviso';
+// El recorrido guiado de la pantalla (#941, tanda D).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   Consultas de alumnos (#188).
@@ -157,24 +159,31 @@ export default function ConsultasPage() {
   }
 
   return (
-    <div className="space-y-4 pb-8">
-      <ConsultasNav />
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+      <div data-recorrido="consultas-pestanas"><ConsultasNav /></div>
       <PageHeader
         title="Consultas de alumnos"
         subtitle={vista === 'mias'
           ? 'Las dudas que te escriben tus alumnos en el campus. Responde desde aquí: les llega al campus.'
           : `Todas las consultas de ${activeIssuerId ? 'la empresa elegida' : activeProject?.id && activeProject.id > 0 ? activeProject.nombre : 'tus campus'}.`}
-        actions={puedeLeerElCampus && vista === 'todas' ? (
-          <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo}>
-            <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
-          </Button>
-        ) : undefined}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            {puedeLeerElCampus && vista === 'todas' && (
+              <Button variant="outline" size="sm" onClick={leerAhora} disabled={leyendo} data-recorrido="consultas-leer">
+                <ArrowsClockwise size={14} weight="bold" className="mr-1.5" /> {leyendo ? 'Leyendo…' : 'Leer el campus ahora'}
+              </Button>
+            )}
+            <VerRecorrido id="consultas" listo={!cargando} />
+          </div>
+        )}
       />
 
       <CampusSinTutorAviso campus={sinTutorCampus} />
 
       {esTutor && esAdmin && (
-        <div role="tablist" aria-label="Qué consultas" className="inline-flex rounded-md border border-border bg-muted p-0.5">
+        <div role="tablist" aria-label="Qué consultas" data-recorrido="consultas-vista" className="inline-flex rounded-md border border-border bg-muted p-0.5">
           {(['mias', 'todas'] as Vista[]).map((v) => (
             <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
               className={`h-8 px-3 rounded text-sm font-semibold ${vista === v ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>
@@ -184,7 +193,7 @@ export default function ConsultasPage() {
         </div>
       )}
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div data-recorrido="consultas-filtros" className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div role="tablist" aria-label="Estado" className="flex flex-wrap gap-1">
           {PESTANAS.map((p) => (
             <button key={p.clave} type="button" role="tab" aria-selected={pestana === p.clave} onClick={() => setPestana(p.clave)}
@@ -218,7 +227,7 @@ export default function ConsultasPage() {
             Se ven {lista.length} de {total}. Para encontrar una que no sale, búscala por el alumno, el correo o el curso.
           </p>
         )}
-        <ul className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Consultas">
+        <ul data-recorrido="consultas-lista" className="divide-y divide-border rounded-lg border border-border bg-card" aria-label="Consultas">
           {lista.map((c) => (
             <li key={c.id}>
               <Link to={`/consultas/${c.id}`} className="block px-4 py-3 hover:bg-muted/50">

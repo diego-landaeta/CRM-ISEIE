@@ -18,6 +18,7 @@ import { X, MagnifyingGlass,
   ArrowCounterClockwise, CalendarBlank, User, Buildings, WarningCircle,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
@@ -436,7 +437,9 @@ export default function SeguimientoPage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
+    // El margen de scroll, como en la tanda C (#619): el recorrido trae cada parte a
+    // la vista por debajo de la barra fija de arriba, no escondida detrás.
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Seguimiento de fin de mes"
         subtitle={
@@ -445,22 +448,27 @@ export default function SeguimientoPage() {
             : 'Quien entró, no compró y lleva tiempo sin noticias. No es la cola del día: esto es toda la base.'
         }
         actions={(
-          <button
-            type="button"
-            onClick={() => setWasapiAbierto(true)}
-            disabled={total === 0}
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-50"
-            title="La base entera en el fichero que carga Wasapi"
-          >
-            <DownloadSimple size={14} weight="bold" />
-            Descargar para Wasapi
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              data-recorrido="seguimiento-wasapi"
+              onClick={() => setWasapiAbierto(true)}
+              disabled={total === 0}
+              className="inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-normal font-semibold hover:bg-muted disabled:opacity-50"
+              title="La base entera en el fichero que carga Wasapi"
+            >
+              <DownloadSimple size={14} weight="bold" />
+              Descargar para Wasapi
+            </button>
+            {/* El recorrido guiado de la pantalla (#619, gemela de CRM#941). */}
+            <VerRecorrido id="seguimiento-fin-de-mes" listo={!cargando} />
+          </div>
         )}
       />
 
       {resumen && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div data-recorrido="seguimiento-antiguedad" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             {BLOQUES.map((b) => (
               <Contador
                 key={b.clave}
@@ -478,6 +486,7 @@ export default function SeguimientoPage() {
           <div className="flex flex-wrap items-center gap-3">
             <button
               type="button"
+              data-recorrido="seguimiento-sin-contactar"
               onClick={() => setSoloSinContactar((v) => !v)}
               aria-pressed={soloSinContactar}
               className={
@@ -509,8 +518,10 @@ export default function SeguimientoPage() {
         </>
       )}
 
-      {/* LOS FILTROS. Van al servidor; ver el comentario de arriba. */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* LOS FILTROS. Van al servidor; ver el comentario de arriba.
+          `max-w-full`: un nombre de formación largo no ensancha la pantalla a
+          375 px ni saca de ella el cartel del recorrido (#619). */}
+      <div data-recorrido="seguimiento-filtros" className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[220px] flex-1">
           <MagnifyingGlass size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -526,7 +537,7 @@ export default function SeguimientoPage() {
           value={producto}
           onChange={(e) => setProducto(e.target.value)}
           aria-label="Filtrar por formación"
-          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-9 max-w-full rounded-md border border-border bg-card px-2 text-sm"
         >
           <option value="">Cualquier formación</option>
           {productos.map((p) => (
@@ -538,7 +549,7 @@ export default function SeguimientoPage() {
           value={estado}
           onChange={(e) => setEstado(e.target.value)}
           aria-label="Filtrar por estado"
-          className="h-9 rounded-md border border-border bg-card px-2 text-sm"
+          className="h-9 max-w-full rounded-md border border-border bg-card px-2 text-sm"
         >
           <option value="">Cualquier estado</option>
           {ESTADOS_DEL_REPASO.map((e) => (
@@ -574,7 +585,7 @@ export default function SeguimientoPage() {
           }
         />
       ) : (
-        <div className="space-y-2">
+        <div data-recorrido="seguimiento-lista" className="space-y-2">
           {visibles.map((p, i) => (
             <div
               key={p.lead_id}
@@ -663,16 +674,19 @@ export default function SeguimientoPage() {
 
                 {/* Atenderla sin abrir la ventana. Va FUERA del botón de la
                     fila: un botón dentro de otro no es HTML válido y el clic
-                    se lo queda el de fuera. */}
-                <AccionesDeFila
-                  fila={p}
-                  plantillas={plantillas}
-                  onAtendido={(tipo) => atenderDesdeLaFila(p, tipo)}
-                />
-                <DescartarDelRepaso
-                  nombre={p.lead_nombre}
-                  onDescartar={(motivo, feedback) => descartarDelRepaso(p, motivo, feedback)}
-                />
+                    se lo queda el de fuera. Las dos, juntas: las señala el
+                    recorrido (#619). */}
+                <div data-recorrido="seguimiento-acciones" className="flex shrink-0 items-start gap-3">
+                  <AccionesDeFila
+                    fila={p}
+                    plantillas={plantillas}
+                    onAtendido={(tipo) => atenderDesdeLaFila(p, tipo)}
+                  />
+                  <DescartarDelRepaso
+                    nombre={p.lead_nombre}
+                    onDescartar={(motivo, feedback) => descartarDelRepaso(p, motivo, feedback)}
+                  />
+                </div>
               </div>
             </div>
           ))}

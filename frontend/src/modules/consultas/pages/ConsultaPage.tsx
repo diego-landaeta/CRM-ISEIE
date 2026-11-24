@@ -9,6 +9,8 @@ import { toast } from '@/shared/hooks/useToast';
 import { Button } from '@/shared/components/ui/button';
 import Select from '@/shared/components/ui/Select';
 import Iniciales from '@/shared/components/ui/Iniciales';
+// El recorrido guiado de la pantalla (#941, tanda D).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { cn } from '@/shared/lib/utils';
 import {
   consultasApi, semaforo, haceCuanto as horasEnTexto,
@@ -120,8 +122,9 @@ function ConEnlaces({ texto, claro }: { texto: string; claro: boolean }) {
   );
 }
 
-const Cabecera = ({ children, className }: { children: React.ReactNode; className?: string }) => (
-  <div className={cn('flex h-14 shrink-0 items-center gap-2 border-b border-border px-4', className)}>{children}</div>
+/** `data-recorrido`: si la señala el recorrido de la pantalla (#941). */
+const Cabecera = ({ children, className, ...resto }: { children: React.ReactNode; className?: string; 'data-recorrido'?: string }) => (
+  <div {...resto} className={cn('flex h-14 shrink-0 items-center gap-2 border-b border-border px-4', className)}>{children}</div>
 );
 
 /** Un apartado de la ficha, plegable: así la ficha no satura y cada una abre lo que necesita. */
@@ -194,10 +197,13 @@ function Bandeja({ actual, puedes, plazoHoras, version }: { actual: number; pued
   }, [actual, puedes, version]);
 
   return (
-    <nav aria-label="Consultas pendientes" className="hidden min-h-0 flex-col border-r border-border bg-card lg:flex">
+    <nav aria-label="Consultas pendientes" data-recorrido="consulta-bandeja" className="hidden min-h-0 flex-col border-r border-border bg-card lg:flex">
       <Cabecera>
         <h2 className="flex-1 text-normal font-semibold text-foreground">Pendientes</h2>
         {lista && <span className="rounded-full bg-muted px-2 py-0.5 text-secundario font-medium tabular-nums text-muted-foreground">{lista.length}</span>}
+        {/* «Ver recorrido» (#941), aquí: la cabecera de la conversación no tiene sitio
+            con la ficha abierta. En el móvil (sin bandeja), «Recorrido» de arriba. */}
+        <VerRecorrido id="consulta" compacto />
       </Cabecera>
       <ul className="min-h-0 flex-1 overflow-y-auto py-1">
         {!lista && [0, 1, 2].map((i) => (
@@ -682,7 +688,7 @@ export default function ConsultaPage() {
             </>
           ) : (
             <>
-              <Cabecera className="gap-3">
+              <Cabecera className="gap-3" data-recorrido="consulta-cabecera">
                 <Link to="/consultas" aria-label="Volver a Consultas" className="-ml-1 inline-grid h-8 w-8 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden">
                   <ArrowLeft size={16} aria-hidden />
                 </Link>
@@ -717,7 +723,7 @@ export default function ConsultaPage() {
               </Cabecera>
 
               {verFicha && (
-                <div className="max-h-[55vh] overflow-y-auto border-b border-border xl:hidden">
+                <div data-recorrido="consulta-ficha" className="max-h-[55vh] overflow-y-auto border-b border-border xl:hidden">
                   <Ficha c={c} ctx={ctx} cargando={cargandoCtx} alInsertar={insertar} puedeEscribir={puedeEscribir} admin={reasignar} />
                 </div>
               )}
@@ -740,7 +746,7 @@ export default function ConsultaPage() {
               )}
 
               {/* Los mensajes */}
-              <div ref={lista} data-testid="chat-mensajes" className="min-h-[18rem] flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
+              <div ref={lista} data-testid="chat-mensajes" data-recorrido="consulta-mensajes" className="min-h-[18rem] flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-8">
                 {c.mensajes.length === 0 && (
                   <p className="grid h-full place-items-center text-secundario text-muted-foreground">Todavía no hay mensajes en esta conversación.</p>
                 )}
@@ -827,7 +833,7 @@ export default function ConsultaPage() {
               )}
 
               {(puedeEscribir || c.puedes === 'admin') && (
-                <form onSubmit={(e) => { e.preventDefault(); enviar(false); }} noValidate className="relative border-t border-border p-3 sm:px-8 sm:py-4">
+                <form onSubmit={(e) => { e.preventDefault(); enviar(false); }} noValidate data-recorrido="consulta-respuesta" className="relative border-t border-border p-3 sm:px-8 sm:py-4">
                   {c.grupo_tipo === 'curso' && modoReal !== 'nota' && <AvisoGrupoDelCurso />}
                   {verGuardadas && (
                     <Guardadas lista={guardadas} texto={texto} alElegir={insertar} alCrear={crearGuardada} alBorrar={borrarGuardada} alCerrar={() => setVerGuardadas(false)} />
@@ -905,7 +911,7 @@ export default function ConsultaPage() {
           )}
         </section>
 
-        <aside aria-label="Ficha del alumno" className="hidden min-h-0 flex-col border-l border-border bg-card xl:flex">
+        <aside aria-label="Ficha del alumno" data-recorrido="consulta-ficha" className="hidden min-h-0 flex-col border-l border-border bg-card xl:flex">
           <Cabecera>
             <IdentificationCard size={16} className="text-muted-foreground" aria-hidden />
             <h2 className="flex-1 text-normal font-semibold text-foreground">Ficha del alumno</h2>
