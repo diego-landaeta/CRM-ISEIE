@@ -15,6 +15,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from './VentaYaExisteAviso';
+import LinkDePagoUsado from './LinkDePagoUsado';
 import usePermission from '@/shared/hooks/usePermission';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { crearLink, generarPlan } from '@/modules/links-pago/api/linksPago.api';
@@ -697,6 +698,15 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
 
   async function despuesDeCrear(res: Awaited<ReturnType<typeof conversionsApi.create>>) {
     if (res.success && res.data) {
+      // «Link de pago usado» (CRM#1107): si el cobro de Stripe se unió o por qué no.
+      const cargo = (res.data as Conversion & { cargo_inicial?: { estado: string; mensaje: string } }).cargo_inicial;
+      if (cargo?.mensaje) {
+        toast({
+          title: cargo.estado === 'unido' || cargo.estado === 'ya_unido' ? 'Cobro de Stripe unido a la venta' : 'El cobro de Stripe no se ha unido',
+          description: cargo.mensaje,
+          ...(cargo.estado === 'unido' || cargo.estado === 'ya_unido' ? {} : { variant: 'destructive' as const }),
+        });
+      }
       // Si es fraccionado, genera las cuotas custom
       if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
         try {
@@ -1077,9 +1087,14 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
               </div>
             )}
             {/* La inicial ya pagada: su referencia (nº de operación, o el link/cobro de Stripe). */}
-            {hayPago && form.metodo_pago === 'fraccionado' && (
-              <Field label={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'El link o el cobro de Stripe de la inicial (opcional)' : 'Referencia del pago inicial (opcional)'}
-                htmlFor="venta-ref-inicial" hint={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'Para encontrarlo luego en Stripe.' : 'El nº de operación de la transferencia o del depósito.'}>
+            {/* Ya pagada con otro link o con Stripe: «Link de pago usado» (CRM#1107), que
+                el CRM busca en Stripe y une a esta venta al registrarla. */}
+            {hayPago && form.metodo_pago === 'fraccionado' && comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') && (
+              <LinkDePagoUsado projectId={projectId} importe={pagadoInicial} value={refInicial} onChange={setRefInicial} />
+            )}
+            {hayPago && form.metodo_pago === 'fraccionado' && !(comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si')) && (
+              <Field label="Referencia del pago inicial (opcional)"
+                htmlFor="venta-ref-inicial" hint="El nº de operación de la transferencia o del depósito.">
                 <input id="venta-ref-inicial" autoComplete="off" value={refInicial} onChange={(e) => setRefInicial(e.target.value)} maxLength={120} className={inputClass} />
               </Field>
             )}

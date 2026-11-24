@@ -119,6 +119,19 @@ const LISTA = [
         ]
       },
       {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "La venta nace con el link",
+            "texto": "Al crear un link desde un prospecto, su venta queda creada a tu nombre, pendiente de cobro (en cuotas, con su plan), y el prospecto pasa a «Convertido». Si caduca o se anula sin pagarse, te avisamos y decides tú. En la venta, «Link de pago usado» une el cobro de Stripe aunque pagara con otro correo.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
+          }
+        ]
+      },
+      {
         "titulo": "Recorridos",
         "items": [
           {

@@ -571,6 +571,8 @@ export async function anular(link, { userId, motivo }) {
   if (!hecho) throw new AppError('El link ha cambiado mientras tanto (pagado o caducado). Recarga.', 409, 'NO_ANULABLE');
   await model.anotarEvento(link.id, 'anulado', { por: userId, motivo });
   logger.info({ linkId: link.id, userId }, 'Links de pago: link anulado');
+  // CRM#1107: si el link traía su venta, sigue pendiente y se avisa a quien lo creó.
+  await (await import('./links-pago.venta.js')).avisarSinPagar(link.id, 'anulado');
   return model.porId(link.id);
 }
 
@@ -597,6 +599,8 @@ export async function caducarVencidos({ lote = 50 } = {}) {
       if (await model.marcarCaducado(l.id)) {
         await model.anotarEvento(l.id, 'caducado', { por: 'cron' });
         res.caducados += 1;
+        // CRM#1107: si el link traía su venta, sigue pendiente y se avisa a quien lo creó.
+        await (await import('./links-pago.venta.js')).avisarSinPagar(l.id, 'caducado');
       }
     } catch (err) {
       logger.warn({ err: err.message, linkId: l.id }, 'Links de pago: no se pudo caducar; se reintenta en la siguiente vuelta');

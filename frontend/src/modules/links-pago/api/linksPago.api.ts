@@ -61,6 +61,12 @@ export interface LinkDePago {
   renovado_de?: number | null;
   renovado_por?: number | null;
   created_at: string;
+  /**
+   * CRM#1107: al crear un link desde un prospecto, su venta. `creada`: la ha creado
+   * el link (pendiente de cobro); si no, es la que ya tenía la ficha. Sin
+   * `conversion_id`, no se pudo crear (`error`) y se creará al pagarse.
+   */
+  venta_del_link?: { conversion_id: number | null; creada: boolean; error?: string };
 }
 
 export interface ConfigLinks {
@@ -148,9 +154,12 @@ export function crearLink(cuerpo: {
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
   // CRM#986: si el link admite códigos promocionales (sin decirlo, lo que diga el campus).
   codigos_promo?: boolean;
+  // CRM#1107: el alumno ya tiene una venta de ese programa y se crea otra igualmente.
+  forzar?: boolean;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
 }
+
 
 /** Un código promocional de campaña (CRM#986): un cupón y un código de Stripe con su fecha límite. */
 export interface CodigoPromocional {

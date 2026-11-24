@@ -307,6 +307,13 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Link de pago abierto sin pagar', agrupa: false,
     descripcion: 'Tu alumno abrió el link de pago y no lo ha pagado',
   },
+  // CRM#1107 (Diego, 24/11): el link traía su venta y caducó o se anuló sin
+  // pagarse. La venta sigue pendiente y decide quien lo creó: link nuevo, pago por
+  // otra vía o anular la venta. Uno por link (links-pago.venta.js).
+  link_pago_sin_pagar: {
+    clase: ACCION, etiqueta: 'Link de pago sin pagar con la venta pendiente', agrupa: false,
+    descripcion: 'Un link tuyo caducó o se anuló sin pagarse y su venta sigue pendiente',
+  },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
     descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',
