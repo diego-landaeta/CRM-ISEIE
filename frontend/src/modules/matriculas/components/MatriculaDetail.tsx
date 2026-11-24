@@ -227,7 +227,7 @@ export default function MatriculaDetail({ matricula, onClose, onChange, onEstado
       .then((res) => {
         if (!vivo) return;
         const todas = Array.isArray(res?.data) ? (res.data as Gestora[]) : [];
-        setGestoras(todas.filter((g) => g.role === 'gestor' || g.role === 'admin'));
+        setGestoras(todas.filter((g) => ['gestor', 'lider_equipo', 'admin'].includes(g.role ?? '')));
       })
       .catch(() => {
         if (!vivo) return;

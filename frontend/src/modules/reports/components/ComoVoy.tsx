@@ -114,6 +114,11 @@ export interface Puesto extends CifrasSeparadas {
   sin_gestora: CifrasSeparadas | null;
   /** Todas las filas, «Sin gestora» incluida: la tarjeta Cobrado. Solo para quien manda. */
   total: CifrasSeparadas | null;
+  /**
+   * Quien lleva un equipo comercial (la líder de equipo, CRM-ISEIE#761): la tabla
+   * es la de su equipo y, como también vende, se le enseña además su puesto en él.
+   */
+  lider?: boolean;
 }
 
 const numero = (n: number) =>
@@ -455,6 +460,16 @@ export default function ComoVoy({
               {' · '}{equipo.gente} {equipo.gente === 1 ? 'persona' : 'personas'}
             </p>
           </div>
+
+          {/* La líder de equipo también vende (CRM-ISEIE#761): su puesto en su equipo. */}
+          {d.lider && (
+            <p data-testid="como-voy-lider" className="mt-1 text-secundario tabular-nums text-muted-foreground">
+              Tú: {d.puesto ? <>puesto <strong className="text-foreground">{d.puesto}</strong> de {d.de}</> : 'aún sin puesto este mes'}
+              {' · '}{euros(d.cobrado)} cobrados
+              {' · '}{cuantos(d.ventas, 'venta nueva', 'ventas nuevas')}
+              {' · '}tasa <strong className="text-foreground">{numero(d.tasa)} %</strong>
+            </p>
+          )}
 
           {/* Las tres primeras, siempre a la vista. */}
           <Podio

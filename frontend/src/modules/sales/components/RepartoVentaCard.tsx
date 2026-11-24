@@ -2,7 +2,6 @@ import { useCallback, useEffect, useState } from 'react';
 import { UsersThree } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
-import { useAuth } from '@/contexts/AuthContext';
 import DialogoRepartoVenta, { eur, type Reparto } from './DialogoRepartoVenta';
 import usePermission from '@/shared/hooks/usePermission';
 
@@ -22,10 +21,10 @@ import usePermission from '@/shared/hooks/usePermission';
  * en el equipo pueden salir 2,5 ventas y la suma sigue cuadrando con el total.
  */
 export default function RepartoVentaCard({ conversionId }: { conversionId: number | string }) {
-  const { user } = useAuth();
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
   const { can } = usePermission();
-  const puedeRepartir = (user?.role === 'admin' || user?.role === 'superadmin') && can('conversions.reparto');
+  // Por permiso, no por rol (#423): también la líder de equipo, que reparte dentro de su equipo (CRM#1105).
+  const puedeRepartir = can('conversions.reparto');
 
   const [data, setData] = useState<Reparto | null>(null);
   const [cargando, setCargando] = useState(true);

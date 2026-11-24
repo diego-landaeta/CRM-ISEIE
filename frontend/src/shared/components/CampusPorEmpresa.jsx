@@ -112,7 +112,8 @@ export default function CampusPorEmpresa({
                     {p.nombre}
                   </label>
                   {checked && (
-                    role === 'admin' ? (
+                    // La líder de equipo (CRM-ISEIE#761), como un admin: recibe leads solo donde se le marque.
+                    role === 'admin' || role === 'lider_equipo' ? (
                       <label className="flex items-center gap-1 text-[11px] text-muted-foreground cursor-pointer">
                         <input type="checkbox" checked={!!assigned[p.id]} onChange={(e) => onSetRecibe(p.id, e.target.checked)} />
                         recibe leads

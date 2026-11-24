@@ -1,5 +1,6 @@
 import { logger } from '../shared/utils/logger.js';
 import { query } from '../shared/config/db.js';
+import { ROLES_DE_GESTORA } from '../shared/utils/roles.js';
 import { sendEmail } from '../shared/services/brevo.service.js';
 import * as informes from '../modules/reports/report.model.js';
 import { vigilar } from './latido.js';
@@ -211,7 +212,7 @@ async function vuelta() {
     const { semana } = semanas(hoy);
     const tandas = [
       ['reporte_semanal', ['admin', 'superadmin'], correoSemanalDireccion, 'reporte-semanal'],
-      ['semana_gestora', ['gestor'], correoSemanalGestora, 'semana-gestora'],
+      ['semana_gestora', ROLES_DE_GESTORA, correoSemanalGestora, 'semana-gestora'],
     ];
     for (const [aviso, roles, arma, etiqueta] of tandas) {
       const gente = await destinatarios(aviso, roles);

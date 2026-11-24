@@ -74,7 +74,8 @@ export async function upsertConfig(projectId, fields) {
 // o superadmin no atiende leads. Las dos consultas de abajo lo comparten: si la
 // lista del panel lo dijera y la rotacion publica no, marcar a un tutor por
 // error le mandaria los leads de la web.
-const ROLES_DEL_WIDGET = `u.role IN ('gestor', 'admin')`;
+// La líder de equipo (CRM#1105 / ISEIE#761) atiende prospectos como una gestora.
+const ROLES_DEL_WIDGET = `u.role IN ('gestor', 'lider_equipo', 'admin')`;
 
 // Lista usuarios candidatos al widget = gestoras y admin del proyecto, activos
 export async function listCandidateUsers(projectId) {

@@ -76,7 +76,7 @@ export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) 
     // pantallas: a quien lleva un equipo, su equipo (QA 09/11/2026).
     if (!veUsuarios) { setGestores([]); return; }
     client.get<User[]>('/users', { params: { limit: 100, alcance: 'comercial' } })
-      .then((r: any) => setGestores(((r?.data) || []).filter((u: User) => u.role === 'gestor' || u.role === 'admin')))
+      .then((r: any) => setGestores(((r?.data) || []).filter((u: User) => ['gestor', 'lider_equipo', 'admin'].includes(u.role ?? ''))))
       .catch(() => {});
   }, [projectId, veUsuarios, catalogoMio]);
 

@@ -49,7 +49,7 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
       if (u.success) {
         const rawUsers = (u.data as { users?: User[] } | User[] | null);
         const list = Array.isArray(rawUsers) ? rawUsers : Array.isArray(rawUsers?.users) ? rawUsers.users : [];
-        setUsers(list.filter((x) => x.role === 'gestor' || x.role === 'admin'));
+        setUsers(list.filter((x) => ['gestor', 'lider_equipo', 'admin'].includes(x.role)));
       }
       if (pj.success) {
         const list = Array.isArray(pj.data) ? (pj.data as Project[]) : [];

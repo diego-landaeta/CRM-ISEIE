@@ -3,6 +3,7 @@ import * as conversionService from '../conversions/conversion.service.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { query, getClient } from '../../shared/config/db.js';
+import { esRolDeGestora } from '../../shared/utils/roles.js';
 import { comoLista, SIN_PRUEBAS } from '../../shared/utils/ambito.js';
 // El país de entrada del prospecto de cada venta (#221).
 import { sqlPaisDeLaVenta, sqlPaisDelLead } from '../leads/pais.js';
@@ -70,7 +71,7 @@ export async function createSale(data, requestUser, { comprobarRepetida: mirarRe
     // que no ha vendido nada. Las dos cosas acaban en el mismo sitio: un
     // informe que atribuye una venta a quien solo la apunto.
     const sinGestora = Boolean(data.sin_gestora);
-    const passCreator = !sinGestora && requestUser && requestUser.role === 'gestor' ? requestUser : null;
+    const passCreator = !sinGestora && requestUser && esRolDeGestora(requestUser.role) ? requestUser : null;
     try {
       leadResult = await leadService.createManualLead(
         {

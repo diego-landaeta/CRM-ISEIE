@@ -8,7 +8,7 @@ import * as editar from './permissions.editar.js';
 const customRoleSchema = z.object({
   label:       z.string().min(1).max(100),
   description: z.string().max(500).optional(),
-  base_role:   z.enum(['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador']).default('gestor'),
+  base_role:   z.enum(['admin', 'gestor', 'lider_equipo', 'soporte', 'project_manager', 'tutor', 'colaborador']).default('gestor'),
   permissions: z.record(z.boolean()).default({}),
 });
 
@@ -134,7 +134,7 @@ export async function updateCustomRole(req, res, next) {
     const parsed = z.object({
       label: z.string().min(1).max(100).optional(),
       description: z.string().max(500).nullable().optional(),
-      base_role: z.enum(['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador']).optional(),
+      base_role: z.enum(['admin', 'gestor', 'lider_equipo', 'soporte', 'project_manager', 'tutor', 'colaborador']).optional(),
       permissions: z.record(z.boolean()).optional(),
       active: z.boolean().optional(),
     }).safeParse(req.body);
