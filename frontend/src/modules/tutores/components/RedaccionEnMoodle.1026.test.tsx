@@ -66,4 +66,14 @@ describe('#1026 · la redactora en Moodle', () => {
     await new Promise((r) => { setTimeout(r, 0); });
     expect(container.textContent).toBe('');
   });
+
+  it('con un rol de MOODLE_ROLES_TUTORA («Gestor» en ISEIE) está lista, pero no se llama «Profesor»', async () => {
+    datos = conCursos();
+    datos.campus[0].cursos = [curso(1, 'profesora', ['editingteacher']), curso(4, 'profesora', ['manager'])];
+    render(<MemoryRouter><RedaccionEnMoodle tutorId={5} /></MemoryRouter>);
+    expect(await screen.findByText('Rol de tutora')).toBeTruthy();
+    expect(screen.getByText('(manager)')).toBeTruthy();
+    expect(screen.getByText('Profesor')).toBeTruthy();
+    expect(screen.queryByRole('link', { name: /Moodle/ })).toBeNull();
+  });
 });

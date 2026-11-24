@@ -14,6 +14,9 @@
        suyos, sin roles de categoría. «Profesor sin permiso de edición» (`teacher`) es
        el de los docentes que solo corrigen: «Mi campus» y el chat ya lo cuentan, pero
        con él no puede redactar el curso, así que aquí no vale como «listo».
+       También valen los roles que el campus da a sus tutoras y que se añaden con
+       `MOODLE_ROLES_TUTORA` (`esRolExtraDeTutora`): en ISEIE las redactoras son «Gestor»
+       (`manager`), y así lo decide el .env de cada CRM y no este fichero (Diego, 24/11).
 
   Aquí se COMPRUEBA, campus a campus y curso a curso, sin escribir nada en Moodle ni en
   el CRM. «Los cursos que redacta» son sus productos (colaboración activa, curso
@@ -34,6 +37,7 @@ import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
   usuarioPor, usuarioPorCorreo, cuentaDelCampus, cursosDe, matriculadosDe, urlDelCampus, MoodleError,
+  esRolExtraDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { campusDelTutor, conexionDelCampus } from './tutor.campus.js';
 
@@ -42,9 +46,13 @@ export const ROL_DE_REDACTORA = 'editingteacher';
 /** «Profesor sin permiso de edición»: ve el curso en «Mi campus», pero no puede redactarlo. */
 const ROL_SIN_EDICION = 'teacher';
 
-/** El estado de un curso en el que ya está matriculada, según sus roles en él. */
-export const estadoPorRoles = (roles) => {
-  if (roles.includes(ROL_DE_REDACTORA)) return 'profesora';
+/**
+ * El estado de un curso en el que ya está matriculada, según sus roles en él. Cuenta como
+ * profesora con «Profesor» o con uno de los roles de `MOODLE_ROLES_TUTORA` (ISEIE:
+ * `manager`, «Gestor»), los mismos que «Mi campus» ya cuenta como tutora.
+ */
+export const estadoPorRoles = (roles, env = process.env) => {
+  if (roles.includes(ROL_DE_REDACTORA) || roles.some((r) => esRolExtraDeTutora(r, env))) return 'profesora';
   if (roles.includes(ROL_SIN_EDICION)) return 'sin_edicion';
   return 'otro_rol';
 };

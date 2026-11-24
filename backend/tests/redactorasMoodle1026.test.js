@@ -8,6 +8,7 @@ import { query } from '../src/shared/config/db.js';
 import { encrypt } from '../src/shared/utils/crypto.js';
 import * as campus from '../src/modules/tutores/tutor.campus.js';
 import tutorRoutes from '../src/modules/tutores/tutor.routes.js';
+import { estadoPorRoles } from '../src/modules/tutores/tutor.redaccion.js';
 import { redactorasMoodleActivo } from '../src/shared/config/soloEnPruebas.js';
 import { errorHandler } from '../src/shared/middleware/errorHandler.js';
 
@@ -369,6 +370,31 @@ describe('#1026 · la redactora en Moodle, en su ficha', () => {
     expect(d.lista).toBe(true);
   });
 
+  it('«Gestor» (`manager`) cuenta como profesora solo con MOODLE_ROLES_TUTORA=manager, como en ISEIE', async () => {
+    if (!hayBase) return;
+    const a = CAMPUS['token-a'];
+    const antes = process.env.MOODLE_ROLES_TUTORA;
+    a.matriculados[101] = [{ id: 10, roles: [{ shortname: 'manager' }] }];
+    try {
+      delete process.env.MOODLE_ROLES_TUTORA;
+      let d = (await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`)).body.data;
+      expect(d.campus[0].cursos[1]).toMatchObject({ estado: 'otro_rol', roles: ['manager'] });
+      expect(d.lista).toBe(false);
+
+      process.env.MOODLE_ROLES_TUTORA = 'manager';
+      d = (await comoSuperadmin().get(`/api/tutores/${e.redactora}/redaccion-moodle`)).body.data;
+      expect(d.campus[0].cursos.map((c) => c.estado)).toEqual(['profesora', 'profesora', 'profesora']);
+      expect(d.lista).toBe(true);
+      // Y ella, en «Mi campus», lo ve igual.
+      const suya = (await comoRedactora().get('/api/tutores/mi-campus/redaccion-moodle')).body.data;
+      expect(suya.campus[0].cursos[1]).toMatchObject({ estado: 'profesora', roles: ['manager'] });
+    } finally {
+      if (antes === undefined) delete process.env.MOODLE_ROLES_TUTORA;
+      else process.env.MOODLE_ROLES_TUTORA = antes;
+      a.matriculados[101] = [{ id: 10, roles: [{ shortname: 'editingteacher' }] }];
+    }
+  });
+
   it('solo LEE: ninguna función de Moodle que escriba y `tutor_campus` sin tocar', async () => {
     if (!hayBase) return;
     const antes = await vinculos(e.redactora);
@@ -387,5 +413,17 @@ describe('#1026 · el interruptor', () => {
     expect(redactorasMoodleActivo({ NODE_ENV: 'production', CRM_BASE_URL: 'https://x/staging' })).toBe(true);
     expect(redactorasMoodleActivo({ NODE_ENV: 'production', REDACTORAS_MOODLE_EN_PRODUCCION: '1' })).toBe(true);
     expect(redactorasMoodleActivo({ NODE_ENV: 'development' })).toBe(true);
+  });
+});
+
+describe('#1026 · qué rol cuenta como profesora', () => {
+  it('«Profesor» siempre; los de MOODLE_ROLES_TUTORA si el .env los añade; «Profesor sin edición», nunca', () => {
+    expect(estadoPorRoles(['editingteacher'], {})).toBe('profesora');
+    expect(estadoPorRoles(['manager'], {})).toBe('otro_rol');
+    expect(estadoPorRoles(['manager'], { MOODLE_ROLES_TUTORA: 'manager' })).toBe('profesora');
+    expect(estadoPorRoles(['student', 'manager'], { MOODLE_ROLES_TUTORA: 'coursecreator, manager' })).toBe('profesora');
+    expect(estadoPorRoles(['teacher'], { MOODLE_ROLES_TUTORA: 'manager' })).toBe('sin_edicion');
+    expect(estadoPorRoles(['teacher'], { MOODLE_ROLES_TUTORA: 'teacher' })).toBe('sin_edicion');
+    expect(estadoPorRoles(['student'], { MOODLE_ROLES_TUTORA: 'manager' })).toBe('otro_rol');
   });
 });

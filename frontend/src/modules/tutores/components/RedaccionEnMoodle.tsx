@@ -54,8 +54,12 @@ const porQue = (por: PorQueEsSuyo[]) => por.map((p) => POR[p] || p).join(' y ');
 /** Qué hacer en Moodle con el curso, para quien lo puede hacer. */
 const accion = (estado: EstadoCursoRedaccion) => (estado === 'sin_matricula' ? 'Matricularla en Moodle' : 'Cambiarle el rol en Moodle');
 
+/** «Profesor» de verdad, o lista con otro rol que el campus da a sus tutoras (MOODLE_ROLES_TUTORA, ISEIE: «Gestor»). */
+const conRolDeTutora = (c: CursoRedaccion) => c.estado === 'profesora' && !c.roles.includes('editingteacher') && c.roles.length > 0;
+
 function Curso({ c, propia }: { c: CursoRedaccion; propia: boolean }) {
-  const e = ESTADO[c.estado];
+  // Con un rol de MOODLE_ROLES_TUTORA cuenta como lista, pero no se llama «Profesor».
+  const e = conRolDeTutora(c) ? { ...ESTADO.profesora, texto: 'Rol de tutora' } : ESTADO[c.estado];
   const falta = c.estado !== 'profesora' && c.estado !== 'sin_comprobar';
   return (
     // Nombre arriba, entero; debajo, el estado y el enlace. En una sola fila el nombre del
@@ -72,7 +76,7 @@ function Curso({ c, propia }: { c: CursoRedaccion; propia: boolean }) {
       <span className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <span>
           <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold ${e.clase}`}>{e.texto}</span>
-          {c.estado === 'otro_rol' && c.roles.length > 0 && (
+          {(c.estado === 'otro_rol' || conRolDeTutora(c)) && c.roles.length > 0 && (
             <span className="ml-1.5 text-xs text-muted-foreground">({c.roles.join(', ')})</span>
           )}
         </span>
