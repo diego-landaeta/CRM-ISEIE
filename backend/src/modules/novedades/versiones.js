@@ -24,7 +24,15 @@ const LISTA = [
           {
             "titulo": "«Mi campus» para las tutoras",
             "texto": "Tus alumnos con su % hecho, las dudas por contestar, las entregas por corregir y los cursos por desarrollar, en una sola pantalla.",
-            "roles": ["tutor", "admin", "superadmin"],
+            "roles": ["tutor", "tutor_redactor", "admin", "superadmin"],
+            "ruta": "/mis-cursos/campus",
+            "boton": "Ir a Mi campus",
+            "recorrido": "mi-campus"
+          },
+          {
+            "titulo": "Responder y corregir desde Mi campus",
+            "texto": "Arriba, las consultas por responder, que se contestan ahí mismo, y las entregas por corregir, la más antigua primero: «Corregir» abre la entrega en el CRM para poner la nota y el comentario, que salen en Moodle. Con varios campus, se ven todos juntos o se eligen uno o varios. También para las tutoras redactoras.",
+            "roles": ["tutor", "tutor_redactor", "admin", "superadmin"],
             "ruta": "/mis-cursos/campus",
             "boton": "Ir a Mi campus",
             "recorrido": "mi-campus"

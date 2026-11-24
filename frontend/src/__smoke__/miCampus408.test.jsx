@@ -1,20 +1,22 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /*
   «Mi campus» (CRM-ISEIE#408, gemela de CRM#681), las indicaciones de Carlos (05/11):
     · arriba, «X entregas por corregir, Y dudas sin contestar y Z cursos por desarrollar»;
-    · por curso: las entregas sin corregir con el enlace para corregirlas EN MOODLE (aquí no
-      hay plugin para corregir desde el CRM, #406), las dudas con «Responder» y los alumnos
-      con su último acceso y su % hecho («—» si Moodle no lo da, no 0 %);
+    · arriba, todo junto (gemela de CRM#1084): las consultas por responder y las entregas
+      por corregir, que se corrigen DESDE EL CRM (la pantalla de corregir, con el plugin);
+    · por curso (se abre al pulsarlo): sus tareas y los alumnos con su último acceso y su
+      % hecho («—» si Moodle no lo da, no 0 %);
     · al lado, lo que tiene por desarrollar, con su fecha.
 */
 
-const api = vi.hoisted(() => ({ miCampus: vi.fn(), toast: vi.fn() }));
+const api = vi.hoisted(() => ({ miCampus: vi.fn(), toast: vi.fn(), mias: vi.fn() }));
 vi.mock('@/modules/tutores/api/tutores.api', () => ({ tutoresApi: { miCampus: api.miCampus } }));
+vi.mock('@/modules/consultas/api/consultas.api', () => ({ consultasApi: { mias: api.mias, responder: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: api.toast }));
 
 import MiCampusPage from '@/modules/tutores/pages/MiCampusPage';
@@ -70,6 +72,10 @@ const pintar = () => render(<MemoryRouter><MiCampusPage /></MemoryRouter>);
 beforeEach(() => {
   vi.clearAllMocks();
   api.miCampus.mockResolvedValue({ success: true, data: datos() });
+  api.mias.mockResolvedValue({ success: true, data: { plazoHoras: 24, consultas: [{
+    id: 31, project_id: 1, campus: 'ISEIE Madrid', alumno_nombre: 'Ana Prueba', curso_nombre: 'Máster en Psicología',
+    estado: 'abierta', entrada_at: hace(5), espera_desde: hace(5), ultimo_mensaje: '¿Cuándo se entrega la tarea final?', sin_enviar: 0,
+  }] } });
 });
 
 describe('Mi campus (#408)', () => {
@@ -79,26 +85,31 @@ describe('Mi campus (#408)', () => {
     expect(resumen).toHaveTextContent('Hoy tienes 3 entregas por corregir, 1 duda sin contestar y 1 curso por desarrollar.');
   });
 
-  it('corregir abre Moodle: una entrega, el calificador con ese alumno; varias, la lista de la tarea', async () => {
+  it('por corregir: cada entrega, la más antigua primero, y se corrige desde el CRM', async () => {
     pintar();
-    const una = await screen.findByRole('link', { name: /Corregir Tarea final en Moodle/ });
-    expect(una).toHaveAttribute('href', `${MOODLE}/mod/assign/view.php?id=17&action=grader&userid=910`);
-    expect(una).toHaveAttribute('target', '_blank');
-    const varias = screen.getByRole('link', { name: /Corregir Caso práctico en Moodle/ });
-    expect(varias).toHaveAttribute('href', `${MOODLE}/mod/assign/view.php?id=18&action=grading`);
-    expect(varias).toHaveTextContent('Corregir (2)');
-    // Nada de corregir desde el CRM: no hay rutas a una pantalla de corrección.
-    expect(document.querySelector('a[href*="/mis-cursos/campus/tarea"]')).toBeNull();
+    const lista = await screen.findByTestId('por-corregir');
+    const enlaces = await within(lista).findAllByRole('link', { name: /Corregir la entrega/ });
+    expect(enlaces.map((a) => a.getAttribute('href'))).toEqual([
+      '/mis-cursos/campus/tarea/1/50/98?alumno=910',
+      '/mis-cursos/campus/tarea/1/50/98?alumno=911',
+      '/mis-cursos/campus/tarea/1/50/97?alumno=910',
+    ]);
+    expect(enlaces[0]).not.toHaveAttribute('target');
   });
 
-  it('la duda lleva a responderla en Consultas', async () => {
+  it('por responder: la consulta con su último mensaje, «Responder» ahí mismo y «Abrir»', async () => {
     pintar();
-    expect(await screen.findByRole('link', { name: 'Responder' })).toHaveAttribute('href', '/consultas/31');
+    const lista = await screen.findByTestId('por-responder');
+    expect(await within(lista).findByText(/Cuándo se entrega la tarea final/)).toBeInTheDocument();
+    expect(within(lista).getByRole('link', { name: 'Abrir' })).toHaveAttribute('href', '/consultas/31');
+    expect(within(lista).getByRole('button', { name: 'Responder' })).toBeInTheDocument();
   });
 
   it('cada alumno con su último acceso y su % hecho; sin dato, «—» y no 0 %', async () => {
     pintar();
     await screen.findByTestId('resumen-mi-campus');
+    // Los cursos empiezan cerrados: lo que hay que hacer ya está arriba.
+    fireEvent.click(screen.getByRole('button', { name: /Máster en Psicología/ }));
     const filas = screen.getAllByTestId('alumno-campus');
     const de = (n) => filas.find((f) => f.textContent.includes(n));
     expect(within(de('Ana Prueba')).getByTestId('progreso-alumno')).toHaveTextContent('63%');

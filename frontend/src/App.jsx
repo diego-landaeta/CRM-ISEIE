@@ -66,6 +66,9 @@ const FormacionesSinTutorPage = lazy(() => import('./modules/tutores/pages/Forma
 const MisCursosPage = lazy(() => import('./modules/tutores/pages/MisCursosPage'));
 // «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene por hacer en Moodle.
 const MiCampusPage = lazy(() => import('./modules/tutores/pages/MiCampusPage'));
+// Corregir desde el CRM y el curso completo (#408, gemela de CRM#681).
+const CorregirTareaPage = lazy(() => import('./modules/tutores/pages/CorregirTareaPage'));
+const CursoCompletoPage = lazy(() => import('./modules/tutores/pages/CursoCompletoPage'));
 // Consultas de alumnos (#188): la bandeja del tutor y el panel de administración.
 const ConsultasPage = lazy(() => import('./modules/consultas/pages/ConsultasPage'));
 const ConsultaPage = lazy(() => import('./modules/consultas/pages/ConsultaPage'));
@@ -424,6 +427,8 @@ function App() {
           <Route path="/mis-cursos" element={<MisCursosPage />} />
           {/* «Mi campus» (#408): bajo /mis-cursos para que el tutor ya pueda abrirlo (ProtectedRoute, betaConfig). */}
           <Route path="/mis-cursos/campus" element={<MiCampusPage />} />
+          <Route path="/mis-cursos/campus/tarea/:projectId/:cursoId/:tareaId" element={<CorregirTareaPage />} />
+          <Route path="/mis-cursos/campus/curso/:projectId/:cursoId" element={<CursoCompletoPage />} />
           {/* Consultas de alumnos (#187–#190), como en MultiCRM. */}
           <Route path="/consultas" element={<ConsultasPage />} />
           <Route path="/consultas/alumnos" element={<AlumnosSinMensajesPage />} />

@@ -140,11 +140,17 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
     rutas: ['/mis-cursos/campus'],
     titulo: 'Mi campus',
     permiso: 'tutores.mis_cursos',
-    pantalla: ['modules/tutores/pages/MiCampusPage.tsx'],
+    // La bandeja y el selector de campus viven en su componente (gemela de CRM#1084).
+    pantalla: ['modules/tutores/pages/MiCampusPage.tsx', 'modules/tutores/components/BandejaMiCampus.tsx'],
     pasos: [
       {
         titulo: 'Tu campus',
-        texto: 'Lo que te toca en Moodle sin entrar en Moodle: entregas por corregir, dudas, tus alumnos y lo que tienes por desarrollar. Son {pasos} pasos.',
+        texto: 'Todo lo que te toca en Moodle, sin entrar en Moodle: las consultas por responder, las entregas por corregir, tus alumnos y lo que tienes por desarrollar. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('mi-campus-selector'),
+        titulo: 'Tus campus',
+        texto: '¿Estás en varios campus? Míralos todos juntos con «Todos» o pulsa uno o varios para ver solo esos. Se queda guardado para la próxima vez.',
       },
       {
         // ISEIE: un enlace de la cabecera, no la pestaña del 360.
@@ -163,9 +169,19 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
         texto: 'En estos campus tu cuenta de Moodle no está unida a la del CRM. Pídeselo a coordinación.',
       },
       {
+        donde: anclaje('mi-campus-responder'),
+        titulo: 'Por responder',
+        texto: 'Las consultas de tus alumnos que esperan respuesta, con su último mensaje. «Responder» abre el cuadro aquí mismo y la respuesta le llega al alumno en Moodle, a tu nombre. «Abrir» lleva a la conversación entera.',
+      },
+      {
+        donde: anclaje('mi-campus-corregir'),
+        titulo: 'Por corregir',
+        texto: 'Cada entrega sin nota, la más antigua primero. «Corregir» abre esa entrega: ves lo que ha subido el alumno, pones la nota y el comentario, y los ve en Moodle.',
+      },
+      {
         donde: anclaje('mi-campus-curso'),
         titulo: 'Cada curso',
-        texto: 'Púlsalo para abrirlo: «Corregir» y «Responder» en lo pendiente, sus tareas, y sus alumnos con el último acceso y el % hecho.',
+        texto: 'Púlsalo para abrirlo: lo pendiente de ese curso, todas sus tareas y sus alumnos con el último acceso y el % hecho.',
       },
       {
         donde: anclaje('mi-campus-por-desarrollar'),

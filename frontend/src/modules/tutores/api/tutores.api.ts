@@ -1,4 +1,4 @@
-import client from '@/shared/api/client';
+import client, { API_BASE_URL, getAccessToken, setAccessToken } from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/types';
 
 export interface Tutor {
@@ -212,9 +212,9 @@ export interface MiCampusAlumno {
 export interface MiCampusDuda { consultaId: number; alumnoId: number | null; alumno: string | null; desde: string | null }
 export interface MiCampusTarea {
   id: number; nombre: string | null; entrega: string | null;
-  /** La tarea en el calificador de Moodle (aquí no se corrige desde el CRM). */
+  /** La tarea en el calificador de Moodle (para lo que no se corrige desde el CRM). */
   corregirUrl: string;
-  sinCorregir: Array<{ alumnoId: number; alumno: string | null; entregadaAt: string | null; corregirUrl: string }>;
+  sinCorregir: Array<{ alumnoId: number; alumno: string | null; entregadaAt: string | null; corregirUrl?: string }>;
   notaMax?: number;
   enGrupo?: boolean;
 }
@@ -232,15 +232,99 @@ export interface MiCampusCampus {
 }
 export interface MiCampusPendiente {
   id: number; nombre: string; tipo: string; estado: string; campus: string; fechaComprometida: string | null;
+  projectId?: number | null;
   avance: { foto: boolean; video: boolean; modulos: number };
 }
+// Corregir desde el CRM (#408, gemela de CRM#681).
+export type EstadoEntrega = 'sin_corregir' | 'calificada' | 'sin_entregar';
+export interface ArchivoEntregado { nombre: string; tamano: number | null; tipo: string | null }
+/** Lo que se abre en otra pestaña; el resto de lo que entrega un alumno, se descarga. */
+export const TIPOS_EN_LINEA = new Set(['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'text/plain']);
+export interface EntregaDeTarea {
+  alumnoId: number; alumno: string | null; email: string | null; estado: EstadoEntrega;
+  entregadaAt: string | null; texto: string; archivos: ArchivoEntregado[]; nota: number | null;
+  /** El último mensaje del chat con el alumno (Consultas), o null si no han hablado. */
+  ultimoMensaje: { consultaId: number; texto: string; at: string; deTutora: boolean } | null;
+}
+export interface TareaParaCorregir {
+  tarea: {
+    id: number; nombre: string | null; notaMax: number; entrega: string | null; enunciado: string; moodleUrl: string; comentarios: boolean;
+    /** Con escala o sin nota, o en grupo: se corrige en Moodle, no aquí. */
+    calificable: boolean; enGrupo: boolean;
+  };
+  entregas: EntregaDeTarea[];
+}
+
+/** El curso entero (#408, gemela de CRM#681): sus temas y todas sus actividades, como en Moodle. */
+export interface ActividadDelCurso {
+  cmid: number; instancia: number | null; tipo: string | null; nombre: string | null; url: string | null;
+  visible: boolean; restringida: boolean; fechas: { etiqueta: string | null; at: string }[];
+  /** Solo en las tareas: lo que tiene por corregir y si se corrige aquí o en Moodle. */
+  tarea: { id: number; porCorregir: number; corregibleEnElCrm: boolean } | null;
+}
+export interface SeccionDelCurso { id: number; numero: number; nombre: string | null; visible: boolean; actividades: ActividadDelCurso[] }
+export interface CursoCompleto { curso: { id: number; nombre: string | null; url: string; alumnos: number }; secciones: SeccionDelCurso[] }
+
 export interface MiCampusSinConectar { projectId: number; campus: string; estado: string | null; motivo: string }
-export interface MiCampus { leidoAt: string; campus: MiCampusCampus[]; pendientes: MiCampusPendiente[]; sinConectar?: MiCampusSinConectar[] }
+export interface MiCampus {
+  leidoAt: string; campus: MiCampusCampus[]; pendientes: MiCampusPendiente[]; sinConectar?: MiCampusSinConectar[];
+  /** Todos sus campus conectados, también los que no se han elegido (el selector de Mi campus). */
+  todosLosCampus?: Array<{ projectId: number; campus: string }>;
+  /** Los campus que se han leído si se pidieron unos en concreto; null = todos. */
+  elegidos?: number[] | null;
+}
 
 export const tutoresApi = {
+  verCurso: (projectId: number, cursoId: number) =>
+    client.get(`/tutores/mi-campus/cursos/${projectId}/${cursoId}`) as Promise<ApiResponse<CursoCompleto>>,
+  verTarea: (projectId: number, cursoId: number, tareaId: number) =>
+    client.get(`/tutores/mi-campus/tareas/${projectId}/${cursoId}/${tareaId}`) as Promise<ApiResponse<TareaParaCorregir>>,
+  calificar: (projectId: number, cursoId: number, tareaId: number, datos: { alumnoId: number; nota: number; comentario: string }) =>
+    client.post(`/tutores/mi-campus/tareas/${projectId}/${cursoId}/${tareaId}/calificar`, datos) as Promise<ApiResponse<{ nota: number; maxima: number; comentario: boolean }>>,
+  /**
+   * Abre un archivo entregado: lo sirve el CRM (el token del campus no sale del servidor).
+   * Solo PDF, imágenes y texto se abren en otra pestaña; el resto se descarga. Un blob abierto
+   * hereda el origen del CRM, así que un HTML o un SVG de un alumno jamás se abre en línea.
+   */
+  async abrirArchivo(projectId: number, cursoId: number, tareaId: number, alumnoId: number, n: number, nombre: string) {
+    const ventana = window.open('', '_blank');
+    try {
+      const pedir = () => fetch(`${API_BASE_URL}/tutores/mi-campus/tareas/${projectId}/${cursoId}/${tareaId}/archivo?alumnoId=${alumnoId}&n=${n}`, {
+        headers: { Authorization: `Bearer ${getAccessToken() || ''}` }, credentials: 'include',
+      });
+      let r = await pedir();
+      if (r.status === 401) {
+        const renovada = await fetch(`${API_BASE_URL}/auth/refresh`, { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' } });
+        if (renovada.ok) { setAccessToken((await renovada.json()).data.accessToken); r = await pedir(); }
+      }
+      if (!r.ok) {
+        const cuerpo = await r.json().catch(() => null);
+        throw new Error(cuerpo?.error || 'No se ha podido abrir el archivo.');
+      }
+      const tipo = (r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+      const enLinea = TIPOS_EN_LINEA.has(tipo);
+      const url = URL.createObjectURL(new Blob([await r.arrayBuffer()], { type: enLinea ? tipo : 'application/octet-stream' }));
+      if (enLinea && ventana) {
+        ventana.opener = null;
+        ventana.location.href = url;
+      } else {
+        ventana?.close();
+        const a = document.createElement('a');
+        a.href = url; a.download = nombre || 'archivo'; a.rel = 'noopener';
+        document.body.appendChild(a); a.click(); a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    } catch (err) { ventana?.close(); throw err; }
+  },
   /** «Mi campus» de quien pide (el servidor usa su sesión). Con `refrescar`, sin la copia de 2 min. */
-  miCampus: (refrescar = false) =>
-    client.get(`/tutores/mi-campus${refrescar ? '?refrescar=1' : ''}`) as Promise<ApiResponse<MiCampus>>,
+  /** Con `campus`, solo esos campus suyos (el servidor no lee de Moodle los demás). Vacío = todos. */
+  miCampus: (refrescar = false, campus: number[] = []) => {
+    const q = new URLSearchParams();
+    if (refrescar) q.set('refrescar', '1');
+    if (campus.length) q.set('campus', campus.join(','));
+    const s = q.toString();
+    return client.get(`/tutores/mi-campus${s ? `?${s}` : ''}`) as Promise<ApiResponse<MiCampus>>;
+  },
   /** Por defecto solo los que dan clase hoy. Con `incluirRetirados` salen
    *  tambien los que se dieron de baja — es la unica forma de volver a
    *  activar a alguien, porque retirado desaparece de la lista. */
