@@ -9059,6 +9059,32 @@
   "puertas": []
  },
  {
+  "id": "GET /api/links-pago/buscar-cobro",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/buscar-cobro",
+  "relativa": "GET /buscar-cobro",
+  "controlador": "buscarCobro",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/links-pago/conectar-stripe",
   "tipo": "ruta",
   "modulo": "links-pago",
