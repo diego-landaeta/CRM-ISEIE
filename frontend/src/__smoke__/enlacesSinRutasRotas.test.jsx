@@ -161,8 +161,10 @@ describe('los botones «Ir a…» de Novedades llevan a una pantalla que existe 
     Registro y de los correos, `route` de los atajos): «prospecto sin tocar»,
     cursos pendientes, Google Ads y los atajos mandaban rutas de MultiCRM.
 */
-
 const conTrozo = (s) => s.replace(/\$\{[^}]*\}/g, 'X1');
+// enlace(…)/P.enlace(…) casi siempre se escribe sin la barra inicial
+// (enlace('tareas'), P.enlace(`clients/${id}`)): se le pone antes de mirarla.
+const conBarra = (s) => (s.startsWith('/') ? s : `/${s}`);
 
 const PATRONES_ARMADOS = [
   /\bto=\{\s*`(\/[^`]*)`\s*\}/g,
@@ -181,7 +183,7 @@ function sacar(base, files, patrones, saltar = () => false) {
       if (/^\s*(\/\/|\*)/.test(linea) || saltar(linea)) return;
       for (const rx of patrones) {
         for (const m of linea.matchAll(rx)) {
-          const to = m[m.length - 1];
+          const to = conBarra(m[m.length - 1]);
           if (/^\/(api|v\d)\b/.test(to) || to.startsWith('//')) continue;
           out.push({ fichero: path.relative(base, f).split(path.sep).join('/'), linea: i + 1, to });
         }
@@ -229,9 +231,11 @@ describe('las rutas que manda el servidor llevan a una pantalla (#633)', () => {
     return out;
   }
   // `link_path` (avisos), `enlace` (Registro, correos con P.enlace) y `route` (atajos).
+  // La de `enlace(…)`/`P.enlace(…)` no exige la barra inicial: casi ningún
+  // correo la pone; `sacar()` se la pone con `conBarra` antes de mirarla.
   const DEL_SERVIDOR = sacar(BACK, ficherosBack(BACK), [
     /\b(?:link_path|enlace|route)\s*:\s*(?:[^'"`\n]*?\?\s*)?[`'"](\/[^`'"]*)[`'"]/g,
-    /\benlace\(\s*[`'"](\/[^`'"]*)[`'"]/g,
+    /\benlace\(\s*[`'"]([^`'"]*)[`'"]/g,
   ]);
 
   it('hay rutas del servidor que mirar', () => {
