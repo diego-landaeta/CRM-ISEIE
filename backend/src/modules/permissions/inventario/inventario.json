@@ -13540,6 +13540,84 @@
   "puertas": []
  },
  {
+  "id": "GET /api/products/formaciones/alumnos",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/formaciones/alumnos",
+  "relativa": "GET /formaciones/alumnos",
+  "controlador": "resumenDelCampus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.alumnos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/:id/formacion/alumnos",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion/alumnos",
+  "relativa": "GET /:id/formacion/alumnos",
+  "controlador": "alumnosDeFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.alumnos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/products/formaciones/acceso",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "PUT",
+  "ruta": "/api/products/formaciones/acceso",
+  "relativa": "PUT /formaciones/acceso",
+  "controlador": "guardarReglaDeAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/project-channels/",
   "tipo": "ruta",
   "modulo": "project-channels",

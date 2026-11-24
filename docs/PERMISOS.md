@@ -918,6 +918,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | guardarFormacion | `PUT /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.edit` |
 | verMoodle | `GET /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
 | llevarAMoodle | `POST /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
+| resumenDelCampus | `GET /api/products/formaciones/alumnos` | (no existía) | (ruta nueva) | `products.alumnos` |
+| alumnosDeFormacion | `GET /api/products/:id/formacion/alumnos` | (no existía) | (ruta nueva) | `products.alumnos` |
+| guardarReglaDeAcceso | `PUT /api/products/formaciones/acceso` | (no existía) | (ruta nueva) | `products.edit` |
 
 ## project-channels
 
@@ -1471,6 +1474,7 @@ lo que pide para tener sentido (editar pide ver).
 | Borrar productos | `products.delete` | Quitar un producto. | Admin, Soporte | `products.view` |
 | Árbol de categorías | `products.categorias` | Crear, mover y quitar categorías. | Admin, Soporte | `products.view` |
 | Exportar el catálogo | `products.export` | Descargar el catálogo. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `products.view` |
+| Ver los alumnos de cada formación | `products.alumnos` | Cuántos alumnos activos tiene cada formación, hasta cuándo y cómo van de pagos (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view`, `products.view` |
 
 ### Dossieres
 

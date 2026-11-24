@@ -6,6 +6,7 @@ import { uploadImage } from '../../shared/middleware/upload.js';
 import * as ProductController from './product.controller.js';
 import * as ModulesController from './product-modules.controller.js';
 import * as FormacionController from './formacion.controller.js';
+import * as AlumnosController from './formacion-alumnos.controller.js';
 
 import { AppError } from '../../shared/utils/AppError.js';
 
@@ -100,5 +101,13 @@ router.put('/:id/formacion', puede('products.edit'), projectAccess, FormacionCon
 // FORMACIONES_MOODLE_EN_PRODUCCION=1; permiso propio, `moodle.crear_cursos`.
 router.get('/:id/formacion/moodle', puede('moodle.crear_cursos'), projectAccess, FormacionController.verMoodle);
 router.post('/:id/formacion/moodle', puede('moodle.crear_cursos'), projectAccess, FormacionController.llevarAMoodle);
+
+// Alumnos de cada formación (CRM-ISEIE#767, gemela de CRM#1113): activos, terminados y cómo van de
+// pagos. Permiso propio (`products.alumnos`: son ventas y cobros); solo en sus campus y, dentro, el
+// alcance de Ventas.
+router.get('/formaciones/alumnos', puede('products.alumnos'), projectAccess, AlumnosController.resumenDelCampus);
+router.get('/:id/formacion/alumnos', puede('products.alumnos'), projectAccess, AlumnosController.alumnosDeFormacion);
+// La regla de acceso del campus (meses por tipo), para las formaciones sin fecha de fin ni duración.
+router.put('/formaciones/acceso', puede('products.edit'), projectAccess, AlumnosController.guardarReglaDeAcceso);
 
 export default router;

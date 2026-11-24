@@ -19,6 +19,7 @@ import {
 } from '../lib/formacionForm';
 import { RUTA_FORMACIONES, rutaDeFormacion } from '../lib/rutasFormacion';
 import LlevarAMoodle from '../components/LlevarAMoodle';
+import AlumnosDeFormacion from '../components/AlumnosDeFormacion';
 
 /**
  * La ficha de una formación (CRM-ISEIE#767, gemela de CRM#1113): sus datos, sus módulos y sus tutoras,
@@ -252,6 +253,8 @@ export default function FormacionEditorPage() {
           </section>
 
           {formacion && <Tutoras formacion={formacion} campusId={campusId} alCambiar={cargar} />}
+
+          {formacion && campusId && <AlumnosDeFormacion productId={formacion.id} campusId={campusId} />}
 
           {formacion && (
             <section className="space-y-2 rounded-lg border border-border bg-card p-4">

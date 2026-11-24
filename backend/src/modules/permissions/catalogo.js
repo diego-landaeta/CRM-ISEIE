@@ -248,6 +248,9 @@ export const SECCIONES = [
           a('delete', 'Borrar productos', 'Quitar un producto.', ADMIN_SOPORTE),
           a('categorias', 'Árbol de categorías', 'Crear, mover y quitar categorías.', ADMIN_SOPORTE),
           a('export', 'Exportar el catálogo', 'Descargar el catálogo.', TODOS),
+          // CRM-ISEIE#767 (gemela de CRM#1113): en Productos › Formaciones, los alumnos de cada formación
+          // (activos, terminados y cómo van de pagos). Son ventas y cobros: con el alcance de Ventas (la gestora, lo suyo).
+          a('alumnos', 'Ver los alumnos de cada formación', 'Cuántos alumnos activos tiene cada formación, hasta cuándo y cómo van de pagos (una gestora, los suyos).', TODOS, { requiere: ['conversions.view'] }),
         ],
       },
       {
