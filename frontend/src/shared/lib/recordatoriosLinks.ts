@@ -15,6 +15,9 @@ export function recordatoriosLinksEncendidos(user: unknown): boolean {
 export function useRecordatoriosLinks(): boolean {
   let user: unknown = null;
   try {
+    // Se llama siempre, una vez y en el mismo orden: el try solo recoge el error
+    // de useAuth fuera de AuthProvider (pruebas sueltas de la venta).
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     user = useAuth()?.user ?? null;
   } catch {
     user = null;
