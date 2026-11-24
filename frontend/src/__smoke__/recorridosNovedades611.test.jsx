@@ -108,7 +108,13 @@ const PANTALLAS = {
     permisos: ['leads.view', 'ventas.view', 'products.view', 'accounting.view', 'integrations.view', 'proceso.view'],
   },
   'hoy-dashboard': {
-    pintar: () => <MemoryRouter><DashboardPage /></MemoryRouter>,
+    // Los bloques de abajo nacen abiertos (24/11) y algunos piden el campus
+    // (ProjectProvider), que esta prueba no monta: se pliegan como si los
+    // hubiera plegado la persona. Lo que se prueba aquí es el recorrido de arriba.
+    pintar: () => {
+      for (const c of ['dashboard-equipo', 'dashboard-productos', 'dashboard-embudo', 'dashboard-ayer-hoy', 'dashboard-recientes']) localStorage.setItem(`crm.bloque.v2.${c}`, '0');
+      return <MemoryRouter><DashboardPage /></MemoryRouter>;
+    },
     cargada: 'Lo que toca',
     permisos: ['proceso.view', 'leads.view'],
   },
