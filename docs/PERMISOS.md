@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-908 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+919 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -280,6 +280,22 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | descargar | `GET /api/copia-diaria/descarga/:fichero` | (no existía) | (ruta nueva) | — |
+
+## correos
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/correos/` | (no existía) | (ruta nueva) | `correos.view` |
+| recuento | `GET /api/correos/recuento` | (no existía) | (ruta nueva) | `correos.view` |
+| sincronizar | `POST /api/correos/sincronizar` | (no existía) | (ruta nueva) | `correos.sincronizar` |
+| listar | `GET /api/correos/buzones` | (no existía) | (ruta nueva) | `correos.view` |
+| crear | `POST /api/correos/buzones` | (no existía) | (ruta nueva) | `correos.buzones` |
+| probar | `POST /api/correos/buzones/probar` | (no existía) | (ruta nueva) | `correos.buzones` |
+| cambiar | `PATCH /api/correos/buzones/:id` | (no existía) | (ruta nueva) | `correos.buzones` |
+| quitar | `DELETE /api/correos/buzones/:id` | (no existía) | (ruta nueva) | `correos.buzones` |
+| probar | `POST /api/correos/buzones/:id/probar` | (no existía) | (ruta nueva) | `correos.buzones` |
+| usarComoCorreoDeEmpresa | `POST /api/correos/buzones/:id/correo-de-empresa` | (no existía) | (ruta nueva) | `correos.buzones` |
+| uno | `GET /api/correos/:id` | (no existía) | (ruta nueva) | `correos.view` |
 
 ## credentials
 
@@ -1775,6 +1791,14 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver el registro | `registro.view` | Quién cambió qué y cuándo (lo de sus campus). | Admin, Soporte, Project manager |  |
 | Ver lo del sistema en el registro | `registro.sistema` | Lo que no es de ningún campus: errores y tareas programadas. | Soporte | `registro.view` |
+
+### Correos
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver correos | `correos.view` | Los correos que llegan a los buzones (los de sus campus). | Admin, Soporte, Project manager |  |
+| Traer correos | `correos.sincronizar` | Leer ahora los buzones, sin esperar a la siguiente vuelta. | Admin, Soporte | `correos.view` |
+| Conectar buzones | `correos.buzones` | Conectar, probar, cambiar y quitar los buzones de correo que lee la Bandeja. Un admin, los de sus campus. | Admin, Soporte | `correos.view` |
 
 ### Estado del sistema
 
