@@ -13244,6 +13244,84 @@
   "puertas": []
  },
  {
+  "id": "GET /api/products/:id/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion",
+  "relativa": "GET /:id/formacion",
+  "controlador": "verFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/products/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "POST",
+  "ruta": "/api/products/formacion",
+  "relativa": "POST /formacion",
+  "controlador": "crearFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.create"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/products/:id/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "PUT",
+  "ruta": "/api/products/:id/formacion",
+  "relativa": "PUT /:id/formacion",
+  "controlador": "guardarFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/project-channels/",
   "tipo": "ruta",
   "modulo": "project-channels",

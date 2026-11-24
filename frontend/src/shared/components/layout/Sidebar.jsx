@@ -479,6 +479,9 @@ const SIN_ENTRADA = {
   '/accounting/conciliacion/facturas': 'facturas.gestionar',
   // La de cargos de Stripe (CRM#906): la clave de «Asociar» en Pagos Stripe.
   '/accounting/conciliacion/cargos-stripe': 'stripe.edit',
+  // Productos › Formaciones (gemela de CRM#1113): crear y editar formaciones con sus
+  // módulos. A quien puede editar el catálogo; el servidor pide lo mismo.
+  '/products/formaciones': ['products.edit', 'products.create'],
 };
 // Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
 // del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que

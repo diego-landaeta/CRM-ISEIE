@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-912 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+915 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -906,6 +906,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateModule | `PATCH /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | deleteModule | `DELETE /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | reorderModules | `POST /api/products/:id/modules/reorder` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
+| verFormacion | `GET /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.view` |
+| crearFormacion | `POST /api/products/formacion` | (no existía) | (ruta nueva) | `products.create` |
+| guardarFormacion | `PUT /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.edit` |
 
 ## project-channels
 
