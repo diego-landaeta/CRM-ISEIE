@@ -362,6 +362,7 @@ export default function ClientDetailPage() {
                     key={t.id}
                     onClick={() => setTab(t.id)}
                     aria-pressed={tab === t.id}
+                    data-recorrido={t.id === 'campus' ? 'ficha-pestana-campus' : undefined}
                     className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap px-4 py-3 text-sm font-semibold border-b-2 transition-all focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-sm ${
                       tab === t.id
                         ? 'border-primary text-primary'

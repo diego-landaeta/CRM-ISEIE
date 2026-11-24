@@ -1,6 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, DownloadSimple, PaperPlaneTilt, Sparkle, Wrench } from '@phosphor-icons/react';
+import { ArrowRight, Compass, DownloadSimple, PaperPlaneTilt, Sparkle, Wrench } from '@phosphor-icons/react';
+import { RECORRIDOS_DE_PANTALLA, rutaConRecorrido } from '@/shared/components/layout/RecorridoDeLaDireccion';
+import { RECORRIDOS_COBROS, tienePermiso, type RecorridoCobros } from '@/shared/lib/recorridosCobros';
+import usePermission from '@/shared/hooks/usePermission';
+
+/** La pantalla del recorrido (la suya, sin «:id»); si no tiene, la de la novedad. */
+const recorridoDe = (id: string) => (RECORRIDOS_COBROS as Record<string, RecorridoCobros | undefined>)[id];
+const pantallaDelRecorrido = (id: string, ruta: string) =>
+  recorridoDe(id)?.rutas.find((r) => !r.includes(':')) || RECORRIDOS_DE_PANTALLA[id] || ruta;
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
@@ -37,6 +45,10 @@ const cuando = (iso: string) => new Date(iso).toLocaleString('es-ES', { day: 'nu
 export default function NovedadesPage() {
   const { user } = useAuth() as { user: { role?: string; email?: string } | null };
   const roles = rolesDe(user as never);
+  const { can } = usePermission();
+  /** «Ver recorrido» solo a quien puede verlo (el permiso del recorrido). */
+  // Los de pantalla (el tablero) los filtra su pantalla: si la novedad te toca, sale.
+  const puedeVerRecorrido = (id: string) => { const r = recorridoDe(id); return r ? tienePermiso(r.permiso, can) : id in RECORRIDOS_DE_PANTALLA; };
   const dirige = roles.some((r) => r === 'superadmin' || r === 'soporte');
   const [datos, setDatos] = useState<Novedades | null>(null);
   const [version, setVersion] = useState<string | null>(null);
@@ -210,10 +222,18 @@ export default function NovedadesPage() {
                     <h3 className="text-sm font-semibold">{it.titulo}</h3>
                     <p className="mt-1.5 flex-1 text-sm leading-relaxed text-muted-foreground">{it.texto}</p>
                     {it.ruta && leToca(it.roles) && (
-                      <Link to={it.ruta}
-                        className="mt-3 inline-flex items-center gap-1.5 self-start rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5">
-                        {it.boton || 'Ir'} <ArrowRight size={12} weight="bold" />
-                      </Link>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <Link to={it.ruta}
+                          className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary/5">
+                          {it.boton || 'Ir'} <ArrowRight size={12} weight="bold" />
+                        </Link>
+                        {it.recorrido && puedeVerRecorrido(it.recorrido) && (
+                          <Link to={rutaConRecorrido(pantallaDelRecorrido(it.recorrido, it.ruta), it.recorrido)}
+                            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90">
+                            <Compass size={12} weight="bold" /> Ver recorrido
+                          </Link>
+                        )}
+                      </div>
                     )}
                   </article>
                 ))}

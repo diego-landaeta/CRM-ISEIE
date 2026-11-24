@@ -442,7 +442,8 @@ export async function listarAccesos(req, res, next) {
 
 const COMO_QUEDA = {
   open: 'vuelve a estar abierta',
-  in_review: 'está en preparación',
+  in_review: 'está en proceso',
+  follow_up: 'está en seguimiento',
   resolved: 'está hecha',
   closed: 'se ha cerrado sin hacer',
 };

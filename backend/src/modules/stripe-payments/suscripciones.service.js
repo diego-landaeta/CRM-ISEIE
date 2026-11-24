@@ -40,6 +40,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { urlDeStripe } from '../../shared/config/stripeApi.js';
 import * as integrationsModel from '../integrations/integrations.model.js';
 import * as P from '../../shared/services/email-plantilla.service.js';
+import { duenoDeLaCuenta } from './stripe-prestado.js';
 
 export const cierreActivo = (env = process.env) => {
   const v = String(env.SUSCRIPCION_CIERRE_ACTIVO || '').toLowerCase();
@@ -58,12 +59,15 @@ const MARGEN = 0.01;
  */
 export async function claveDeStripe(projectId, { escritura = false } = {}) {
   const proveedores = escritura ? ['stripe_links', 'stripe'] : ['stripe'];
+  // Con la cuenta prestada (Stripe prestado, 332), las claves del dueño; nunca la del `.env`.
+  const dueno = await duenoDeLaCuenta(projectId);
   for (const p of proveedores) {
     try {
-      const row = await integrationsModel.get(projectId, p);
+      const row = await integrationsModel.get(dueno, p);
       if (row?.encrypted_value) return decrypt(row.encrypted_value, row.iv, row.auth_tag);
     } catch (e) { logger.warn({ err: e.message, projectId, proveedor: p }, 'suscripción: no se pudo leer la clave de Stripe'); }
   }
+  if (dueno !== projectId) return null;
   return process.env.STRIPE_SECRET_KEY || null;
 }
 

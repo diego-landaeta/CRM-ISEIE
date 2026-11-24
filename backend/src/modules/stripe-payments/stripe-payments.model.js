@@ -375,9 +375,14 @@ export async function campusDelLead(leadId) {
 }
 
 export async function listProjectsWithStripe() {
+  // Un campus que usa la cuenta de otro (Stripe prestado, 332) no tiene vuelta
+  // propia: la de su dueño le trae sus cargos. Aunque guarde una clave, no se
+  // sincroniza aparte (sería la misma cuenta dos veces).
   const { rows } = await query(
-    `SELECT DISTINCT project_id FROM project_integrations
-     WHERE provider = 'stripe' AND active = true AND encrypted_value IS NOT NULL`
+    `SELECT DISTINCT i.project_id FROM project_integrations i
+       JOIN projects p ON p.id = i.project_id
+     WHERE i.provider = 'stripe' AND i.active = true AND i.encrypted_value IS NOT NULL
+       AND p.stripe_prestado_de IS NULL`
   );
   return rows.map(r => r.project_id);
 }

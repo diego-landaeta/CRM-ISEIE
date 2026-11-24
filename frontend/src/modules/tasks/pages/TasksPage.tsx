@@ -486,12 +486,14 @@ export default function TasksPage() {
             ariaLabel="Persona" size="sm" className="w-44"
           />
           {opcionesTipo.length > 0 && (
-            <Select<'' | TipoEquipo>
-              value={filtros.tipoEquipo}
-              onChange={(v) => setFiltros((f) => ({ ...f, tipoEquipo: v }))}
-              options={opcionesTipo}
-              ariaLabel="Equipo de trabajo" size="sm" className="w-52"
-            />
+            <span data-recorrido="equipos" className="inline-flex">
+              <Select<'' | TipoEquipo>
+                value={filtros.tipoEquipo}
+                onChange={(v) => setFiltros((f) => ({ ...f, tipoEquipo: v }))}
+                options={opcionesTipo}
+                ariaLabel="Equipo de trabajo" size="sm" className="w-52"
+              />
+            </span>
           )}
           {equiposActivos.length > 0 && pestanas.length === 0 && (
             <Select<string>
