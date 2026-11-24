@@ -192,6 +192,8 @@ export const crearSchema = z.object({
   // CRM#986: si el link admite códigos promocionales de Stripe. Sin decirlo, lo que
   // diga el campus (solo en pago único y sin venta).
   codigos_promo: z.boolean({ invalid_type_error: 'Códigos promocionales: sí o no' }).optional(),
+  // CRM#1107: el alumno ya tiene una venta de ese programa y la gestora crea otra igualmente.
+  forzar: z.boolean({ invalid_type_error: 'Forzar: sí o no' }).optional(),
 }).refine((b) => b.leadId || b.conversionId || b.projectId, 'Falta el campus, el prospecto o la venta')
   .refine((b) => b.modalidad !== 'cuotas' || b.num_cuotas, 'Di en cuántas cuotas')
   .refine((b) => b.modalidad === 'cuotas' || !b.num_cuotas, 'Las cuotas solo van con «cuotas»')
@@ -277,3 +279,12 @@ export const codigoBodySchema = z.object({
   .refine((b) => b.tipo === 'monto' || b.moneda === undefined, 'La moneda solo va con un descuento en importe');
 
 export const codigoDesactivarSchema = z.object({ projectId: id, id });
+
+// GET /api/links-pago/buscar-cobro (CRM#1107): lo que pegó la gestora como «link de
+// pago usado» y, si lo sabe, lo que pagó de inicial (para elegir el cobro).
+export const buscarCobroSchema = z.object({
+  projectId: id,
+  referencia: z.string({ required_error: 'Falta el link o el id del cobro' }).trim()
+    .min(4, 'Pega el link de pago o el id del cobro').max(500, 'Demasiado largo'),
+  importe: importeEnEuros('El importe').optional(),
+});

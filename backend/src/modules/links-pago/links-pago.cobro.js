@@ -19,6 +19,11 @@ import { logger } from '../../shared/utils/logger.js';
       quien creó el link (`vendedora_id`), con el curso y el importe del link;
     · el link pasa a «pagado», queda en su historial y se avisa a quien lo creó.
 
+  Desde CRM-ISEIE#762 (gemela de CRM#1107, 24/11) el link desde un prospecto ya
+  nace con su venta (links-pago.venta.js): aquí llega con `conversion_id` y el
+  cobro va a ella. Lo de crearla al pagarse queda para los links sin prospecto,
+  los de otra moneda, los de antes y los que no pudieron crearla.
+
   No hay un camino aparte: esto lo llama `stripe-payments.service.js` dentro de
   la misma reserva por cargo (CRM#635) que el sondeo, el aviso y «Sincronizar», y el
   cobro se apunta con el mismo `addPayment` y la misma comprobación de duplicados.
@@ -246,6 +251,18 @@ async function ventaNueva(projectId, payment, link) {
 export async function ventaDelLink(projectId, payment, link) {
   let conversionId = link.conversion_id;
   let cuotaId = null;
+  if (conversionId && !link.installment_id && link.modalidad === 'cuotas') {
+    // La venta nació con el link en cuotas (CRM#1107): este cobro es la inicial, la cuota 1.
+    cuotaId = await model.primeraCuotaPendiente(conversionId);
+  }
+  if (conversionId && link.promo) {
+    // Pagado con un código promocional (CRM#986) un link que ya traía su venta
+    // (CRM#1107): la venta pasa a lo que pagó, con el descuento entero.
+    if (await model.ajustarVentaAlCodigo(conversionId, link)) {
+      await model.descuentoEnLaVenta(conversionId, link).catch((e) => logger.warn({ err: e.message, linkId: link.id },
+        'links de pago: no se pudo apuntar el descuento del código en la venta'));
+    }
+  }
   if (!conversionId) {
     const nueva = await ventaNueva(projectId, payment, link);
     conversionId = nueva?.conversionId || null;

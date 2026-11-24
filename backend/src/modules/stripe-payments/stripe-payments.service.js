@@ -69,7 +69,7 @@ export async function stripeGet(apiKey, path, params = {}) {
   return r.json();
 }
 
-function chargeToPayment(charge, projectId) {
+export function chargeToPayment(charge, projectId) {
   // Importe SIEMPRE en EUR: si el cargo entra en moneda extranjera, usamos el
   // importe liquidado por Stripe en EUR (balance_transaction.amount), no el
   // importe en la moneda del cargo. Así el CRM registra euros reales y no vuelve

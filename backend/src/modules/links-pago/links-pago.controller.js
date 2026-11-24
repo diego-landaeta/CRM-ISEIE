@@ -3,7 +3,7 @@ import * as service from './links-pago.service.js';
 import {
   listarSchema, idSchema, configQuerySchema, configBodySchema, crearSchema, anularSchema, webhookAccionSchema,
   ventasProspectoSchema, planQuerySchema, planBodySchema, cobroAutoQuerySchema, cobroAutoBodySchema, cuotasQuerySchema,
-  embudoSchema, codigosQuerySchema, codigoBodySchema, codigoDesactivarSchema,
+  embudoSchema, codigosQuerySchema, codigoBodySchema, codigoDesactivarSchema, buscarCobroSchema,
   totalConDescuento,
 } from './links-pago.validation.js';
 import * as codigos from './links-pago.codigos.js';
@@ -11,6 +11,7 @@ import * as codigosModel from './links-pago.codigos.model.js';
 import * as cobroAuto from './links-pago.cobro-auto.js';
 import * as cobroAutoModel from './links-pago.cobro-auto.model.js';
 import * as seguimiento from './links-pago.seguimiento.js';
+import * as ventaAlCrear from './links-pago.venta.js';
 import { embudo as embudoDe } from './links-pago.embudo.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -309,12 +310,71 @@ export async function crear(req, res, next) {
         valor: b.descuento_tipo ? b.descuento_valor : null, importe: b.descuento_tipo ? t.descuento : 0,
       };
     }
-    const codigosPromo = codigos.codigosDelLink({ pedido: b.codigos_promo, cfg, enCuotas, desdeVenta: !!destino.conversionId });
+    let codigosPromo = codigos.codigosDelLink({ pedido: b.codigos_promo, cfg, enCuotas, desdeVenta: !!destino.conversionId });
+
+    /*
+      LA VENTA, AL CREAR EL LINK (CRM#1107). Desde un prospecto (sin venta y en
+      euros), con todo ya comprobado y antes de tocar Stripe, se decide a qué venta
+      irá: la de ese curso que ya tenga la ficha con lo pendiente (salvo que se pidan
+      códigos promocionales, que no van desde una venta), o una nueva que se crea en
+      cuanto el link existe. Si el alumno ya tiene una venta de ese programa, 409
+      VENTA_YA_EXISTE y la gestora elige (`forzar` para crear otra igualmente).
+    */
+    let ventaDelLink = null;
+    if (ventaAlCrear.llevaVentaAlCrear({ ...destino, modalidad: b.modalidad, moneda: reglas.moneda })) {
+      ventaDelLink = await ventaAlCrear.ventaParaElLink({
+        projectId: destino.projectId, leadId: destino.leadId, productId: prod.id, importe: b.importe,
+        modalidad: b.modalidad, forzar: b.forzar === true, reusar: b.codigos_promo !== true,
+      });
+      if (ventaDelLink.conversionId) {
+        // Va a una venta que ya existía: como un link desde ella, por lo pendiente y sin códigos.
+        destino.conversionId = ventaDelLink.conversionId;
+        codigosPromo = false;
+      }
+    }
     const link = await service.crear({
       projectId: destino.projectId, leadId: destino.leadId, conversionId: destino.conversionId,
       prod, reglas, importe: b.importe, userId: Number(req.user.userId), guardaTarjeta, enCuotas: cuotas, descuento, codigosPromo,
     });
-    res.status(201).json({ success: true, data: link });
+    if (!ventaDelLink) return res.status(201).json({ success: true, data: link });
+    // La venta del link (CRM#1107): la que ya había, o la nueva. Si la nueva no se
+    // puede crear, el link vale igual y su venta se crea al pagarse (y se dice).
+    let venta;
+    if (ventaDelLink.crear) {
+      venta = await ventaAlCrear.crearVentaDelLink(link.id, {
+        userId: Number(req.user.userId), role: req.user.role, forzar: b.forzar === true,
+      });
+    } else {
+      await ventaAlCrear.anotarVentaUsada(link.id, ventaDelLink.conversionId, req.user.userId);
+      venta = { conversionId: ventaDelLink.conversionId, creada: false };
+    }
+    const ahora = venta.conversionId ? await model.porId(link.id) : link;
+    res.status(201).json({
+      success: true,
+      data: {
+        ...ahora,
+        venta_del_link: venta.conversionId
+          ? { conversion_id: venta.conversionId, creada: venta.creada }
+          : { conversion_id: null, creada: false, error: venta.error },
+      },
+    });
+  } catch (err) { next(err); }
+}
+
+// GET /api/links-pago/buscar-cobro?projectId=N&referencia=…&importe=… (CRM#1107)
+// «Link de pago usado» en el formulario de la venta: lo que encontraría el CRM en
+// Stripe con lo que pegó la gestora, sin unir nada (eso lo hace al registrar la
+// venta). El campus lo ha comprobado `projectAccess`.
+export async function buscarCobro(req, res, next) {
+  try {
+    const parsed = buscarCobroSchema.safeParse({ ...req.query, projectId: req.projectId });
+    if (!parsed.success) throw fallo(parsed);
+    const { unirCargoDeLaReferencia } = await import('./links-pago.referencia.js');
+    const data = await unirCargoDeLaReferencia({
+      projectId: parsed.data.projectId, referencia: parsed.data.referencia,
+      importe: parsed.data.importe ?? null, soloMirar: true,
+    });
+    res.json({ success: true, data });
   } catch (err) { next(err); }
 }
 
