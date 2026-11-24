@@ -89,7 +89,9 @@ export default function NovedadesPage() {
     return () => window.removeEventListener('keydown', alPulsar);
   }, [v]);
 
-  const leToca = (itemRoles: string[]) => !itemRoles?.length || itemRoles.some((r) => roles.includes(r as never));
+  // Lo que es de la gestora también le toca a la líder de equipo (CRM-ISEIE#761): es una gestora con equipo.
+  const leToca = (itemRoles: string[]) => !itemRoles?.length || itemRoles.some((r) => roles.includes(r as never)
+    || (r === 'gestor' && roles.includes('lider_equipo' as never)));
 
   async function pdf() {
     if (!v || !datos) return;

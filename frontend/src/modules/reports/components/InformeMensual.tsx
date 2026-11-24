@@ -58,6 +58,7 @@ export default function InformeMensual({ issuerId }: { issuerId: number | null }
 }
 
 function Panel({ issuerInicial }: { issuerInicial: number | null }) {
+  const { llevaEquipo } = usePermission();
   const { projects } = useProjectContext() as { projects: Campus[] };
   const empresas = useMemo(() => {
     const m = new Map<number, string>();
@@ -143,7 +144,9 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
           >
             <FileXls size={15} /> {bajando === 'excel' ? 'Preparando…' : 'Excel'}
           </button>
-          <button
+          {/* El ZIP de facturas es de la empresa: quien lleva un equipo (la líder de
+              equipo, CRM-ISEIE#761) tiene el informe de su equipo y el servidor le niega el ZIP. */}
+          {!llevaEquipo && <button
             type="button"
             onClick={() => bajar('zip')}
             disabled={!!bajando || !issuerId}
@@ -152,7 +155,7 @@ function Panel({ issuerInicial }: { issuerInicial: number | null }) {
             className="h-8 inline-flex items-center gap-1.5 rounded-md border border-border px-2.5 text-sm hover:bg-muted disabled:opacity-50"
           >
             <FileZip size={15} /> {bajando === 'zip' ? 'Preparando…' : 'ZIP de facturas'}
-          </button>
+          </button>}
         </div>
       </div>
 

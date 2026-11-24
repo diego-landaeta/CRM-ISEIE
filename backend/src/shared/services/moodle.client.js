@@ -49,7 +49,35 @@ export function urlDelCampus(url) {
  * Moodle contesta 200 también cuando falla: el fallo viene dentro, como
  * `{ exception, errorcode, message }`. Por eso se mira el cuerpo, no el estado.
  */
-export async function llamar({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
+export async function llamar(conexion, funcion, parametros = {}, opciones = {}) {
+  const veces = reintentosBD();
+  for (let intento = 0; ; intento++) {
+    try {
+      return await llamarUnaVez(conexion, funcion, parametros, opciones);
+    } catch (err) {
+      // «Database connection failed»: el Moodle no ha llegado ni a abrir su base, así que no
+      // ha hecho nada y repetir es seguro, también en lo que escribe. Pasa cuando el servidor
+      // de los campus tiene sus conexiones a la base llenas (Psiko e ISAEG, 24/11: con 4
+      // llamadas a la vez fallaban 14-40 de 96 cursos; de una en una, ninguno).
+      if (!(err instanceof MoodleError) || err.codigo !== 'BD_CAMPUS' || intento >= veces) throw err;
+      await (opciones.esperarImpl || esperar)(pausaBD() * (intento + 1) + Math.floor(Math.random() * pausaBD()));
+    }
+  }
+}
+
+/** Cuántas veces se repite una llamada que el campus rechaza por su base llena. */
+const reintentosBD = () => {
+  const n = parseInt(process.env.MOODLE_REINTENTOS_BD ?? '3', 10);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 5) : 3;
+};
+/** La pausa (ms) antes de cada repetición; crece con cada intento. */
+const pausaBD = () => {
+  const n = parseInt(process.env.MOODLE_REINTENTO_MS ?? '700', 10);
+  return Number.isInteger(n) && n >= 0 ? n : 700;
+};
+const esperar = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
+async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
   const base = urlDelCampus(url);
   if (!base) throw new MoodleError('Falta la dirección del campus.', 'SIN_URL');
   if (!token) throw new MoodleError('Falta el token del campus.', 'SIN_TOKEN');
@@ -98,6 +126,11 @@ function traducir(datos, funcion) {
   if (codigo === 'accessexception' || codigo === 'servicerequireslogin') {
     return error(`El token no tiene permiso para «${funcion}»: añádela al servicio del token en el campus.`, 'PERMISO');
   }
+  // La base del Moodle saturada o caída. El mensaje de Moodle viene en HTML («<p>Error:
+  // Database connection failed</p>…»), y así lo veía la tutora en «Mi campus».
+  if (codigo === 'dbconnectionfailed') {
+    return error('La base de datos del campus no admite más conexiones ahora mismo (Moodle: «Database connection failed»). Pulsa «Actualizar» en unos minutos.', 'BD_CAMPUS');
+  }
   if (codigo === 'webservicesnotenabled' || codigo === 'enablewsdescription') {
     return error('El campus tiene los servicios web apagados.', 'WS_APAGADOS');
   }
@@ -116,8 +149,10 @@ function traducir(datos, funcion) {
  * otra función, se usa `debuginfo` si viene.
  */
 function motivoDelError(datos) {
-  const mensaje = String(datos.message || '').trim();
-  const debug = String(datos.debuginfo || '').trim();
+  // Algunos errores de Moodle llegan en HTML: se enseñan como texto.
+  const sinHtml = (t) => String(t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const mensaje = sinHtml(datos.message);
+  const debug = sinHtml(datos.debuginfo);
   const generico = !mensaje || datos.errorcode === 'invalidparameter' || /^invalid parameter value detected\.?$/i.test(mensaje);
   return generico && debug ? debug : mensaje;
 }
@@ -294,10 +329,45 @@ export async function conversacionesDe(conexion, moodleUserId, { limite = 50, de
   const r = await llamar(conexion, 'core_message_get_conversations', {
     userid: moodleUserId, type: 1, limitfrom: desde, limitnum: limite,
   }, opciones);
-  return (r?.conversations || []).map((c) => ({
-    id: Number(c.id),
-    miembros: (c.members || []).map((m) => ({ id: Number(m.id), nombre: m.fullname || null })),
-  }));
+  return (r?.conversations || []).map((c) => {
+    // Moodle manda con cada conversación su último mensaje (solo ese).
+    const u = (c.messages || [])[0];
+    return {
+      id: Number(c.id),
+      miembros: (c.members || []).map((m) => ({ id: Number(m.id), nombre: m.fullname || null })),
+      ultimo: u ? { id: Number(u.id), de: Number(u.useridfrom), fecha: new Date(Number(u.timecreated) * 1000) } : null,
+    };
+  });
+}
+
+/** Conversaciones por página al buscar las que esperan respuesta, y el tope por tutora. */
+const CONVERSACIONES_POR_PAGINA = 50;
+const maxConversaciones = () => {
+  const n = parseInt(process.env.MI_CAMPUS_MAX_CONVERSACIONES || '300', 10);
+  return Number.isInteger(n) && n > 0 ? n : 300;
+};
+
+/**
+ * Las conversaciones privadas de una tutora cuyo ÚLTIMO mensaje es del otro (el alumno): las
+ * que esperan su respuesta en Moodle, de cualquier fecha. Diego, 24/11: «tienen que tener
+ * TODAS las pendientes, no solamente desde que se subió el campus». Solo lee. Moodle las da de
+ * la más reciente a la más antigua; se pide página a página hasta el tope.
+ */
+export async function conversacionesSinResponder(conexion, moodleUserId, opciones) {
+  const yo = Number(moodleUserId);
+  const pendientes = [];
+  const tope = maxConversaciones();
+  for (let desde = 0; desde < tope; desde += CONVERSACIONES_POR_PAGINA) {
+    const pagina = await conversacionesDe(conexion, yo, { limite: CONVERSACIONES_POR_PAGINA, desde }, opciones);
+    for (const c of pagina) {
+      // Individual: el otro miembro es el alumno (Moodle no lista al propio usuario).
+      const otro = c.miembros.find((m) => m.id !== yo);
+      if (!otro || !c.ultimo || c.ultimo.de === yo || c.ultimo.de !== otro.id) continue;
+      pendientes.push({ conversacionId: c.id, alumnoId: otro.id, alumno: otro.nombre, mensajeId: c.ultimo.id, desde: c.ultimo.fecha });
+    }
+    if (pagina.length < CONVERSACIONES_POR_PAGINA) break;
+  }
+  return pendientes;
 }
 
 /**

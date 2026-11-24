@@ -61,7 +61,7 @@ export default function LeadReassignDialog({ open, gestores, onClose, onSubmit }
                 options={[
                   { value: '', label: 'Seleccionar responsable' },
                   ...gestores
-                    .filter((g) => g.role === 'admin' || g.role === 'gestor' || g.role === 'superadmin')
+                    .filter((g) => ['admin', 'gestor', 'lider_equipo', 'superadmin'].includes(g.role))
                     .map((g) => ({ value: String(g.id), label: `${g.nombre} (${g.role})` })),
                 ]}
                 ariaLabel="Nuevo responsable"

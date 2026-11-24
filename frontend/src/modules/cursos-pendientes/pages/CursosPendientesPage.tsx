@@ -57,7 +57,7 @@ export default function CursosPendientesPage() {
   // El tutor redactor (#708) también desarrolla cursos: ve lo suyo, como una tutora (#770).
   const esTutora = user?.role === 'tutor' || user?.role === 'tutor_redactor';
   const supervisa = user?.role === 'admin' || user?.role === 'superadmin';
-  const puedeCrear = ['admin', 'superadmin', 'soporte', 'gestor'].includes(user?.role || '');
+  const puedeCrear = ['admin', 'superadmin', 'soporte', 'gestor', 'lider_equipo'].includes(user?.role || '');
 
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [cursos, setCursos] = useState<CursoPendiente[]>([]);

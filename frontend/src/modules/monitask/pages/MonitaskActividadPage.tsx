@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
 import usePermission from '@/shared/hooks/usePermission';
+import { useFuncionEncendida } from '@/shared/lib/funcionesDelServidor';
 import { toast } from '@/shared/hooks/useToast';
 import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { CaretDown, CaretRight, WarningCircle, ArrowsClockwise } from '@phosphor-icons/react';
@@ -42,9 +43,13 @@ export default function MonitaskActividadPage() {
   const vista = (['actividad', 'cotejo', 'personas'].includes(params.get('vista') || '') ? params.get('vista') : 'actividad') as Vista;
   const [estado, setEstado] = useState<EstadoMonitask | null | 'apagado'>(null);
 
+  const encendido = useFuncionEncendida('monitask');
+
   useEffect(() => {
+    // Apagado en el servidor (MONITASK_ACTIVO): se dice sin preguntar (contestaría 404).
+    if (!encendido) { setEstado('apagado'); return; }
     monitaskApi.estado().then((r) => setEstado(r.data || 'apagado')).catch(() => setEstado('apagado'));
-  }, []);
+  }, [encendido]);
 
   const cambiarVista = (v: Vista) => {
     const qs = new URLSearchParams(params);

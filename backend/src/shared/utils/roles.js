@@ -226,7 +226,25 @@ export function sinPermiso() {
   permisos del catálogo (#423).
 */
 const VEN_TODO_EL_CAMPUS = ['superadmin', 'admin', 'soporte'];
-const COMERCIAL_PROPIO = ['gestor', 'project_manager'];
+// La líder de equipo (CRM#1105 / ISEIE#761) también: lo suyo y, con
+// `equipo_comercial`, lo de sus gestoras (`alcanceComercial`, más abajo).
+const COMERCIAL_PROPIO = ['gestor', 'project_manager', 'lider_equipo'];
+
+/*
+  LOS ROLES QUE TRABAJAN COMO UNA GESTORA (CRM#1105 / ISEIE#761, Diego 24/11/2026).
+
+  La líder de equipo es una gestora que además ve a su equipo: atiende sus
+  prospectos, registra sus ventas, sale en el ranking, usa su WhatsApp y le
+  llegan los correos de gestora. Donde el CRM preguntaba «¿es gestora?» para
+  eso —no para decidir quién entra, que es cosa de los permisos (#423)—, la
+  líder cuenta como gestora. Mismo nombre y contrato en el 360 (paridad).
+*/
+export const ROLES_DE_GESTORA = ['gestor', 'lider_equipo'];
+
+/** Si su rol PRINCIPAL trabaja como una gestora (lo que antes era `role === 'gestor'`). */
+export function esRolDeGestora(rol) {
+  return ROLES_DE_GESTORA.includes(rol);
+}
 
 export function soloLoSuyo(user) {
   const suyos = rolesDe(user);
@@ -328,7 +346,13 @@ export function personasDentro(alcance, pedido) {
  */
 export async function alcanceDeLider(user) {
   const alcance = await alcanceComercial(user);
-  return Array.isArray(alcance) && alcance.length > 1 ? alcance : null;
+  if (!Array.isArray(alcance)) return null;
+  // La líder de equipo (CRM#1105 / ISEIE#761) lo es aunque hoy no tenga a nadie
+  // a su cargo: su equipo es ella sola, y lo que trae de equipo (el ranking,
+  // reasignar…) se queda en ella. Sin esto, con el equipo vacío se le abría el
+  // campus entero.
+  if (alcance.length > 1 || tieneRol(user, 'lider_equipo')) return alcance;
+  return null;
 }
 
 /** Si esa persona entra en el alcance (null = entra cualquiera). */

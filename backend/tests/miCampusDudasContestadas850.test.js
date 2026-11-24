@@ -39,6 +39,8 @@ vi.mock('../src/shared/services/moodle.client.js', async (importOriginal) => ({
   ]),
   tareasDeCursos: vi.fn(async () => new Map()),
   entregasSinCorregir: vi.fn(async () => new Map()),
+  // Sus mensajes de Moodle sin responder (miCampusPendientesAntiguas.test.js): aquí, ninguno.
+  conversacionesSinResponder: vi.fn(async () => []),
 }));
 
 const { miCampus } = await import('../src/modules/tutores/tutor.micampus.js');

@@ -58,7 +58,12 @@ export async function list(req, res, next) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
     const { alcance, ...filtros } = parsed.data;
-    const soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    let soloIds = alcance === 'comercial' ? await alcanceDeLider(req.user) : null;
+    // Sin «Ver usuarios», solo por «Ver a su equipo» (CRM#1105 / ISEIE#761): ella
+    // y su equipo, pida lo que pida. Nunca la lista entera de sus campus.
+    if (!(await tienePermiso(req, 'users.view'))) {
+      soloIds = (await alcanceDeLider(req.user)) || [Number(req.user.userId)];
+    }
     const result = await userService.list({ ...filtros, campus: await campusDeLaLista(req), soloIds });
     res.json({
       success: true,
