@@ -4,6 +4,7 @@ import { abrirChatCrm } from '@/shared/lib/abrirChatCrm';
 import {
   DownloadSimple,
   EnvelopeSimple,
+  Prohibit,
   Trash,
   UserCheck,
   WhatsappLogo,
@@ -21,6 +22,7 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
 import type { Client } from '@/shared/types';
 import ClientsFiltersBar from '../components/ClientsFiltersBar';
+import { useSuspensionesMoodleEncendidas } from '@/shared/lib/suspensionesMoodle';
 
 const SoftDeleteDialog = lazy(() => import('@/modules/leads/components/SoftDeleteDialog'));
 
@@ -181,6 +183,15 @@ function InstallmentsCell({ client: item }: { client: Client }) {
   );
 }
 
+/** En la fila: sigue suspendido en Moodle (gemela de CRM#531). El motivo está en su ficha. */
+function SuspendidoEnMoodle() {
+  return (
+    <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-destructive-soft px-1.5 py-0.5 text-[10px] font-semibold text-destructive-soft-foreground">
+      <Prohibit size={10} weight="bold" aria-hidden /> Suspendido en Moodle
+    </span>
+  );
+}
+
 export default function ClientsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -194,6 +205,8 @@ export default function ClientsPage() {
     resp: '',
     prod: '',
     cuotas: '',
+    // Gemela de CRM#531: 'suspendidos' = solo los que siguen suspendidos en Moodle (server-side).
+    moodle: '',
     sort: 'nombre',
     page: 1,
   });
@@ -202,6 +215,7 @@ export default function ClientsPage() {
     resp: filterResp,
     prod: filterProducto,
     cuotas: filterInstallments,
+    moodle: filtroMoodle,
     sort: sortBy,
     page,
   } = urlFilters as {
@@ -209,9 +223,13 @@ export default function ClientsPage() {
     resp: string;
     prod: string;
     cuotas: string;
+    moodle: string;
     sort: string;
     page: number;
   };
+  // Con SUSPENSIONES_MOODLE_EN_PRODUCCION apagado, el filtro ni sale ni se manda.
+  const conSuspensiones = useSuspensionesMoodleEncendidas();
+  const filterMoodle = conSuspensiones ? filtroMoodle : '';
 
   const setSearch = useCallback(
     (value: string) => setUrlFilters({ q: value, page: 1 }),
@@ -227,6 +245,10 @@ export default function ClientsPage() {
   );
   const setFilterInstallments = useCallback(
     (value: string) => setUrlFilters({ cuotas: value, page: 1 }),
+    [setUrlFilters],
+  );
+  const setFilterMoodle = useCallback(
+    (value: string) => setUrlFilters({ moodle: value, page: 1 }),
     [setUrlFilters],
   );
   const setSortBy = useCallback(
@@ -315,6 +337,7 @@ export default function ClientsPage() {
       else if (filterResp) params.set('responsableId', filterResp);
       if (filterProducto) params.set('productId', filterProducto);
       if (filterInstallments) params.set('installmentStatus', filterInstallments);
+      if (filterMoodle === 'suspendidos') params.set('suspendidoMoodle', 'true');
 
       const response = await client.get(`/leads?${params.toString()}`, {
         signal: controller.signal,
@@ -344,6 +367,7 @@ export default function ClientsPage() {
     filterResp,
     filterProducto,
     filterInstallments,
+    filterMoodle,
   ]);
 
   useEffect(() => {
@@ -371,7 +395,7 @@ export default function ClientsPage() {
   });
 
   const hasActiveFilters = Boolean(
-    search.trim() || filterResp || filterProducto || filterInstallments,
+    search.trim() || filterResp || filterProducto || filterInstallments || filterMoodle,
   );
   const totalPages = Math.max(1, Math.ceil(totalBackend / PAGE_SIZE));
 
@@ -410,6 +434,8 @@ export default function ClientsPage() {
           gestores={gestores}
           productos={productos}
           totalBackend={totalBackend}
+          filterMoodle={filterMoodle}
+          setFilterMoodle={conSuspensiones ? setFilterMoodle : undefined}
         />
         {sortedClients.length > 0 && (
           <button
@@ -462,7 +488,10 @@ export default function ClientsPage() {
                       className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
                       onClick={() => navigate(`/clients/${item.id}`)}
                     >
-                      <td className="px-4 py-3 font-semibold whitespace-nowrap">{item.nombre}</td>
+                      <td className="px-4 py-3 font-semibold whitespace-nowrap">
+                        <div>{item.nombre}</div>
+                        {item.suspendido_moodle && <SuspendidoEnMoodle />}
+                      </td>
                       <td className="px-4 py-3 text-muted-foreground">{item.email || '—'}</td>
                       <td className="px-4 py-3 text-xs text-muted-foreground font-mono whitespace-nowrap">
                         {item.telefono || '—'}
@@ -515,6 +544,7 @@ export default function ClientsPage() {
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0">
                         <div className="font-semibold truncate">{item.nombre}</div>
+                        {item.suspendido_moodle && <SuspendidoEnMoodle />}
                         <div className="text-xs text-muted-foreground truncate">{item.email}</div>
                         <div className="text-[11px] text-muted-foreground mt-0.5">
                           {item.responsable_nombre || 'Sin gestora'}
