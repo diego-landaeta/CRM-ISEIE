@@ -184,6 +184,71 @@ describe('la ficha de cada persona (#423)', () => {
   });
 });
 
+ describe('el panel de permisos de la ficha (#703)', () => {
+  it('a quien puede editar le dice qué tiene él, para no ofrecerle dar lo que no tiene', async () => {
+    const r = await request.get(`/api/permissions/personas/${U.gestoraA.id}`).set(como('adminA'));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.data.puedeEditar).toBe(true);
+    expect(r.body.data.motivo).toBeNull();
+    expect(r.body.data.misPermisos).toContain('users.excepciones');
+    expect(r.body.data.misPermisos).toContain('facturas.editar_fechas');
+    // «Guardar claves» no lo tiene el admin: la ficha no debe ofrecérselo.
+    expect(r.body.data.misPermisos).not.toContain('credentials.edit');
+  });
+
+  it('al superadmin, todo: sin lista', async () => {
+    const r = await request.get(`/api/permissions/personas/${U.gestoraA.id}`).set(como('superadmin'));
+    expect(r.body.data.puedeEditar).toBe(true);
+    expect(r.body.data.misPermisos).toBeNull();
+  });
+
+  it('en solo lectura dice por qué, y no enseña lo que tiene quien mira', async () => {
+    const propia = await request.get(`/api/permissions/personas/${U.gestoraA.id}`).set(como('gestoraA'));
+    expect(propia.body.data.puedeEditar).toBe(false);
+    expect(propia.body.data.motivo).toMatch(/otra persona/);
+    expect(propia.body.data.misPermisos).toBeNull();
+
+    const deAdmin = await request.get(`/api/permissions/personas/${U.adminA2.id}`).set(como('adminA'));
+    expect(deAdmin.body.data.puedeEditar).toBe(false);
+    expect(deAdmin.body.data.motivo).toMatch(/superadmin/);
+
+    // Soporte ve usuarios pero no da permisos: con un campus de ella, la ve en solo lectura.
+    await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [U.soporte.id, P.A]);
+    const soporte = await request.get(`/api/permissions/personas/${U.gestoraA.id}`).set(como('soporte'));
+    await q('DELETE FROM user_projects WHERE user_id = $1', [U.soporte.id]);
+    expect(soporte.status, JSON.stringify(soporte.body)).toBe(200);
+    expect(soporte.body.data.puedeEditar).toBe(false);
+    expect(soporte.body.data.motivo).toMatch(/Permisos de cada persona/);
+  });
+
+  it('dar y quitar «Cambiar fechas» a una persona: su mapa cambia y el registro lo dice con su nombre', async () => {
+    const dar = await request.put(`/api/permissions/personas/${U.tutorA.id}/excepciones`).set(como('adminA'))
+      .send({ cambios: { 'facturas.view': true, 'facturas.editar_fechas': true } });
+    expect(dar.status, JSON.stringify(dar.body)).toBe(200);
+    expect(dar.body.data['facturas.editar_fechas']).toBe(true);
+    const quitar = await request.put(`/api/permissions/personas/${U.tutorA.id}/excepciones`).set(como('adminA'))
+      .send({ cambios: { 'facturas.editar_fechas': null, 'facturas.view': null } });
+    expect(quitar.status, JSON.stringify(quitar.body)).toBe(200);
+    expect(quitar.body.data['facturas.editar_fechas']).not.toBe(true);
+
+    const f = await request.get(`/api/permissions/personas/${U.tutorA.id}`).set(como('adminA'));
+    const apuntes = f.body.data.registro.filter((x) => x.clave === 'facturas.editar_fechas');
+    expect(apuntes).toHaveLength(2);
+    expect(apuntes.every((x) => x.nombre === 'Facturación · Cambiar fechas')).toBe(true);
+    expect(apuntes.map((x) => x.despues)).toEqual(['como su rol (no)', 'sí']);
+    expect(apuntes.every((x) => x.quien_nombre === `${MARCA} adminA`)).toBe(true);
+  });
+
+  it('el registro de un rol también va con nombres; solo quien cambia roles lo lee', async () => {
+    const r = await request.get('/api/permissions/registro').query({ rol: 'gestor' }).set(como('adminA'));
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    for (const x of r.body.data) expect(typeof x.nombre).toBe('string');
+    // El «Exportar» que el superadmin dio y quitó arriba: en palabras, no `true`/`false`.
+    const exportar = r.body.data.filter((x) => x.clave === 'leads.export' && x.quien_nombre === `${MARCA} superadmin`);
+    expect(exportar.map((x) => `${x.antes} → ${x.despues}`)).toEqual(['sí → no', 'no → sí']);
+    expect((await request.get('/api/permissions/registro').query({ rol: 'gestor' }).set(como('gestoraA'))).status).toBe(403);
+  });
+});
 describe('roles a medida (#423)', () => {
   it('el superadmin lo crea a partir de un rol fijo; el admin también, sin darle lo que no tiene; soporte, no', async () => {
     expect((await request.post('/api/permissions/roles/a-medida').set(como('soporte')).send({ nombre: 'x', base: 'gestor' })).status).toBe(403);

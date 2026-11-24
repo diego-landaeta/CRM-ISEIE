@@ -115,6 +115,14 @@ export default function ListaDePermisos({
                       const f = formaDe(catalogo, a, { mapa, origenes, role });
                       const eleccion: Eleccion = a.clave in excepciones ? (excepciones[a.clave] ? 'si' : 'no') : 'rol';
                       const faltan = f.requiere.filter((x) => !x.tiene);
+                      // «Sí» no se ofrece si su rol no puede tenerlo, si le falta lo que
+                      // necesita o si quien edita no lo tiene. Y se dice por qué, a la
+                      // vista (#703): un `title` en un botón apagado no lo enseña el
+                      // navegador al pasar el ratón, ni existe en el móvil.
+                      const motivoSi = !puedeEditar || !onElegir || eleccion === 'si' ? null
+                        : f.bloqueo ? f.bloqueo
+                          : faltan.length ? `Antes necesita: ${faltan.map((x) => x.nombre).join(', ')}`
+                            : !puedeDar(a.clave) ? 'No lo puedes dar: tú no lo tienes' : null;
                       return (
                         <li key={a.clave} data-clave={a.clave} data-origen={f.origen} data-marcas={f.marcas.join(' ')}
                           className={cn('flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center', f.bloqueo && 'bg-muted/30')}>
@@ -138,16 +146,17 @@ export default function ListaDePermisos({
                               ))}
                             </div>
                             <p className="pl-5 text-secundario text-muted-foreground">{a.descripcion}</p>
+                            {/* Lo bloqueado ya lo dice su etiqueta de origen; aquí, el resto. */}
+                            {motivoSi && !f.bloqueo && (
+                              <p data-motivo-si className="flex items-center gap-1 pl-5 text-secundario text-warning-soft-foreground">
+                                <LockSimple size={12} weight="bold" aria-hidden="true" /> {motivoSi}
+                              </p>
+                            )}
                           </div>
                           {puedeEditar && onElegir && (
                             <div role="radiogroup" aria-label={`Excepción para ${a.nombre}`} className="flex overflow-hidden rounded-lg border border-border text-secundario">
                               {([['rol', 'Como su rol'], ['si', 'Sí'], ['no', 'No']] as const).map(([v, t]) => {
-                                // «Sí» no se ofrece si su rol no puede tenerlo, si le falta lo que
-                                // necesita o si quien edita no lo tiene. Y se dice por qué.
-                                const motivo = v !== 'si' || eleccion === 'si' ? null
-                                  : f.bloqueo ? f.bloqueo
-                                    : faltan.length ? `Antes necesita: ${faltan.map((x) => x.nombre).join(', ')}`
-                                      : !puedeDar(a.clave) ? 'No lo puedes dar: tú no lo tienes' : null;
+                                const motivo = v === 'si' ? motivoSi : null;
                                 return (
                                   <button key={v} type="button" role="radio" aria-checked={eleccion === v} disabled={ocupado || Boolean(motivo)}
                                     title={motivo || undefined}

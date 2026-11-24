@@ -325,11 +325,19 @@ export async function fichaDePermisos(userId, quien) {
   if (!propia && quien.role !== 'superadmin' && !(await model.compartenCampus(quien.userId, userId))) {
     throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
   }
+  // #703: si no puede tocarla, la ficha dice por qué; y si puede, qué tiene él,
+  // para no ofrecerle dar lo que no tiene (el servidor lo vuelve a comprobar).
   let puedeEditar = false;
-  if (!propia) {
-    const mios = await explicarPermisos(quien.userId);
-    if (mios?.mapa['users.excepciones']) {
-      try { await exigirQuePuedaTocar(quien, e.persona); puedeEditar = true; } catch { puedeEditar = false; }
+  let motivo = null;
+  let mios = null;
+  if (propia) {
+    motivo = 'Tus propios permisos te los cambia otra persona.';
+  } else {
+    mios = quien.role === 'superadmin' ? null : ((await explicarPermisos(quien.userId))?.mapa || {});
+    if (mios && mios['users.excepciones'] !== true) {
+      motivo = 'Para cambiarlos hace falta «Permisos de cada persona».';
+    } else {
+      try { await exigirQuePuedaTocar(quien, e.persona); puedeEditar = true; } catch (err) { motivo = `${err.message}.`; }
     }
   }
   const roles = await model.findAllCustomRoles();
@@ -340,10 +348,38 @@ export async function fichaDePermisos(userId, quien) {
     excepciones: Object.fromEntries(Object.entries(e.excepciones).filter(([k]) => CLAVES.has(k))),
     rolAMedida: e.customRole ? { id: e.customRole.id, nombre: e.customRole.label, activo: e.customRole.active !== false } : null,
     rolesAMedida: roles.filter((r) => r.active !== false).map((r) => ({ id: r.id, nombre: r.label, base: r.base_role })),
-    registro: await model.leerRegistro({ usuarioId: userId, limite: 50 }),
+    registro: conNombres(await model.leerRegistro({ usuarioId: userId, limite: 50 })),
     puedeEditar,
+    motivo: puedeEditar ? null : motivo,
+    misPermisos: puedeEditar && mios ? Object.keys(mios).filter((k) => mios[k] === true) : null,
   };
 }
+
+/**
+ * #703 · Cada apunte del registro, con el nombre del permiso como se lee en la
+ * pantalla («Facturación · Cambiar fechas»), no su clave. Lo que no es un
+ * permiso (el rol a medida, el nombre de un rol…) lleva su propio nombre.
+ */
+const OTROS_APUNTES = {
+  rol_a_medida: 'Rol a medida', creado: 'Rol creado', borrado: 'Rol borrado',
+  base: 'Rol del que parte', activo: 'Activo', nombre: 'Nombre del rol',
+};
+// Los cambios de un rol (y su «Activo») se guardan como `true`/`false`; los de
+// una persona ya van en palabras («como su rol (no)»). En pantalla, siempre así.
+const EN_PALABRAS = { true: 'sí', false: 'no' };
+const enPalabras = (v) => (v in EN_PALABRAS ? EN_PALABRAS[v] : v);
+export function conNombres(apuntes) {
+  return apuntes.map((r) => {
+    const a = POR_CLAVE[r.clave];
+    return {
+      ...r,
+      antes: enPalabras(r.antes),
+      despues: enPalabras(r.despues),
+      nombre: a ? `${a.recursoNombre ? `${a.recursoNombre} · ` : ''}${a.nombre}` : (OTROS_APUNTES[r.clave] || r.clave),
+    };
+  });
+}
+
 
 /**
  * #694 · Lo que tendría alguien que todavía no existe: con este rol, estos
