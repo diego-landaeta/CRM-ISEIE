@@ -811,10 +811,8 @@ export default function LeadsPage() {
               desplegar». */}
           <BloquePlegable
             clave="prospectos-resumen"
-            // Diego, repaso del 15/09: «tiene que nacer cerrado, no desplegado».
-            // Quien ya lo dejó abierto lo sigue viendo abierto: lo guardado manda
-            // sobre el arranque.
-            abiertoPorDefecto={false}
+            // Nace abierto (Diego, 24/11: «todo abierto como antes»); quien lo
+            // pliega lo sigue viendo plegado.
             titulo="Resumen del día"
             resumen={
               quickCounts.urgent > 0
