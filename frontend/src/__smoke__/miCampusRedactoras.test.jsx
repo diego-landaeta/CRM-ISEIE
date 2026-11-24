@@ -161,6 +161,8 @@ describe('Mi campus · uno o varios campus', () => {
   });
 
   it('elegir un campus lo pide al servidor y se recuerda', async () => {
+    // El servidor contesta con lo que se le pide (`elegidos`), como de verdad.
+    api.miCampus.mockImplementation(async (_refrescar, pedidos = []) => ({ success: true, data: datos({ elegidos: pedidos.length ? pedidos : null }) }));
     pintar();
     const grupo = await screen.findByRole('group', { name: 'Campus que ves' });
     expect(within(grupo).getByRole('button', { name: /Todos/ })).toHaveAttribute('aria-pressed', 'true');

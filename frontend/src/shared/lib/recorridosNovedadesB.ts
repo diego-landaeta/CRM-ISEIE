@@ -145,23 +145,12 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
     pasos: [
       {
         titulo: 'Tu campus',
-        texto: 'Todo lo que te toca en Moodle, sin entrar en Moodle: las consultas por responder, las entregas por corregir, tus alumnos y lo que tienes por desarrollar. Son {pasos} pasos.',
+        texto: 'Todo lo que te toca en Moodle, sin entrar en Moodle. Arriba, la cuenta de lo de hoy; «Actualizar» lo vuelve a leer, y en «Mis cursos y comisiones», arriba, tienes tus cursos en el CRM y lo que te corresponde. Son {pasos} pasos.',
       },
       {
         donde: anclaje('mi-campus-selector'),
         titulo: 'Tus campus',
         texto: '¿Estás en varios campus? Míralos todos juntos con «Todos» o pulsa uno o varios para ver solo esos. Se queda guardado para la próxima vez.',
-      },
-      {
-        // ISEIE: un enlace de la cabecera, no la pestaña del 360.
-        donde: anclaje('mi-campus-comisiones'),
-        titulo: 'Mis cursos y comisiones',
-        texto: 'Aquí, lo de hoy en Moodle. En «Mis cursos y comisiones», tus cursos en el CRM y lo que te corresponde.',
-      },
-      {
-        donde: anclaje('mi-campus-resumen'),
-        titulo: 'Lo de hoy',
-        texto: 'Cuántas entregas tienes por corregir, cuántas dudas sin contestar y cuántos cursos por desarrollar.',
       },
       {
         donde: anclaje('mi-campus-sin-conectar'),
@@ -187,11 +176,6 @@ export const RECORRIDOS_NOVEDADES_B: Record<IdRecorridoNovedadesB, RecorridoNove
         donde: anclaje('mi-campus-por-desarrollar'),
         titulo: 'Por desarrollar',
         texto: 'Los cursos que estás preparando: el plazo, el % de módulos y si ya están la foto y el vídeo.',
-      },
-      {
-        donde: anclaje('mi-campus-actualizar'),
-        titulo: 'Actualizar',
-        texto: 'Todo se lee de Moodle. Arriba pone a qué hora; pulsa «Actualizar» para leerlo otra vez.',
       },
       {
         titulo: 'Y listo',
