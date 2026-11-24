@@ -18,6 +18,7 @@ const api = vi.hoisted(() => ({ miCampus: vi.fn(), toast: vi.fn(), mias: vi.fn()
 vi.mock('@/modules/tutores/api/tutores.api', () => ({ tutoresApi: { miCampus: api.miCampus } }));
 vi.mock('@/modules/consultas/api/consultas.api', () => ({ consultasApi: { mias: api.mias, responder: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: api.toast }));
+vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 7, role: 'tutor' } }) }));
 
 import MiCampusPage from '@/modules/tutores/pages/MiCampusPage';
 

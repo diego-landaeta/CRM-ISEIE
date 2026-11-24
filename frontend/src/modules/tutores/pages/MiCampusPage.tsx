@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '@/contexts/AuthContext';
+import { soloEsTutorRedactor } from '@/shared/lib/roles';
 import {
   ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, ListBullets, Warning,
 } from '@phosphor-icons/react';
@@ -349,6 +351,9 @@ function Resumen({ porCorregir, dudas, porDesarrollar, conCampus }: { porCorregi
 }
 
 export default function MiCampusPage() {
+  // La redactora no tiene comisiones: sin el enlace (Diego, 24/11/2026).
+  const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
+  const soloRedactora = soloEsTutorRedactor(user);
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -457,9 +462,11 @@ export default function MiCampusPage() {
             <VerRecorrido id="mi-campus" listo={!cargando} compacto />
             {/* En ISEIE «Mis cursos y comisiones» es un enlace, no una pestaña como
                 en el 360: el paso del recorrido lo señala a él. */}
+            {!soloRedactora && (
             <Link to="/mis-cursos" data-recorrido="mi-campus-comisiones" className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-secundario font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
               <Coins size={14} aria-hidden /> Mis cursos y comisiones
             </Link>
+            )}
             <Button data-recorrido="mi-campus-actualizar" variant="outline" size="sm" disabled={cargando} onClick={actualizar} className="h-8 text-secundario">
               <ArrowsClockwise size={14} className={cn('mr-1.5', cargando && 'animate-spin')} aria-hidden />
               {cargando ? 'Leyendo…' : 'Actualizar'}
