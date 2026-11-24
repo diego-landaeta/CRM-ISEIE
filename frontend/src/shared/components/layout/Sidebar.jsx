@@ -16,6 +16,7 @@ import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
 import { rolesDe } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
+import ContadorConsultas from './ContadorConsultas';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
@@ -625,6 +626,7 @@ export function NavItem({ to, label, icon: Icon, end, comingSoon, collapsed, onC
             )}
             <Icon size={18} weight={active ? 'duotone' : 'regular'} />
             {!collapsed && <span className="truncate">{label}</span>}
+            {to === '/consultas' && <ContadorConsultas collapsed={collapsed} />}
           </>
         );
       }}
