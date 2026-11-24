@@ -25,11 +25,18 @@ export async function existeTabla(tabla) {
 }
 
 export async function campus(ids) {
+  // `stripe_prestado_de`: el campus cuya cuenta de Stripe usa este (Stripe
+  // prestado, 332), solo si es de su misma empresa; null si no.
   const { rows } = await query(
-    `SELECT id, nombre, type, sociedad_emisora_id
-       FROM projects
-      WHERE id = ANY($1::int[]) AND active
-      ORDER BY nombre`,
+    `SELECT p.id, p.nombre, p.type, p.sociedad_emisora_id,
+            CASE WHEN d.id IS NOT NULL THEN json_build_object('id', d.id, 'nombre', d.nombre) END AS stripe_prestado_de
+       FROM projects p
+       LEFT JOIN projects d ON d.id = p.stripe_prestado_de
+                           AND p.sociedad_emisora_id IS NOT NULL
+                           AND d.sociedad_emisora_id = p.sociedad_emisora_id
+                           AND d.stripe_prestado_de IS NULL
+      WHERE p.id = ANY($1::int[]) AND p.active
+      ORDER BY p.nombre`,
     [ids]
   );
   return rows;

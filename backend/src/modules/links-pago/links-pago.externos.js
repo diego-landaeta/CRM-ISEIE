@@ -132,6 +132,14 @@ const DIAS_DE_SESIONES = 7;
  * Errores con `code` para la pantalla.
  */
 export async function sincronizar(projectId, { conCobros = true } = {}) {
+  // Los links creados a mano en Stripe son de la cuenta, y en una cuenta
+  // prestada (332) la cuenta es del dueño: salen en su campus, no en este.
+  const { prestadoDe } = await import('../stripe-payments/stripe-prestado.js');
+  const dueno = await prestadoDe(projectId);
+  if (dueno) {
+    throw new AppError(`Este campus usa el Stripe de ${dueno.nombre}: los links creados directamente en Stripe salen en ${dueno.nombre}.`,
+      409, 'STRIPE_PRESTADO');
+  }
   const { clave, motivo } = await claveParaLeer(projectId);
   if (!clave) throw new AppError(motivo, 409, 'SIN_CLAVE_DE_LINKS');
   let lista;
