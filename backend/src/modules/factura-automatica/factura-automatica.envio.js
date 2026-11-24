@@ -17,7 +17,7 @@ import { logger } from '../../shared/utils/logger.js';
     · EL CORREO. El de la ficha, ya relleno; la gestora lo confirma o lo
       cambia. El formulario y el PDF van a ese. Sin confirmar, el de la ficha.
 
-  Se guarda en la venta (`conversions.factura_envio_*`, migración 337 en ISEIE, 325 en el 360): las
+  Se guarda en la venta (`conversions.factura_envio_*`, migración 338 en ISEIE, 326 en el 360): las
   cuotas reutilizan la elección, como reutilizan los datos fiscales. Un link de
   pago sin venta lo guarda en el link y lo pasa a la venta que nace al pagarlo.
 */
