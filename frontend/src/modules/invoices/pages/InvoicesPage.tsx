@@ -5,6 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
+import { colasQueSeVen } from '../lib/colasDeFacturacion';
 import AvisoHuecosFacturas from '../components/AvisoHuecosFacturas';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
@@ -137,6 +138,8 @@ export default function InvoicesPage() {
   // Solo se ofrecen sociedades a las que el usuario tiene acceso — es decir, las
   // que son sociedad emisora de alguno de SUS proyectos. Nunca se cruza la
   // facturación entre sociedades: para ver otra hay que entrar a un proyecto suyo.
+  // Las colas de facturación que se pintan: una por campus con empresa o con «Todos».
+  const colas = colasQueSeVen({ pid, porSociedad, sociedadProjects, filterProject, projects });
   const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
@@ -376,16 +379,17 @@ export default function InvoicesPage() {
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
       {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
           suyo. Antes salía «todo facturado» con 20 cobros esperando en ACADEMIA IA (21/10). */}
-      {!esProformas && !esAbonos && (porSociedad ? (
+      {/* Y con «Todos los proyectos», también una por campus suyo (25/11, Ana): antes no salía ninguna. */}
+      {!esProformas && !esAbonos && (colas ? (
         <>
-          {!filterProject && sociedadProjects.length > 1 && (
+          {colas.varias && (
             <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
           )}
-          {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
-            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} resaltar={cobroBuscado} />
+          {colas.campus.map((p) => (
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={colas.varias} resaltar={cobroBuscado} />
           ))}
         </>
-      ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} resaltar={cobroBuscado} />)}
+      ) : <FacturacionAlDiaCard projectId={activeProject?.id} resaltar={cobroBuscado} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos). Gemela de
           CRM#917: a 320 px no caben las tres; la tira se desplaza ella sola en

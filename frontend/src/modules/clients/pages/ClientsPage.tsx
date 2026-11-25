@@ -274,7 +274,8 @@ export default function ClientsPage() {
   }, [user?.role, activeProject?.id]);
 
   useEffect(() => {
-    if (!activeProject?.id) {
+    // Con «Todos» (-1) no hay un catálogo que pedir: era un 400 en cada visita (25/11).
+    if (!(Number(activeProject?.id) > 0)) {
       setProductos([]);
       return;
     }
