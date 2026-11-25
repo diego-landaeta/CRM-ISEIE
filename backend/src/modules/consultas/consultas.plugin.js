@@ -27,6 +27,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { llamar } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from '../tutores/tutor.campus.js';
+import { anotarActualizacion, leerEstado, explicar } from './consultas.actualizacion.js';
 
 export const VENTANA_FIRMA_S = 300;
 
@@ -65,9 +66,13 @@ export async function desactivar(projectId) {
 /** Lo que enseña el panel: si hay clave, si está activo y el último aviso. */
 export async function estado(projectId) {
   const { rows } = await query(
-    `SELECT activo, ultimo_aviso_at, updated_at, sincronizado_at, sincronizacion_error, version_plugin
-       FROM moodle_plugin_campus WHERE project_id = $1`, [projectId]);
+    // `to_jsonb(m)->…`: la actualización pendiente (Campus-Moodle#24) sale NULL también si
+    // todavía no está la columna (migración 345), en lugar de romper el panel.
+    `SELECT activo, ultimo_aviso_at, updated_at, sincronizado_at, sincronizacion_error, version_plugin,
+            to_jsonb(m)->'actualizacion_pendiente' AS actualizacion_pendiente
+       FROM moodle_plugin_campus m WHERE project_id = $1`, [projectId]);
   const r = rows[0];
+  const pendiente = r?.actualizacion_pendiente || null;
   return {
     project_id: projectId,
     configurado: Boolean(r),
@@ -77,6 +82,8 @@ export async function estado(projectId) {
     sincronizado_at: r?.sincronizado_at || null,
     sincronizacion_error: r?.sincronizacion_error || null,
     version_plugin: r?.version_plugin || null,
+    // El Moodle tiene una actualización pendiente: desde cuándo, versiones y qué hacer.
+    actualizacion_pendiente: pendiente ? { ...pendiente, explicacion: explicar(pendiente) } : null,
     clave_desde: r?.updated_at || null,
     ruta: rutaDelAviso(projectId),
   };
@@ -362,12 +369,15 @@ export async function sincronizarCampus(projectId, { procesar, desdeFecha = null
   const desde = desdeFecha ? Math.floor(new Date(desdeFecha).getTime() / 1000) : Math.floor(Date.now() / 1000) - 3600;
   const r = { projectId, mensajes: 0, nuevos: 0, paginas: 0, version: null, descartados: 0 };
   let atascado = null;
+  let actualizacion = null;
   try {
     for (let i = 0; i < PAGINAS_POR_REPASO && !atascado; i++) {
       const pagina = await llamar(conexion, 'local_crm_mensajes_desde',
         desdeId > 0 ? { desdeid: desdeId, limite: 200 } : { desdefecha: desde, limite: 200 }, opciones);
       r.paginas += 1;
       r.version = pagina?.version || r.version;
+      // Campus-Moodle#24: ¿tiene el Moodle una actualización pendiente? (plugin 1.12.0 o después)
+      if (i === 0) actualizacion = leerEstado(pagina);
       let avisos = [];
       try { avisos = JSON.parse(pagina?.avisos || '[]'); } catch { avisos = []; }
       for (const aviso of avisos) {
@@ -396,6 +406,7 @@ export async function sincronizarCampus(projectId, { procesar, desdeFecha = null
       await query('UPDATE moodle_plugin_campus SET sincronizado_hasta_id = $2 WHERE project_id = $1', [projectId, desdeId || null]);
       if (!pagina?.mas) break;
     }
+    if (actualizacion) await anotarActualizacion(projectId, actualizacion);
     if (atascado) {
       // Con error, el campus vuelve también a la lectura de cada 5 minutos (campusConPluginAlDia)
       // y el panel lo enseña. El siguiente repaso empieza por ese mensaje.
