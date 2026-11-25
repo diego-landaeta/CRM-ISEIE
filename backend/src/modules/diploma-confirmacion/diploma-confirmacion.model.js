@@ -232,8 +232,13 @@ export async function leadEnElCampus(projectId, email) {
  * El diploma en la ficha del alumno (#791): sus confirmaciones vivas, la más reciente
  * primero. Lo que hace falta para decir «datos pedidos», «contestados» o «emitido»; sin el
  * enlace, la IP ni el documento.
+ *
+ * `campusPermitidos`: los campus de quien mira (null si ve todo el CRM). Una ficha puede
+ * tener confirmaciones de otro campus (una venta allí, o las filas de antes de #1135 que se
+ * unieron por correo a la ficha de cualquier campus): solo salen las de sus campus, como en
+ * el avance de Moodle.
  */
-export async function deLaFicha(leadId) {
+export async function deLaFicha(leadId, { campusPermitidos = null } = {}) {
   const { rows } = await query(
     `SELECT d.matricula_id, d.centro, d.project_id, p.nombre AS campus, d.estado, d.curso_nombre,
             d.created_at AS pedido_at, d.caduca_at, d.enviado_at, d.envio_simulado, d.envio_error,
@@ -241,8 +246,9 @@ export async function deLaFicha(leadId) {
        FROM diploma_confirmaciones d
        LEFT JOIN projects p ON p.id = d.project_id
       WHERE d.lead_id = $1 AND d.estado <> 'anulado'
+        AND ($2::int[] IS NULL OR d.project_id = ANY($2))
       ORDER BY d.created_at DESC, d.id DESC
       LIMIT 20`,
-    [leadId]);
+    [leadId, campusPermitidos]);
   return rows.map((r) => ({ ...r, matricula_id: Number(r.matricula_id) }));
 }

@@ -485,3 +485,103 @@ describe('#791 · el estado del diploma, en la ficha y en Pendientes', () => {
     expect(otra[0].confirmacion).toBeNull();
   });
 });
+
+describe('#791 · la ficha solo enseña el diploma de los campus de quien mira', () => {
+  // Una ficha puede tener confirmaciones de otro campus: una venta allí, o las filas de
+  // antes de #1135, que se unieron por correo a la ficha de cualquier campus. Quien solo
+  // tiene el campus A no ve la del campus B (Diego, revisión de CRM-ISEIE#810).
+  let otro;
+  const leads = [];
+  const matriculas = [];
+  const personas = [];
+  const persona = async (nombre, role, campus) => {
+    const [u] = await q(
+      `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', $3) RETURNING id`,
+      [`${MARCA} ${nombre}`, `${nombre}.${MARCA.toLowerCase()}@diploma-campus.test`, role]);
+    personas.push(u.id);
+    for (const p of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, p]);
+    // Un objeto nuevo en cada llamada: el alcance comercial se guarda por petición.
+    return () => ({ userId: u.id, email: `${nombre}@diploma-campus.test`, role, roles_extra: [] });
+  };
+  /** GET /api/leads/:id/diploma como `user`: { data } o { error }. */
+  const verComo = async (user, id) => {
+    let cuerpo; let error;
+    await diplomaDelAlumno({ params: { id: String(id) }, user, query: {} },
+      { json: (b) => { cuerpo = b; } }, (e) => { error = e; });
+    return error ? { error } : { data: cuerpo.data };
+  };
+
+  let suya; let deA; let deB;
+  beforeAll(async () => {
+    [otro] = await q(
+      'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id, nombre',
+      [`${MARCA}B`, `${MARCA.toLowerCase()}-b`, `${MARCA}B`]);
+    // beforeAll va antes que el beforeEach de arriba, y la prueba anterior la deja apagada.
+    process.env.DIPLOMA_CONFIRMACION_ACTIVA = '1';
+    process.env.DIPLOMA_CONFIRMACION_CENTROS = MARCA;
+    deA = alumno();
+    deB = alumno();
+    matriculas.push(deA.matriculaId, deB.matriculaId);
+    const [{ id }] = await q('INSERT INTO leads (project_id, nombre, email) VALUES ($1, $2, $3) RETURNING id',
+      [proyecto.id, 'Alumno de dos campus', deA.titular.email]);
+    suya = Number(id);
+    leads.push(suya);
+    await pedirUno(deA);
+    await pedirUno(deB);
+    // La de B, como una fila antigua unida por correo a la ficha del campus A.
+    await q('UPDATE diploma_confirmaciones SET lead_id = $1, project_id = $2 WHERE matricula_id = $3 AND estado <> \'anulado\'',
+      [suya, otro.id, deB.matriculaId]);
+  });
+  afterAll(async () => {
+    await q('DELETE FROM diploma_confirmaciones WHERE matricula_id = ANY($1::bigint[])', [matriculas]);
+    if (leads.length) await q('DELETE FROM leads WHERE id = ANY($1::int[])', [leads]);
+    if (personas.length) {
+      await q('DELETE FROM user_projects WHERE user_id = ANY($1::int[])', [personas]);
+      await q('DELETE FROM users WHERE id = ANY($1::int[])', [personas]);
+    }
+    if (otro) await q('DELETE FROM projects WHERE id = $1', [otro.id]);
+  });
+
+  const matriculasDe = (filas) => filas.map((f) => f.matricula_id).sort();
+
+  it('el superadmin ve las dos; un admin con solo el campus A, solo la de A', async () => {
+    const todas = await verComo(SUPER, suya);
+    expect(matriculasDe(todas.data)).toEqual([deA.matriculaId, deB.matriculaId].sort());
+
+    const adminA = await persona('admin-a', 'admin', [proyecto.id]);
+    const r = await verComo(adminA(), suya);
+    expect(r.error).toBeUndefined();
+    expect(r.data.map((f) => f.matricula_id)).toEqual([deA.matriculaId]);
+    expect(r.data.every((f) => Number(f.project_id) === proyecto.id)).toBe(true);
+
+    // Con los dos campus, las dos.
+    const adminAB = await persona('admin-ab', 'admin', [proyecto.id, otro.id]);
+    expect(matriculasDe((await verComo(adminAB(), suya)).data)).toEqual([deA.matriculaId, deB.matriculaId].sort());
+  });
+
+  it('un admin con solo el campus B no abre la ficha del campus A (404)', async () => {
+    const adminB = await persona('admin-b', 'admin', [otro.id]);
+    const r = await verComo(adminB(), suya);
+    expect(r.data).toBeUndefined();
+    expect(r.error).toMatchObject({ statusCode: 404 });
+  });
+
+  it('una gestora del campus que no lleva la ficha: 403, sin datos', async () => {
+    const ajena = await persona('gestora-ajena', 'gestor', [proyecto.id, otro.id]);
+    const r = await verComo(ajena(), suya);
+    expect(r.data).toBeUndefined();
+    expect(r.error).toMatchObject({ statusCode: 403, code: 'NO_ES_TUYO' });
+
+    // La que sí la lleva la ve (y solo lo de sus campus).
+    const lleva = await persona('gestora-lleva', 'gestor', [proyecto.id]);
+    const { userId } = lleva();
+    await q('UPDATE leads SET responsable_id = $1 WHERE id = $2', [userId, suya]);
+    try {
+      const v = await verComo(lleva(), suya);
+      expect(v.error).toBeUndefined();
+      expect(v.data.map((f) => f.matricula_id)).toEqual([deA.matriculaId]);
+    } finally {
+      await q('UPDATE leads SET responsable_id = NULL WHERE id = $1', [suya]);
+    }
+  });
+});

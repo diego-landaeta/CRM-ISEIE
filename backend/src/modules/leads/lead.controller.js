@@ -309,7 +309,8 @@ export async function suspensionesEnMoodle(req, res, next) {
 /**
  * El diploma del alumno en su ficha (#791): las confirmaciones de datos unidas a ESTA
  * ficha (`diploma_confirmaciones.lead_id`, que ya es la de su campus) y en qué están:
- * datos pedidos, contestados o emitido. Mismo acceso que el resto de la ficha.
+ * datos pedidos, contestados o emitido. Mismo acceso que el resto de la ficha y, además,
+ * solo las confirmaciones de los campus de quien mira (como `avanceEnMoodle`).
  */
 export async function diplomaDelAlumno(req, res, next) {
   try {
@@ -319,7 +320,8 @@ export async function diplomaDelAlumno(req, res, next) {
     const { rows } = await query('SELECT id, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [id]);
     if (!rows[0]) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
     await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
-    res.json({ success: true, data: await diplomaDeLaFicha(id) });
+    const campusPermitidos = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
+    res.json({ success: true, data: await diplomaDeLaFicha(id, { campusPermitidos }) });
   } catch (err) { next(err); }
 }
 
