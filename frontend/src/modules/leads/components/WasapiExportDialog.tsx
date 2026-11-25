@@ -4,8 +4,7 @@ import { X, WhatsappLogo, DownloadSimple, Info } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
-import { useAuth } from '@/contexts/AuthContext';
-import { esRolDeGestora } from '@/shared/lib/roles';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Modal de exportación con formato Wasapi (plantilla bulk WhatsApp).
 // - Filtros opcionales: gestor, fechas, producto, país, sólo con teléfono.
@@ -67,8 +66,10 @@ export default function WasapiExportDialog({
   resumenFiltros = null,
   nombreFichero = 'wasapi-leads',
 }: Props) {
-  const { user } = useAuth() as { user: { userId: number; role: string } | null };
-  const isGestor = esRolDeGestora(user?.role);
+  // Quien solo ve lo suyo (una gestora). La líder de equipo elige entre ella y
+  // su equipo: por permiso y alcance, no por rol (Diego, 25/11/2026).
+  const { veGestoras } = usePermission();
+  const isGestor = !veGestoras;
   const seVe = (b: 'gestor' | 'producto' | 'fechas' | 'convertidos') => !ocultar.includes(b);
 
   const [gestores, setGestores] = useState<Gestor[]>([]);

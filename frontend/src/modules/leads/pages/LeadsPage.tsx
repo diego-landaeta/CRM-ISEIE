@@ -151,7 +151,7 @@ function SkeletonRow() {
 export default function LeadsPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { can } = usePermission();
+  const { can, veGestoras } = usePermission();
   // Eliminar: admin y superadmin, y desde el 01/10 la gestora con el permiso
   // «leads.delete» (#204) en SUS leads sin venta. El servidor lo vuelve a mirar.
   const puedeEliminar = (l: { responsable_id?: number | null; status?: string }) =>
@@ -393,10 +393,12 @@ export default function LeadsPage() {
     // `leads`: se vuelve a contar cuando cambia la lista (un recordatorio nuevo, un alta).
   }, [activeProject?.id, filterResponsable, leads]);
 
-  // Cargar lista de responsables para el filtro (solo admin/superadmin).
+  // Cargar lista de responsables para el filtro y para reasignar.
   // Con un proyecto activo, solo los gestores de ESE proyecto.
+  // Por permiso y alcance, no por rol (Diego, 25/11/2026): a la líder de equipo
+  // le salía vacía; el servidor le da ella y su equipo (`equipos.su_equipo`).
   useEffect(() => {
-    if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
+    if (!veGestoras) return;
     const pidParam = activeProject?.id && activeProject.id > 0 ? `&projectId=${activeProject.id}` : '';
     // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
     client.get(`/users?limit=100&alcance=comercial${pidParam}`)
@@ -404,7 +406,7 @@ export default function LeadsPage() {
         if (res.success) setGestores(res.data || []);
       })
       .catch(() => {});
-  }, [user?.role, activeProject?.id]);
+  }, [veGestoras, activeProject?.id]);
 
   function handleMarkContacted(lead) {
     setConfirmingContact(lead);
@@ -1240,7 +1242,7 @@ export default function LeadsPage() {
           onMarcarContactado={marcarContactadosEnBloque}
           onCopiarContactos={copiarContactosEnBloque}
           gestores={gestores}
-          isAdmin={user?.role === 'superadmin' || user?.role === 'admin'}
+          isAdmin={veGestoras && can('leads.assign')}
           loading={bulkLoading}
         />
       )}

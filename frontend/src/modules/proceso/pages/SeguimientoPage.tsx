@@ -21,7 +21,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
-import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { copyToClipboard } from '@/shared/lib/clipboard';
@@ -88,8 +88,8 @@ function hace(dias: number | null) {
 export default function SeguimientoPage() {
   const { activeProject, activeIssuer } = useProjectContext();
   const campus = useProyectosDelAmbito<{ id: number; nombre: string }>();
-  const { user } = useAuth();
-  const esAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // De quién es cada fila: a quien ve a más de una persona (también la líder de equipo, 25/11/2026).
+  const { veGestoras: esAdmin } = usePermission();
 
   const [base, setBase] = useState<EnSeguimiento[]>([]);
   const [resumen, setResumen] = useState<ResumenSeguimiento | null>(null);
