@@ -23,6 +23,15 @@ describe('alumnos de una formación', () => {
     expect(textoEstado({ estado: 'activo', motivo_fuera: null })).toBe('Activo');
     expect(textoEstado({ estado: 'fuera', motivo_fuera: 'devuelta' })).toBe('Devuelta');
     expect(textoEstado({ estado: 'fuera', motivo_fuera: 'anulada' })).toBe('Anulada');
+    // La baja apuntada en la venta (25/11): «Baja (motivo)».
+    expect(textoEstado({ estado: 'baja', motivo_fuera: null, motivo_baja: 'desistimiento' })).toBe('Baja (Desistimiento en plazo)');
+    expect(textoEstado({ estado: 'baja', motivo_fuera: null, motivo_baja: 'impago' })).toBe('Baja (Impago)');
+    expect(textoEstado({ estado: 'baja', motivo_fuera: null })).toBe('Baja (Otro)');
+  });
+  it('filtro «De baja»', () => {
+    const conBaja = [...lista, { ...alumno(6, 'baja', 'al_dia'), motivo_baja: 'voluntaria' as const }];
+    expect(filtrarAlumnos(conBaja, 'baja').map((a) => a.venta_id)).toEqual([6]);
+    expect(filtrarAlumnos(conBaja, 'activos').map((a) => a.venta_id)).toEqual([1, 2, 5]);
   });
 });
 
@@ -36,7 +45,8 @@ describe('la lista de formaciones', () => {
     expect(ordenarFormaciones(filas, 'activos', null).map((f) => f.id)).toEqual([2, 1, 3]);
   });
   it('totales del campus', () => {
-    expect(totalesDelCampus(cifras)).toEqual({ activos: 10, impago: 2 });
-    expect(totalesDelCampus(null)).toEqual({ activos: 0, impago: 0 });
+    expect(totalesDelCampus(cifras)).toEqual({ activos: 10, impago: 2, baja: 0 });
+    expect(totalesDelCampus({ ...cifras, 4: { ...cifra(1, 0), baja: 3 } })).toEqual({ activos: 11, impago: 2, baja: 3 });
+    expect(totalesDelCampus(null)).toEqual({ activos: 0, impago: 0, baja: 0 });
   });
 });

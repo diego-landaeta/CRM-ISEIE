@@ -32,11 +32,12 @@ beforeEach(() => {
       hoy: '2026-11-24',
       regla: { curso: 3, diplomado: 6, master: 12, configurada: false },
       solo_lo_suyo: true,
-      resumen: { activos: 2, terminados: 1, total: 3, fuera: 0, al_dia: 1, pendiente: 0, impago: 1 },
+      resumen: { activos: 2, terminados: 1, baja: 1, total: 4, fuera: 0, al_dia: 1, pendiente: 0, impago: 1 },
       alumnos: [
         alumno(1, 'Ana Impago', 'activo', 'impago'),
         alumno(2, 'Berta Al Día', 'activo', 'al_dia'),
         alumno(3, 'Carla Terminó', 'terminado', 'al_dia', { fin_acceso: '2026-03-01' }),
+        alumno(4, 'Dora De Baja', 'baja', 'pendiente', { fin_acceso: '2026-11-20', fecha_baja: '2026-11-20', motivo_baja: 'desistimiento' }),
       ],
     },
   });
@@ -53,7 +54,8 @@ describe('AlumnosDeFormacion', () => {
     const cifra = (t: string) => screen.getByText(t, { selector: 'dt' }).nextElementSibling?.textContent;
     expect(cifra('Activos')).toBe('2');
     expect(cifra('Terminados')).toBe('1');
-    expect(cifra('Total')).toBe('3');
+    expect(cifra('Total')).toBe('4');
+    expect(cifra('De baja')).toBe('1');
     expect(cifra('Impago')).toBe('1');
     expect(screen.getByText('(solo los de tus ventas)')).toBeInTheDocument();
   });
@@ -68,6 +70,16 @@ describe('AlumnosDeFormacion', () => {
     expect(screen.getByText('Ana Impago')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Terminados' }));
     expect(screen.getByText('Carla Terminó')).toBeInTheDocument();
+  });
+
+  it('filtro «De baja»: el alumno con su estado «Baja (motivo)»', async () => {
+    pintar();
+    await screen.findByText('Ana Impago');
+    expect(screen.queryByText('Dora De Baja')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'De baja' }));
+    expect(screen.getByText('Dora De Baja')).toBeInTheDocument();
+    expect(screen.getByText('Baja (Desistimiento en plazo)')).toBeInTheDocument();
+    expect(screen.queryByText('Ana Impago')).not.toBeInTheDocument();
   });
 
   it('sin el permiso no sale ni pide nada', () => {

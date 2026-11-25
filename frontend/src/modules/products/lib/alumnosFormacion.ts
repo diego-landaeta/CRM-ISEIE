@@ -1,5 +1,5 @@
 import { soloFecha } from '@/shared/lib/fechas';
-import type { AlumnoFormacion, EstadoPago, ResumenAlumnos } from '../api/alumnos.api';
+import type { AlumnoFormacion, EstadoPago, MotivoBajaAlumno, ResumenAlumnos } from '../api/alumnos.api';
 
 /**
  * Formaciones · alumnos activos (CRM-ISEIE#767, gemela de CRM#1113): textos y orden de la pantalla.
@@ -28,14 +28,22 @@ export const TONO_PAGO: Record<EstadoPago, string> = {
   impago: 'bg-destructive-soft text-destructive-soft-foreground',
 };
 
-/** Lo que se lee en la columna «Estado» de un alumno. */
-export function textoEstado(a: Pick<AlumnoFormacion, 'estado' | 'motivo_fuera'>): string {
+export const TEXTO_MOTIVO_BAJA: Record<MotivoBajaAlumno, string> = {
+  desistimiento: 'Desistimiento en plazo',
+  voluntaria: 'Baja voluntaria',
+  impago: 'Impago',
+  otro: 'Otro',
+};
+
+/** Lo que se lee en la columna «Estado» de un alumno: «Baja (motivo)» si está de baja. */
+export function textoEstado(a: Pick<AlumnoFormacion, 'estado' | 'motivo_fuera'> & { motivo_baja?: MotivoBajaAlumno | null }): string {
   if (a.estado === 'activo') return 'Activo';
   if (a.estado === 'terminado') return 'Terminado';
+  if (a.estado === 'baja') return `Baja (${TEXTO_MOTIVO_BAJA[a.motivo_baja || 'otro'] || 'Otro'})`;
   return a.motivo_fuera === 'devuelta' ? 'Devuelta' : 'Anulada';
 }
 
-export type FiltroAlumnos = 'activos' | 'impago' | 'pendiente' | 'terminados' | 'todos';
+export type FiltroAlumnos = 'activos' | 'impago' | 'pendiente' | 'terminados' | 'baja' | 'todos';
 
 export function filtrarAlumnos(alumnos: AlumnoFormacion[], filtro: FiltroAlumnos): AlumnoFormacion[] {
   switch (filtro) {
@@ -43,6 +51,7 @@ export function filtrarAlumnos(alumnos: AlumnoFormacion[], filtro: FiltroAlumnos
     case 'impago': return alumnos.filter((a) => a.estado === 'activo' && a.pago === 'impago');
     case 'pendiente': return alumnos.filter((a) => a.estado === 'activo' && a.pago === 'pendiente');
     case 'terminados': return alumnos.filter((a) => a.estado === 'terminado');
+    case 'baja': return alumnos.filter((a) => a.estado === 'baja');
     default: return alumnos;
   }
 }
@@ -63,9 +72,10 @@ export function ordenarFormaciones<T extends { id: number; nombre: string }>(
 }
 
 /** Los totales del campus (la suma de sus formaciones): un alumno con dos formaciones cuenta en las dos. */
-export function totalesDelCampus(cifras: Record<string, ResumenAlumnos> | null): { activos: number; impago: number } {
+export function totalesDelCampus(cifras: Record<string, ResumenAlumnos> | null): { activos: number; impago: number; baja: number } {
   let activos = 0;
   let impago = 0;
-  for (const c of Object.values(cifras || {})) { activos += c.activos; impago += c.impago; }
-  return { activos, impago };
+  let baja = 0;
+  for (const c of Object.values(cifras || {})) { activos += c.activos; impago += c.impago; baja += c.baja ?? 0; }
+  return { activos, impago, baja };
 }

@@ -3447,6 +3447,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "GET /:id/baja",
+  "controlador": "get",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "PUT",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "PUT /:id/baja",
+  "controlador": "set",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.baja_alumno"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "DELETE",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "DELETE /:id/baja",
+  "controlador": "remove",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.baja_alumno"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "DELETE /api/conversions/:id",
   "tipo": "ruta",
   "modulo": "conversions",

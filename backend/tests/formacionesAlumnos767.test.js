@@ -125,7 +125,7 @@ describe('los alumnos de una formación', () => {
     const r = await request.get(`/api/products/${CURSO}/formacion/alumnos?projectId=${CAMPUS}`).set(como(ADMIN));
     expect(r.status).toBe(200);
     const d = r.body.data;
-    expect(d.resumen).toEqual({ activos: 2, terminados: 1, total: 3, fuera: 1, al_dia: 1, pendiente: 0, impago: 1 });
+    expect(d.resumen).toEqual({ activos: 2, terminados: 1, baja: 0, total: 3, fuera: 1, al_dia: 1, pendiente: 0, impago: 1 });
     expect(d.solo_lo_suyo).toBe(false);
     expect(d.regla).toMatchObject({ curso: 3, diplomado: 6, master: 12, configurada: false });
     const de = (v) => d.alumnos.find((a) => a.venta_id === V[v]);
@@ -161,7 +161,7 @@ describe('las cifras de la lista de formaciones', () => {
     expect(r.status).toBe(200);
     const pp = r.body.data.por_producto;
     expect(pp[CURSO]).toMatchObject({ activos: 2, impago: 1, total: 3 });
-    expect(pp[DIPLOMADO]).toEqual({ activos: 1, terminados: 0, total: 1, fuera: 0, al_dia: 0, pendiente: 1, impago: 0 });
+    expect(pp[DIPLOMADO]).toEqual({ activos: 1, terminados: 0, baja: 0, total: 1, fuera: 0, al_dia: 0, pendiente: 1, impago: 0 });
     expect(pp[DE_OTRO]).toBeUndefined();
   });
 });
