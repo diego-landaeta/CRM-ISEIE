@@ -13,7 +13,9 @@ import jwt from 'jsonwebtoken';
  *   · va con la fase 2: con el interruptor apagado (producción) no se escribe nada;
  *   · «Crear en Moodle» manda `secciones[i][dias]` solo en los módulos con días, y los
  *     avisos del plugin («sin_relativedate») llegan dichos para quien los lee;
- *   · la vista previa dice a los cuántos días se abre cada sección.
+ *   · la vista previa dice a los cuántos días se abre cada sección;
+ *   · con curso unido, vaciar un módulo que ya llevó días manda `dias = -1` («quitar»,
+ *     molinangel/Campus-Moodle#25); sin curso unido, no se manda nada.
  *
  *   npx vitest run tests/formacionesDesbloqueo1124.test.js
  */
@@ -22,7 +24,9 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const { default: modulo } = await import('../src/modules/products/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { encrypt } = await import('../src/shared/utils/crypto.js');
-const { datosDelCurso, diasDeDesbloqueo, textoDelAviso, vaciarCacheDelCampus } = await import('../src/modules/products/formacion.moodle.js');
+const {
+  datosDelCurso, diasDeDesbloqueo, diasQueSeMandan, diasTrasGuardar, QUITAR_DIAS, textoDelAviso, vaciarCacheDelCampus,
+} = await import('../src/modules/products/formacion.moodle.js');
 const { formacionSchema } = await import('../src/modules/products/formacion.validation.js');
 
 const app = express();
@@ -176,5 +180,64 @@ describe('guardar y llevar a Moodle (CRM#1124)', () => {
     // «desde» no se manda: el plugin cuenta desde el inicio del curso (s = 1).
     expect([...c.keys()].some((k) => k.endsWith('[desde]'))).toBe(false);
     expect(r.body.data.curso.avisos).toEqual([expect.stringMatching(/Fecha relativa/)]);
+  });
+});
+
+describe('vaciar los días quita la restricción en Moodle (revisión de Diego)', () => {
+  const llevar = () => request.post(`/api/products/${FORMACION}/formacion/moodle`).set(como(ADMIN)).send({ projectId: CAMPUS });
+  const enviado = () => llamadas.find((x) => x.get('wsfunction') === 'local_crm_curso_guardar');
+  const unido = () => q('SELECT curso_moodle_id, dias_secciones FROM moodle_cursos_producto WHERE product_id = $1', [FORMACION]);
+
+  it('sin base: -1 solo si la sección tenía días en el curso unido', () => {
+    const modulos = [{ titulo: 'Uno', dias_desbloqueo: null }, { titulo: 'Dos', dias_desbloqueo: null }, { titulo: 'Tres', dias_desbloqueo: 5 }];
+    expect(diasQueSeMandan(modulos, [7, null, 3])).toEqual([QUITAR_DIAS, null, 5]);
+    // Al actualizar el curso unido, -1; al crear uno nuevo, nada.
+    expect(datosDelCurso({ id: 1, project_id: 2, nombre: 'M' }, modulos, { cursoId: 701, enMoodle: [7] }).secciones[0].dias).toBe(-1);
+    expect(datosDelCurso({ id: 1, project_id: 2, nombre: 'M' }, modulos, { cursoId: 0, enMoodle: [7] }).secciones[0]).not.toHaveProperty('dias');
+    // Si el plugin no ha tocado las restricciones, se queda lo de antes; las secciones de más, también.
+    expect(diasTrasGuardar(modulos, [7], ['sin_relativedate'])).toEqual([7]);
+    expect(diasTrasGuardar(modulos.slice(0, 1), [7, 9])).toEqual([null, 9]);
+  });
+
+  it('lo que se lleva a Moodle se apunta en el curso unido', async () => {
+    const r = await llevar();
+    expect(r.status).toBe(200);
+    expect(await unido()).toEqual([{ curso_moodle_id: '701', dias_secciones: [null, 7, 30, 45] }]);
+    expect(r.body.data.formacion.cursos_moodle[0].dias_secciones).toEqual([null, 7, 30, 45]);
+  });
+
+  it('con curso unido, vaciar un módulo que tenía días manda -1', async () => {
+    const antes = (await ficha()).body.data.modulos;
+    await guardar(antes.map((m, i) => ({ id: m.id, titulo: m.titulo, dias_desbloqueo: i === 1 ? '' : m.dias_desbloqueo })));
+    const vista = await request.get(`/api/products/${FORMACION}/formacion/moodle?projectId=${CAMPUS}`).set(como(ADMIN));
+    expect(vista.body.data.desbloqueo).toEqual([null, null, 30, 45]);
+    expect(vista.body.data.quitar_desbloqueo).toEqual([null, 7, null, null]);
+
+    const r = await llevar();
+    expect(r.status).toBe(200);
+    const c = enviado();
+    expect(c.get('cursoid')).toBe('701');
+    expect(c.has('secciones[0][dias]')).toBe(false); // nunca tuvo días: no se manda nada
+    expect(c.get('secciones[1][dias]')).toBe('-1');
+    expect(c.get('secciones[2][dias]')).toBe('30');
+    expect((await unido())[0].dias_secciones).toEqual([null, null, 30, 45]);
+  });
+
+  it('una vez quitada, la siguiente vez ya no se manda', async () => {
+    await llevar();
+    expect(enviado().has('secciones[1][dias]')).toBe(false);
+  });
+
+  it('sin curso unido, vaciar no manda nada', async () => {
+    const antes = (await ficha()).body.data.modulos;
+    await guardar(antes.map((m) => ({ id: m.id, titulo: m.titulo, dias_desbloqueo: '' })));
+    await q('DELETE FROM moodle_cursos_producto WHERE product_id = $1', [FORMACION]);
+    const vista = await request.get(`/api/products/${FORMACION}/formacion/moodle?projectId=${CAMPUS}`).set(como(ADMIN));
+    expect(vista.body.data.quitar_desbloqueo).toEqual([null, null, null, null]);
+    const r = await llevar();
+    expect(r.status).toBe(200);
+    const c = enviado();
+    expect(c.get('cursoid')).toBe('0');
+    expect([...c.keys()].some((k) => k.endsWith('[dias]'))).toBe(false);
   });
 });

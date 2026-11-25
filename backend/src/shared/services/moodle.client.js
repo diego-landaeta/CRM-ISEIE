@@ -874,8 +874,9 @@ export async function guardarCursoEnMoodle(conexion, {
     params[`secciones[${i}][nombre]`] = s.nombre;
     params[`secciones[${i}][resumen]`] = s.resumen || '';
     // «Se desbloquea a los … días» (CRM#1124, plugin 1.12.0): solo con valor, para que un
-    // campus sin él no reciba una clave que no conoce.
-    if (Number.isInteger(s.dias) && s.dias > 0) params[`secciones[${i}][dias]`] = s.dias;
+    // campus sin él no reciba una clave que no conoce. -1 = quitar la restricción
+    // (molinangel/Campus-Moodle#25).
+    if (Number.isInteger(s.dias) && (s.dias > 0 || s.dias === -1)) params[`secciones[${i}][dias]`] = s.dias;
   });
   const r = await llamar(conexion, 'local_crm_curso_guardar', params, opciones);
   if (!r?.cursoid) throw new MoodleError('El campus no ha devuelto el curso.', 'SIN_CURSO');

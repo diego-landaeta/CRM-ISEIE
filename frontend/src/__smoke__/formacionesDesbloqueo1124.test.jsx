@@ -8,7 +8,9 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
  * CRM#1124 · Formaciones: «se desbloquea a los X días» por módulo (gemelas).
  *   · el formulario: de lo guardado a lo escrito, y solo se manda con la fase 2 encendida;
  *   · la ficha enseña el campo en cada módulo solo si se puede llevar a Moodle, y lo guarda;
- *   · «Crear en Moodle» dice a los cuántos días se abre cada sección y enseña los avisos.
+ *   · «Crear en Moodle» dice a los cuántos días se abre cada sección y enseña los avisos;
+ *   · si un módulo que ya llevó días a Moodle se vacía, no es «desde el principio»: se dice
+ *     que se quitará la restricción al llevarlo (y la vista previa lo enseña).
  *
  *   npx vitest run src/__smoke__/formacionesDesbloqueo1124.test.jsx
  */
@@ -24,7 +26,7 @@ vi.mock('@/modules/products/components/AlumnosDeFormacion', () => ({ default: ()
 
 const { default: FormacionEditorPage } = await import('@/modules/products/pages/FormacionEditorPage');
 const { default: LlevarAMoodle } = await import('@/modules/products/components/LlevarAMoodle');
-const { datosDeForm, formDesde, problemaDelForm } = await import('@/modules/products/lib/formacionForm');
+const { datosDeForm, diasDelCursoUnido, formDesde, problemaDelForm } = await import('@/modules/products/lib/formacionForm');
 
 beforeEach(() => { get.mockReset(); post.mockReset(); put.mockReset(); toast.mockReset(); });
 afterEach(cleanup);
@@ -125,5 +127,38 @@ describe('Crear en Moodle', () => {
     fireEvent.click(screen.getByRole('button', { name: /Actualizar en Moodle/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.objectContaining({ title: 'Aviso de Moodle', variant: 'warning' })));
+  });
+});
+
+describe('vaciar los días con el curso ya llevado a Moodle (revisión de Diego)', () => {
+  it('la ficha no dice «desde el principio»: dice que se quitará al llevarlo', async () => {
+    const f = { ...formacion({ disponible: true, conectado: true }), cursos_moodle: [{ curso_moodle_id: 9, curso_nombre: 'Máster en Voz', dias_secciones: [null, 7] }] };
+    get.mockImplementation(respuestas(f));
+    abrirFicha();
+    const segundo = await screen.findByLabelText('Se desbloquea a los … días, módulo 2');
+    expect(screen.queryByText(/se quitará la restricción/)).toBeNull();
+    fireEvent.change(segundo, { target: { value: '' } });
+    expect(screen.getByText(/Ahora tiene 7 días en Moodle: se quitará la restricción al llevarlo a Moodle/)).toBeInTheDocument();
+    // El primero nunca tuvo días en Moodle: ese sí es «desde el principio».
+    expect(screen.getAllByText(/vacío: desde el principio/)).toHaveLength(1);
+  });
+
+  it('sin curso unido, vaciar es «desde el principio»', () => {
+    expect(diasDelCursoUnido({ cursos_moodle: [] })).toEqual([]);
+    expect(diasDelCursoUnido({ cursos_moodle: [{ curso_moodle_id: 9, curso_nombre: null, dias_secciones: [null, 7] }] })).toEqual([0, 7]);
+  });
+
+  it('la vista previa dice que se quita la restricción', async () => {
+    const f = formacion({ disponible: true, conectado: true });
+    get.mockResolvedValue({
+      success: true,
+      data: {
+        accion: 'actualizar', nombre: f.nombre, tipo: 'master', inicio: null, fin: null, secciones: ['Fundamentos', 'Práctica'],
+        desbloqueo: [null, null], quitar_desbloqueo: [null, 7], cursos_unidos: [{ id: 9, nombre: 'Máster en Voz', url: null }],
+      },
+    });
+    render(<LlevarAMoodle formacion={{ ...f, cursos_moodle: [{ curso_moodle_id: 9, curso_nombre: 'Máster en Voz' }] }} campusId={1} pendiente={false} alGuardar={() => {}} />);
+    expect(await screen.findByText(/se quita la restricción de 7 días/)).toBeInTheDocument();
+    expect(screen.queryByText(/se desbloquea a los/)).toBeNull();
   });
 });

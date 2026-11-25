@@ -203,7 +203,9 @@ export const enlaceAlCurso = (urlCampus, cursoId) => (urlCampus && cursoId ? `${
 // ─── Lo que se manda ──────────────────────────────────────────────────────
 
 /** Lo que se manda al plugin, a partir de la formación y sus módulos. */
-export function datosDelCurso(formacion, modulos, { cursoId = 0, categoria = 0, nombreCorto = '' } = {}) {
+export function datosDelCurso(formacion, modulos, { cursoId = 0, categoria = 0, nombreCorto = '', enMoodle = [] } = {}) {
+  // Un curso nuevo no tiene restricciones que quitar: lo de antes solo cuenta al actualizar.
+  const dias = diasQueSeMandan(modulos, cursoId ? enMoodle : []);
   return {
     cursoId,
     idnumber: idnumberDe(formacion.project_id, formacion.id),
@@ -212,12 +214,12 @@ export function datosDelCurso(formacion, modulos, { cursoId = 0, categoria = 0, 
     categoria,
     inicio: marcaDeDia(formacion.fecha_inicio),
     fin: marcaDeDia(formacion.fecha_fin),
-    secciones: modulos.map((m) => ({
+    secciones: modulos.map((m, i) => ({
       nombre: m.titulo.slice(0, 255),
       resumen: m.descripcion ? textoParaElCampus(m.descripcion) : '',
-      // «Se desbloquea a los … días» (CRM#1124): solo con valor; sin él, el plugin deja la
-      // restricción de la sección como esté.
-      ...(diasDeDesbloqueo(m) ? { dias: diasDeDesbloqueo(m) } : {}),
+      // «Se desbloquea a los … días» (CRM#1124): los días, -1 para quitarlos o nada (el
+      // plugin deja la restricción de la sección como esté).
+      ...(dias[i] != null ? { dias: dias[i] } : {}),
     })),
   };
 }
@@ -227,6 +229,39 @@ export function diasDeDesbloqueo(m) {
   const n = Number(m?.dias_desbloqueo);
   return Number.isInteger(n) && n > 0 ? n : null;
 }
+
+/** `dias = -1`: quitar la restricción de la sección (plugin con molinangel/Campus-Moodle#25). */
+export const QUITAR_DIAS = -1;
+
+/**
+ * Los días que el CRM dejó en cada sección del curso unido la última vez que lo llevó a
+ * Moodle, por posición (`moodle_cursos_producto.dias_secciones`). Vacío si nunca.
+ */
+export const diasEnMoodle = (unido) => (Array.isArray(unido?.dias_secciones) ? unido.dias_secciones : []);
+
+/**
+ * Qué va en `dias` de cada sección: los días del módulo si los tiene; -1 si se ha quedado sin
+ * ellos y en Moodle esa sección sí los tenía (si no, la restricción se quedaría puesta); y
+ * nada (null) en otro caso, para que un plugin sin «quitar» no reciba la clave.
+ */
+export function diasQueSeMandan(modulos, enMoodle = []) {
+  return modulos.map((m, i) => diasDeDesbloqueo(m) ?? (Number(enMoodle[i]) > 0 ? QUITAR_DIAS : null));
+}
+
+/**
+ * Lo que queda en Moodle tras guardar, para la próxima vez. Si el plugin avisa de que no ha
+ * tocado las restricciones (sin «Fecha relativa», o un curso que no creó el CRM), lo de
+ * antes. Las secciones de más, que no se tocan, conservan lo que tuvieran.
+ */
+export function diasTrasGuardar(modulos, enMoodle = [], avisos = []) {
+  if (avisos.some((a) => a === 'sin_relativedate' || a === 'curso_no_del_crm')) return enMoodle;
+  const sobrantes = enMoodle.slice(modulos.length).map((d) => (Number(d) > 0 ? Number(d) : null));
+  return [...modulos.map(diasDeDesbloqueo), ...sobrantes];
+}
+
+/** Para la vista previa: en cada sección, los días que se le quitan en Moodle, o null. */
+export const quitarDesbloqueo = (modulos, enMoodle = []) =>
+  diasQueSeMandan(modulos, enMoodle).map((d, i) => (d === QUITAR_DIAS ? Number(enMoodle[i]) : null));
 
 /**
  * Lo que el plugin dice que no ha podido hacer, sin fallar, dicho para quien lo lee
@@ -249,7 +284,8 @@ async function prepararFormacion(productId, projectId) {
 
   const [{ rows: modulos }, { rows: unidos }] = await Promise.all([
     query('SELECT titulo, descripcion, dias_desbloqueo FROM product_modules WHERE product_id = $1 ORDER BY orden, id', [productId]),
-    query('SELECT curso_moodle_id, curso_nombre FROM moodle_cursos_producto WHERE product_id = $1 AND project_id = $2 ORDER BY curso_moodle_id',
+    query(`SELECT curso_moodle_id, curso_nombre, dias_secciones FROM moodle_cursos_producto
+            WHERE product_id = $1 AND project_id = $2 ORDER BY curso_moodle_id`,
       [productId, projectId]),
   ]);
   return { formacion, modulos, unidos };
@@ -290,6 +326,9 @@ export async function vistaPrevia(productId, projectId, { fetchImpl } = {}) {
     secciones: modulos.map((m) => m.titulo),
     // A los cuántos días se desbloquea cada sección (null = desde el principio), CRM#1124.
     desbloqueo: modulos.map(diasDeDesbloqueo),
+    // Las secciones a las que se les quita la restricción que tenían en Moodle: los días que
+    // tenían, o null. Solo al actualizar el único curso unido.
+    quitar_desbloqueo: quitarDesbloqueo(modulos, unidos.length === 1 ? diasEnMoodle(unidos[0]) : []),
     cursos_unidos: unidos.map((u) => ({
       id: Number(u.curso_moodle_id), nombre: u.curso_nombre || null, url: enlaceAlCurso(conexion.url, Number(u.curso_moodle_id)),
     })),
@@ -335,6 +374,7 @@ export async function llevarAMoodle(productId, projectId, {
   const conexion = await conexionOError(projectId);
   const opciones = fetchImpl ? { fetchImpl } : undefined;
   const cursoId = unidos[0] ? Number(unidos[0].curso_moodle_id) : 0;
+  const enMoodle = cursoId ? diasEnMoodle(unidos[0]) : [];
 
   // Al crear: la categoría y el nombre corto. Al actualizar, el plugin no los cambia.
   let cat = 0; let corto = ''; let base = ''; const ocupados = [];
@@ -360,7 +400,7 @@ export async function llevarAMoodle(productId, projectId, {
   let r;
   for (let intento = 0; ; intento += 1) {
     try {
-      r = await guardarCursoEnMoodle(conexion, datosDelCurso(formacion, modulos, { cursoId, categoria: cat, nombreCorto: corto }), opciones);
+      r = await guardarCursoEnMoodle(conexion, datosDelCurso(formacion, modulos, { cursoId, categoria: cat, nombreCorto: corto, enMoodle }), opciones);
       break;
     } catch (err) {
       // Moodle dice que el nombre corto ya está cogido (uno creado entretanto, o un campus
@@ -375,6 +415,13 @@ export async function llevarAMoodle(productId, projectId, {
   }
 
   await cursosProducto.unir({ productId, projectId, curso: { id: r.cursoId, nombre: r.nombre }, userId, ip });
+  // Lo que se ha dejado en cada sección, para saber la próxima vez si hay que quitarlo (-1).
+  // Si Moodle devuelve otro curso, lo de antes no vale: se empieza de cero.
+  const quedan = diasTrasGuardar(modulos, r.cursoId === cursoId ? enMoodle : [], r.avisos || []);
+  await query(
+    `UPDATE moodle_cursos_producto SET dias_secciones = $4::jsonb
+      WHERE product_id = $1 AND project_id = $2 AND curso_moodle_id = $3`,
+    [productId, projectId, r.cursoId, JSON.stringify(quedan)]);
   vaciarCacheCursosProducto();
   // El curso nuevo ya tiene su nombre corto: la próxima lectura tiene que verlo.
   cache.delete(Number(projectId));

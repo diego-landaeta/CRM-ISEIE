@@ -167,6 +167,7 @@ export default function LlevarAMoodle({ formacion, campusId, pendiente, alGuarda
                     <li key={`${i}-${s}`}>
                       {s}
                       {vista.desbloqueo?.[i] ? <span className="text-xs text-muted-foreground"> · se desbloquea a los {vista.desbloqueo[i]} días</span> : null}
+                      {vista.quitar_desbloqueo?.[i] ? <span className="text-xs font-medium text-warning"> · se quita la restricción de {vista.quitar_desbloqueo[i]} días</span> : null}
                     </li>
                   ))}
                 </ol>

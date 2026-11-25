@@ -30,6 +30,17 @@ export const moduloVacio = (): ModuloForm => ({ clave: nuevaClave(), titulo: '',
 /** El mismo tope que el servidor y el plugin de Moodle: diez años. */
 export const MAX_DIAS_DESBLOQUEO = 3650;
 
+/**
+ * Los días que tiene cada sección (por posición) en el curso unido, según lo último que el
+ * CRM llevó a Moodle; 0 donde no tiene. Sin un único curso unido, nada: al crear el curso
+ * no hay restricciones que quitar.
+ */
+export function diasDelCursoUnido(f?: Pick<Formacion, 'cursos_moodle'> | null): number[] {
+  const unidos = f?.cursos_moodle ?? [];
+  if (unidos.length !== 1) return [];
+  return (unidos[0].dias_secciones ?? []).map((d) => (Number(d) > 0 ? Number(d) : 0));
+}
+
 const txt = (v: unknown) => (v == null ? '' : String(v));
 
 export function formDesde(f?: Formacion | null): FormacionForm {

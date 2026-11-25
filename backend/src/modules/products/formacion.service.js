@@ -75,7 +75,7 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
       [productId]
     ),
     query(
-      `SELECT curso_moodle_id, curso_nombre FROM moodle_cursos_producto
+      `SELECT curso_moodle_id, curso_nombre, dias_secciones FROM moodle_cursos_producto
         WHERE product_id = $1 AND project_id = $2 ORDER BY curso_moodle_id`,
       [productId, p.project_id]
     ),
@@ -117,7 +117,11 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
       vigente_desde: fechaISO(t.vigente_desde),
       vigente_hasta: fechaISO(t.vigente_hasta),
     })),
-    cursos_moodle: cursos.map((c) => ({ curso_moodle_id: Number(c.curso_moodle_id), curso_nombre: c.curso_nombre })),
+    cursos_moodle: cursos.map((c) => ({
+      curso_moodle_id: Number(c.curso_moodle_id), curso_nombre: c.curso_nombre,
+      // Los días que el CRM dejó en cada sección la última vez que lo llevó a Moodle (CRM#1124).
+      dias_secciones: Array.isArray(c.dias_secciones) ? c.dias_secciones : [],
+    })),
   };
 }
 

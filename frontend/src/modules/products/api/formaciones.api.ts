@@ -61,7 +61,11 @@ export interface Formacion {
   horas_de_los_modulos: number;
   tutoras: TutoraFormacion[];
   /** `url`: el enlace al curso en el Moodle del campus (si está conectado). */
-  cursos_moodle: Array<{ curso_moodle_id: number; curso_nombre: string | null; url?: string | null }>;
+  cursos_moodle: Array<{
+    curso_moodle_id: number; curso_nombre: string | null; url?: string | null;
+    /** Los días que el CRM dejó en cada sección la última vez que lo llevó a Moodle, por posición (CRM#1124). */
+    dias_secciones?: Array<number | null>;
+  }>;
   /** Fase 2: `disponible` = interruptor + plugin + permiso `moodle.crear_cursos`; `conectado` = el campus tiene su Moodle. */
   moodle?: { disponible: boolean; conectado: boolean };
 }
@@ -105,6 +109,8 @@ export interface VistaPreviaMoodle {
   secciones: string[];
   /** A los cuántos días se desbloquea cada sección, en el mismo orden (null = desde el principio), CRM#1124. */
   desbloqueo?: Array<number | null>;
+  /** Las secciones a las que se les quita la restricción que tienen en Moodle: sus días, o null (se manda `dias = -1`). */
+  quitar_desbloqueo?: Array<number | null>;
   cursos_unidos: Array<{ id: number; nombre: string | null; url: string | null }>;
   /** Solo al crear (al actualizar, Moodle deja la categoría, el nombre corto y la visibilidad como estén). */
   categoria?: CategoriaElegida | null;
