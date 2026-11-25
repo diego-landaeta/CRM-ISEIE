@@ -2,7 +2,7 @@ import * as Proceso from './proceso.service.js';
 import { crearPasoSchema, editarPasoSchema, reordenarSchema, ajustarPasoSchema, anadirSeguimientoSchema } from './proceso.validation.js';
 import { leadsToWasapiCsv, leadsToWasapiXlsx, detectCountry } from '../../shared/utils/wasapiCsv.js';
 import { listaDelAmbito } from '../../shared/utils/ambito.js';
-import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, personasDentro, tieneRol } from '../../shared/utils/roles.js';
 
 export async function listarPasos(req, res, next) {
   try {
@@ -52,11 +52,13 @@ export async function desactivarPaso(req, res, next) {
 //
 // Con equipo comercial (09/11/2026): la suya y la de sus gestoras, o la de
 // una de ellas si la pide.
-async function deQuienEsLaCola(req) {
+export async function deQuienEsLaCola(req) {
   const alcance = await alcanceComercial(req.user);
   if (alcance && alcance.length > 1) return personasDentro(alcance, req.query.gestoraId);
-  const rol = req.user?.role;
-  if (rol === 'admin' || rol === 'superadmin') {
+  // Quien ve el campus entero (admin, superadmin, soporte): todo, o la de una.
+  // Por alcance, no por rol principal (25/11/2026): soporte tiene la Cola y le
+  // salía vacía, porque solo el admin y el superadmin pasaban de aquí.
+  if (tieneRol(req.user, 'superadmin', 'admin', 'soporte')) {
     return req.query.gestoraId ? Number(req.query.gestoraId) : null;
   }
   return req.user?.userId || -1;

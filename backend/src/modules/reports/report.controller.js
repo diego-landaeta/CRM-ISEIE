@@ -10,7 +10,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto, alcanceDelMcp } from '../mcp/mcp.acceso.js';
-import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro, tieneRol } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
 
 // A que proyectos se acota el informe.
@@ -52,8 +52,10 @@ export async function overview(req, res, next) {
 export async function asesoraDelInforme(req) {
   const alcance = await alcanceComercial(req.user);
   if (alcance && alcance.length > 1) return personasDentro(alcance, req.query.asesoraId);
-  const rol = req.user?.role;
-  if (rol === 'admin' || rol === 'superadmin') {
+  // Quien ve el campus entero (admin, superadmin, soporte): todo, o la asesora
+  // que pida. Por alcance, no por rol (25/11/2026): soporte tiene Reportes y
+  // le salían vacíos, porque solo el admin y el superadmin pasaban de aquí.
+  if (tieneRol(req.user, 'superadmin', 'admin', 'soporte')) {
     return req.query.asesoraId ? Number(req.query.asesoraId) : null;
   }
   return req.user?.userId || -1;
