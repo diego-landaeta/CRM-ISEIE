@@ -41,6 +41,14 @@ const MOTIVOS: Record<string, string> = {
 export function estadoDeCuota(c: CuotaCobroAuto, e: CobroAutomatico): { texto: string; tono: 'ok' | 'info' | 'warn' | 'bad' } {
   if (c.guarda_tarjeta) return { texto: 'La paga el alumno con su link y, al pagarla, guarda la tarjeta para las demás.', tono: 'info' };
   if (c.estado === 'cobrada') return { texto: 'Cobrada por Stripe.', tono: 'ok' };
+  // CRM#1103: Stripe ya no la cobrará. Sigue pendiente: se cobra con un link.
+  if (c.estado === 'cancelada') {
+    return {
+      texto: `Cobro automático cancelado en Stripe${c.cancelada_el ? ` el ${fechaCorta(c.cancelada_el)}` : ''}`
+        + `${c.cancelada_motivo ? `: ${c.cancelada_motivo}` : '.'} Sigue pendiente: mándale un link de pago.`,
+      tono: 'bad',
+    };
+  }
   if (c.estado === 'fallida') {
     const motivo = MOTIVOS[c.error_codigo || ''] || c.error_codigo || 'rechazada';
     return {
@@ -78,8 +86,20 @@ export function CobroAutomaticoDetalle({ estado, onQuitar, quitando = false }: {
         <p className="text-sm font-semibold flex-1">Cobro automático con Stripe</p>
         {estado.activo
           ? <span className="inline-flex items-center gap-1 text-xs font-semibold text-success-soft-foreground"><CheckCircle size={13} weight="fill" aria-hidden="true" /> Activo</span>
-          : <span className="text-xs font-semibold text-muted-foreground">Quitado</span>}
+          : estado.cancelado_en_stripe
+            ? <span className="text-xs font-semibold text-destructive">Cancelado en Stripe</span>
+            : <span className="text-xs font-semibold text-muted-foreground">Quitado</span>}
       </div>
+      {!estado.activo && estado.cancelado_en_stripe && (
+        <p role="alert" className="text-xs flex items-start gap-1.5 text-destructive">
+          <WarningCircle size={13} weight="fill" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+          <span>
+            Stripe dejó de cobrar las cuotas el {fechaCorta(estado.cancelado_en_stripe.el)}
+            {estado.cancelado_en_stripe.motivo ? `: ${estado.cancelado_en_stripe.motivo}` : '.'} Las que quedaban siguen
+            pendientes: mándale un link de pago de cada una desde el plan de cuotas.
+          </span>
+        </p>
+      )}
       <p className="text-xs flex items-center gap-1.5">
         <CreditCard size={13} weight="bold" aria-hidden="true" />
         {tarjeta

@@ -567,6 +567,9 @@ export async function generarPlan(req, res, next) {
     const conLinkAhora = soloLaPrimera ? [] : await model.cuotasPendientes(destino.conversionId);
     const elegidas = conLinkAhora.filter((c) => !pedidas || pedidas.has(Number(c.id)));
     const nuevas = elegidas.filter((c) => !c.link_id);
+    // CRM#1103: una cuota que Stripe no pudo cobrar (o dejó de cobrar) puede tener aún su
+    // factura pagable en Stripe: se anula antes de crear su link (nunca dos maneras de pagar).
+    await cobroAuto.antesDeUnLinkDeCuota(destino.projectId, nuevas.map((c) => c.id));
     // Con el cobro automático activo (de antes), los links que se creen guardan la tarjeta.
     const guardaTarjeta = await cobroAuto.guardaTarjetaPara(destino.conversionId);
     creados.push(...await service.crearLinksDeCuotas({

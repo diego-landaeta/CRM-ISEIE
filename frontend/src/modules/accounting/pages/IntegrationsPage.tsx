@@ -76,6 +76,11 @@ const EVENTOS_DEL_WEBHOOK = [
   // El cobro automático de las cuotas (gemela de CRM 309): Stripe cobra cada cuota con una
   // factura de su calendario; pagada, salda su cuota; fallida, se avisa y se manda su link.
   'invoice.paid', 'invoice.payment_failed',
+  // CRM#1103: Stripe deja de cobrar una cuota (suscripción cancelada o impagada,
+  // calendario cancelado, factura anulada o incobrable): sigue pendiente, marcada y con aviso.
+  'customer.subscription.deleted', 'customer.subscription.updated',
+  'subscription_schedule.canceled', 'subscription_schedule.aborted',
+  'invoice.voided', 'invoice.marked_uncollectible',
   // Los links creados directamente en Stripe (gemela de CRM#1019): salen en Links de
   // pago como «Creado en Stripe» y su cobro se busca por el correo o el móvil.
   'payment_link.created', 'payment_link.updated',

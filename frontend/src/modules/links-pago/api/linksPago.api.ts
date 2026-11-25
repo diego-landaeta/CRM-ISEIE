@@ -300,7 +300,8 @@ export interface CuotaCobroAuto {
   numero: number;
   vence: string;
   importe: number;
-  estado: 'programada' | 'cobrada' | 'fallida' | 'quitada' | null;
+  /** `cancelada`: Stripe ya no la cobrará (CRM#1103); sigue pendiente y se cobra con un link. */
+  estado: 'programada' | 'cobrada' | 'fallida' | 'quitada' | 'cancelada' | null;
   fecha_programada: string | null;
   importe_programado: number | null;
   desfasada: boolean;
@@ -311,6 +312,9 @@ export interface CuotaCobroAuto {
   historial: Array<{ el: string; que: string; [k: string]: unknown }>;
   guarda_tarjeta: boolean;
   problema: string | null;
+  /** CRM#1103: cuándo y por qué dejó de cobrarla Stripe. Opcionales: un servidor anterior no los manda. */
+  cancelada_el?: string | null;
+  cancelada_motivo?: string | null;
 }
 
 /** El cobro automático de las cuotas de una venta: lo cobra Stripe en las fechas del plan (309). */
@@ -320,6 +324,8 @@ export interface CobroAutomatico {
   reintento_dias: number | null;
   activo: boolean;
   activado_el: string | null;
+  /** CRM#1103: el cobro automático lo canceló Stripe (el alumno, el panel o un impago). */
+  cancelado_en_stripe?: { el: string; motivo: string | null } | null;
   tarjeta: { marca: string | null; ultimos4: string | null; caduca: string | null; guardada_el: string | null } | null;
   stripe_schedule_id: string | null;
   sincronizado_el: string | null;
