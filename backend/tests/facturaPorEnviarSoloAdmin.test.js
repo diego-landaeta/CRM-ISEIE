@@ -186,6 +186,24 @@ describe('25/11 · «Por enviar» (FACTURA_ENVIO_REVISION_ADMIN)', () => {
     expect(conPdf()).toHaveLength(0);
   });
 
+  it('«Enviar por WhatsApp»: queda enviada, con la nota y quién; sale de «Por enviar» y no se marca dos veces', async () => {
+    const invModel = await import('../src/modules/invoices/invoices.model.js');
+    const v = await venta('whatsapp.pe25@example.com', 150);
+    await fichaCompleta(v, '00000008P');
+    await fa.alCobrar({ conversionId: v.id, paymentId: await pagar(v, 150) });
+    const [inv] = await facturasDe(v);
+    expect(inv.envio_nota).toBe(envio.NOTA_POR_ENVIAR);
+    const r = await invModel.markSentWhatsapp(inv.id, 'Admin Prueba');
+    expect(r.envio_nota).toBe('Enviada por WhatsApp (por Admin Prueba)');
+    const [despues] = await facturasDe(v);
+    expect(despues.sent_at).toBeTruthy();
+    expect(despues.sent_to_email).toBeNull();
+    expect(conPdf()).toHaveLength(0);
+    const p = await panelMod.panel({ projectIds: [proyecto.id] });
+    expect(p.por_enviar.map((i) => i.id)).not.toContain(inv.id);
+    expect(await invModel.markSentWhatsapp(inv.id, 'Otra')).toBeNull();
+  });
+
   it('apagado: como hasta hoy, se le pide el formulario al alumno', async () => {
     delete process.env.FACTURA_ENVIO_REVISION_ADMIN;
     const v = await venta('apagado.pe25@example.com', 200);

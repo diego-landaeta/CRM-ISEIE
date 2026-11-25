@@ -173,7 +173,7 @@ const LISTA = [
           },
           {
             "titulo": "El envío de la factura, solo administración",
-            "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La factura no se le manda sola al alumno: queda «Por enviar» en Facturación › Facturación automática, y administración la verifica y la envía. La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
+            "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La factura no se le manda sola al alumno: queda «Por enviar» en Facturación › Facturación automática, y administración la verifica y la envía: por correo desde el CRM o por WhatsApp (se descarga el PDF y queda marcada «Enviada por WhatsApp»). La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
             "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
             "ruta": "/accounting/facturas/automatica",
             "boton": "Ir a Facturación automática"
