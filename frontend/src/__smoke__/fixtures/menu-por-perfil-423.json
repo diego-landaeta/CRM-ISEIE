@@ -66,6 +66,7 @@
   "Sistema › Manual del CRM",
   "Sistema › Status",
   "Sistema › Registro",
+  "Sistema › Correos",
   "Tutores › Consultas",
   "Análisis › Pregunta a tus datos",
   "Conexión › Moodle"
@@ -135,6 +136,7 @@
   "Sistema › Manual del CRM",
   "Sistema › Status",
   "Sistema › Registro",
+  "Sistema › Correos",
   "Tutores › Consultas",
   "Análisis › Pregunta a tus datos",
   "Conexión › Moodle"
@@ -204,6 +206,7 @@
   "Sistema › Manual del CRM",
   "Sistema › Status",
   "Sistema › Registro",
+  "Sistema › Correos",
   "Tutores › Consultas",
   "Análisis › Pregunta a tus datos"
  ],
@@ -256,7 +259,8 @@
   "Sistema › Notificaciones",
   "Sistema › Soporte",
   "Sistema › Manual del CRM",
-  "Sistema › Status"
+  "Sistema › Status",
+  "Sistema › Correos"
  ],
  "tutor": [
   "Tutores › Mis cursos",
@@ -332,6 +336,7 @@
   "Sistema › Manual del CRM",
   "Sistema › Status",
   "Sistema › Registro",
+  "Sistema › Correos",
   "Tutores › Consultas",
   "Análisis › Pregunta a tus datos",
   "Conexión › Moodle"

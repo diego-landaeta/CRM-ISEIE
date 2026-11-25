@@ -80,7 +80,9 @@ export const PUERTAS = [
       'borrarColaboracion', 'ajustes', 'calcular', 'formacionesSinTutor', 'marcarBusqueda',
       'anunciosDeTutores', 'pagosSinFormacion', 'retirarTutor', 'reactivarTutor', 'cambiarEstadoComision',
       // Sus campus y empresas (#187, staging 22/10): exigirTutorGestionable.
-      'asignarCampus', 'comprobarCampus', 'asignarEmpresa', 'quitarEmpresa', 'cambiarDisponible'],
+      'asignarCampus', 'comprobarCampus', 'asignarEmpresa', 'quitarEmpresa', 'cambiarDisponible',
+      // La redactora en Moodle (CRM#1026): exigirTutorGestionable.
+      'redaccionMoodle'],
   },
   {
     id: 'tutores.ficha_ajena', modulo: 'tutores', regla: 'tutoresGestionar',

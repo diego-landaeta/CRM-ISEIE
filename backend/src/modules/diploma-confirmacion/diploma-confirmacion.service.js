@@ -33,7 +33,8 @@ import { normalizarNombreDiploma, dniDiploma } from '../certifex/certifex.valida
   LO QUE NO HACE TODAVÍA (espera decisión o material; ver `alConfirmar`):
     · Emitir solo al confirmar o al vencer. Hoy el diploma lo sigue emitiendo una
       persona en Diplomas; esto solo le dice que ya puede.
-    · Pedir la confirmación sola cuando Moodle avisa de que el alumno terminó.
+  (Pedirla sola cuando Moodle avisa de que el alumno terminó con todo corregido
+  es el paso 1: diploma-confirmacion.moodle.js, con DIPLOMA_CONFIRMACION_AUTO.)
 
   EL ENLACE. Aleatorio (24 bytes) y firmado con la clave del servidor; en la
   base solo su sha256. Vale una vez (se quema al contestar), caduca a los 7 días
@@ -70,6 +71,13 @@ const caducidad = (desde = new Date()) => new Date(desde.getTime() + cfg.diasDeP
 
 const QUIEN_ALUMNO = 'El alumno (enlace de confirmación del CRM)';
 
+/**
+ * «Quién» la pide cuando la pide el aviso de Moodle de curso terminado (paso 1,
+ * diploma-confirmacion.moodle.js). Se compara por identidad: nadie puede llegar a
+ * `pedir` con este objeto desde una petición.
+ */
+export const DESDE_MOODLE = Object.freeze({ userId: null, email: 'Moodle (curso terminado)' });
+
 // ── Pedir la confirmación (desde el CRM) ─────────────────────────────────────
 
 /** Las solicitudes de Certifex de esas matrículas, por id. */
@@ -98,7 +106,8 @@ function proyectoDe(centro, proyectos) {
  */
 export async function pedir(user, matriculaIds) {
   if (!cfg.activa()) throw new AppError('La confirmación de datos del diploma no está encendida.', 409, 'APAGADA');
-  const alcance = await alcanceDe(user);
+  // Pedida sola por el aviso de Moodle (paso 1): no hay persona ni alcance que mirar.
+  const alcance = user === DESDE_MOODLE ? null : await alcanceDe(user);
   const cands = await candidatosDe(matriculaIds);
   exigirMatriculas(alcance, matriculaIds, (id) => cands.get(id)?.centro);
 

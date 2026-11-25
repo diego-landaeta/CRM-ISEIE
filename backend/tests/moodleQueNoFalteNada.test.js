@@ -117,7 +117,10 @@ describe('Alumnos sin mensajes: alumno es cualquier rol que no sea del equipo', 
     expect(esAlumno({ roles: ['student'] })).toBe(true);
     expect(esAlumno({ roles: ['alumno'] })).toBe(true);
     expect(esAlumno({ roles: ['teacher'] })).toBe(false);
-    expect(esAlumno({ roles: ['student', 'manager'] })).toBe(false);
+    // Con rol de alumno puede entregar aunque tenga otro del equipo: en Moodle los permisos
+    // se suman y `mod/assign:submit` viene del de alumno (CRM#1062).
+    expect(esAlumno({ roles: ['student', 'manager'] })).toBe(true);
+    expect(esAlumno({ roles: ['manager', 'editingteacher'] })).toBe(false);
     expect(esAlumno({ roles: [] })).toBe(false);
   });
 

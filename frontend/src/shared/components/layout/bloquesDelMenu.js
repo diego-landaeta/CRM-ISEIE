@@ -67,10 +67,11 @@ export const REUBICACIONES = [
   ['Tutores › Comisiones', 'Finanzas › Comisiones de tutores', { despuesDe: 'Comisiones' }],
   ['Tutores', 'Académico'],
   // CONFIGURACIÓN: integraciones y conexiones juntas, y lo de administrar.
-  // (En ISEIE no hay «Claves y variables» ni «Correos» en Sistema.)
+  // (En ISEIE no hay «Claves y variables» en Sistema; «Correos» llegó con la #701.)
   ['Finanzas › Integraciones', 'Configuración › Integraciones'],
   ['Conexión', 'Configuración'],
   ['Sistema › Registro', 'Configuración › Registro'],
+  ['Sistema › Correos', 'Configuración › Correos'],
   ['Sistema › Status', 'Configuración › Status'],
 ];
 

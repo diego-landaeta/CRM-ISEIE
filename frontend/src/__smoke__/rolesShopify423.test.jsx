@@ -96,7 +96,7 @@ describe('<PermisosDePersona>', () => {
       excepciones: { 'diplomas.view': true },
       rolAMedida: null,
       rolesAMedida: [],
-      registro: [{ id: 1, cuando: '2026-10-21T10:00:00Z', quien_nombre: 'Diego', clave: 'diplomas.view', antes: 'como su rol (no)', despues: 'sí', origen: 'ficha_usuario' }],
+      registro: [{ id: 1, cuando: '2026-10-21T10:00:00Z', quien_nombre: 'Diego', clave: 'diplomas.view', nombre: 'Diplomas · Ver diplomas', antes: 'como su rol (no)', despues: 'sí', origen: 'ficha_usuario' }],
       puedeEditar: true,
     });
     api.guardarExcepciones.mockResolvedValue({});
@@ -109,7 +109,9 @@ describe('<PermisosDePersona>', () => {
     expect(screen.getByText('Excepción suya: dado a mano')).toBeTruthy();
     fireEvent.change(screen.getByLabelText('Buscar un permiso'), { target: { value: 'ver prospectos' } });
     expect(screen.getByText('Su rol: Gestora')).toBeTruthy();
-    expect(screen.getByText(/Diego · diplomas.view: como su rol \(no\) → sí/)).toBeTruthy();
+    // #703: el registro, con el nombre del permiso y no su clave.
+    const apunte = document.querySelector('[data-registro] li');
+    expect(apunte.textContent).toMatch(/Diego · Diplomas · Ver diplomas: como su rol \(no\) → sí/);
   });
 
   it('volver a «Como su rol» quita la excepción', async () => {
