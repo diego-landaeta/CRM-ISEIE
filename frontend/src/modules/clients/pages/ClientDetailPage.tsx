@@ -215,8 +215,10 @@ export default function ClientDetailPage() {
   const totalPendiente = totalFacturado - totalPagado;
   const interacciones = lead.interactions || [];
 
+  // pb-24: el botón flotante de atajos (el rayo, abajo a la derecha) no tapa lo último
+  // de la ficha, sobre todo en el móvil (QA del 25/11/2026). Como en Diplomas y Emisiones.
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px]">
+    <div className="space-y-5 pb-24 max-w-[1100px]">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">

@@ -279,8 +279,8 @@ export const TIPOS = {
   // cuenta o un curso—, casi siempre por un impago que suspende Make. A su gestora (sin
   // gestora, a administración del campus): pide llamarle. Uno por cambio.
   moodle_alumno_suspendido: {
-    clase: ACCION, etiqueta: 'Alumno suspendido en Moodle', agrupa: false,
-    descripcion: 'Un alumno tuyo ha quedado suspendido en Moodle (la cuenta o un curso), con el motivo que deduce el CRM',
+    clase: ACCION, etiqueta: 'Suspensión en Moodle', agrupa: false,
+    descripcion: 'Se ha suspendido en Moodle la cuenta o la matrícula de un curso de alguien que llevas, con el motivo que deduce el CRM',
   },
   matricula_moodle_fallo: {
     clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
@@ -316,8 +316,8 @@ export const TIPOS = {
   },
   // CRM#531: y cuando se le reactiva (normalmente porque ha pagado). Solo lo cuenta.
   moodle_alumno_reactivado: {
-    clase: AVISO, etiqueta: 'Alumno reactivado en Moodle', agrupa: false,
-    descripcion: 'Un alumno tuyo vuelve a estar activo en Moodle tras una suspensión',
+    clase: AVISO, etiqueta: 'Reactivación en Moodle', agrupa: false,
+    descripcion: 'Se ha reactivado en Moodle la cuenta o la matrícula de alguien que llevas, tras una suspensión',
   },
   // CRM#1107 (Diego, 24/11): el link traía su venta y caducó o se anuló sin
   // pagarse. La venta sigue pendiente y decide quien lo creó: link nuevo, pago por
