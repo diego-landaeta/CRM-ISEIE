@@ -601,9 +601,6 @@ export async function cursosDelCampus(conexion, opciones) {
       id: Number(c.id),
       nombre: c.displayname || c.fullname || c.shortname || null,
       visible: c.visible === undefined ? true : Number(c.visible) === 1 || c.visible === true,
-      // Con seguimiento de finalización, Moodle da el % hecho de cada alumno («Mi campus» de
-      // administración, 25/11); sin él, el % es «—».
-      seguimiento: c.enablecompletion === true || Number(c.enablecompletion) === 1,
     }));
 }
 

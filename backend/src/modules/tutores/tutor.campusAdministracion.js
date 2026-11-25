@@ -36,7 +36,7 @@ import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import {
-  cursosDelCampus, matriculadosDe, esAlumno, esRolDeTutora, urlDelCampus, MoodleError, conversacionesSinResponder,
+  llamar, matriculadosDe, esAlumno, esRolDeTutora, urlDelCampus, MoodleError, conversacionesSinResponder,
 } from '../../shared/services/moodle.client.js';
 import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { conexionDelCampus } from './tutor.campus.js';
@@ -72,6 +72,23 @@ export function olvidarCopias() {
   copias.clear();
   enMarcha.clear();
   copiasCurso.clear();
+}
+
+/**
+ * TODOS los cursos del campus, como `cursosDelCampus` (#769) y además con su seguimiento de
+ * finalización: sin él, el % de sus alumnos es «—» y no se pregunta. Aparte para no cambiar
+ * lo que devuelve `cursosDelCampus` a quien ya lo usa (Productos › Cursos de Moodle).
+ */
+async function cursosDelCampus(conexion, opciones) {
+  const r = await llamar(conexion, 'core_course_get_courses_by_field', {}, opciones);
+  return (Array.isArray(r?.courses) ? r.courses : [])
+    .filter((c) => c && c.format !== 'site' && Number(c.id) > 1)
+    .map((c) => ({
+      id: Number(c.id),
+      nombre: c.displayname || c.fullname || c.shortname || null,
+      visible: c.visible === undefined ? true : Number(c.visible) === 1 || c.visible === true,
+      seguimiento: c.enablecompletion === true || Number(c.enablecompletion) === 1,
+    }));
 }
 
 /** Los campus de su alcance con el Moodle conectado. */
