@@ -155,6 +155,8 @@ import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMood
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
+// La versión del CRM: la primera de Novedades, la misma que enseña el frontal (25/11).
+import { ACTUAL as VERSION_ACTUAL } from './modules/novedades/versiones.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -226,7 +228,7 @@ app.get('/api', (_req, res) => {
     success: true,
     data: {
       name: 'CRM-ISEIE API',
-      version: '1.0.0',
+      version: VERSION_ACTUAL.version,
       status: 'online',
       endpoints: {
         health: '/api/health',
@@ -267,7 +269,7 @@ app.get('/api', (_req, res) => {
 
 // Health check (público, ligero).
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
+  res.json({ success: true, data: { status: 'ok', version: VERSION_ACTUAL.version, timestamp: new Date().toISOString() } });
 });
 
 // Health detallado: DB ping + estado de credenciales externas + uptime +

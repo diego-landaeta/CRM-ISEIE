@@ -1,6 +1,6 @@
 {
   "name": "crm-iseie-backend",
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "CRM-ISEIE - API REST",
   "type": "module",
   "engines": {
