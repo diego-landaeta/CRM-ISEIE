@@ -17,6 +17,8 @@ import { RECORRIDOS_GESTORA_C, type IdRecorridoGestoraC } from '@/shared/lib/rec
 import { RECORRIDOS_GESTORA_D, type IdRecorridoGestoraD } from '@/shared/lib/recorridosGestoraD';
 // Lo que faltaba de Comercial (#619, tanda G: Convocatorias, los duplicados y Solicitud de admisión), en su propio fichero.
 import { RECORRIDOS_GESTORA_E, type IdRecorridoGestoraE } from '@/shared/lib/recorridosGestoraE';
+// Captación y publicidad (#619, tanda H: Email, Formularios, Widget web y Meta Ads), en su propio fichero.
+import { RECORRIDOS_GESTORA_F, type IdRecorridoGestoraF } from '@/shared/lib/recorridosGestoraF';
 // Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
 import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
@@ -80,6 +82,7 @@ export type IdRecorridoCobros =
   | IdRecorridoGestoraC
   | IdRecorridoGestoraD
   | IdRecorridoGestoraE
+  | IdRecorridoGestoraF
   | IdRecorridoLinks;
 
 export interface RecorridoCobros {
@@ -516,6 +519,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   ...RECORRIDOS_GESTORA_D,
   // ─── 9 · Lo que faltaba de Comercial (#619, tanda G): `recorridosGestoraE.ts` ───
   ...RECORRIDOS_GESTORA_E,
+  // ─── 9 · Captación y publicidad (#619, tanda H): `recorridosGestoraF.ts` ───
+  ...RECORRIDOS_GESTORA_F,
 
   // ─── Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
   ...RECORRIDOS_LINKS,

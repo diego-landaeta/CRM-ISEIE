@@ -11,6 +11,8 @@ import { inputClass } from '@/shared/lib/ui';
 import { Envelope, Plus, Trash, X, Play, Pause, FloppyDisk } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { emailTemplatesApi, type EmailTemplate } from '@/modules/email-templates/api/templates.api';
+// El recorrido guiado de la pantalla (#619, tanda H).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -88,18 +90,24 @@ export default function EmailSequencesPage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda H): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Secuencias de email"
         subtitle={`${sequences.length} secuencias en ${activeProject?.nombre || 'este proyecto'}`}
         actions={
-          <button
-            onClick={() => setEditing({ nombre: '', trigger_event: 'lead_created', trigger_filter: {}, steps: [{ delay_hours: 0, subject: '', body: '' }], active: true })}
-            aria-label="Nueva secuencia"
-            className="flex items-center gap-1 h-9 px-3 sm:px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nueva secuencia</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="secuencias-email" listo={!loading} />
+            <button
+              data-recorrido="email-nueva"
+              onClick={() => setEditing({ nombre: '', trigger_event: 'lead_created', trigger_filter: {}, steps: [{ delay_hours: 0, subject: '', body: '' }], active: true })}
+              aria-label="Nueva secuencia"
+              className="flex items-center gap-1 h-9 px-3 sm:px-4 rounded-xl bg-primary text-primary-foreground text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nueva secuencia</span>
+            </button>
+          </div>
         }
       />
 
@@ -107,7 +115,7 @@ export default function EmailSequencesPage() {
         sequences.length === 0 ? (
           <EmptyState icon={Envelope} title="Sin secuencias" description="Crea una para enviar emails de seguimiento automaticos" />
         ) : (
-          <div className="grid gap-3">
+          <div data-recorrido="email-lista" className="grid gap-3">
             {sequences.map(s => (
               <div key={s.id} className="bg-card border border-border rounded-2xl p-4 flex items-center gap-4">
                 <div className="flex-1 min-w-0">
@@ -117,27 +125,30 @@ export default function EmailSequencesPage() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{TRIGGERS.find(t => t.v === s.trigger_event)?.label || s.trigger_event} - {s.steps?.length || 0} pasos - {s.active_runs || 0} activas, {s.completed_runs || 0} completadas</p>
                 </div>
-                <button
-                  onClick={() => handleToggle(s)}
-                  aria-label={s.active ? 'Pausar secuencia' : 'Reanudar secuencia'}
-                  title={s.active ? 'Pausar' : 'Reanudar'}
-                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  {s.active ? <Pause size={16} /> : <Play size={16} />}
-                </button>
-                <button
-                  onClick={() => setEditing(s)}
-                  className="h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
-                >
-                  Editar
-                </button>
-                <button
-                  onClick={() => handleDelete(s)}
-                  aria-label="Eliminar secuencia"
-                  className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-destructive-soft text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40"
-                >
-                  <Trash size={14} />
-                </button>
+                {/* Los tres botones juntos, para que el recorrido los señale a la vez (#619, tanda H). */}
+                <div data-recorrido="email-acciones" className="flex flex-shrink-0 items-center gap-2">
+                  <button
+                    onClick={() => handleToggle(s)}
+                    aria-label={s.active ? 'Pausar secuencia' : 'Reanudar secuencia'}
+                    title={s.active ? 'Pausar' : 'Reanudar'}
+                    className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-muted focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    {s.active ? <Pause size={16} /> : <Play size={16} />}
+                  </button>
+                  <button
+                    onClick={() => setEditing(s)}
+                    className="h-9 px-3 rounded bg-muted text-xs font-bold focus:outline-none focus:ring-2 focus:ring-primary/40"
+                  >
+                    Editar
+                  </button>
+                  <button
+                    onClick={() => handleDelete(s)}
+                    aria-label="Eliminar secuencia"
+                    className="h-9 w-9 inline-flex items-center justify-center rounded hover:bg-destructive-soft text-destructive focus:outline-none focus:ring-2 focus:ring-destructive/40"
+                  >
+                    <Trash size={14} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

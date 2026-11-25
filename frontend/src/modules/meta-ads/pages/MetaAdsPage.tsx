@@ -6,6 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { metaApi, MetaAccount, MetaCampaign, MetaDashboard, MetaRoiRow, MetaAdSet, MetaAd } from '../api/metaAds.api';
 import { toast } from '@/shared/hooks/useToast';
 import { tieneRol } from '@/shared/lib/roles';
+// El recorrido guiado de la pantalla (#619, tanda H).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const ConnectWizard = lazy(() => import('../components/ConnectWizard'));
 const AssociateProductsDialog = lazy(() => import('../components/AssociateProductsDialog'));
@@ -39,7 +41,12 @@ export default function MetaAdsPage() {
   // tapia: se elige aquí cuál (#218, tanda 3).
   const campus = useCampusDeLaPantalla();
   const projectId = campus.id;
-  const selector = <ElegirCampus campus={campus} que="sus anuncios" />;
+  // Con su anclaje del recorrido (#619, tanda H) solo cuando de verdad hay que elegir.
+  const selector = !campus.fijo && campus.opciones.length > 0 && (
+    <div data-recorrido="meta-campus">
+      <ElegirCampus campus={campus} que="sus anuncios" />
+    </div>
+  );
   // Quien la ve por `meta_ads.view` (26/10/2026: el equipo de desarrollo) solo
   // CONSULTA: conectar, sincronizar, configurar y asociar son de administración
   // (el servidor también se lo niega).
@@ -179,11 +186,13 @@ export default function MetaAdsPage() {
   if (!account) return null;
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda H): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       {selector}
       {/* Header con selector de cuenta (cuando hay >1) + info + acciones */}
       <div className="bg-card border border-border rounded-lg p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div data-recorrido="meta-cuenta" className="flex items-center gap-3 min-w-0 flex-1">
           <div className="w-10 h-10 rounded-md bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-300 flex items-center justify-center flex-shrink-0">
             <PlugsConnected size={20} weight="duotone" />
           </div>
@@ -228,36 +237,42 @@ export default function MetaAdsPage() {
             )}
           </div>
         </div>
-        {!soloVer && (
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <button onClick={handleSync}
-            disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
-            title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para sincronizar' : 'Sincronizar (último día)'}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
-            <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} />
-            {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
-          </button>
-          <button onClick={handleBackfill}
-            disabled={filterAccountId == null && accounts.length > 1}
-            title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para re-backfillear' : 'Re-descargar últimos 90 días en background'}
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
-            <ArrowsClockwise size={14} /> 90d
-          </button>
-          <button onClick={() => setShowAddAccount(true)} title="Conectar otra cuenta publicitaria al mismo proyecto"
-            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
-            <Plus size={14} weight="bold" /> Cuenta
-          </button>
-          <button onClick={() => setTab('config')} title="Configuración (token, cuenta, desconectar)"
-            className={`h-9 px-3 rounded-md border text-sm font-medium flex items-center gap-1.5 ${tab === 'config' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted'}`}>
-            <Gear size={14} weight="duotone" /> Configuración
-          </button>
+        {/* «Ver recorrido» lo ve también quien solo consulta; los botones de
+            administrar, no. En el móvil se parten en filas (#619, tanda H): en
+            una sola se salían de la pantalla. */}
+        <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+          <VerRecorrido id="meta-ads" listo={!loading} />
+          {!soloVer && (
+          <div data-recorrido="meta-acciones" className="flex flex-wrap items-center gap-2">
+            <button onClick={handleSync}
+              disabled={syncing || account.last_sync_status === 'in_progress' || (filterAccountId == null && accounts.length > 1)}
+              title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para sincronizar' : 'Sincronizar (último día)'}
+              className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+              <ArrowsClockwise size={14} weight="bold" className={syncing ? 'animate-spin' : ''} />
+              {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
+            </button>
+            <button onClick={handleBackfill}
+              disabled={filterAccountId == null && accounts.length > 1}
+              title={filterAccountId == null && accounts.length > 1 ? 'Selecciona una cuenta concreta para re-backfillear' : 'Re-descargar últimos 90 días en background'}
+              className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed">
+              <ArrowsClockwise size={14} /> 90d
+            </button>
+            <button onClick={() => setShowAddAccount(true)} title="Conectar otra cuenta publicitaria al mismo proyecto"
+              className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted flex items-center gap-1.5">
+              <Plus size={14} weight="bold" /> Cuenta
+            </button>
+            <button onClick={() => setTab('config')} title="Configuración (token, cuenta, desconectar)"
+              className={`h-9 px-3 rounded-md border text-sm font-medium flex items-center gap-1.5 ${tab === 'config' ? 'border-primary bg-primary/10 text-primary' : 'border-border bg-card hover:bg-muted'}`}>
+              <Gear size={14} weight="duotone" /> Configuración
+            </button>
+          </div>
+          )}
         </div>
-        )}
       </div>
 
       {/* Selector rango fechas (oculto cuando estás en config) */}
       {tab !== 'config' && tab !== 'manual' && (
-      <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+      <div data-recorrido="meta-rango" className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <label className="text-xs font-semibold text-muted-foreground">Rango:</label>
         <input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)}
           className="h-9 px-2 rounded-md border border-border bg-muted/50 text-sm" />
@@ -277,7 +292,7 @@ export default function MetaAdsPage() {
 
       {/* KPIs del dashboard */}
       {tab !== 'config' && tab !== 'manual' && dashboard && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div data-recorrido="meta-cifras" className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <KpiCard icon={Receipt} label="Gasto" value={fmtMoney(dashboard.totals.spend, currency)} tone="violet" />
           <KpiCard icon={Eye} label="Impresiones" value={fmtNum(dashboard.totals.impressions)} tone="blue" />
           <KpiCard icon={CursorClick} label="Leads" value={fmtNum(dashboard.totals.leads)} hint={`CTR ${dashboard.totals.ctr ? dashboard.totals.ctr.toFixed(2) + '%' : '—'}`} tone="emerald" />
@@ -297,7 +312,7 @@ export default function MetaAdsPage() {
       )}
 
       {/* Tabs Campañas / ROI / Configuración */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="meta-pestanas" className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-2 border-b border-border flex gap-1 flex-wrap">
           <button onClick={() => setTab('campaigns')}
             className={`px-3 py-1.5 rounded-md text-sm font-semibold ${tab === 'campaigns' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted text-muted-foreground'}`}>
