@@ -261,8 +261,8 @@ describe('el botón «Recorrido» de la cabecera los encuentra por su ruta', () 
   it('cada pantalla, el suyo', () => {
     expect(recorridosDeLaRuta('/whatsapp/banco')).toEqual(['whatsapp-banco']);
     expect(recorridosDeLaRuta('/whatsapp/actividad')).toEqual(['whatsapp-actividad']);
-    // Correos aún no está aquí (#750): sin pantalla, sin recorrido.
-    expect(recorridosDeLaRuta('/correos')).toEqual([]);
+    // Correos llegó con #750 (solo lo recibido) y su recorrido, con la tanda J.
+    expect(recorridosDeLaRuta('/correos')).toEqual(['correos']);
     expect(recorridosDeLaRuta('/consultas/alumnos')).toEqual(['consultas-alumnos']);
     expect(recorridosDeLaRuta('/consultas/carga')).toEqual(['consultas-carga']);
     expect(recorridosDeLaRuta('/consultas/tutores/')).toEqual(['consultas-tutores']);

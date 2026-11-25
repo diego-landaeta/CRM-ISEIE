@@ -4,6 +4,8 @@ import { ArrowRight, Compass, DownloadSimple, PaperPlaneTilt, Sparkle, Wrench } 
 import { RECORRIDOS_DE_PANTALLA, rutaConRecorrido } from '@/shared/components/layout/RecorridoDeLaDireccion';
 import { RECORRIDOS_COBROS, tienePermiso, type RecorridoCobros } from '@/shared/lib/recorridosCobros';
 import usePermission from '@/shared/hooks/usePermission';
+// El recorrido guiado de la pantalla (#941, tanda J).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /** La pantalla del recorrido (la suya, sin «:id»); si no tiene, la de la novedad. */
 const recorridoDe = (id: string) => (RECORRIDOS_COBROS as Record<string, RecorridoCobros | undefined>)[id];
@@ -128,12 +130,15 @@ export default function NovedadesPage() {
   }
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda J). */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Novedades"
         subtitle={`${datos.crm.nombre} · ${v.titulo} · ${fechaLarga(v.fecha)}`}
         actions={(
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="novedades" />
+            <div className="flex items-center gap-2" data-recorrido="novedades-version">
             {datos.versiones.length > 1 && (
               <select value={v.version} onChange={(e) => setVersion(e.target.value)} aria-label="Versión"
                 className="h-9 rounded-md border border-border bg-card px-2 text-sm">
@@ -144,11 +149,12 @@ export default function NovedadesPage() {
               className="flex h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-semibold hover:bg-muted disabled:opacity-50">
               <DownloadSimple size={15} weight="bold" /> {yendo === 'pdf' ? 'Preparando…' : 'PDF'}
             </button>
+            </div>
           </div>
         )}
       />
 
-      <section className="rounded-xl border border-border bg-card p-5">
+      <section className="rounded-xl border border-border bg-card p-5" data-recorrido="novedades-resumen">
         <div className="flex items-start gap-3">
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary"><Sparkle size={20} weight="fill" /></span>
           <div>
@@ -160,7 +166,7 @@ export default function NovedadesPage() {
         </div>
 
         {dirige && (
-          <div className="mt-4 flex flex-col gap-3 border-t border-border pt-4 lg:flex-row lg:items-end lg:justify-between">
+          <div data-recorrido="novedades-envio" className="mt-4 flex flex-col gap-3 border-t border-border pt-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="flex flex-wrap items-end gap-2">
               <label className="block">
                 <span className="text-xs font-semibold text-muted-foreground">Mandármelo a mí (prueba)</span>
@@ -191,7 +197,7 @@ export default function NovedadesPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[230px_1fr]">
         {/* Índice: los atajos a cada apartado. */}
-        <nav aria-label="Apartados" className="lg:sticky lg:top-4 lg:self-start">
+        <nav aria-label="Apartados" className="lg:sticky lg:top-4 lg:self-start" data-recorrido="novedades-indice">
           <ol className="flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-2 lg:flex-col">
             {v.grupos.map((g, i) => (
               <li key={g.titulo}>
@@ -218,7 +224,7 @@ export default function NovedadesPage() {
           {v.grupos.map((g, i) => (
             <section key={g.titulo} id={`grupo-${i + 1}`} className="scroll-mt-4">
               <h2 className="mb-3 text-lg font-bold"><span className="mr-2 text-muted-foreground">{i + 1}.</span>{g.titulo}</h2>
-              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 xl:grid-cols-2" data-recorrido="novedades-lista">
                 {g.items.map((it) => (
                   <article key={it.titulo} className="flex flex-col rounded-xl border border-border bg-card p-4">
                     <h3 className="text-sm font-semibold">{it.titulo}</h3>

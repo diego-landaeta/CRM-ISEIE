@@ -21,6 +21,8 @@ import { RECORRIDOS_GESTORA_E, type IdRecorridoGestoraE } from '@/shared/lib/rec
 import { RECORRIDOS_GESTORA_F, type IdRecorridoGestoraF } from '@/shared/lib/recorridosGestoraF';
 // El bloque Académico (#619, tanda I: Productos, Cursos pendientes, WooCommerce, Árbol de categorías, Mis cursos y Sin tutor), en su propio fichero.
 import { RECORRIDOS_GESTORA_G, type IdRecorridoGestoraG } from '@/shared/lib/recorridosGestoraG';
+// Las del menú que no estaban en la lista (#619, tanda J: Historial de tareas, Configurar tablero, Reportes, PayPal y banco, Novedades y Correos), en su propio fichero.
+import { RECORRIDOS_GESTORA_H, type IdRecorridoGestoraH } from '@/shared/lib/recorridosGestoraH';
 // Links de pago y cuotas, los principales (CRM#1012), en su propio fichero.
 import { RECORRIDOS_LINKS, type IdRecorridoLinks } from '@/shared/lib/recorridosLinksYCuotas';
 
@@ -86,6 +88,7 @@ export type IdRecorridoCobros =
   | IdRecorridoGestoraE
   | IdRecorridoGestoraF
   | IdRecorridoGestoraG
+  | IdRecorridoGestoraH
   | IdRecorridoLinks;
 
 export interface RecorridoCobros {
@@ -526,6 +529,8 @@ export const RECORRIDOS_COBROS: Record<IdRecorridoCobros, RecorridoCobros> = {
   ...RECORRIDOS_GESTORA_F,
   // ─── 9 · El bloque Académico (#619, tanda I): `recorridosGestoraG.ts` ───
   ...RECORRIDOS_GESTORA_G,
+  // ─── 9 · Las del menú que no estaban en la lista (#619, tanda J): `recorridosGestoraH.ts` ───
+  ...RECORRIDOS_GESTORA_H,
 
   // ─── Links de pago y cuotas (CRM#1012): `recorridosLinksYCuotas.ts` ───
   ...RECORRIDOS_LINKS,

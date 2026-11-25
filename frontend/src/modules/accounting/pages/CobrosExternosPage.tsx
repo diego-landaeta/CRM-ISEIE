@@ -5,6 +5,8 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
+// El recorrido del día a día (#941, tanda J); el de arriba es para probar la función.
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { ponerAmbito, TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { formatCurrency, formatDateShort } from '@/shared/lib/format';
 import { ArrowsClockwise, Bank, CheckCircle, PaypalLogo, UploadSimple, XCircle } from '@phosphor-icons/react';
@@ -55,16 +57,20 @@ export default function CobrosExternosPage() {
     ponerAmbito(new URLSearchParams(extra), { activeIssuerId, activeProject }), [activeIssuerId, activeProject]);
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda J). */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Cobros de PayPal y del banco"
         subtitle="Lo que entra por PayPal se registra solo en su venta. Del banco se sube el extracto y se deciden los abonos dudosos."
         actions={estado && (
           // El recorrido para probar la pestaña abierta (CRM-ISEIE#522).
-          <VerComoFunciona
-            id={pestana === 'paypal' ? 'cobros-paypal' : 'extractos-banco'}
-            apagada={pestana === 'paypal' ? !estado.paypal : !estado.santander}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="cobros-externos" />
+            <VerComoFunciona
+              id={pestana === 'paypal' ? 'cobros-paypal' : 'extractos-banco'}
+              apagada={pestana === 'paypal' ? !estado.paypal : !estado.santander}
+            />
+          </div>
         )}
       />
       <div className="flex gap-2 border-b border-border" data-recorrido="cobros-pestanas">
