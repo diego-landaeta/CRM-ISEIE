@@ -17680,7 +17680,52 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/administracion",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/administracion",
+  "relativa": "GET /mi-campus/administracion",
+  "controlador": "campusAdministracion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.campus_administracion"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId",
+  "relativa": "GET /mi-campus/administracion/cursos/:projectId/:cursoId",
+  "controlador": "cursoAdministracion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17702,7 +17747,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17724,7 +17770,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17746,7 +17793,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17768,7 +17816,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],

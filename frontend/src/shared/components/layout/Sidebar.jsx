@@ -200,7 +200,8 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // #408 (gemela de CRM#681): sus cursos en Moodle, con lo que tiene por corregir y contestar.
-      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Y administración (Diego, 25/11, gemela de CRM), con «Mi campus de administración»: todo el campus.
+      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: ['tutores.mis_cursos', 'tutores.campus_administracion'] },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde. `end`: no se marca en «Mi campus».
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], end: true, permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.

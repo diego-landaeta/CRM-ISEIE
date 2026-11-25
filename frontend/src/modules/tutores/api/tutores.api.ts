@@ -296,6 +296,53 @@ export interface MiCampus {
   elegidos?: number[] | null;
 }
 
+/** «Mi campus» de administración (25/11): todo el Moodle de un campus, leído con el token del campus. */
+export interface AdminProfesora { id: number; nombre: string | null }
+export interface AdminEntrega {
+  cursoId: number; curso: string | null; tareaId: number; tarea: string | null;
+  alumnoId: number; alumno: string | null; entregadaAt: string | null;
+  corregirUrl: string; tareaUrl: string; profesoras: AdminProfesora[];
+  /** Es profesora de ese curso con su cuenta enlazada: corrige desde el CRM, como en «Mis cursos». */
+  puedoCorregir: boolean;
+}
+export interface AdminConsulta {
+  consultaId: number; alumnoId: number | null; alumno: string | null; cursoId: number | null; curso: string | null;
+  desde: string | null; tutoraId: number | null; tutora: string | null; moodleUrl: string | null;
+}
+export interface AdminMensaje {
+  conversacionId: number; alumnoId: number; alumno: string | null; desde: string | null;
+  tutoraId: number; tutora: string | null; responderUrl: string;
+}
+export interface AdminCurso {
+  id: number; nombre: string | null; visible: boolean; url: string; porCorregir: number;
+  profesoras: AdminProfesora[] | null; error: string | null; soyProfesora: boolean;
+}
+export interface AdminCampus {
+  projectId: number; campus: string; url: string | null; error: string | null; avisos: string[];
+  cursos: AdminCurso[]; entregas: AdminEntrega[]; consultas: AdminConsulta[]; mensajes: AdminMensaje[];
+  tareasEnGrupo: number;
+}
+export interface MiCampusAdministracion {
+  todosLosCampus: Array<{ projectId: number; campus: string }>;
+  elegido: number | null;
+  /** La lectura sigue en marcha: la pantalla vuelve a preguntar (con la copia anterior, si la hay). */
+  leyendo: boolean;
+  leidoAt: string | null;
+  campus: AdminCampus | null;
+  tengoCuentaEnlazada: boolean;
+}
+export interface AdminCursoDetalle {
+  projectId: number; id: number; nombre: string | null; visible: boolean; url: string;
+  seguimiento: boolean | null; avisoProgreso: string | null; error: string | null; leidoAt: string;
+  profesoras: AdminProfesora[]; soyProfesora: boolean;
+  alumnos: MiCampusAlumno[];
+  tareas: Array<{
+    id: number; nombre: string | null; entrega: string | null; enGrupo: boolean; tareaUrl: string; corregirUrl: string;
+    sinCorregir: Array<{ alumnoId: number; alumno: string | null; entregadaAt: string | null; corregirUrl: string }>;
+  }>;
+  consultas: AdminConsulta[];
+}
+
 export const tutoresApi = {
   verCurso: (projectId: number, cursoId: number) =>
     client.get(`/tutores/mi-campus/cursos/${projectId}/${cursoId}`) as Promise<ApiResponse<CursoCompleto>>,
@@ -339,6 +386,17 @@ export const tutoresApi = {
     } catch (err) { ventana?.close(); throw err; }
   },
   /** «Mi campus» de quien pide (el servidor usa su sesión). Con `refrescar`, sin la copia de 2 min. */
+  /** «Mi campus» de administración: un campus cada vez (el primero si no se dice). Solo lee. */
+  miCampusAdministracion: (campus: number | null = null, refrescar = false) => {
+    const q = new URLSearchParams();
+    if (campus) q.set('campus', String(campus));
+    if (refrescar) q.set('refrescar', '1');
+    const s = q.toString();
+    return client.get(`/tutores/mi-campus/administracion${s ? `?${s}` : ''}`) as Promise<ApiResponse<MiCampusAdministracion>>;
+  },
+  /** Un curso del campus al abrirlo: profesoras, alumnos con su % hecho y sus tareas. */
+  cursoAdministracion: (projectId: number, cursoId: number, refrescar = false) =>
+    client.get(`/tutores/mi-campus/administracion/cursos/${projectId}/${cursoId}${refrescar ? '?refrescar=1' : ''}`) as Promise<ApiResponse<AdminCursoDetalle>>,
   /** Con `campus`, solo esos campus suyos (el servidor no lee de Moodle los demás). Vacío = todos. */
   miCampus: (refrescar = false, campus: number[] = []) => {
     const q = new URLSearchParams();

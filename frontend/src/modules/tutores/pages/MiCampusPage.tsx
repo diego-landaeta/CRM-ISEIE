@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { soloEsTutorRedactor } from '@/shared/lib/roles';
 import {
@@ -23,6 +23,9 @@ import { consultasApi, type ConsultaFila } from '@/modules/consultas/api/consult
 import Progreso from '@/modules/moodle/components/ProgresoCurso';
 // El recorrido guiado de la pantalla (#611): solo con el botón (#681).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+// «Mi campus» de administración (Diego, 25/11, gemela de CRM): todo el campus, con su permiso.
+import usePermission from '@/shared/hooks/usePermission';
+import CampusAdministracion from '../components/CampusAdministracion';
 
 /*
   «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene que hacer hoy en Moodle.
@@ -392,10 +395,33 @@ function Resumen({ porCorregir, dudas, porDesarrollar, conCampus }: { porCorregi
   );
 }
 
+/**
+ * La pestaña de administración (Diego, 25/11, gemela de CRM), con `tutores.campus_administracion`:
+ * todo el campus. Con ella, la de la tutora se llama «Mis cursos en Moodle». Sin el permiso no
+ * hay pestañas: la tutora y la redactora ven lo de siempre.
+ */
+type Vista = 'campus' | 'administracion';
+const PESTANA_MIA = { id: 'campus' as Vista, label: 'Mis cursos en Moodle', icono: <ClipboardText size={15} aria-hidden /> };
+const PESTANA_ADMINISTRACION = { id: 'administracion' as Vista, label: 'Todo el campus (administración)', icono: <GraduationCap size={15} aria-hidden /> };
+
 export default function MiCampusPage() {
   // La redactora no tiene comisiones: sin el enlace (Diego, 24/11/2026).
   const { user } = useAuth() as { user: { role?: string; roles_extra?: string[] } | null };
   const soloRedactora = soloEsTutorRedactor(user);
+  const [params, setParams] = useSearchParams();
+  const { can } = usePermission();
+  const puedeAdministracion = can('tutores.campus_administracion');
+  const puedeMios = can('tutores.mis_cursos');
+  // Administración con su propia cuenta enlazada (da clase): también ve «sus cursos».
+  const [cuentaEnlazada, setCuentaEnlazada] = useState(false);
+  const [leidoAdministracion, setLeidoAdministracion] = useState<string | null>(null);
+  const pestanas = puedeAdministracion
+    ? [...(puedeMios || cuentaEnlazada ? [PESTANA_MIA] : []), PESTANA_ADMINISTRACION]
+    : [];
+  const porDefecto: Vista = puedeAdministracion && !puedeMios ? 'administracion' : 'campus';
+  const pedida = params.get('vista') as Vista | null;
+  const vista: Vista = pedida && pestanas.some((t) => t.id === pedida) ? pedida : porDefecto;
+  const irA = (v: Vista) => setParams(v === porDefecto ? {} : { vista: v }, { replace: true });
   const [datos, setDatos] = useState<MiCampus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(true);
@@ -447,8 +473,8 @@ export default function MiCampusPage() {
   }, []);
   // Se vuelve a leer al cambiar de campus.
   const claveCampus = elegidos.join(',');
-  useEffect(() => { cargar(); }, [cargar, claveCampus]);
-  useEffect(() => { cargarConsultas(); }, [cargarConsultas]);
+  useEffect(() => { if (vista === 'campus') cargar(); }, [cargar, claveCampus, vista]);
+  useEffect(() => { if (vista === 'campus') cargarConsultas(); }, [cargarConsultas, vista]);
 
   const elegirCampus = (ids: number[]) => { setElegidos(ids); guardarCampusElegidos(ids); };
   const actualizar = () => { cargar(true); cargarConsultas(); };
@@ -496,31 +522,54 @@ export default function MiCampusPage() {
   });
 
   const leido = datos ? new Date(datos.leidoAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
+  const leidoAdmin = leidoAdministracion ? new Date(leidoAdministracion).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
+  // Cada vista dice cuál es: la de administración (todo el campus) o la suya (sus cursos).
+  const subtitulo = vista === 'administracion'
+    ? `Administración: todo el campus en Moodle${leidoAdmin ? ` · leído a las ${leidoAdmin}` : ''}`
+    : (leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle');
 
   return (
     // El margen de scroll de lo que señala el recorrido: que la barra fija no lo tape.
     <div className="mx-auto max-w-6xl space-y-5 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Mi campus"
-        subtitle={leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle'}
+        subtitle={subtitulo}
         actions={(
           <>
             {/* El recorrido (#611): solo con el botón (#681). */}
-            <VerRecorrido id="mi-campus" listo={!cargando} compacto />
+            <VerRecorrido id="mi-campus" listo={vista !== 'campus' || !cargando} compacto />
             {/* En ISEIE «Mis cursos y comisiones» es un enlace, no una pestaña como
                 en el 360: el paso del recorrido lo señala a él. */}
-            {!soloRedactora && (
+            {!soloRedactora && (!puedeAdministracion || puedeMios) && (
             <Link to="/mis-cursos" data-recorrido="mi-campus-comisiones" className="inline-flex h-8 items-center gap-1.5 rounded-md px-3 text-secundario font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
               <Coins size={14} aria-hidden /> Mis cursos y comisiones
             </Link>
             )}
+            {vista === 'campus' && (
             <Button data-recorrido="mi-campus-actualizar" variant="outline" size="sm" disabled={cargando} onClick={actualizar} className="h-8 text-secundario">
               <ArrowsClockwise size={14} className={cn('mr-1.5', cargando && 'animate-spin')} aria-hidden />
               {cargando ? 'Leyendo…' : 'Actualizar'}
             </Button>
+            )}
           </>
         )}
       />
+
+      {pestanas.length > 1 && (
+      <div role="tablist" aria-label="Mi campus" className="inline-flex rounded-md bg-muted p-0.5">
+        {pestanas.map((t) => (
+          <button key={t.id} type="button" role="tab" aria-selected={vista === t.id} onClick={() => irA(t.id)}
+            className={cn('inline-flex h-8 items-center gap-1.5 rounded px-3 text-secundario font-medium transition-colors',
+              vista === t.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground')}>
+            {t.icono} {t.label}
+          </button>
+        ))}
+      </div>
+      )}
+
+      {vista === 'administracion' ? (
+        <CampusAdministracion alLeer={({ leidoAt, tengoCuentaEnlazada }) => { setLeidoAdministracion(leidoAt); setCuentaEnlazada(tengoCuentaEnlazada); }} />
+      ) : (<>
 
       {error && !datos && (
         <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive-soft dark:bg-destructive/15 px-4 py-4">
@@ -655,6 +704,7 @@ export default function MiCampusPage() {
           </div>
         </>
       )}
+      </>)}
     </div>
   );
 }
