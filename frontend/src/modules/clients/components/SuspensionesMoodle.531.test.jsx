@@ -15,6 +15,8 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 afterEach(() => { cleanup(); });
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn() }, API_BASE_URL: '/api', getAccessToken: () => null, setAccessToken: () => {} }));
+// Desde main (25/11) el filtro de gestora va por permiso y alcance (usePermission), no por rol.
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true, veGestoras: true, llevaEquipo: false }) }));
 
 const { default: SuspensionesMoodleBloque, EtiquetaSuspendido } = await import('@/modules/clients/components/SuspensionesMoodle');
 const { useSuspensionesMoodle } = await import('@/modules/clients/hooks/useSuspensionesMoodle');
