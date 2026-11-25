@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { PaperPlaneTilt, FilePdf, X } from '@phosphor-icons/react';
+import { PaperPlaneTilt, FilePdf, X, WhatsappLogo, EnvelopeSimple } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import Field from '@/shared/components/ui/Field';
 import usePermission from '@/shared/hooks/usePermission';
@@ -35,6 +35,21 @@ export default function PorEnviar({ facturas, rutaVenta, onEnviada }: Props) {
   const [enviando, setEnviando] = useState(false);
 
   const abrir = (f: FacturaSola) => { setAbierta(f); setEmail(f.envio_email || ''); };
+
+  // «Enviar por WhatsApp»: se descarga el PDF para mandarlo y queda marcada.
+  async function porWhatsapp() {
+    if (!abierta) return;
+    setEnviando(true);
+    try {
+      await invoicesApi.downloadPdf(abierta.id, `${String(abierta.codigo).replace('/', '-')}.pdf`);
+      await invoicesApi.enviadaPorWhatsapp(abierta.id);
+      toast({ title: `✓ Factura ${abierta.codigo} marcada como enviada por WhatsApp`, description: 'El PDF está en Descargas: mándaselo por WhatsApp.' });
+      setAbierta(null);
+      onEnviada();
+    } catch (err) {
+      toast({ title: 'No se pudo', description: (err as Error)?.message, variant: 'destructive' });
+    } finally { setEnviando(false); }
+  }
 
   async function enviar() {
     if (!abierta) return;
@@ -105,20 +120,27 @@ export default function PorEnviar({ facturas, rutaVenta, onEnviada }: Props) {
                 className="inline-flex items-center gap-1.5 h-8 px-3 rounded-md border border-border text-xs font-semibold">
                 <FilePdf size={14} aria-hidden="true" /> Ver el PDF
               </button>
-              <Field label="Enviar a este correo" htmlFor="por-enviar-email">
+              <Field label="Correo (si se envía por correo)" htmlFor="por-enviar-email">
                 <input id="por-enviar-email" type="email" autoComplete="off" className={inputClass}
                   value={email} onChange={(e) => setEmail(e.target.value)} />
               </Field>
               <p className="text-xs text-muted-foreground">
                 Si algún dato está mal, corrígelo antes en la factura (Facturas) o en la venta.
               </p>
-              <div className="flex justify-end gap-2">
+              <div className="flex flex-wrap justify-end gap-2">
                 <button type="button" onClick={() => setAbierta(null)} className="h-9 px-3 rounded-md border border-border text-sm">Cancelar</button>
+                <button type="button" disabled={enviando} onClick={porWhatsapp}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border text-sm font-semibold disabled:opacity-50">
+                  <WhatsappLogo size={16} aria-hidden="true" /> Enviar por WhatsApp
+                </button>
                 <button type="button" disabled={enviando} onClick={enviar}
-                  className="h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
-                  {enviando ? 'Enviando…' : 'Enviar factura'}
+                  className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-semibold disabled:opacity-50">
+                  <EnvelopeSimple size={16} aria-hidden="true" /> {enviando ? 'Enviando…' : 'Enviar por correo desde el CRM'}
                 </button>
               </div>
+              <p className="text-[11px] text-muted-foreground">
+                Por WhatsApp: se descarga el PDF para que se lo mandes y la factura queda marcada como «Enviada por WhatsApp».
+              </p>
             </div>
           </div>
         </Portal>

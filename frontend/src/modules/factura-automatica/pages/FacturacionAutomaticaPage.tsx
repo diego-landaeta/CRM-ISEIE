@@ -267,7 +267,7 @@ export default function FacturacionAutomaticaPage() {
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{euros(i.total)}</td>
                     <td className="px-3 py-2 text-[12px]">
                       {i.sent_at
-                        ? <span className="text-success">Enviado a {i.sent_to_email} · {cuando(i.sent_at)}</span>
+                        ? <span className="text-success">{i.sent_to_email ? `Enviado a ${i.sent_to_email}` : (i.envio_nota || 'Enviada')} · {cuando(i.sent_at)}</span>
                         : i.envio_nota
                           ? <span className="text-warning-soft-foreground">{i.envio_nota}</span>
                           : <span className="text-muted-foreground">No se envió{panel.enviar_pdf ? '' : ' (envío del PDF apagado)'}</span>}

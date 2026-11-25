@@ -324,6 +324,8 @@ export const invoicesApi = {
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 60000);
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
+  /** «Por enviar» › «Enviar por WhatsApp» (25/11): marca la factura como enviada por WhatsApp. */
+  enviadaPorWhatsapp: (id: number) => client.post(`/invoices/${id}/enviada-whatsapp`, {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   // «Cobrada» en una proforma: apunta el cobro en la venta y la proforma pasa a factura.
   cobrarProforma: (id: number, body: { importe: number; fecha: string; metodo?: string | null; notas?: string | null; referencia?: string | null }) =>

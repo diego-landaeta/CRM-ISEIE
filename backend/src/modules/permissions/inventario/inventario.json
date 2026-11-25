@@ -8021,6 +8021,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/invoices/:id/enviada-whatsapp",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "POST",
+  "ruta": "/api/invoices/:id/enviada-whatsapp",
+  "relativa": "POST /:id/enviada-whatsapp",
+  "controlador": "enviadaPorWhatsapp",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.envio_auto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/invoices/:id/mark-paid",
   "tipo": "ruta",
   "modulo": "invoices",
