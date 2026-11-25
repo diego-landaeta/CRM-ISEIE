@@ -6,7 +6,8 @@ import type { DatosFormacion, Formacion, TipoFormacion } from '../api/formacione
  * poder probarlo sin montar la pantalla.
  */
 
-export type ModuloForm = { clave: string; id?: number; titulo: string; horas: string; descripcion: string };
+/** `dias`: «Se desbloquea a los … días» en Moodle (CRM#1124); vacío = desde el principio. */
+export type ModuloForm = { clave: string; id?: number; titulo: string; horas: string; descripcion: string; dias: string };
 
 export type FormacionForm = {
   nombre: string;
@@ -24,7 +25,10 @@ let siguiente = 0;
 /** Una clave para React que no cambia al reordenar (el id no vale: los nuevos no lo tienen). */
 export const nuevaClave = () => `m${++siguiente}`;
 
-export const moduloVacio = (): ModuloForm => ({ clave: nuevaClave(), titulo: '', horas: '', descripcion: '' });
+export const moduloVacio = (): ModuloForm => ({ clave: nuevaClave(), titulo: '', horas: '', descripcion: '', dias: '' });
+
+/** El mismo tope que el servidor y el plugin de Moodle: diez años. */
+export const MAX_DIAS_DESBLOQUEO = 3650;
 
 const txt = (v: unknown) => (v == null ? '' : String(v));
 
@@ -43,6 +47,7 @@ export function formDesde(f?: Formacion | null): FormacionForm {
     fecha_fin: f.fecha_fin || '',
     modulos: f.modulos.map((m) => ({
       clave: nuevaClave(), id: m.id, titulo: m.titulo, horas: txt(m.horas), descripcion: m.descripcion || '',
+      dias: txt(m.dias_desbloqueo),
     })),
   };
 }
@@ -51,7 +56,11 @@ const entero = (s: string) => (s.trim() === '' ? null : Math.round(Number(s.repl
 const numero = (s: string) => (s.trim() === '' ? null : Number(s.replace(',', '.')));
 const nulo = (s: string) => (s.trim() === '' ? null : s.trim());
 
-export function datosDeForm(form: FormacionForm): DatosFormacion {
+/**
+ * `conDesbloqueo`: «Se desbloquea a los … días» solo se manda con la fase 2 de Moodle
+ * encendida (CRM#1124), que es cuando se ve el campo; sin él, el servidor deja lo guardado.
+ */
+export function datosDeForm(form: FormacionForm, { conDesbloqueo = false }: { conDesbloqueo?: boolean } = {}): DatosFormacion {
   return {
     nombre: form.nombre.trim(),
     tipo_formacion: form.tipo || null,
@@ -66,6 +75,8 @@ export function datosDeForm(form: FormacionForm): DatosFormacion {
       titulo: m.titulo.trim(),
       horas: entero(m.horas),
       descripcion: nulo(m.descripcion),
+      // 0 es lo mismo que vacío: desde el principio.
+      ...(conDesbloqueo ? { dias_desbloqueo: entero(m.dias) || null } : {}),
     })),
   };
 }
@@ -82,6 +93,11 @@ export function problemaDelForm(form: FormacionForm): string | null {
     return 'La fecha de fin es anterior a la de inicio.';
   }
   if (form.horas.trim() && !(Number(form.horas.replace(',', '.')) >= 1)) return 'Las horas tienen que ser un número.';
+  const diasMal = form.modulos.findIndex((m) => {
+    const d = m.dias.trim();
+    return d !== '' && (!/^\d+$/.test(d) || Number(d) > MAX_DIAS_DESBLOQUEO);
+  });
+  if (diasMal >= 0) return `Los días del módulo ${diasMal + 1} van sin decimales, de 1 a ${MAX_DIAS_DESBLOQUEO} (vacío: desde el principio).`;
   if (form.precio.trim() && !(Number(form.precio.replace(',', '.')) >= 0)) return 'El precio tiene que ser un número.';
   return null;
 }

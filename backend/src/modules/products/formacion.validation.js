@@ -16,6 +16,8 @@ export const TIPOS_FORMACION = ['curso', 'diplomado', 'master'];
 export const MAX_HORAS = 5000;
 export const MAX_MODULOS = 100;
 export const MAX_HORAS_MODULO = 2000;
+// El mismo tope que el plugin del CRM en Moodle (1.12.0, CRM#1124): diez años.
+export const MAX_DIAS_DESBLOQUEO = 3650;
 
 const vacioEsNulo = (v) => (v === '' || (typeof v === 'number' && Number.isNaN(v)) ? null : v);
 const fecha = z.preprocess(vacioEsNulo,
@@ -27,6 +29,12 @@ const moduloSchema = z.object({
   descripcion: z.preprocess(vacioEsNulo, z.string().max(20000, 'El temario de un módulo no puede pasar de 20.000 caracteres').nullable().optional()),
   horas: z.preprocess(vacioEsNulo, z.coerce.number().int('Las horas de un módulo van sin decimales')
     .min(0, 'Las horas no pueden ser negativas').max(MAX_HORAS_MODULO, `Un módulo no puede pasar de ${MAX_HORAS_MODULO} horas`).nullable().optional()),
+  // «Se desbloquea a los … días» (CRM#1124): vacío o 0 = desde el principio. Sin la clave, se
+  // queda lo guardado (la pantalla solo la manda con la fase 2 de Moodle encendida).
+  dias_desbloqueo: z.preprocess((v) => { const x = vacioEsNulo(v); return x === 0 || x === '0' ? null : x; },
+    z.coerce.number().int('Los días para desbloquear un módulo van sin decimales')
+      .min(1, 'Los días para desbloquear no pueden ser negativos')
+      .max(MAX_DIAS_DESBLOQUEO, `Un módulo no puede desbloquearse a más de ${MAX_DIAS_DESBLOQUEO} días`).nullable().optional()),
 });
 
 const campos = {

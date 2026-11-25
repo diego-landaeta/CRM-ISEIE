@@ -215,9 +215,28 @@ export function datosDelCurso(formacion, modulos, { cursoId = 0, categoria = 0, 
     secciones: modulos.map((m) => ({
       nombre: m.titulo.slice(0, 255),
       resumen: m.descripcion ? textoParaElCampus(m.descripcion) : '',
+      // «Se desbloquea a los … días» (CRM#1124): solo con valor; sin él, el plugin deja la
+      // restricción de la sección como esté.
+      ...(diasDeDesbloqueo(m) ? { dias: diasDeDesbloqueo(m) } : {}),
     })),
   };
 }
+
+/** Los días de «se desbloquea a los … días» de un módulo, o null (desde el principio). */
+export function diasDeDesbloqueo(m) {
+  const n = Number(m?.dias_desbloqueo);
+  return Number.isInteger(n) && n > 0 ? n : null;
+}
+
+/**
+ * Lo que el plugin dice que no ha podido hacer, sin fallar, dicho para quien lo lee
+ * (CRM#1124). Los códigos que no se conocen se enseñan tal cual.
+ */
+const AVISOS_DEL_PLUGIN = Object.freeze({
+  sin_relativedate: 'El campus no tiene activo el plugin «Fecha relativa» (availability_relativedate): las secciones se han dejado sin «se desbloquea a los … días».',
+  curso_no_del_crm: 'El curso no lo creó el CRM: sus restricciones de acceso no se han tocado.',
+});
+export const textoDelAviso = (codigo) => AVISOS_DEL_PLUGIN[codigo] || codigo;
 
 /** La formación, sus módulos y sus cursos unidos (comprobando que sea de ese campus). */
 async function prepararFormacion(productId, projectId) {
@@ -229,7 +248,7 @@ async function prepararFormacion(productId, projectId) {
   const formacion = { ...p, id: Number(p.id), project_id: Number(p.project_id), fecha_inicio: fecha(p.fecha_inicio), fecha_fin: fecha(p.fecha_fin) };
 
   const [{ rows: modulos }, { rows: unidos }] = await Promise.all([
-    query('SELECT titulo, descripcion FROM product_modules WHERE product_id = $1 ORDER BY orden, id', [productId]),
+    query('SELECT titulo, descripcion, dias_desbloqueo FROM product_modules WHERE product_id = $1 ORDER BY orden, id', [productId]),
     query('SELECT curso_moodle_id, curso_nombre FROM moodle_cursos_producto WHERE product_id = $1 AND project_id = $2 ORDER BY curso_moodle_id',
       [productId, projectId]),
   ]);
@@ -269,6 +288,8 @@ export async function vistaPrevia(productId, projectId, { fetchImpl } = {}) {
     inicio: formacion.fecha_inicio || null,
     fin: formacion.fecha_fin || null,
     secciones: modulos.map((m) => m.titulo),
+    // A los cuántos días se desbloquea cada sección (null = desde el principio), CRM#1124.
+    desbloqueo: modulos.map(diasDeDesbloqueo),
     cursos_unidos: unidos.map((u) => ({
       id: Number(u.curso_moodle_id), nombre: u.curso_nombre || null, url: enlaceAlCurso(conexion.url, Number(u.curso_moodle_id)),
     })),
@@ -357,5 +378,5 @@ export async function llevarAMoodle(productId, projectId, {
   vaciarCacheCursosProducto();
   // El curso nuevo ya tiene su nombre corto: la próxima lectura tiene que verlo.
   cache.delete(Number(projectId));
-  return { ...r, url: enlaceAlCurso(conexion.url, r.cursoId) };
+  return { ...r, avisos: (r.avisos || []).map(textoDelAviso), url: enlaceAlCurso(conexion.url, r.cursoId) };
 }

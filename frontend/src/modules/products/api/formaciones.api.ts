@@ -23,6 +23,8 @@ export interface ModuloFormacion {
   titulo: string;
   descripcion: string | null;
   horas: number | null;
+  /** «Se desbloquea a los … días» en Moodle (CRM#1124); null = desde el principio. */
+  dias_desbloqueo?: number | null;
 }
 
 export interface TutoraFormacion {
@@ -75,6 +77,8 @@ export interface CursoGuardado {
   sobran: number;
   /** El enlace al curso en el campus. */
   url?: string | null;
+  /** Lo que Moodle no ha podido hacer, sin fallar, dicho para quien lo lee (p. ej. sin el plugin «Fecha relativa», CRM#1124). */
+  avisos?: string[];
 }
 
 /** Una categoría del Moodle del campus. `ruta` solo si el token puede leer el árbol entero. */
@@ -99,6 +103,8 @@ export interface VistaPreviaMoodle {
   fin: string | null;
   /** Una sección por módulo, en orden. */
   secciones: string[];
+  /** A los cuántos días se desbloquea cada sección, en el mismo orden (null = desde el principio), CRM#1124. */
+  desbloqueo?: Array<number | null>;
   cursos_unidos: Array<{ id: number; nombre: string | null; url: string | null }>;
   /** Solo al crear (al actualizar, Moodle deja la categoría, el nombre corto y la visibilidad como estén). */
   categoria?: CategoriaElegida | null;
@@ -128,7 +134,8 @@ export interface DatosFormacion {
   modalidad: string | null;
   fecha_inicio: string | null;
   fecha_fin: string | null;
-  modulos: Array<{ id?: number; titulo: string; descripcion: string | null; horas: number | null }>;
+  /** `dias_desbloqueo` solo va con la fase 2 de Moodle encendida; sin la clave, el servidor deja lo guardado. */
+  modulos: Array<{ id?: number; titulo: string; descripcion: string | null; horas: number | null; dias_desbloqueo?: number | null }>;
 }
 
 export const formacionesApi = {

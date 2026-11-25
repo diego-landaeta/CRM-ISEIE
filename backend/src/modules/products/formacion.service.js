@@ -3,6 +3,7 @@ import { AppError } from '../../shared/utils/AppError.js';
 import { horasDeTexto } from '../certifex/certifex.programa.js';
 import { tipoPorNombre } from '../cursos-pendientes/cursos-pendientes.venta.js';
 import { formacionSchema } from './formacion.validation.js';
+import { formacionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
 
 /**
  * Formaciones desde el CRM · fase 1 (CRM#1113 / CRM-ISEIE#767).
@@ -60,7 +61,7 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
 
   const [{ rows: modulos }, { rows: tutoras }, { rows: cursos }] = await Promise.all([
     query(
-      `SELECT id, orden, titulo, descripcion, horas FROM product_modules
+      `SELECT id, orden, titulo, descripcion, horas, dias_desbloqueo FROM product_modules
         WHERE product_id = $1 ORDER BY orden, id`,
       [productId]
     ),
@@ -105,6 +106,7 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
     updated_at: p.updated_at,
     modulos: modulos.map((m) => ({
       id: Number(m.id), orden: m.orden, titulo: m.titulo, descripcion: m.descripcion, horas: m.horas,
+      dias_desbloqueo: m.dias_desbloqueo ?? null,
     })),
     horas_de_los_modulos: modulos.reduce((s, m) => s + (Number(m.horas) || 0), 0),
     tutoras: tutoras.map((t) => ({
@@ -123,8 +125,11 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
  * Deja los módulos de la formación como la lista: los que traen `id` se
  * actualizan, los nuevos se crean y los que no vienen se quitan. El orden es el
  * de la lista. Dentro de la transacción de quien llama.
+ *
+ * «Se desbloquea a los … días» (CRM#1124) va con la fase 2 de Moodle: solo se escribe con
+ * el interruptor encendido y si el módulo trae la clave; si no, se queda lo guardado.
  */
-async function guardarModulos(db, productId, modulos) {
+async function guardarModulos(db, productId, modulos, { conDesbloqueo = formacionesMoodleActivas() } = {}) {
   const { rows } = await db.query('SELECT id FROM product_modules WHERE product_id = $1', [productId]);
   const suyos = new Set(rows.map((r) => Number(r.id)));
   const ajeno = modulos.find((m) => m.id && !suyos.has(m.id));
@@ -138,16 +143,19 @@ async function guardarModulos(db, productId, modulos) {
   for (let i = 0; i < modulos.length; i++) {
     const m = modulos[i];
     const valores = [m.titulo, m.descripcion ?? null, m.horas ?? null, i];
+    const dias = conDesbloqueo && m.dias_desbloqueo !== undefined;
     if (m.id) {
       await db.query(
-        `UPDATE product_modules SET titulo = $1, descripcion = $2, horas = $3, orden = $4, updated_at = NOW()
+        `UPDATE product_modules SET titulo = $1, descripcion = $2, horas = $3, orden = $4,
+                dias_desbloqueo = CASE WHEN $7 THEN $8::int ELSE dias_desbloqueo END, updated_at = NOW()
           WHERE id = $5 AND product_id = $6`,
-        [...valores, m.id, productId]
+        [...valores, m.id, productId, dias, dias ? m.dias_desbloqueo : null]
       );
     } else {
       await db.query(
-        `INSERT INTO product_modules (product_id, titulo, descripcion, horas, orden) VALUES ($5, $1, $2, $3, $4)`,
-        [...valores, productId]
+        `INSERT INTO product_modules (product_id, titulo, descripcion, horas, orden, dias_desbloqueo)
+         VALUES ($5, $1, $2, $3, $4, $6)`,
+        [...valores, productId, dias ? m.dias_desbloqueo : null]
       );
     }
   }
