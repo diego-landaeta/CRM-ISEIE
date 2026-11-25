@@ -73,3 +73,59 @@ export const campusTutorApi = {
   disponible: (tutorId: number, disponible: boolean, motivo?: string | null) =>
     client.patch(`/tutores/${tutorId}/disponible`, { disponible, motivo: motivo || null }) as Promise<ApiResponse<PanelCampusTutor>>,
 };
+
+/*
+  Las tutoras redactoras en Moodle (CRM#1026): si su cuenta de cada campus está lista y si es
+  profesora de los cursos que redacta. Solo lee; no matricula.
+*/
+
+/**
+ * profesora («Profesor», `editingteacher`, como las tutoras de hoy) · sin_edicion
+ * («Profesor sin permiso de edición», `teacher`: no puede redactar) · otro_rol
+ * (matriculada, pero no como profesora) · sin_matricula · sin_comprobar.
+ */
+export type EstadoCursoRedaccion = 'profesora' | 'sin_edicion' | 'otro_rol' | 'sin_matricula' | 'sin_comprobar';
+
+/** Por qué el producto es suyo. */
+export type PorQueEsSuyo = 'colaboracion' | 'curso_pendiente' | 'responsable';
+
+export interface CursoRedaccion {
+  product_id: number;
+  producto: string;
+  producto_activo: boolean;
+  por: PorQueEsSuyo[];
+  curso_moodle_id: number;
+  curso_nombre: string | null;
+  estado: EstadoCursoRedaccion;
+  roles: string[];
+  /** La página de participantes del curso en Moodle (para matricularla a mano). */
+  enlace: string | null;
+}
+
+export interface CampusRedaccion {
+  project_id: number;
+  campus: string;
+  tiene_campus: boolean;
+  campus_conectado: boolean;
+  vinculada_en_crm: boolean;
+  cuenta: { id: number; nombre: string | null; suspendida: boolean; vinculada: boolean } | null;
+  problemas: string[];
+  cursos: CursoRedaccion[];
+}
+
+export interface RedaccionEnMoodle {
+  es_redactora: boolean;
+  /** El rol de Moodle que debe tener en sus cursos: `editingteacher`. */
+  rol_moodle?: string;
+  campus: CampusRedaccion[];
+  sin_curso: Array<{ product_id: number; producto: string; producto_activo: boolean; por: PorQueEsSuyo[] }>;
+  lista: boolean;
+}
+
+export const redaccionMoodleApi = {
+  ver: (tutorId: number) =>
+    client.get(`/tutores/${tutorId}/redaccion-moodle`) as Promise<ApiResponse<RedaccionEnMoodle>>,
+  /** La propia redactora, en «Mi campus»: el servidor usa el id de su sesión. */
+  mia: () =>
+    client.get('/tutores/mi-campus/redaccion-moodle') as Promise<ApiResponse<RedaccionEnMoodle>>,
+};

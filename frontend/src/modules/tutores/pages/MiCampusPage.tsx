@@ -22,6 +22,9 @@ import { consultasApi, type ConsultaFila } from '@/modules/consultas/api/consult
 import Progreso from '@/modules/moodle/components/ProgresoCurso';
 // El recorrido guiado de la pantalla (#611): solo con el botón (#681).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+// La redactora ve lo suyo (CRM#1026): su cuenta y su rol en los cursos que redacta. En pruebas.
+import RedaccionEnMoodle from '../components/RedaccionEnMoodle';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 
 /*
   «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene que hacer hoy en Moodle.
@@ -583,6 +586,10 @@ export default function MiCampusPage() {
               <PorDesarrollar lista={datos.pendientes} />
             </aside>
           </div>
+
+          {/* Debajo, a todo el ancho (en la columna fija no cabría). Solo se pinta si es
+              redactora: lo decide el componente con lo que contesta el servidor. */}
+          {SOLO_EN_PRUEBAS && <RedaccionEnMoodle propia />}
         </>
       )}
     </div>
