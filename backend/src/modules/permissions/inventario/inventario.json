@@ -214,6 +214,314 @@
   "puertas": []
  },
  {
+  "id": "GET /api/apostillas/",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/cifras",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/cifras",
+  "relativa": "GET /cifras",
+  "controlador": "cifras",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/catalogo",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/catalogo",
+  "relativa": "GET /catalogo",
+  "controlador": "catalogo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/personas",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/ajustes",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/ajustes",
+  "relativa": "GET /ajustes",
+  "controlador": "verAjustes",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/apostillas/ajustes",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "PUT",
+  "ruta": "/api/apostillas/ajustes",
+  "relativa": "PUT /ajustes",
+  "controlador": "guardarAjustes",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.config"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/de-cliente/:leadId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/de-cliente/:leadId",
+  "relativa": "GET /de-cliente/:leadId",
+  "controlador": "deLead",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/de-venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/de-venta/:conversionId",
+  "relativa": "GET /de-venta/:conversionId",
+  "controlador": "deVenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/documentos/:docId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/documentos/:docId",
+  "relativa": "GET /documentos/:docId",
+  "controlador": "descargarDocumento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.asociar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/:id",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/:id",
+  "relativa": "GET /:id",
+  "controlador": "porId",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/apostillas/:id",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "PATCH",
+  "ruta": "/api/apostillas/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "editar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/:id/enlazar",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/:id/enlazar",
+  "relativa": "POST /:id/enlazar",
+  "controlador": "enlazar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.asociar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/:id/documentos",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/:id/documentos",
+  "relativa": "POST /:id/documentos",
+  "controlador": "subirDocumento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/asignacion/entrada",
   "tipo": "ruta",
   "modulo": "asignacion",

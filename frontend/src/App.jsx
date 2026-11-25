@@ -31,6 +31,8 @@ const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPe
 const ProductsTreePage = lazy(() => import('./modules/products/pages/ProductsTreePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetailPage'));
+// Clientes › Apostillas de La Haya (gemela de CRM#1130).
+const ApostillasPage = lazy(() => import('./modules/apostillas/pages/ApostillasPage'));
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
 const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
@@ -380,6 +382,8 @@ function App() {
           <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          {/* Apostillas de La Haya (gemela de CRM#1130): antes que `/clients/:id`. */}
+          <Route path="/clients/apostillas" element={<ConPermiso permiso="apostillas.view" a="/clients"><ApostillasPage /></ConPermiso>} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />

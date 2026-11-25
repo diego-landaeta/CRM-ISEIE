@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-932 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+946 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -41,6 +41,25 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | listar | `GET /api/actividad/` | (no existía) | (ruta nueva) | lo de cada uno |
+
+## apostillas
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/apostillas/` | (no existía) | (ruta nueva) | `apostillas.view` |
+| cifras | `GET /api/apostillas/cifras` | (no existía) | (ruta nueva) | `apostillas.view` |
+| catalogo | `GET /api/apostillas/catalogo` | (no existía) | (ruta nueva) | `apostillas.view` |
+| personas | `GET /api/apostillas/personas` | (no existía) | (ruta nueva) | `apostillas.edit` |
+| verAjustes | `GET /api/apostillas/ajustes` | (no existía) | (ruta nueva) | `apostillas.view` |
+| guardarAjustes | `PUT /api/apostillas/ajustes` | (no existía) | (ruta nueva) | `apostillas.config` |
+| deLead | `GET /api/apostillas/de-cliente/:leadId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| deVenta | `GET /api/apostillas/de-venta/:conversionId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| descargarDocumento | `GET /api/apostillas/documentos/:docId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| crear | `POST /api/apostillas/` | (no existía) | (ruta nueva) | `apostillas.asociar` |
+| porId | `GET /api/apostillas/:id` | (no existía) | (ruta nueva) | `apostillas.view` |
+| editar | `PATCH /api/apostillas/:id` | (no existía) | (ruta nueva) | `apostillas.edit` |
+| enlazar | `POST /api/apostillas/:id/enlazar` | (no existía) | (ruta nueva) | `apostillas.asociar` |
+| subirDocumento | `POST /api/apostillas/:id/documentos` | (no existía) | (ruta nueva) | `apostillas.edit` |
 
 ## asignacion
 
@@ -1694,6 +1713,15 @@ lo que pide para tener sentido (editar pide ver).
 | Editar solicitudes de admisión | `matriculas.edit` | Cambiar datos y subir documentos. | Admin, Gestora, Soporte, Líder de equipo | `matriculas.view` |
 | Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 | Borrar solicitudes de admisión | `matriculas.delete` | Quitar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
+
+### Apostillas de La Haya
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver apostillas | `apostillas.view` | Las apostillas de sus campus, sus cifras y su paso, y el bloque en la ficha del cliente y de la venta. | Admin, Gestora, Soporte, Project manager, Líder de equipo |  |
+| Gestionar apostillas | `apostillas.edit` | Cambiar el paso, quién la lleva, el envío y las notas, y subir y abrir sus documentos (una gestora, solo las de sus clientes y ventas). | Admin, Gestora, Líder de equipo | `apostillas.view` |
+| Crear y enlazar apostillas | `apostillas.asociar` | Crear una apostilla a mano y enlazar las «Sin asociar» con su cliente y su venta. | Admin | `apostillas.view` |
+| Configurar el aviso de atascadas | `apostillas.config` | A los cuántos días en el mismo paso avisa la campana, en sus campus. | Admin | `apostillas.view` |
 
 ### Diplomas (Certifex)
 
