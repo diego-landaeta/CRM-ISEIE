@@ -103,9 +103,12 @@ export default function WasapiExportDialog({
         .then((res: any) => setProductos(Array.isArray(res?.data) ? res.data : []))
         .catch(() => setProductos([]));
     }
-    // `seVe` se recalcula en cada pintada; lo que importa es `ocultar`.
+    // `seVe` se recalcula en cada pintada; lo que importa es `ocultar`, por su
+    // CONTENIDO: sin la prop (Prospectos no la pasa) el `[]` por defecto es otro en
+    // cada pintada, y cada respuesta volvía a pedir /users y /products sin parar
+    // mientras el diálogo estaba abierto (25/11/2026).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId, isGestor, ocultar]);
+  }, [open, projectId, isGestor, ocultar.join(',')]);
 
   async function handleDownload() {
     setLoading(true);

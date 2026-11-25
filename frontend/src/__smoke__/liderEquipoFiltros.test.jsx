@@ -34,14 +34,15 @@ vi.mock('@/contexts/ProjectContext', () => ({
 vi.mock('@/contexts/ThemeContext', () => ({ useTheme: () => ({}), useOptionalTheme: () => 'light' }));
 
 // La ficha del prospecto, con lo que no importa aquí apagado.
-vi.mock('@/modules/leads/hooks/useLeads', () => ({
-  useLeadDetail: () => ({
-    lead: { id: 900, nombre: 'Prospecto Uno', email: 'p@x.test', status: 'nuevo', project_id: 4, responsable_id: 12, responsable_nombre: 'Malena' },
-    timeline: [], interacciones: [], reminders: [], utms: null, loading: false, error: null, refetch: vi.fn(),
-    updateStatus: vi.fn(), addInteraction: vi.fn(), addReminder: vi.fn(), completeReminder: vi.fn(),
-    reassign: ficha.reassign, updateLead: vi.fn(),
-  }),
+// El mismo objeto en cada pintada, como el hook de verdad (uno nuevo cada vez
+// relanzaría los efectos que dependen de él).
+const detalle = vi.hoisted(() => ({
+  lead: { id: 900, nombre: 'Prospecto Uno', email: 'p@x.test', status: 'nuevo', project_id: 4, responsable_id: 12, responsable_nombre: 'Malena' },
+  timeline: [], interacciones: [], reminders: [], utms: null, loading: false, error: null, refetch: () => {},
+  updateStatus: () => {}, addInteraction: () => {}, addReminder: () => {}, completeReminder: () => {},
+  reassign: (...a) => ficha.reassign(...a), updateLead: () => {},
 }));
+vi.mock('@/modules/leads/hooks/useLeads', () => ({ useLeadDetail: () => detalle }));
 const nada = vi.hoisted(() => () => ({ default: () => null }));
 vi.mock('@/modules/conversions/components/ConversionsTab', nada);
 vi.mock('@/modules/leads/components/lead-detail/LeadInfoCard', nada);
@@ -151,7 +152,7 @@ describe('Lo de Raquel: la ficha del prospecto, «Reasignar»', () => {
   it('una gestora no pide la lista (no tiene «Reasignar» ni el permiso de leerla)', async () => {
     entrarComo('gestor', { id: 12 });
     pintar();
-    await screen.findByText('Prospecto Uno');
+    await screen.findAllByText('Prospecto Uno');
     expect(api.get.mock.calls.some(([u]) => String(u).startsWith('/users'))).toBe(false);
     expect(screen.queryByRole('button', { name: /Reasignar/ })).toBeNull();
   });
