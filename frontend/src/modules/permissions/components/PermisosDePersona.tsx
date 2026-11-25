@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ClockCounterClockwise, ShieldCheck, X } from '@phosphor-icons/react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Info, ShieldCheck, X } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import { toast } from '@/shared/hooks/useToast';
 import * as api from '../api/permissions.api';
 import type { Catalogo, FichaDePermisos } from '../api/permissions.api';
 import { clavesDeSeccion } from '../lib/permisos';
 import ListaDePermisos, { nombreDeRol, type Eleccion } from './ListaDePermisos';
+import RegistroDeCambios from './RegistroDeCambios';
 
 export { textoDeOrigen } from './ListaDePermisos';
 
@@ -59,6 +60,9 @@ export default function PermisosDePersona({ userId, onClose, enLinea = false }: 
     }
   }
 
+  // #703: nadie da lo que no tiene. «Sí» sale apagado, con el porqué, en lo que
+  // quien edita no tiene (null: el superadmin, que lo tiene todo).
+  const misPermisos = useMemo(() => (ficha?.misPermisos ? new Set(ficha.misPermisos) : null), [ficha]);
   const total = catalogo ? catalogo.secciones.flatMap(clavesDeSeccion) : [];
   const rol = (r: string) => (catalogo ? nombreDeRol(catalogo, r) : r);
   const resumen = ficha && (
@@ -77,6 +81,12 @@ export default function PermisosDePersona({ userId, onClose, enLinea = false }: 
 
       {ficha && catalogo && (
         <>
+          {/* #703: si no se pueden cambiar, por qué (solo a quien podría querer hacerlo). */}
+          {!ficha.puedeEditar && ficha.motivo && (
+            <p className="flex items-start gap-2 rounded-lg bg-muted/50 p-3 text-secundario text-muted-foreground">
+              <Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" /> {ficha.motivo}
+            </p>
+          )}
           {ficha.puedeEditar && (
             <div className="flex flex-col gap-2 rounded-xl border border-border p-3 sm:flex-row sm:items-center">
               <label htmlFor={`rol-a-medida-${userId}`} className="text-normal font-semibold">Rol a medida</label>
@@ -90,23 +100,10 @@ export default function PermisosDePersona({ userId, onClose, enLinea = false }: 
           )}
 
           <ListaDePermisos catalogo={catalogo} mapa={ficha.mapa} origenes={ficha.origenes} excepciones={ficha.excepciones}
-            puedeEditar={ficha.puedeEditar} ocupado={ocupado} onElegir={elegir} role={ficha.persona.role} />
+            puedeEditar={ficha.puedeEditar} ocupado={ocupado} onElegir={elegir} role={ficha.persona.role}
+            puedeDar={(c) => !misPermisos || misPermisos.has(c)} />
 
-          <section className="space-y-2">
-            <h3 className="flex items-center gap-1.5 text-normal font-semibold"><ClockCounterClockwise size={16} /> Cambios de permisos</h3>
-            {ficha.registro.length === 0 ? (
-              <p className="text-secundario text-muted-foreground">Ninguno todavía.</p>
-            ) : (
-              <ul className="space-y-1 text-secundario">
-                {ficha.registro.map((r) => (
-                  <li key={r.id} className="text-muted-foreground">
-                    <span className="text-foreground">{new Date(r.cuando).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</span>
-                    {' · '}{r.quien_nombre || 'el sistema'} · {r.clave}: {r.antes ?? '—'} → {r.despues ?? '—'}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
+          <RegistroDeCambios apuntes={ficha.registro} />
         </>
       )}
     </>

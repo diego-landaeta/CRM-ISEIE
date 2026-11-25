@@ -103,6 +103,29 @@ export const avisoSchema = z.object({
   }
 });
 
+/**
+ * La suspensión o la reactivación de un alumno (plugin 1.13.0, classes/estado_alumno.php,
+ * `aviso`; CRM#531): de su cuenta (`ambito: 'cuenta'`, sin curso) o de su matrícula en un
+ * curso (`ambito: 'curso'`, con el curso). `cambio_id` es el sha1 que pone el plugin.
+ */
+export const estadoAlumnoSchema = z.object({
+  evento: z.literal('estado_alumno'),
+  sitio: textoOpcional(500),
+  estado: z.object({
+    cambio_id: z.string().trim().min(8).max(64).regex(/^[A-Za-z0-9_-]+$/, 'cambio_id no válido'),
+    ambito: z.enum(['cuenta', 'curso']),
+    suspendido: z.boolean(),
+    fecha: z.coerce.number().int().positive(),
+    via: z.enum(['ws', 'cli', 'web']).nullish(),
+  }).passthrough(),
+  alumno: personaDelCampus,
+  curso: z.object({ id: idMoodle, nombre: textoOpcional(500) }).passthrough().nullish(),
+}).passthrough().superRefine((a, ctx) => {
+  if (a.estado.ambito === 'curso' && !a.curso) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['curso'], message: 'Aviso incompleto: falta el curso de la matrícula' });
+  }
+});
+
 /** Lo que manda el plugin al conectar con el código (classes/conexion.php, `conectar`). */
 const FALTAN_DATOS = 'Faltan datos: código, dirección del campus o token.';
 export const conectarSchema = z.object({

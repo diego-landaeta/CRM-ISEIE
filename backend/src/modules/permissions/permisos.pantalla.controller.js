@@ -103,6 +103,6 @@ export async function registro(req, res, next) {
   try {
     const rol = req.query.rol ? String(req.query.rol) : null;
     const customRoleId = req.query.customRoleId ? idDe(req.query.customRoleId) : null;
-    res.json({ success: true, data: await model.leerRegistro({ rol, customRoleId, limite: 200 }) });
+    res.json({ success: true, data: editar.conNombres(await model.leerRegistro({ rol, customRoleId, limite: 200 })) });
   } catch (err) { next(err); }
 }

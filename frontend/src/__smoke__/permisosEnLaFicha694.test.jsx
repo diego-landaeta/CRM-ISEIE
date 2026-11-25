@@ -98,6 +98,27 @@ describe('editando: los permisos en la propia ficha', () => {
     expect(screen.getByText(/solo lectura/)).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup')).toBeNull();
   });
+
+  it('#703 · «Sí» sale apagado, con el porqué, en lo que quien edita no tiene', async () => {
+    api.getFicha.mockResolvedValue({ ...ficha(true), misPermisos: ['leads.view'] });
+    editar();
+    await esperar();
+    abrirComercial();
+    const si = within(screen.getByRole('radiogroup', { name: 'Excepción para Exportar prospectos' })).getByRole('radio', { name: 'Sí' });
+    expect(si).toBeDisabled();
+    expect(si).toHaveAttribute('title', 'No lo puedes dar: tú no lo tienes');
+    // Y a la vista, no solo en el `title` (que un botón apagado no enseña).
+    expect(si.closest('li').querySelector('[data-motivo-si]')).toHaveTextContent('No lo puedes dar: tú no lo tienes');
+  });
+
+  it('#703 · en solo lectura dice por qué', async () => {
+    api.getFicha.mockResolvedValue({ ...ficha(false), motivo: 'Los permisos de un admin los cambia el superadmin.' });
+    editar();
+    await esperar();
+    abrirComercial();
+    expect(screen.getByText('Los permisos de un admin los cambia el superadmin.')).toBeInTheDocument();
+    expect(screen.queryByRole('radiogroup')).toBeNull();
+  });
 });
 
 describe('en el alta: lo que trae el rol, y sus excepciones antes de crearla', () => {

@@ -19,7 +19,7 @@ import {
   textoDeMoodle, urlDelCampus, porCorregir, contenidoDelCurso, entregasSinCorregir, cursosDe, MoodleError, esRolDeTutora,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
-import { olvidarMiCampus, alumnosDe } from './tutor.micampus.js';
+import { olvidarMiCampus, vistaDeLaProfesora } from './tutor.micampus.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
 
@@ -38,8 +38,12 @@ async function comoProfesora(tutorId, projectId, cursoId) {
   try { gente = await matriculadosDe(conexion, cursoId); } catch (err) { throw comoAppError(err, 'No se ha podido leer el curso.'); }
   const yo = gente.find((g) => g.id === moodleId);
   if (!yo || !yo.roles.some((r) => esRolDeTutora(r))) throw new AppError('No eres profesora de este curso', 403, 'FORBIDDEN');
-  return { conexion, moodleId, alumnos: alumnosDe(gente, yo) };
+  // Los del curso y, en cada tarea, los de su modo de grupo: los mismos que «Mi campus» (CRM#1062).
+  const { alumnos, deLaTarea } = await vistaDeLaProfesora(conexion, cursoId, gente, yo);
+  return { conexion, moodleId, alumnos, deLaTarea };
 }
+
+const noEsSuyo = () => new AppError('Ese alumno no está entre los tuyos en este curso (o es de otro grupo)', 404, 'NOT_FOUND');
 
 /** La tarea, si es de ese curso (o 404). */
 async function tareaDelCurso(conexion, cursoId, tareaId) {
@@ -50,7 +54,7 @@ async function tareaDelCurso(conexion, cursoId, tareaId) {
 
 /** La tarea con TODAS las entregas de sus alumnos (también quien no ha entregado). */
 export async function verTarea(tutorId, projectId, cursoId, tareaId) {
-  const { conexion, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
+  const { conexion, deLaTarea } = await comoProfesora(tutorId, projectId, cursoId);
   let tarea; let entregas; let notas;
   try {
     tarea = await tareaDelCurso(conexion, cursoId, tareaId);
@@ -59,6 +63,7 @@ export async function verTarea(tutorId, projectId, cursoId, tareaId) {
     if (err instanceof AppError) throw err;
     throw comoAppError(err, 'No se ha podido leer la tarea.');
   }
+  const alumnos = deLaTarea(tarea.cmid);
   const base = urlDelCampus(conexion.url);
   const porAlumno = new Map(entregas.map((e) => [e.alumnoId, e]));
   // El último mensaje del chat con cada alumno (Consultas), para verlo en la lista.
@@ -75,8 +80,8 @@ export async function verTarea(tutorId, projectId, cursoId, tareaId) {
     const e = porAlumno.get(a.id);
     const entregada = e?.estado === 'submitted';
     const nota = notas.get(a.id);
-    // Vuelta a entregar después de la nota = otra vez por corregir.
-    const estado = !entregada ? 'sin_entregar' : (porCorregir(e, nota) ? 'sin_corregir' : 'calificada');
+    // Vuelta a entregar a la misma hora que la nota o después = otra vez por corregir (como Moodle).
+    const estado = !entregada ? 'sin_entregar' : (porCorregir(e, nota, { escala: tarea.escala }) ? 'sin_corregir' : 'calificada');
     return {
       alumnoId: a.id, alumno: a.nombre, email: a.email, estado,
       entregadaAt: entregada ? e.entregadaAt : null,
@@ -104,7 +109,7 @@ export async function verTarea(tutorId, projectId, cursoId, tareaId) {
  * actividades, y en las tareas cuántas tiene por corregir. Solo para la profesora del curso.
  */
 export async function verCurso(tutorId, projectId, cursoId) {
-  const { conexion, moodleId, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
+  const { conexion, moodleId, alumnos, deLaTarea } = await comoProfesora(tutorId, projectId, cursoId);
   const base = urlDelCampus(conexion.url);
   let secciones; let tareas; let entregas; let suyos;
   try {
@@ -114,7 +119,7 @@ export async function verCurso(tutorId, projectId, cursoId) {
       cursosDe(conexion, moodleId),
     ]);
     const lista = tareas.get(Number(cursoId)) || [];
-    entregas = await entregasSinCorregir(conexion, lista.map((x) => x.id));
+    entregas = await entregasSinCorregir(conexion, lista);
   } catch (err) {
     // Un campus con el plugin de antes de la 1.5.0 no deja leer el contenido del curso.
     if (err instanceof MoodleError && /access|acceso|function|función/i.test(`${err.codigo} ${err.message}`)) {
@@ -122,15 +127,15 @@ export async function verCurso(tutorId, projectId, cursoId) {
     }
     throw comoAppError(err, 'No se ha podido leer el curso.');
   }
-  const deLaTarea = new Map((tareas.get(Number(cursoId)) || []).map((x) => [x.cmid, x]));
-  const misAlumnos = new Set(alumnos.map((a) => a.id));
+  const tareaPorCm = new Map((tareas.get(Number(cursoId)) || []).map((x) => [x.cmid, x]));
   const curso = suyos.find((k) => k.id === Number(cursoId));
   return {
     curso: { id: Number(cursoId), nombre: curso?.nombre || null, url: `${base}/course/view.php?id=${cursoId}`, alumnos: alumnos.length },
     secciones: secciones.map((s) => ({
       ...s,
       actividades: s.actividades.map((a) => {
-        const tarea = a.tipo === 'assign' ? deLaTarea.get(a.cmid) : null;
+        const tarea = a.tipo === 'assign' ? tareaPorCm.get(a.cmid) : null;
+        const misAlumnos = tarea ? new Set(deLaTarea(tarea.cmid).map((x) => x.id)) : null;
         return {
           ...a,
           url: a.url || `${base}/mod/${a.tipo}/view.php?id=${a.cmid}`,
@@ -147,13 +152,13 @@ export async function verCurso(tutorId, projectId, cursoId) {
 
 /** Pone la nota (y el comentario) a nombre de la tutora. */
 export async function calificar(tutorId, projectId, cursoId, tareaId, { alumnoId, nota, comentario }) {
-  const { conexion, moodleId, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
-  if (!alumnos.some((a) => a.id === Number(alumnoId))) throw new AppError('Ese alumno no está entre los tuyos en este curso (o es de otro grupo)', 404, 'NOT_FOUND');
+  const { conexion, moodleId, deLaTarea } = await comoProfesora(tutorId, projectId, cursoId);
   let tarea;
   try { tarea = await tareaDelCurso(conexion, cursoId, tareaId); } catch (err) {
     if (err instanceof AppError) throw err;
     throw comoAppError(err, 'No se ha podido leer la tarea.');
   }
+  if (!deLaTarea(tarea.cmid).some((a) => a.id === Number(alumnoId))) throw noEsSuyo();
   if (!tarea.calificable) throw new AppError('Esta tarea se califica con escala o sin nota: corrígela en el campus.', 409, 'NO_CALIFICABLE');
   if (tarea.enGrupo) throw new AppError('Es una tarea en grupo: corrígela en el campus.', 409, 'NO_CALIFICABLE');
   if (Number(nota) > tarea.notaMax) throw new AppError(`La nota máxima de esta tarea es ${tarea.notaMax}`, 400, 'VALIDATION_ERROR');
@@ -188,11 +193,11 @@ export function esArchivoDelCampus(destino, base) {
  * Moodle. Así solo se sirven archivos de entregas de SUS cursos, y nunca otra cosa.
  */
 export async function archivo(tutorId, projectId, cursoId, tareaId, alumnoId, posicion, { fetchImpl = fetch } = {}) {
-  const { conexion, alumnos } = await comoProfesora(tutorId, projectId, cursoId);
-  if (!alumnos.some((a) => a.id === Number(alumnoId))) throw new AppError('Ese alumno no está entre los tuyos en este curso (o es de otro grupo)', 404, 'NOT_FOUND');
+  const { conexion, deLaTarea } = await comoProfesora(tutorId, projectId, cursoId);
   let entrega;
   try {
-    await tareaDelCurso(conexion, cursoId, tareaId);
+    const tarea = await tareaDelCurso(conexion, cursoId, tareaId);
+    if (!deLaTarea(tarea.cmid).some((a) => a.id === Number(alumnoId))) throw noEsSuyo();
     entrega = (await entregasDeTarea(conexion, tareaId)).find((e) => e.alumnoId === Number(alumnoId));
   } catch (err) {
     if (err instanceof AppError) throw err;

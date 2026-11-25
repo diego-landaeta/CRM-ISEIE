@@ -1,2 +1,5 @@
-# El ZIP se genera con empaquetar.sh; no se versiona.
-*.zip
+# El plugin vive en molinangel/Campus-Moodle (local_crm/), no aquí (#1037). Si alguien trae
+# aquí una versión para publicarla, no se versiona: así no vuelve a haber dos copias.
+/*
+!/README.md
+!/.gitignore

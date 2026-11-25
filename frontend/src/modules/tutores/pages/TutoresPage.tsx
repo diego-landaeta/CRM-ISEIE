@@ -20,6 +20,8 @@ import BuscadorCurso from '../components/BuscadorCurso';
 import Entregables from '../components/Entregables';
 import CampoCobraDesde from '../components/CampoCobraDesde';
 import ConsultasDelTutor from '../components/ConsultasDelTutor';
+import RedaccionEnMoodle from '../components/RedaccionEnMoodle';
+import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { tutoresApi, type Tutor, type Colaboracion, type AjustesTutores } from '../api/tutores.api';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 import {
@@ -974,6 +976,8 @@ export default function TutoresPage() {
               </div>
               {/* Consultas de alumnos (#187): campus, empresas y matrícula. */}
               <ConsultasDelTutor key={elegido.id} tutorId={elegido.id} puedeGestionar data-recorrido="tutor-consultas" />
+              {/* La redactora en Moodle (CRM#1026): su cuenta y su rol en los cursos que redacta. Aún en pruebas. */}
+              {SOLO_EN_PRUEBAS && <RedaccionEnMoodle key={`redaccion-${elegido.id}`} tutorId={elegido.id} />}
             </>
           )}
         </div>

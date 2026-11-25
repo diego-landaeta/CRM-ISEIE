@@ -3691,6 +3691,248 @@
   "puertas": []
  },
  {
+  "id": "GET /api/correos/",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "GET",
+  "ruta": "/api/correos/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/correos/recuento",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "GET",
+  "ruta": "/api/correos/recuento",
+  "relativa": "GET /recuento",
+  "controlador": "recuento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/correos/sincronizar",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "POST",
+  "ruta": "/api/correos/sincronizar",
+  "relativa": "POST /sincronizar",
+  "controlador": "sincronizar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.sincronizar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/correos/buzones",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "GET",
+  "ruta": "/api/correos/buzones",
+  "relativa": "GET /buzones",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/correos/buzones",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "POST",
+  "ruta": "/api/correos/buzones",
+  "relativa": "POST /buzones",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/correos/buzones/probar",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "POST",
+  "ruta": "/api/correos/buzones/probar",
+  "relativa": "POST /buzones/probar",
+  "controlador": "probar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/correos/buzones/:id",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "PATCH",
+  "ruta": "/api/correos/buzones/:id",
+  "relativa": "PATCH /buzones/:id",
+  "controlador": "cambiar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/correos/buzones/:id",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "DELETE",
+  "ruta": "/api/correos/buzones/:id",
+  "relativa": "DELETE /buzones/:id",
+  "controlador": "quitar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/correos/buzones/:id/probar",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "POST",
+  "ruta": "/api/correos/buzones/:id/probar",
+  "relativa": "POST /buzones/:id/probar",
+  "controlador": "probar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/correos/buzones/:id/correo-de-empresa",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "POST",
+  "ruta": "/api/correos/buzones/:id/correo-de-empresa",
+  "relativa": "POST /buzones/:id/correo-de-empresa",
+  "controlador": "usarComoCorreoDeEmpresa",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.buzones"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/correos/:id",
+  "tipo": "ruta",
+  "modulo": "correos",
+  "metodo": "GET",
+  "ruta": "/api/correos/:id",
+  "relativa": "GET /:id",
+  "controlador": "uno",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "correos.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/credentials/",
   "tipo": "ruta",
   "modulo": "credentials",
@@ -8416,6 +8658,28 @@
   "ruta": "/api/leads/:id/campus",
   "relativa": "GET /:id/campus",
   "controlador": "avanceEnMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/leads/:id/suspensiones-moodle",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/:id/suspensiones-moodle",
+  "relativa": "GET /:id/suspensiones-moodle",
+  "controlador": "suspensionesEnMoodle",
   "publica": false,
   "guardias": [
    {
@@ -16895,6 +17159,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/tutores/mi-campus/redaccion-moodle",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/redaccion-moodle",
+  "relativa": "GET /mi-campus/redaccion-moodle",
+  "controlador": "miRedaccionMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.mis_cursos"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo",
   "tipo": "ruta",
   "modulo": "tutores",
@@ -17334,6 +17620,30 @@
    }
   ],
   "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/:id/redaccion-moodle",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/:id/redaccion-moodle",
+  "relativa": "GET /:id/redaccion-moodle",
+  "controlador": "redaccionMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.gestionar"
+    ]
+   }
+  ],
+  "puertas": [
+   "tutores.gestionar"
+  ]
  },
  {
   "id": "POST /api/tutores/:id/empresas",

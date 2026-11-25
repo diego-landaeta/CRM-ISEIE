@@ -72,7 +72,7 @@ async function leerFicha(c, { quien, userId, opciones }) {
     }));
     const tareas = await tareasDeCursos(conexion, cursos.map((k) => k.id), opciones);
     const lista = [...tareas.entries()].flatMap(([cursoId, ts]) => ts.map((t) => ({ ...t, cursoId })));
-    const entregas = await entregasSinCorregir(conexion, lista.map((t) => t.id), opciones);
+    const entregas = await entregasSinCorregir(conexion, lista, opciones);
     const susCursos = await cursosDeLaTutora(conexion, c.project_id, quien === 'tutor' ? userId : null, opciones);
     ficha.entregas = lista.flatMap((t) => (entregas.get(t.id) || [])
       .filter((e) => e.alumnoId === Number(c.alumno_moodle_id))

@@ -28,11 +28,16 @@
 */
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
+// Plugin 1.14.0 (#768, paso 1): el alumno terminó un curso con todo corregido.
+import { recibirCursoCompletado } from '../diploma-confirmacion/diploma-confirmacion.moodle.js';
 import { textoDeMoodle } from '../../shared/services/moodle.client.js';
 import * as model from './consultas.model.js';
 import { entraMensajeDelAlumno, tutoresDelCampus, siYaEstaRepetido, campusConConsultas } from './consultas.service.js';
 import { claveDelCampus, firmaValida, apuntarAviso } from './consultas.plugin.js';
-import { avisoSchema } from './consultas.validation.js';
+import { avisoSchema, estadoAlumnoSchema } from './consultas.validation.js';
+import { procesarEstadoAlumno } from './consultas.estadoAlumno.js';
+import { suspensionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
+import { suspensionesListas } from '../leads/suspensiones-moodle.js';
 
 const NO_VALE = () => new AppError('Firma no válida', 401, 'INVALID_SIGNATURE');
 
@@ -48,8 +53,35 @@ export async function recibirAviso(projectId, cuerpo, cabecera, { ahoraMs = Date
   } catch {
     throw new AppError('El aviso no es JSON', 400, 'VALIDATION_ERROR');
   }
+  if (aviso?.evento === 'curso_completado') {
+    await apuntarAviso(projectId);
+    return recibirCursoCompletado(projectId, aviso);
+  }
   await apuntarAviso(projectId);
+  if (aviso?.evento === 'estado_alumno') return recibirEstadoAlumno(projectId, aviso);
   return procesarAviso(projectId, aviso);
+}
+
+/**
+ * Una suspensión o reactivación del alumno (plugin 1.13.0, CRM#531). Con el interruptor
+ * apagado (SUSPENSIONES_MOODLE_EN_PRODUCCION) se contesta como un CRM que aún no conoce el
+ * aviso: 400, y el plugin lo da por perdido sin reintentar (no atasca su cola).
+ */
+async function recibirEstadoAlumno(projectId, avisoRecibido) {
+  if (!suspensionesMoodleActivas()) {
+    throw new AppError('Este CRM todavía no recibe suspensiones de Moodle', 400, 'EVENTO_NO_ADMITIDO');
+  }
+  // Encendido pero sin la migración 333: 503, y el plugin lo reintenta más tarde (no se pierde).
+  if (!(await suspensionesListas())) {
+    throw new AppError('Falta preparar la base para las suspensiones de Moodle', 503, 'MIGRACION_PENDIENTE');
+  }
+  const valido = estadoAlumnoSchema.safeParse(avisoRecibido);
+  if (!valido.success) {
+    const fallo = valido.error.issues[0];
+    const donde = fallo?.path?.length ? ` (${fallo.path.join('.')})` : '';
+    throw new AppError(`Aviso incompleto o no válido${donde}: ${fallo?.message || 'formato'}`, 400, 'VALIDATION_ERROR');
+  }
+  return procesarEstadoAlumno(Number(projectId), valido.data);
 }
 
 /**
