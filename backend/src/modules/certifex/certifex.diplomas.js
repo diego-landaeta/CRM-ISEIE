@@ -10,7 +10,7 @@ import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } fro
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
 import { pasarAPendientes, REF_CURSO_CRM } from './certifex.pendientes.js';
-import { anotarEnvios } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
+import { anotarEnvios, conConfirmacion } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 import { conReversiones } from './certifex.revertir.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
 import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
@@ -132,6 +132,8 @@ export async function solicitudes(req, res, next) {
     if ((f.estado ?? 'pendiente') !== 'rechazada') {
       await conProgramaCrm(data.filas);
       await conFirma(data.filas);
+      // #791: a quién ya se le pidieron los datos del diploma (y en qué está).
+      await conConfirmacion(data.filas);
     }
     res.json({ success: true, data });
   } catch (err) { next(err); }

@@ -29,6 +29,7 @@ import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
 import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
+import { dia, EtiquetaDiploma, leerConfirmacion } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -1568,6 +1569,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                   <tbody className="divide-y divide-border">
                     {solicitudes.map((c) => {
                       const k = String(c.matriculaId);
+                      // #791: a quien ya se le pidieron los datos no se le ofrece «Aprobar y emitir»
+                      // como a los demás: se dice que se espera al alumno (y hasta cuándo).
+                      const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+                      const esperando = !!datos && !datos.puedeEmitir;
                       return (
                         <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                           {!soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
@@ -1576,6 +1581,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                             <CorreoDelAlumno c={c} />
                             <div className="flex flex-wrap items-center gap-1.5">
                               {FIRMA_EN_DIPLOMA && administra && <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />}
+                              {datos && <EtiquetaDiploma lectura={datos} className="mt-1" />}
                               {soloLectura
                                 ? (tieneDni(c)
                                   ? <div className="mt-1"><Etiqueta tono="neutral">DNI {c.titular.dni}</Etiqueta></div>
@@ -1597,12 +1603,27 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {!soloLectura && (
                             <td className="px-2 py-3 pr-4">
                               <div className="flex flex-col items-stretch gap-1.5">
-                                <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
-                                  aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
-                                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
-                                  <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
-                                </Button>
-                                {!tieneDni(c) && (
+                                {esperando ? (
+                                  <div role="status" data-confirmacion={c.confirmacion?.estado}
+                                    className="flex max-w-[190px] items-start gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                    <HourglassMedium size={14} className="mt-px shrink-0 text-info" aria-hidden="true" />
+                                    <span>
+                                      <span className="block font-semibold text-foreground">
+                                        {c.confirmacion?.estado === 'pendiente' ? 'Esperando al alumno' : 'Sin pasar a Certifex'}
+                                      </span>
+                                      {c.confirmacion?.estado === 'pendiente'
+                                        ? `Datos pedidos. Hasta el ${dia(c.confirmacion.caducaEn)}.`
+                                        : 'Corrigió sus datos: pásalos antes de emitir.'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
+                                    aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
+                                    onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
+                                    <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
+                                  </Button>
+                                )}
+                                {!esperando && !tieneDni(c) && (
                                   <span id={`diplomas-sin-dni-${k}`} className="text-center text-[11px] font-medium text-destructive" title={TITULO_SIN_DNI}>{PON_EL_DNI}</span>
                                 )}
                                 {/* Rechazar sigue siendo de administración (22/10/2026). */}

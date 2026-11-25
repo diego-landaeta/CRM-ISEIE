@@ -12,6 +12,7 @@ import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { soloLoSuyo, alcanceComercial, personasDentro, dentroDelAlcance } from '../../shared/utils/roles.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { avanceDelAlumno } from './avance-moodle.js';
+import { deLaFicha as diplomaDeLaFicha } from '../diploma-confirmacion/diploma-confirmacion.model.js';
 import { suspensionesDelAlumno, suspensionesListas } from './suspensiones-moodle.js';
 
 // ============================================================
@@ -302,6 +303,23 @@ export async function suspensionesEnMoodle(req, res, next) {
     await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
     const campusPermitidos = veTodoElCrm(req.user) ? null : await campusDeLaPersona(req.user.userId);
     res.json({ success: true, data: await suspensionesDelAlumno(id, { campusPermitidos }) });
+  } catch (err) { next(err); }
+}
+
+/**
+ * El diploma del alumno en su ficha (#791): las confirmaciones de datos unidas a ESTA
+ * ficha (`diploma_confirmaciones.lead_id`, que ya es la de su campus) y en qué están:
+ * datos pedidos, contestados o emitido. Mismo acceso que el resto de la ficha.
+ */
+export async function diplomaDelAlumno(req, res, next) {
+  try {
+    const id = parseInt(req.params.id);
+    if (isNaN(id)) throw new AppError('ID invalido', 400, 'INVALID_ID');
+    await exigirQueSeaSuyo(req, id);
+    const { rows } = await query('SELECT id, project_id FROM leads WHERE id = $1 AND deleted_at IS NULL', [id]);
+    if (!rows[0]) throw new AppError('Contacto no encontrado', 404, 'NOT_FOUND');
+    await exigirCampusSuyo(req, rows[0].project_id, 'Contacto no encontrado');
+    res.json({ success: true, data: await diplomaDeLaFicha(id) });
   } catch (err) { next(err); }
 }
 

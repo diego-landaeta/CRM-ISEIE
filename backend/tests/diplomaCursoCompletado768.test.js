@@ -379,3 +379,48 @@ describe('#768 paso 1 · por la puerta firmada del plugin', () => {
     expect(r.resultado).toBe('ignorado');
   });
 });
+
+describe('#791 · la ficha de ESTE campus y el 503 que entiende el plugin', () => {
+  let otro;
+  beforeAll(async () => {
+    [otro] = await q('INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
+      [`${MARCA}OTRO`, `${MARCA.toLowerCase()}-otro`, `${MARCA}OTRO`]);
+  });
+  afterAll(async () => {
+    if (!otro) return;
+    await q('DELETE FROM leads WHERE project_id = $1', [otro.id]);
+    await q('DELETE FROM projects WHERE id = $1', [otro.id]);
+  });
+
+  it('el mismo correo con ficha más reciente en otro campus: la confirmación queda en la de este', async () => {
+    const { email, leadId, c } = await alumno();
+    const [{ id: ajena }] = await q('INSERT INTO leads (project_id, nombre, email) VALUES ($1, $2, $3) RETURNING id',
+      [otro.id, 'Alumno en otro campus', email]);
+    expect(Number(ajena)).toBeGreaterThan(leadId);
+    expect(await recibirCursoCompletado(proyecto.id, aviso(email))).toMatchObject({ resultado: 'pedida', leadId });
+    const [f] = await filas(c.matriculaId);
+    expect(Number(f.lead_id)).toBe(leadId);
+  });
+
+  it('Certifex caído: el plugin recibe 503 «Certifex no responde, se reintentará», no el genérico', async () => {
+    const { default: supertest } = await import('supertest');
+    const { default: express } = await import('express');
+    const { default: puerta } = await import('../src/modules/consultas/consultas.webhook.js');
+    const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
+    const app = express();
+    app.use('/api/moodle-avisos', puerta);
+    app.use(errorHandler);
+
+    const secreto = await crearClave(proyecto.id);
+    const { email } = await alumno();
+    const crudo = Buffer.from(JSON.stringify(aviso(email)));
+    estado.caido = { msg: 'Certifex no responde', status: 502, code: 'CERTIFEX_NO_RESPONDE' };
+    const r = await supertest(app).post(`/api/moodle-avisos/${proyecto.id}`)
+      .set('Content-Type', 'application/json')
+      .set('x-crm-firma', firmar(crudo, secreto, Math.floor(Date.now() / 1000)))
+      .send(crudo.toString('utf8'));
+    expect(r.status).toBe(503);
+    expect(r.body).toMatchObject({ success: false, code: 'CERTIFEX_NO_RESPONDE', error: 'Certifex no responde, se reintentará' });
+    expect(r.body.ref).toBeTruthy();
+  });
+});

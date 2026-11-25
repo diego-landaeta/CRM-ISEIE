@@ -27,6 +27,14 @@ function classifyError(err, statusCode) {
   return 'business';
 }
 
+/**
+ * Fallos de sistema previstos cuyo texto ya es el que hay que decir, a quien sea (#791).
+ * Un 5xx normal sale como «Error del sistema. Pasa esta referencia…» a quien no administra,
+ * y el plugin de Moodle (sin sesión) recibía eso cuando Certifex no contestaba. Estos dicen
+ * qué pasa y no llevan nada técnico; la referencia sigue en `ref` y en el registro.
+ */
+export const MENSAJE_PARA_TODOS = new Set(['CERTIFEX_NO_RESPONDE']);
+
 export function errorHandler(err, req, res, _next) {
   const statusCode = err.statusCode || 500;
   const message = err.isOperational ? err.message : 'Error interno del servidor';
@@ -71,6 +79,8 @@ export function errorHandler(err, req, res, _next) {
   let displayMessage = message;
   if (errorType === 'validation') {
     displayMessage = message; // ya viene descriptivo de Zod
+  } else if (errorType === 'system' && err.isOperational && MENSAJE_PARA_TODOS.has(err.code)) {
+    displayMessage = message;
   } else if (errorType === 'system') {
     // A quien administra se le dice QUE ha fallado. Es informacion tecnica, pero
     // se la damos a quien puede hacer algo con ella: si no, un fallo de la base

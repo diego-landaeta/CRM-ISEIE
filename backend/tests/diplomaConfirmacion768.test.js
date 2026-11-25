@@ -63,6 +63,9 @@ const { prepararEmision, emitirMatriculas } = await import('../src/modules/certi
 const diplomas = await import('../src/modules/certifex/certifex.diplomas.js');
 const { default: modulo } = await import('../src/modules/diploma-confirmacion/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
+// #791: el diploma en la ficha y en Pendientes.
+const { diplomaDelAlumno } = await import('../src/modules/leads/lead.controller.js');
+const { conConfirmacion } = await import('../src/modules/diploma-confirmacion/diploma-confirmacion.puerta.js');
 
 const MARCA = `D7${Date.now().toString(36).slice(-6).toUpperCase()}`;
 const BASE = 7_680_000_000 + (Date.now() % 1_000_000) * 100;
@@ -356,5 +359,129 @@ describe('#768 · el plazo de 7 días', () => {
     await expect(svc.verFormulario(token)).rejects.toMatchObject({ code: 'ENLACE_NO_VALE' });
     expect((await prepararEmision([c.matriculaId])).bloqueadas.has(c.matriculaId)).toBe(false);
     expect(avisos.some((a) => /7 días/.test(a.title))).toBe(true);
+  });
+});
+
+describe('#774 · la confirmación se une a la ficha del alumno en SU campus', () => {
+  // El mismo alumno puede tener ficha en varios campus. La confirmación es del
+  // campus del aviso (el centro de la solicitud de Certifex): su lead_id tiene
+  // que ser la ficha de ESE campus, nunca la de otro aunque sea más reciente.
+  let otro;
+  const leads = [];
+  const matriculas = [];
+  const ficha = async (projectId, email) => {
+    const [{ id }] = await q('INSERT INTO leads (project_id, nombre, email) VALUES ($1, $2, $3) RETURNING id',
+      [projectId, 'Alumno 1119', email]);
+    leads.push(id);
+    return Number(id);
+  };
+
+  beforeAll(async () => {
+    [otro] = await q(
+      'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
+      [`${MARCA}OTRO`, `${MARCA.toLowerCase()}-otro`, `${MARCA}OTRO`]);
+  });
+
+  afterAll(async () => {
+    await q('DELETE FROM diploma_confirmaciones WHERE matricula_id = ANY($1::bigint[])', [matriculas]);
+    if (leads.length) await q('DELETE FROM leads WHERE id = ANY($1::int[])', [leads]);
+    if (otro) await q('DELETE FROM projects WHERE id = $1', [otro.id]);
+  });
+
+  it('mismo correo en dos campus: enlaza con la ficha del campus del aviso, no con la más reciente del otro', async () => {
+    const c = alumno();
+    matriculas.push(c.matriculaId);
+    const suya = await ficha(proyecto.id, c.titular.email);
+    const ajena = await ficha(otro.id, c.titular.email.toUpperCase());
+    expect(ajena).toBeGreaterThan(suya); // la del otro campus es la más reciente
+    await pedirUno(c);
+    const f = await filaDe(c.matriculaId);
+    expect(Number(f.project_id)).toBe(proyecto.id);
+    expect(Number(f.lead_id)).toBe(suya);
+  });
+
+  it('sin ficha en su campus: lead_id vacío, aunque haya una en otro campus', async () => {
+    const c = alumno();
+    matriculas.push(c.matriculaId);
+    await ficha(otro.id, c.titular.email);
+    await pedirUno(c);
+    expect((await filaDe(c.matriculaId)).lead_id).toBeNull();
+  });
+});
+
+describe('#791 · el estado del diploma, en la ficha y en Pendientes', () => {
+  let otro;
+  const leads = [];
+  const matriculas = [];
+  const ficha = async (projectId, email) => {
+    const [{ id }] = await q('INSERT INTO leads (project_id, nombre, email) VALUES ($1, $2, $3) RETURNING id',
+      [projectId, 'Alumno 1135', email]);
+    leads.push(id);
+    return Number(id);
+  };
+  /** Lo que contesta GET /api/leads/:id/diploma, como superadmin. */
+  const verFicha = async (id) => {
+    let cuerpo; let fallo;
+    await diplomaDelAlumno({ params: { id: String(id) }, user: SUPER, query: {} },
+      { json: (b) => { cuerpo = b; } }, (e) => { fallo = e; });
+    if (fallo) throw fallo;
+    return cuerpo.data;
+  };
+
+  beforeAll(async () => {
+    [otro] = await q(
+      'INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id',
+      [`${MARCA}FICHA`, `${MARCA.toLowerCase()}-ficha`, `${MARCA}FICHA`]);
+  });
+  afterAll(async () => {
+    await q('DELETE FROM diploma_confirmaciones WHERE matricula_id = ANY($1::bigint[])', [matriculas]);
+    if (leads.length) await q('DELETE FROM leads WHERE id = ANY($1::int[])', [leads]);
+    if (otro) await q('DELETE FROM projects WHERE id = $1', [otro.id]);
+  });
+
+  it('la ficha de su campus dice «datos pedidos», luego «contestados» y «emitido»; la del otro campus, nada', async () => {
+    const c = alumno();
+    matriculas.push(c.matriculaId);
+    const suya = await ficha(proyecto.id, c.titular.email);
+    const ajena = await ficha(otro.id, c.titular.email);
+    expect(await verFicha(suya)).toEqual([]);
+    await pedirUno(c);
+
+    const [pedida] = await verFicha(suya);
+    expect(pedida).toMatchObject({
+      matricula_id: c.matriculaId, centro: MARCA, campus: MARCA, estado: 'pendiente',
+      curso_nombre: 'Curso de prueba 768', envio_simulado: true, nexpediente: null,
+    });
+    expect(pedida.pedido_at).toBeTruthy();
+    expect(pedida.caduca_at).toBeTruthy();
+    // Ni el enlace, ni la IP, ni el documento.
+    expect(pedida).not.toHaveProperty('token_hash');
+    expect(pedida).not.toHaveProperty('respondido_ip');
+    expect(pedida).not.toHaveProperty('documento_propuesto');
+    expect(await verFicha(ajena)).toEqual([]);
+
+    await q(`UPDATE diploma_confirmaciones SET estado = 'confirmado', respondido_at = NOW() WHERE matricula_id = $1`, [c.matriculaId]);
+    expect((await verFicha(suya))[0]).toMatchObject({ estado: 'confirmado' });
+    await q(`UPDATE diploma_confirmaciones SET nexpediente = 'PRB-2026-000001-AAAA', emitido_at = NOW() WHERE matricula_id = $1`, [c.matriculaId]);
+    expect((await verFicha(suya))[0]).toMatchObject({ estado: 'confirmado', nexpediente: 'PRB-2026-000001-AAAA' });
+  });
+
+  it('Pendientes: la fila de quien ya tiene los datos pedidos lo dice; las demás, null', async () => {
+    const pedida = alumno();
+    const sinPedir = alumno();
+    matriculas.push(pedida.matriculaId, sinPedir.matriculaId);
+    await pedirUno(pedida);
+    const filasPanel = [{ matriculaId: pedida.matriculaId }, { matriculaId: sinPedir.matriculaId }];
+    await conConfirmacion(filasPanel);
+    expect(filasPanel[0].confirmacion).toMatchObject({ estado: 'pendiente', simulado: true, sinAplicar: false });
+    expect(filasPanel[0].confirmacion.caducaEn).toBeTruthy();
+    expect(filasPanel[0].confirmacion).not.toHaveProperty('token_hash');
+    expect(filasPanel[1].confirmacion).toBeNull();
+
+    // Con el interruptor apagado, nada (como el resto de la confirmación).
+    process.env.DIPLOMA_CONFIRMACION_ACTIVA = '0';
+    const otra = [{ matriculaId: pedida.matriculaId }];
+    await conConfirmacion(otra);
+    expect(otra[0].confirmacion).toBeNull();
   });
 });

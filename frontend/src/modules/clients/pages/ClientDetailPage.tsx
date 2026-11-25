@@ -25,6 +25,8 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+// #791: el diploma (datos pedidos, contestados o emitido).
+import DiplomaDelAlumno from '../components/DiplomaDelAlumno';
 import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
 import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
 
@@ -454,6 +456,8 @@ export default function ClientDetailPage() {
 
         {/* ── Columna derecha (1/3) ── */}
         <div className="space-y-4">
+
+          <DiplomaDelAlumno leadId={lead?.id} />
 
           {/* Datos de contacto */}
           <div className="bg-card border border-border rounded-xl p-4 space-y-3">
