@@ -29,6 +29,7 @@ const { errorHandler } = await import('../src/shared/middleware/errorHandler.js'
 const { resolverPermisos } = await import('../src/modules/permissions/resolver.js');
 const { asesoraDelInforme } = await import('../src/modules/reports/report.controller.js');
 const { deQuienEsLaCola } = await import('../src/modules/proceso/proceso.controller.js');
+const { deQuien: deQuienConvocatorias } = await import('../src/modules/convocatorias/convocatoria.controller.js');
 const modulos = await Promise.all(['users', 'leads', 'sales']
   .map((m) => import(`../src/modules/${m}/index.js`).then((x) => x.default)));
 
@@ -64,7 +65,10 @@ beforeAll(async () => {
     await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, A]);
     return u;
   };
-  for (const r of ROLES) P[r] = await persona(r.replace(/_/g, ''), r);
+  // El super admin, uno que ya exista: dar de alta uno nuevo cambia cuántos hay
+  // mientras otra prueba los cuenta (consultas190 avisa a todos los super admin).
+  const sa = await one("SELECT id, role FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1");
+  for (const r of ROLES) P[r] = r === 'superadmin' && sa ? sa : await persona(r.replace(/_/g, ''), r);
   G1 = await persona('g1', 'gestor');
   FUERA = P.gestor; // otra gestora del campus, de fuera del equipo
   await q('INSERT INTO equipo_comercial (lider_id, gestora_id) VALUES ($1, $2)', [P.lider_equipo.id, G1.id]);
@@ -165,6 +169,30 @@ describe('De quién son la Cola y los Reportes, rol por rol', () => {
     for (const r of ['gestor', 'project_manager']) {
       expect(await deQuienEsLaCola(req(P[r], { gestoraId: String(G1.id) })), r).toBe(P[r].id);
       expect(await asesoraDelInforme(req(P[r], { asesoraId: String(G1.id) })), r).toBe(P[r].id);
+    }
+  });
+});
+
+describe('Convocatorias pendientes: de quién son, rol por rol (repaso del 25/11)', () => {
+  const req = (u, query = {}) => ({ user: { userId: u.id, role: u.role, roles_extra: [] }, query });
+
+  it('admin, superadmin y soporte: el campus entero o la que pidan (soporte salía vacío)', async () => {
+    for (const r of ['superadmin', 'admin', 'soporte']) {
+      expect(await deQuienConvocatorias(req(P[r])), r).toBeNull();
+      expect(await deQuienConvocatorias(req(P[r], { gestoraId: String(G1.id) })), r).toBe(G1.id);
+    }
+  });
+
+  it('la líder: su equipo, o una de él; nunca una de fuera (antes, solo lo suyo)', async () => {
+    const lider = P.lider_equipo;
+    expect(await deQuienConvocatorias(req(lider))).toEqual([lider.id, G1.id]);
+    expect(await deQuienConvocatorias(req(lider, { gestoraId: String(G1.id) }))).toEqual([G1.id]);
+    expect(await deQuienConvocatorias(req(lider, { gestoraId: String(FUERA.id) }))).toEqual([lider.id, G1.id]);
+  });
+
+  it('gestora y project manager: solo lo suyo', async () => {
+    for (const r of ['gestor', 'project_manager']) {
+      expect(await deQuienConvocatorias(req(P[r], { gestoraId: String(G1.id) })), r).toBe(P[r].id);
     }
   });
 });

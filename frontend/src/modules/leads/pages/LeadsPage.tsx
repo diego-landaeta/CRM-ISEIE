@@ -787,7 +787,9 @@ export default function LeadsPage() {
               360; sombreado: CRM#524 / ISEIE #293). Solo para quien manda: es
               una vista del reparto de todo el equipo, no algo que una gestora
               necesite. */}
-          {(user?.role === 'admin' || user?.role === 'superadmin') && (
+          {/* Por permiso y alcance (25/11/2026): también soporte y la líder de equipo, que lo
+                ve de su equipo (el servidor lo recorta con `alcanceDeLider`). */}
+          {veGestoras && (
             <UltimoLeadAsignado projectId={activeProject?.id} />
           )}
 
