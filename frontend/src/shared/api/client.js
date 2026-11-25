@@ -142,6 +142,10 @@ async function request(url, options = {}) {
     throw new ApiError('Session expired', 401);
   }
 
+  // Las descargas (PDF, documentos, exportaciones) piden `responseType: 'blob'`: con
+  // `res.text()` el archivo llegaba como texto y «Descargar» no hacía nada (Diego,
+  // 24/11: el PDF de Novedades). Un error sigue llegando como JSON.
+  if (options.responseType === 'blob' && res.ok) return res.blob();
   const data = res.headers.get('content-type')?.includes('json')
     ? await res.json()
     : await res.text();

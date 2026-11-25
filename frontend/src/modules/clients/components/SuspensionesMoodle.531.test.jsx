@@ -4,9 +4,10 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 
 /**
  * Suspensiones de Moodle en el CRM (gemela de MultiCRM #531), en el frontal:
- *   · la ficha: «Suspendido en Moodle desde … · motivo», qué está suspendido, el historial;
- *     «Reactivado el …»; «Al día» si Moodle nunca avisó; nada si el servidor lo tiene apagado;
+ *   · la ficha: «Matrícula suspendida en Moodle desde … · motivo», a qué afecta, el
+ *     historial; «Reactivada en Moodle el …»; «Al día» si Moodle nunca avisó; nada si el servidor lo tiene apagado;
  *   · la etiqueta de la cabecera, solo si sigue suspendido;
+ *   · todo sin género (QA del 25/11/2026): «Cuenta / Matrícula suspendida», «Reactivada»;
  *   · el hook pide `/leads/:id/suspensiones-moodle`;
  *   · el filtro «Suspendidos en Moodle» de Clientes: sale solo encendido y se puede quitar.
  *
@@ -15,8 +16,10 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
 afterEach(() => { cleanup(); });
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn() }, API_BASE_URL: '/api', getAccessToken: () => null, setAccessToken: () => {} }));
+// Desde main (25/11) el filtro de gestora va por permiso y alcance (usePermission), no por rol.
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true, veGestoras: true, llevaEquipo: false }) }));
 
-const { default: SuspensionesMoodleBloque, EtiquetaSuspendido } = await import('@/modules/clients/components/SuspensionesMoodle');
+const { default: SuspensionesMoodleBloque, EtiquetaSuspendido, loSuspendido, cambioDicho } = await import('@/modules/clients/components/SuspensionesMoodle');
 const { useSuspensionesMoodle } = await import('@/modules/clients/hooks/useSuspensionesMoodle');
 const { default: ClientsFiltersBar } = await import('@/modules/clients/components/ClientsFiltersBar');
 const { suspensionesMoodleEncendidas } = await import('@/shared/lib/suspensionesMoodle');
@@ -44,17 +47,17 @@ const REACTIVADO = {
 describe('#531 · el estado en Moodle de la ficha', () => {
   it('suspendido: desde cuándo, el motivo según el CRM, qué está suspendido y el historial', () => {
     render(<SuspensionesMoodleBloque datos={SUSPENDIDO} cargando={false} error={null} />);
-    expect(screen.getByText(/Suspendido en Moodle desde el/).textContent).toMatch(/20 nov/);
+    expect(screen.getByText(/Matrícula suspendida en Moodle desde el/).textContent).toMatch(/20 nov/);
     expect(screen.getAllByText('Motivo según el CRM: Cuota vencida sin pagar desde el 01/11/2026')).toHaveLength(1);
-    expect(screen.getByText('Suspendido: Curso de prueba')).toBeTruthy();
+    expect(screen.getByText('Afecta a: Curso de prueba')).toBeTruthy();
     expect(screen.getByText('Historial de cambios (2)')).toBeTruthy();
     expect(screen.getByText(/desde una integración \(Make…\)/)).toBeTruthy();
     expect(screen.getByText('Pagó el 09/11/2026')).toBeTruthy();
   });
 
-  it('reactivado: «Reactivado el …» con el pago; sin avisos: «Al día»; apagado: nada', () => {
+  it('reactivado: «Reactivada en Moodle el …» con el pago; sin avisos: «Al día»; apagado: nada', () => {
     const { rerender, container } = render(<SuspensionesMoodleBloque datos={REACTIVADO} cargando={false} error={null} />);
-    expect(screen.getByText(/Reactivado el/).textContent).toMatch(/22 nov/);
+    expect(screen.getByText(/Reactivada en Moodle el/).textContent).toMatch(/22 nov/);
     expect(screen.getByText('Pagó el 21/11/2026')).toBeTruthy();
     rerender(<SuspensionesMoodleBloque datos={{ disponible: true, suspendido: false, campus: [], historial: [] }} cargando={false} error={null} />);
     expect(screen.getByText('Al día')).toBeTruthy();
@@ -64,9 +67,38 @@ describe('#531 · el estado en Moodle de la ficha', () => {
 
   it('la etiqueta de la cabecera, solo si sigue suspendido', () => {
     const { rerender, container } = render(<EtiquetaSuspendido datos={SUSPENDIDO} />);
-    expect(screen.getByText('Suspendido en Moodle')).toBeTruthy();
+    expect(screen.getByText('Matrícula suspendida en Moodle')).toBeTruthy();
     rerender(<EtiquetaSuspendido datos={REACTIVADO} />);
     expect(container.textContent).toBe('');
+  });
+
+  it('sin género (QA 25/11): cuenta o matrícula, nunca «Suspendido» ni «Reactivado»', () => {
+    const MASCULINO = /\b(suspendido|reactivado)\b/i;
+    // La cuenta entera manda; si no, la matrícula o las matrículas.
+    expect(loSuspendido({ cuenta: true, cursos: [{ id: 2, nombre: 'Curso de prueba' }] })).toBe('Cuenta suspendida');
+    expect(loSuspendido({ cuenta: false, cursos: [{ id: 2, nombre: 'A' }] })).toBe('Matrícula suspendida');
+    expect(loSuspendido({ cuenta: false, cursos: [{ id: 2, nombre: 'A' }, { id: 3, nombre: 'B' }] })).toBe('Matrículas suspendidas');
+    expect(cambioDicho({ ambito: 'cuenta', suspendido: true })).toBe('Cuenta suspendida');
+    expect(cambioDicho({ ambito: 'curso', suspendido: false })).toBe('Matrícula reactivada');
+
+    const CUENTA = {
+      ...SUSPENDIDO,
+      campus: [{ ...SUSPENDIDO.campus[0], cuenta: true, cursos: [] }],
+    };
+    const { container, rerender } = render(<SuspensionesMoodleBloque datos={CUENTA} cargando={false} error={null} />);
+    expect(screen.getByText(/Cuenta suspendida en Moodle desde el/)).toBeTruthy();
+    expect(screen.getByText('Afecta a: la cuenta del campus')).toBeTruthy();
+    // El historial: «Matrícula suspendida · Curso de prueba» y «Cuenta reactivada».
+    expect(screen.getByText('Matrícula suspendida')).toBeTruthy();
+    expect(screen.getByText('Cuenta reactivada')).toBeTruthy();
+    expect(container.textContent).not.toMatch(MASCULINO);
+    rerender(<SuspensionesMoodleBloque datos={REACTIVADO} cargando={false} error={null} />);
+    expect(screen.getByText('Reactivada')).toBeTruthy();
+    expect(container.textContent).not.toMatch(MASCULINO);
+    cleanup();
+
+    const { container: cabecera } = render(<EtiquetaSuspendido datos={CUENTA} />);
+    expect(cabecera.textContent.trim()).toBe('Cuenta suspendida en Moodle');
   });
 
   it('el hook pide /leads/:id/suspensiones-moodle', async () => {
@@ -76,7 +108,7 @@ describe('#531 · el estado en Moodle de la ficha', () => {
       return <SuspensionesMoodleBloque datos={s.datos} cargando={s.cargando} error={s.error} />;
     }
     render(<Ficha />);
-    await waitFor(() => expect(screen.getByText(/Suspendido en Moodle desde el/)).toBeTruthy());
+    await waitFor(() => expect(screen.getByText(/Matrícula suspendida en Moodle desde el/)).toBeTruthy());
     expect(get).toHaveBeenCalledWith('/leads/7/suspensiones-moodle');
   });
 });

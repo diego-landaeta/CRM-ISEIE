@@ -10,7 +10,7 @@ import {
   proyectosDeLaPersona, ayerEnMadrid,
 } from '../mcp/mcp.model.js';
 import { construirAmbito, acotarProyectos, responsableImpuesto, alcanceDelMcp } from '../mcp/mcp.acceso.js';
-import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, dentroDelAlcance, personasDentro, tieneRol } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
 
 // A que proyectos se acota el informe.
@@ -52,8 +52,10 @@ export async function overview(req, res, next) {
 export async function asesoraDelInforme(req) {
   const alcance = await alcanceComercial(req.user);
   if (alcance && alcance.length > 1) return personasDentro(alcance, req.query.asesoraId);
-  const rol = req.user?.role;
-  if (rol === 'admin' || rol === 'superadmin') {
+  // Quien ve el campus entero (admin, superadmin, soporte): todo, o la asesora
+  // que pida. Por alcance, no por rol (25/11/2026): soporte tiene Reportes y
+  // le salían vacíos, porque solo el admin y el superadmin pasaban de aquí.
+  if (tieneRol(req.user, 'superadmin', 'admin', 'soporte')) {
     return req.query.asesoraId ? Number(req.query.asesoraId) : null;
   }
   return req.user?.userId || -1;
@@ -157,6 +159,8 @@ export async function miPuesto(req, res, next) {
     const { asesoraId, base, ...sinAsesora } = ambito;
     const data = await model.miPuesto({
       userId, from: desde, to: hasta, ...sinAsesora, esJefe,
+      // Quien lleva un equipo, la clasificación de su equipo (CRM#1105 / ISEIE#761).
+      soloEstas: lider,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: ['factura', 'cerrado'].includes(req.query.base) ? req.query.base : 'cobro',
@@ -167,6 +171,8 @@ export async function miPuesto(req, res, next) {
       data.sin_gestora = null;
       data.total = null;
     }
+    // Para «Cómo voy»: además de la tabla de su equipo, su propio puesto (CRM#1105 / ISEIE#761).
+    data.lider = Boolean(lider);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

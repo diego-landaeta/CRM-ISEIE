@@ -280,6 +280,11 @@ export async function sincronizar({ desde, hasta, nocturna = null } = {}, env = 
     const usuarios = datos.lista(await conToken((t) => cliente.usuarios(t, env)));
     resultado.campos.usuarios = datos.camposDe(usuarios);
     const personas = usuarios.map(datos.normalizarUsuario).filter(Boolean);
+    // La API de Monitask no documenta sus respuestas: si trae personas y no se
+    // reconoce ninguna, se dice con los nombres de sus campos en vez de dar «0 personas».
+    if (usuarios.length && !personas.length) {
+      resultado.errores.push({ que: 'formato', error: datos.avisoDeFormato('personas', usuarios.length, resultado.campos.usuarios) });
+    }
     for (const p of personas) await model.guardarPersona(p);
     resultado.emparejadas = await model.emparejarPorCorreo();
 
@@ -294,10 +299,20 @@ export async function sincronizar({ desde, hasta, nocturna = null } = {}, env = 
       resultado.errores.push({ que: 'proyectos', error: String(err.message).slice(0, 200) });
     }
 
+    // Lo que llega de Monitask frente a lo que el CRM entiende, para el aviso de formato.
+    const leidas = { entradas: [0, 0], actividad: [0, 0] };
+    // La actividad se deja de pedir a TODOS solo si Monitask la niega a la cuenta
+    // (401/403: el plan o el permiso). Otro fallo es de esa persona: las demás siguen
+    // con su %. Antes, el primer fallo de cualquiera dejaba a todo el equipo sin %.
+    let actividadNegada = false;
+    let conActividad = 0;
+    let falloDeActividad = false;
+
     for (const persona of personas) {
       try {
         const entradas = [];
         const actividad = [];
+        let actividadDeEsta = true;
         for (const [a, b] of datos.tramos(desde, hasta, diasPorTramo(env))) {
           const rango = {
             userId: persona.id,
@@ -306,20 +321,32 @@ export async function sincronizar({ desde, hasta, nocturna = null } = {}, env = 
           };
           const crudas = datos.lista(await conToken((t) => cliente.entradas(t, rango, env)));
           if (crudas.length && !resultado.campos.entradas) resultado.campos.entradas = datos.camposDe(crudas);
-          entradas.push(...crudas.map(datos.normalizarEntrada).filter(Boolean));
-          if (!resultado.sin_actividad) {
+          const buenas = crudas.map(datos.normalizarEntrada).filter(Boolean);
+          leidas.entradas[0] += crudas.length;
+          leidas.entradas[1] += buenas.length;
+          entradas.push(...buenas);
+          if (!actividadNegada && actividadDeEsta) {
             try {
               const act = datos.lista(await conToken((t) => cliente.actividad(t, rango, env)));
               if (act.length && !resultado.campos.actividad) resultado.campos.actividad = datos.camposDe(act);
-              actividad.push(...act.map(datos.normalizarActividad).filter(Boolean));
+              const tramosAct = act.map(datos.normalizarActividad).filter(Boolean);
+              leidas.actividad[0] += act.length;
+              leidas.actividad[1] += tramosAct.length;
+              actividad.push(...tramosAct);
             } catch (err) {
               if (err.code === 'MONITASK_CADUCADO') throw err;
-              // Sin actividad las horas siguen valiendo: se apunta una vez y se sigue sin ella.
-              resultado.sin_actividad = true;
-              resultado.errores.push({ que: 'actividad', error: String(err.message).slice(0, 200) });
+              // Sin actividad las horas siguen valiendo: se apunta y se sigue sin ella.
+              falloDeActividad = true;
+              actividadDeEsta = false;
+              if (err.status === 401 || err.status === 403) actividadNegada = true;
+              resultado.errores.push({
+                que: actividadNegada ? 'actividad' : `actividad persona ${persona.id}`,
+                error: String(err.message).slice(0, 200),
+              });
             }
           }
         }
+        if (actividad.length) conActividad += 1;
         const dias = datos.resumirPorDia({ entradas, actividad, desde, hasta, tz, proyectos: nombres });
         await model.guardarDias(persona.id, desde, hasta, dias);
         resultado.personas += 1;
@@ -329,6 +356,18 @@ export async function sincronizar({ desde, hasta, nocturna = null } = {}, env = 
         resultado.errores.push({ que: `persona ${persona.id}`, error: String(err.message).slice(0, 200) });
       }
     }
+    // «Monitask no dio el % de actividad»: falló y nadie la tiene.
+    resultado.sin_actividad = falloDeActividad && conActividad === 0;
+    if (leidas.entradas[0] && !leidas.entradas[1]) {
+      resultado.errores.push({ que: 'formato', error: datos.avisoDeFormato('entradas de tiempo', leidas.entradas[0], resultado.campos.entradas) });
+    }
+    if (leidas.actividad[0] && !leidas.actividad[1]) {
+      resultado.errores.push({ que: 'formato', error: datos.avisoDeFormato('tramos de actividad', leidas.actividad[0], resultado.campos.actividad) });
+    }
+    resultado.leidas = {
+      entradas: { llegan: leidas.entradas[0], se_entienden: leidas.entradas[1] },
+      actividad: { llegan: leidas.actividad[0], se_entienden: leidas.actividad[1] },
+    };
 
     const sinFallos = resultado.errores.filter((e) => e.que.startsWith('persona')).length === 0;
     await model.apuntarSincronizacion({ ...resultado, termino: new Date().toISOString() },

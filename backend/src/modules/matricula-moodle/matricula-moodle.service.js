@@ -112,6 +112,19 @@ const listaDeCursos = (cursos) => cursos
   .map((c) => (c.curso_nombre ? `${c.curso_nombre} (id ${c.curso_moodle_id})` : `curso id ${c.curso_moodle_id}`))
   .join(', ');
 
+/**
+ * El título del aviso «para revisar» de lo que no se arregla reintentando, sin género
+ * (QA del 25/11/2026: «Alumno suspendido en Moodle» lo decía en masculino a todas). Lo
+ * suspendido es la cuenta del campus o la matrícula de un curso: se dice eso.
+ *   «Cuenta suspendida en Moodle: María Alumna (Psiko)» · «Matrícula rechazada por Moodle: …»
+ */
+export function tituloDeRevisar(r, fila) {
+  const quien = String(fila.alumno_nombre || '').trim() || 'sin nombre';
+  const que = r?.tipo !== 'suspendido' ? 'Matrícula rechazada por Moodle'
+    : r.ambito === 'curso' ? 'Matrícula suspendida en Moodle' : 'Cuenta suspendida en Moodle';
+  return `${que}: ${quien} (${fila.campus_nombre})`;
+}
+
 async function avisar(fila, { tipo, title, message }, destinatarios) {
   try {
     const para = destinatarios ?? await model.adminsDelCampus(fila.project_id);
@@ -271,9 +284,7 @@ export async function procesar(fila, { destinatarios = null, moodle = hacerEnMoo
     const suspendido = r.tipo === 'suspendido';
     await avisar(fila, {
       tipo: TIPO_REVISAR,
-      title: suspendido
-        ? `Alumno suspendido en Moodle: ${fila.alumno_nombre || 'alumno'} (${fila.campus_nombre})`
-        : `Matrícula rechazada por Moodle: ${fila.alumno_nombre || 'alumno'} (${fila.campus_nombre})`,
+      title: tituloDeRevisar(r, fila),
       message: `${r.motivo}. No se reintenta sola: ${listaDeCursos(cursos)}.`,
     }, destinatarios);
     await anotarEnFicha(fila, `⚠️ Matrícula en Moodle sin hacer (${fila.campus_nombre}): ${r.motivo}.`);

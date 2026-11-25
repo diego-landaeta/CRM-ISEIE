@@ -250,7 +250,7 @@ export async function opcionesDeVenta(projectId) {
     query(
       `SELECT u.id, u.nombre, u.role FROM users u
          JOIN user_projects up ON up.user_id = u.id AND up.project_id = $1 AND up.active
-        WHERE u.active AND u.role IN ('gestor', 'admin')
+        WHERE u.active AND u.role IN ('gestor', 'lider_equipo', 'admin')
         ORDER BY u.nombre`,
       [projectId]),
   ]);

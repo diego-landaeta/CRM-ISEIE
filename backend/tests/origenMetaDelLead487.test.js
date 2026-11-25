@@ -65,9 +65,9 @@ describe('lo que trae el envío (sin base)', () => {
       custom_fields: { adset_id: '120244428100730111' },
       landing_url: 'https://web.test/x?ad_id=120244428100730222&utm_id=120244428100730715',
     });
-    expect(r.explicitos).toEqual({ ad: '120244428100730222', adset: '120244428100730111', campaign: null });
+    expect(r.explicitos).toEqual({ ad: '120244428100730222', adset: '120244428100730111', campaign: null, lead: null, form: null });
     expect(r.candidatos.sort()).toEqual(['120244428100730715', '120244428100730999']);
-    expect(idsMetaDelEnvio({ utm_campaign: 'PRUEBA_C1', utm_content: '12' })).toEqual({ explicitos: { ad: null, adset: null, campaign: null }, candidatos: [] });
+    expect(idsMetaDelEnvio({ utm_campaign: 'PRUEBA_C1', utm_content: '12' })).toEqual({ explicitos: { ad: null, adset: null, campaign: null, lead: null, form: null }, candidatos: [] });
   });
 });
 

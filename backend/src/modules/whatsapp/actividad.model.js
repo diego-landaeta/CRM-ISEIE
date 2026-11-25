@@ -34,7 +34,7 @@ export async function actividadEnWhatsapp({ projectIds, desde, hasta }) {
          FROM users u
          JOIN user_projects up ON up.user_id = u.id AND up.active
          JOIN projects p ON p.id = up.project_id
-        WHERE u.active AND u.role IN ('gestor', 'admin')
+        WHERE u.active AND u.role IN ('gestor', 'lider_equipo', 'admin')
           AND ($1::int[] IS NULL AND NOT COALESCE(p.es_prueba, false) OR p.id = ANY($1::int[]))
      ),
      conv AS (

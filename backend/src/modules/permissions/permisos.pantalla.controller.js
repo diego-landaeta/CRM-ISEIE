@@ -6,7 +6,7 @@ import * as editar from './permissions.editar.js';
 import * as model from './permissions.model.js';
 
 const permisosSchema = z.record(z.boolean());
-const ROLES_BASE = ['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador'];
+const ROLES_BASE = ['admin', 'gestor', 'lider_equipo', 'soporte', 'project_manager', 'tutor', 'colaborador'];
 
 const rolAMedidaSchema = z.object({
   nombre: z.string().trim().min(1, 'Ponle nombre al rol').max(100),
@@ -78,7 +78,7 @@ export async function guardarExcepciones(req, res, next) {
 // POST /api/permissions/vista-previa-alta   { role, roles_extra, excepciones, projectIds } (#694)
 export async function vistaPreviaDeAlta(req, res, next) {
   try {
-    const roles = z.enum(['admin', 'gestor', 'soporte', 'project_manager', 'tutor', 'colaborador']);
+    const roles = z.enum(ROLES_BASE);
     const d = validar(z.object({
       role: roles,
       roles_extra: z.array(roles).max(6).default([]),

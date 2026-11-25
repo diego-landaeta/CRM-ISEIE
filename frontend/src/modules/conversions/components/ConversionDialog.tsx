@@ -11,10 +11,12 @@ import { X, Link as LinkIcon, Copy, CheckCircle, Receipt, FileText } from '@phos
 import { conversionsApi, type Conversion, type MetodoPago } from '../api/conversions.api';
 import { useProducts } from '@/modules/products/hooks/useProducts';
 import { invoicesApi, invoiceFaltantes, type Invoice, type InvoiceItem } from '@/modules/invoices/api/invoices.api';
+import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from './VentaYaExisteAviso';
+import LinkDePagoUsado from './LinkDePagoUsado';
 import usePermission from '@/shared/hooks/usePermission';
 import { useLinksPagoEncendidos } from '@/shared/lib/linksPago';
 import { crearLink, generarPlan } from '@/modules/links-pago/api/linksPago.api';
@@ -24,6 +26,12 @@ import AvisoComoSeCobra from '@/modules/links-pago/components/AvisoComoSeCobra';
 import type { DatosDelAviso } from '@/modules/links-pago/lib/avisoCuotas';
 import { useRecordatoriosLinks } from '@/shared/lib/recordatoriosLinks';
 import EmitirFacturaCobro, { AvisoCobroEnCola, QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+import EnvioFacturaCampos from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
+import DatosFiscalesVenta, { DATOS_FISCALES_VACIOS, aDatosFiscales, deLaFicha as fiscalesDeLaFicha, faltanDatosFiscales, type DatosFiscalesEnVenta } from '@/modules/factura-automatica/components/DatosFiscalesVenta';
+import { useModoPorEnviar } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
+import { useFacturaAutomaticaActiva } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
 const EmitirBorradorDialog = lazy(() => import('@/modules/invoices/components/EmitirBorradorDialog'));
@@ -224,6 +232,20 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   useEffect(() => () => {
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
   }, []);
+  // El correo de la ficha, para «Enviar a este correo» (#764, 24/11). Solo con
+  // la factura automática encendida: apagada, no se pregunta nada.
+  const facturaAuto = useFacturaAutomaticaActiva();
+  const [emailFicha, setEmailFicha] = useState<string | null | undefined>(undefined);
+  // Los datos de la persona para la factura (25/11): de la ficha, o los carga la gestora.
+  const porEnviar = useModoPorEnviar();
+  const [fiscales, setFiscales] = useState<DatosFiscalesEnVenta>(DATOS_FISCALES_VACIOS);
+  useEffect(() => {
+    if (facturaAuto !== true || !lead?.id) return;
+    client.get<{ email?: string | null } & Record<string, unknown>>(`/leads/${lead.id}`)
+      .then((r) => { setEmailFicha(r?.data?.email || null); setFiscales(fiscalesDeLaFicha(r?.data)); })
+      .catch(() => setEmailFicha(null));
+  }, [facturaAuto, lead?.id]);
+  const envioFactura = useEnvioFacturaAlta(emailFicha, { sinCorreoVale: true });
   // Al cerrar, resetea el paso de documento para que una próxima apertura arranque limpia.
   useEffect(() => {
     if (!open) { setDocPhase('idle'); setCreated(null); setEmitInv(null); setVentaExistente(null); setIntentado(false); notifiedRef.current = false; }
@@ -627,6 +649,14 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       toast({ title: 'Falta decir cómo paga la inicial', description: 'Con el link de pago, ya pagada con otro link o por transferencia.', variant: 'destructive' });
       return;
     }
+    const faltaEnvio = envioFactura.falta();
+    if (faltaEnvio) { toast({ ...faltaEnvio, variant: 'destructive' }); return; }
+    // «Por enviar» (ISEIE): con cobro, la factura sale con estos datos y administración la verifica.
+    const faltanFiscales = porEnviar === true && hayPago ? faltanDatosFiscales(fiscales) : [];
+    if (faltanFiscales.length) {
+      toast({ title: 'Faltan datos de la persona para la factura', description: `Completa ${faltanFiscales.join(', ')}.`, variant: 'destructive' });
+      return;
+    }
     if (!pagoMode) {
       toast({ title: 'Falta decir si ha pagado', description: 'Elige «Sin pago», «Parcial» o «Pagó TODO». La forma de pago sola no registra el cobro.', variant: 'destructive' });
       return;
@@ -663,6 +693,10 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       descuento_tipo: form.descuento_tipo,
       descuento_valor: form.descuento_tipo === 'none' ? 0 : Number(form.descuento_valor || 0),
       subtotal_bruto: calc.bruto,
+      // Sin la factura automática encendida, no va (undefined).
+      envio_factura: envioFactura.cuerpo(),
+      // Los datos de la persona: a la ficha, antes del primer cobro (25/11).
+      datos_fiscales: facturaAuto === true ? aDatosFiscales(fiscales) : undefined,
     } as any;
     setSaving(true);
     try {
@@ -697,6 +731,15 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
 
   async function despuesDeCrear(res: Awaited<ReturnType<typeof conversionsApi.create>>) {
     if (res.success && res.data) {
+      // «Link de pago usado» (CRM#1107): si el cobro de Stripe se unió o por qué no.
+      const cargo = (res.data as Conversion & { cargo_inicial?: { estado: string; mensaje: string } }).cargo_inicial;
+      if (cargo?.mensaje) {
+        toast({
+          title: cargo.estado === 'unido' || cargo.estado === 'ya_unido' ? 'Cobro de Stripe unido a la venta' : 'El cobro de Stripe no se ha unido',
+          description: cargo.mensaje,
+          ...(cargo.estado === 'unido' || cargo.estado === 'ya_unido' ? {} : { variant: 'destructive' as const }),
+        });
+      }
       // Si es fraccionado, genera las cuotas custom
       if (form.metodo_pago === 'fraccionado' && installments.length >= 1) {
         try {
@@ -1077,9 +1120,14 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
               </div>
             )}
             {/* La inicial ya pagada: su referencia (nº de operación, o el link/cobro de Stripe). */}
-            {hayPago && form.metodo_pago === 'fraccionado' && (
-              <Field label={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'El link o el cobro de Stripe de la inicial (opcional)' : 'Referencia del pago inicial (opcional)'}
-                htmlFor="venta-ref-inicial" hint={comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') ? 'Para encontrarlo luego en Stripe.' : 'El nº de operación de la transferencia o del depósito.'}>
+            {/* Ya pagada con otro link o con Stripe: «Link de pago usado» (CRM#1107), que
+                el CRM busca en Stripe y une a esta venta al registrarla. */}
+            {hayPago && form.metodo_pago === 'fraccionado' && comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si') && (
+              <LinkDePagoUsado projectId={projectId} importe={pagadoInicial} value={refInicial} onChange={setRefInicial} />
+            )}
+            {hayPago && form.metodo_pago === 'fraccionado' && !(comoInicial === 'otro_link' && (usarLink === 'si' || inicialStripe === 'si')) && (
+              <Field label="Referencia del pago inicial (opcional)"
+                htmlFor="venta-ref-inicial" hint="El nº de operación de la transferencia o del depósito.">
                 <input id="venta-ref-inicial" autoComplete="off" value={refInicial} onChange={(e) => setRefInicial(e.target.value)} maxLength={120} className={inputClass} />
               </Field>
             )}
@@ -1376,6 +1424,16 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
                   </p>
                 )}
               </div>
+            )}
+
+            {envioFactura.visible && emailFicha !== undefined && (
+              <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                emailFicha={emailFicha} idBase="venta-envio-factura" sinCorreoVale />
+            )}
+
+            {facturaAuto === true && (
+              <DatosFiscalesVenta value={fiscales} onChange={setFiscales} idBase="venta-fiscales"
+                obligatorios={porEnviar === true && hayPago} />
             )}
 
             <Field label="Notas" htmlFor="venta-notas">

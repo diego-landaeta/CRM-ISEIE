@@ -172,7 +172,7 @@ export async function getQueueState(req, res, next) {
        JOIN users u ON u.id = up.user_id
        WHERE up.project_id = $1 AND up.active = true
          AND u.active = true
-         AND u.role IN ('admin', 'gestor')
+         AND u.role IN ('admin', 'gestor', 'lider_equipo')
        ORDER BY up.orden_cola, u.id`,
       [projectId]
     );

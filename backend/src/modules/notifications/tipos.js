@@ -264,7 +264,7 @@ export const TIPOS = {
     descripcion: 'Un Claude se ha conectado con tu URL del MCP y espera a que lo autorices',
   },
   // Moodle (#335): el de un campus ha dejado de responder o su token ya no vale. Lo arregla un
-  // super admin (nuevo token en Conexión → Moodle, o revisar el servidor del campus).
+  // super admin (nuevo token en Moodle › Cursos y alumnos, o revisar el servidor del campus).
   moodle_campus_caido: {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
@@ -279,8 +279,8 @@ export const TIPOS = {
   // cuenta o un curso—, casi siempre por un impago que suspende Make. A su gestora (sin
   // gestora, a administración del campus): pide llamarle. Uno por cambio.
   moodle_alumno_suspendido: {
-    clase: ACCION, etiqueta: 'Alumno suspendido en Moodle', agrupa: false,
-    descripcion: 'Un alumno tuyo ha quedado suspendido en Moodle (la cuenta o un curso), con el motivo que deduce el CRM',
+    clase: ACCION, etiqueta: 'Suspensión en Moodle', agrupa: false,
+    descripcion: 'Se ha suspendido en Moodle la cuenta o la matrícula de un curso de alguien que llevas, con el motivo que deduce el CRM',
   },
   matricula_moodle_fallo: {
     clase: ACCION, etiqueta: 'Matrícula en Moodle fallida', agrupa: false,
@@ -316,8 +316,32 @@ export const TIPOS = {
   },
   // CRM#531: y cuando se le reactiva (normalmente porque ha pagado). Solo lo cuenta.
   moodle_alumno_reactivado: {
-    clase: AVISO, etiqueta: 'Alumno reactivado en Moodle', agrupa: false,
-    descripcion: 'Un alumno tuyo vuelve a estar activo en Moodle tras una suspensión',
+    clase: AVISO, etiqueta: 'Reactivación en Moodle', agrupa: false,
+    descripcion: 'Se ha reactivado en Moodle la cuenta o la matrícula de alguien que llevas, tras una suspensión',
+  },
+  // CRM#1107 (Diego, 24/11): el link traía su venta y caducó o se anuló sin
+  // pagarse. La venta sigue pendiente y decide quien lo creó: link nuevo, pago por
+  // otra vía o anular la venta. Uno por link (links-pago.venta.js).
+  // CRM#1103: Stripe canceló (o dio por perdido) el cobro automático de unas cuotas.
+  // A la gestora de la venta y a los admins del campus; una vez por cancelación.
+  stripe_cobro_cancelado: {
+    clase: ACCION, etiqueta: 'Cobro automático cancelado en Stripe', agrupa: false,
+    descripcion: 'Stripe ya no cobrará solas unas cuotas de una venta: siguen pendientes y hay que mandar un link',
+  },
+  link_pago_sin_pagar: {
+    clase: ACCION, etiqueta: 'Link de pago sin pagar con la venta pendiente', agrupa: false,
+    descripcion: 'Un link tuyo caducó o se anuló sin pagarse y su venta sigue pendiente',
+  },
+  // Apostilla de La Haya (CRM#1130): solo campana, a la gestora de la venta (o a
+  // quien la lleve) y, si no tiene, a los admins del campus. Nunca un correo al
+  // alumno (apostillas.avisos.js).
+  apostilla_nueva: {
+    clase: ACCION, etiqueta: 'Apostilla nueva', agrupa: false,
+    descripcion: 'Se ha vendido o pagado una Apostilla de La Haya y hay que empezar el trámite',
+  },
+  apostilla_atascada: {
+    clase: ACCION, etiqueta: 'Apostilla atascada', agrupa: false,
+    descripcion: 'Una apostilla lleva los días del aviso (7 de serie) en el mismo paso',
   },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,

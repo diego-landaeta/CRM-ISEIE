@@ -61,6 +61,12 @@ export interface LinkDePago {
   renovado_de?: number | null;
   renovado_por?: number | null;
   created_at: string;
+  /**
+   * CRM#1107: al crear un link desde un prospecto, su venta. `creada`: la ha creado
+   * el link (pendiente de cobro); si no, es la que ya tenía la ficha. Sin
+   * `conversion_id`, no se pudo crear (`error`) y se creará al pagarse.
+   */
+  venta_del_link?: { conversion_id: number | null; creada: boolean; error?: string };
 }
 
 export interface ConfigLinks {
@@ -146,11 +152,16 @@ export function crearLink(cuerpo: {
   cuotas?: { importe: number; vence: string }[];
   // CRM#982: el precio antes del descuento y el descuento; `importe` es el total que resulta.
   precio_original?: number; descuento_tipo?: 'monto' | 'pct'; descuento_valor?: number;
+  // «Enviar factura automáticamente» y su correo (#764, 24/11).
+  envio_factura?: { auto: boolean; email: string | null };
   // CRM#986: si el link admite códigos promocionales (sin decirlo, lo que diga el campus).
   codigos_promo?: boolean;
+  // CRM#1107: el alumno ya tiene una venta de ese programa y se crea otra igualmente.
+  forzar?: boolean;
 }) {
   return client.post<LinkDePago>('/links-pago', cuerpo);
 }
+
 
 /** Un código promocional de campaña (CRM#986): un cupón y un código de Stripe con su fecha límite. */
 export interface CodigoPromocional {
@@ -289,7 +300,8 @@ export interface CuotaCobroAuto {
   numero: number;
   vence: string;
   importe: number;
-  estado: 'programada' | 'cobrada' | 'fallida' | 'quitada' | null;
+  /** `cancelada`: Stripe ya no la cobrará (CRM#1103); sigue pendiente y se cobra con un link. */
+  estado: 'programada' | 'cobrada' | 'fallida' | 'quitada' | 'cancelada' | null;
   fecha_programada: string | null;
   importe_programado: number | null;
   desfasada: boolean;
@@ -300,6 +312,9 @@ export interface CuotaCobroAuto {
   historial: Array<{ el: string; que: string; [k: string]: unknown }>;
   guarda_tarjeta: boolean;
   problema: string | null;
+  /** CRM#1103: cuándo y por qué dejó de cobrarla Stripe. Opcionales: un servidor anterior no los manda. */
+  cancelada_el?: string | null;
+  cancelada_motivo?: string | null;
 }
 
 /** El cobro automático de las cuotas de una venta: lo cobra Stripe en las fechas del plan (309). */
@@ -309,6 +324,8 @@ export interface CobroAutomatico {
   reintento_dias: number | null;
   activo: boolean;
   activado_el: string | null;
+  /** CRM#1103: el cobro automático lo canceló Stripe (el alumno, el panel o un impago). */
+  cancelado_en_stripe?: { el: string; motivo: string | null } | null;
   tarjeta: { marca: string | null; ultimos4: string | null; caduca: string | null; guardada_el: string | null } | null;
   stripe_schedule_id: string | null;
   sincronizado_el: string | null;

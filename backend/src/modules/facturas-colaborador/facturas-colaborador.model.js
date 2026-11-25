@@ -197,7 +197,7 @@ export async function esUsuarioColaborador(userId, tipo = 'colaborador') {
   const { rows } = await query(
     tipo === 'vendedora'
       ? `SELECT 1 FROM users WHERE id = $1 AND active = true
-           AND (role IN ('gestor', 'admin') OR roles_extra::text[] && ARRAY['gestor'])`
+           AND (role IN ('gestor', 'lider_equipo', 'admin') OR roles_extra::text[] && ARRAY['gestor', 'lider_equipo'])`
       : `SELECT 1 FROM users WHERE id = $1 AND (role IN ('colaborador', 'tutor_redactor') OR roles_extra::text[] && ARRAY['colaborador', 'tutor_redactor'])`,
     [userId],
   );

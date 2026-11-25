@@ -11,6 +11,7 @@ import { query } from '../../shared/config/db.js';
 export async function venta(conversionId) {
   const { rows } = await query(
     `SELECT c.id, c.project_id, c.lead_id, c.producto_contratado,
+            c.factura_envio_auto, c.factura_envio_email,
             l.nombre, l.email, l.cliente_tipo, l.custom_fields,
             l.identificacion_fiscal, l.direccion_fiscal, l.ciudad_fiscal,
             l.codigo_postal_fiscal, l.pais_fiscal, l.responsable_id,
@@ -153,7 +154,7 @@ export async function sumarIntento(id, maximo) {
  * Guarda los datos y QUEMA el enlace en la misma sentencia: solo entra el
  * primero que llegue (dos envíos a la vez no guardan los dos).
  */
-export async function guardarDatos(id, d, { origen, ip = null, estado }) {
+export async function guardarDatos(id, d, { origen, ip = null, estado, desde = ['pendiente'] }) {
   const { rows } = await query(
     `UPDATE factura_datos_fiscales
         SET cliente_tipo = $2, nombre = $3, nif = $4, direccion = $5, codigo_postal = $6,
@@ -162,11 +163,28 @@ export async function guardarDatos(id, d, { origen, ip = null, estado }) {
             respondido_at = CASE WHEN $10::text = 'formulario' THEN NOW() ELSE respondido_at END,
             respondido_ip = COALESCE($12, respondido_ip),
             motivo_revision = NULL, updated_at = NOW()
-      WHERE id = $1 AND estado = 'pendiente'
+      WHERE id = $1 AND estado = ANY($13::text[])
       RETURNING *`,
     [id, d.tipo, d.nombre, d.nif, d.direccion, d.codigo_postal, d.ciudad, d.pais, d.email,
-      origen, estado, ip]);
+      origen, estado, ip, desde]);
   return rows[0] || null;
+}
+
+/**
+ * Los datos fiscales que cargó la gestora en la venta (25/11), en la ficha del
+ * alumno: de ahí los leen la factura a mano y la automática. Lo vacío no pisa.
+ */
+export async function guardarFichaFiscal(leadId, d) {
+  await query(
+    `UPDATE leads
+        SET identificacion_fiscal = COALESCE($2, identificacion_fiscal),
+            direccion_fiscal      = COALESCE($3, direccion_fiscal),
+            codigo_postal_fiscal  = COALESCE($4, codigo_postal_fiscal),
+            ciudad_fiscal         = COALESCE($5, ciudad_fiscal),
+            pais_fiscal           = COALESCE($6, pais_fiscal),
+            updated_at = NOW()
+      WHERE id = $1`,
+    [leadId, d.nif || null, d.direccion || null, d.codigo_postal || null, d.ciudad || null, d.pais || null]);
 }
 
 /** Día 7 sin datos buenos: a revisión, con el enlace quemado. */

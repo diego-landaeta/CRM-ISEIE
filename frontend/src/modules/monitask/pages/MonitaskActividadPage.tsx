@@ -1,8 +1,9 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
 import usePermission from '@/shared/hooks/usePermission';
+import { useFuncionEncendida } from '@/shared/lib/funcionesDelServidor';
 import { toast } from '@/shared/hooks/useToast';
 import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { CaretDown, CaretRight, WarningCircle, ArrowsClockwise } from '@phosphor-icons/react';
@@ -35,6 +36,56 @@ const mesPasado = () => rangoDe('pasado').from.slice(0, 7);
 const pct = (v: number | null) => (v === null || v === undefined ? '—' : `${v.toLocaleString('es-ES', { maximumFractionDigits: 1 })} %`);
 const fechaCorta = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('es-ES', { weekday: 'short', day: '2-digit', month: 'short' });
 
+/*
+  Las tablas en el móvil (QA de /testeo, 25/11/2026). A 375 px la de Actividad
+  ya se desplazaba dentro de su caja, pero nada lo decía y parecía cortada —no
+  se veía «Proyectos»—; estrujada, cada fila ocupaba diez renglones. Y el
+  «Nadie con horas…» iba en una celda del ancho de la tabla entera, centrado:
+  la mitad se quedaba fuera.
+
+  Ahora cada tabla tiene un ancho mínimo y se desliza sola dentro de su caja
+  (la página no se ensancha), se avisa de que se desliza cuando de verdad no
+  cabe, y los mensajes de «Cargando…» y «nadie» van fuera de la parte que se
+  desliza, a lo ancho de la caja. Es el patrón de la tabla de Diplomas
+  (TablaDesplazable).
+*/
+function TablaDesplazable({ etiqueta, aviso, recorrido, children }: {
+  etiqueta: string;
+  /** «Cargando…» o la tabla vacía: se lee entero, debajo de la cabecera. */
+  aviso?: ReactNode;
+  recorrido?: string;
+  children: ReactNode;
+}) {
+  const caja = useRef<HTMLDivElement>(null);
+  const [noCabe, setNoCabe] = useState(false);
+  useEffect(() => {
+    const el = caja.current;
+    if (!el) return undefined;
+    const medir = () => setNoCabe(el.scrollWidth > el.clientWidth + 1);
+    medir();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, []);
+
+  return (
+    <div className="bg-card border border-border rounded-lg overflow-hidden" data-recorrido={recorrido}>
+      {noCabe && !aviso && (
+        <p className="px-3 pt-2 text-[11px] text-muted-foreground" data-testid="aviso-desliza">
+          Desliza la tabla a los lados para ver todas las columnas →
+        </p>
+      )}
+      <div ref={caja} className="overflow-x-auto [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]"
+        tabIndex={0} role="region" aria-label={etiqueta}>
+        {children}
+      </div>
+      {aviso && <p className="px-3 py-6 text-center text-sm text-muted-foreground border-t border-border">{aviso}</p>}
+    </div>
+  );
+}
+
 export default function MonitaskActividadPage() {
   const { can } = usePermission();
   const puedeConfigurar = can('monitask.configurar');
@@ -42,9 +93,13 @@ export default function MonitaskActividadPage() {
   const vista = (['actividad', 'cotejo', 'personas'].includes(params.get('vista') || '') ? params.get('vista') : 'actividad') as Vista;
   const [estado, setEstado] = useState<EstadoMonitask | null | 'apagado'>(null);
 
+  const encendido = useFuncionEncendida('monitask');
+
   useEffect(() => {
+    // Apagado en el servidor (MONITASK_ACTIVO): se dice sin preguntar (contestaría 404).
+    if (!encendido) { setEstado('apagado'); return; }
     monitaskApi.estado().then((r) => setEstado(r.data || 'apagado')).catch(() => setEstado('apagado'));
-  }, []);
+  }, [encendido]);
 
   const cambiarVista = (v: Vista) => {
     const qs = new URLSearchParams(params);
@@ -169,8 +224,9 @@ function VistaActividad() {
           className="h-8 px-2 rounded-md border border-border bg-card text-sm w-44" />
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-x-auto" data-recorrido="monitask-tabla">
-        <table className="w-full text-sm">
+      <TablaDesplazable etiqueta="Actividad por persona" recorrido="monitask-tabla"
+        aviso={filas === null ? 'Cargando…' : visibles.length === 0 ? 'Nadie con horas en Monitask en estas fechas.' : null}>
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th className="text-left px-3 py-2 font-semibold">Persona</th>
@@ -182,10 +238,6 @@ function VistaActividad() {
             </tr>
           </thead>
           <tbody>
-            {filas === null && <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Cargando…</td></tr>}
-            {filas !== null && visibles.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Nadie con horas en Monitask en estas fechas.</td></tr>
-            )}
             {visibles.map((f) => (
               <Fragment key={f.monitask_id}>
                 <tr className="border-t border-border hover:bg-muted/30 cursor-pointer" onClick={() => abrir(f.monitask_id)}>
@@ -197,10 +249,10 @@ function VistaActividad() {
                       {f.colaborador_nombre ? `Colaborador: ${f.colaborador_nombre}` : f.usuario_nombre ? `Usuario: ${f.usuario_nombre}` : 'Sin emparejar'}
                     </span>
                   </td>
-                  <td className="px-3 py-2 text-right tabular-nums font-semibold">{horasEscritas(f.horas)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{horasEscritas(f.horas_activas)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{pct(f.actividad_pct)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{f.dias}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold">{horasEscritas(f.horas)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{horasEscritas(f.horas_activas)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{pct(f.actividad_pct)}</td>
+                  <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap">{f.dias}</td>
                   <td className="px-3 py-2 text-xs text-muted-foreground">
                     {f.proyectos.slice(0, 4).map((p) => `${p.nombre} (${horasEscritas(p.horas)})`).join(' · ') || '—'}
                   </td>
@@ -239,13 +291,13 @@ function VistaActividad() {
             <tfoot className="border-t border-border text-xs">
               <tr>
                 <td className="px-3 py-2 font-semibold">Total ({visibles.length})</td>
-                <td className="px-3 py-2 text-right tabular-nums font-semibold">{horasEscritas(Math.round(total * 100) / 100)}</td>
+                <td className="px-3 py-2 text-right tabular-nums whitespace-nowrap font-semibold">{horasEscritas(Math.round(total * 100) / 100)}</td>
                 <td colSpan={4} />
               </tr>
             </tfoot>
           )}
         </table>
-      </div>
+      </TablaDesplazable>
     </div>
   );
 }
@@ -296,8 +348,9 @@ function VistaCotejo({ mesInicial }: { mesInicial: string }) {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
+      <TablaDesplazable etiqueta="Cotejo con facturas"
+        aviso={!datos ? 'Cargando…' : filas.length === 0 ? 'Ningún colaborador con factura o con Monitask ese mes.' : null}>
+        <table className="w-full min-w-[760px] text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th className="text-left px-3 py-2 font-semibold">Colaborador</th>
@@ -309,10 +362,6 @@ function VistaCotejo({ mesInicial }: { mesInicial: string }) {
             </tr>
           </thead>
           <tbody>
-            {!datos && <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Cargando…</td></tr>}
-            {datos && filas.length === 0 && (
-              <tr><td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">Ningún colaborador con factura o con Monitask ese mes.</td></tr>
-            )}
             {filas.map((f) => (
               <tr key={f.colaborador_id} className={`border-t border-border ${f.fuera_de_margen ? 'bg-destructive-soft/60' : ''}`}>
                 <td className="px-3 py-2">
@@ -348,7 +397,7 @@ function VistaCotejo({ mesInicial }: { mesInicial: string }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TablaDesplazable>
     </div>
   );
 }
@@ -406,8 +455,8 @@ function VistaPersonas({ conectada }: { conectada: boolean }) {
           <ArrowsClockwise size={13} weight="bold" /> Sincronizar ahora
         </button>
       </div>
-      <div className="bg-card border border-border rounded-lg overflow-x-auto">
-        <table className="w-full text-sm">
+      <TablaDesplazable etiqueta="Personas de Monitask" aviso={datos.personas.length === 0 ? 'Todavía no se ha traído a nadie de Monitask.' : null}>
+        <table className="w-full min-w-[600px] text-sm">
           <thead className="bg-muted/40 text-xs text-muted-foreground">
             <tr>
               <th className="text-left px-3 py-2 font-semibold">En Monitask</th>
@@ -416,9 +465,6 @@ function VistaPersonas({ conectada }: { conectada: boolean }) {
             </tr>
           </thead>
           <tbody>
-            {datos.personas.length === 0 && (
-              <tr><td colSpan={3} className="px-3 py-6 text-center text-muted-foreground">Todavía no se ha traído a nadie de Monitask.</td></tr>
-            )}
             {datos.personas.map((p) => (
               <tr key={p.monitask_id} className="border-t border-border">
                 <td className="px-3 py-2">
@@ -450,7 +496,7 @@ function VistaPersonas({ conectada }: { conectada: boolean }) {
             ))}
           </tbody>
         </table>
-      </div>
+      </TablaDesplazable>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
-import { alcanceComercial } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider } from '../../shared/utils/roles.js';
 import { nombreCortoDeEmpresa } from '../../shared/services/marca.service.js';
 import * as service from './informe-mensual.service.js';
 import * as model from './informe-mensual.model.js';
@@ -95,8 +95,8 @@ export async function excel(req, res, next) {
 export async function zip(req, res, next) {
   try {
     const q = validar(zipSchema, req.query);
-    const alcance = await alcanceComercial(req.user);
-    if (alcance && alcance.length > 1) {
+    // Y la líder de equipo (CRM#1105 / ISEIE#761), lleve o no a alguien hoy.
+    if (await alcanceDeLider(req.user)) {
       throw new AppError('El ZIP de facturas de la empresa es de administración; tú tienes el informe de tu equipo.', 403, 'FORBIDDEN');
     }
     const empresa = await service.empresaOError(q.issuerId);

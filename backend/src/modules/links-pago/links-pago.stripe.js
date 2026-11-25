@@ -273,6 +273,30 @@ export function sesionDelPago(apiKey, paymentIntentId) {
     `/v1/checkout/sessions?payment_intent=${encodeURIComponent(paymentIntentId)}&limit=1&expand[]=data.discounts.promotion_code`);
 }
 
+// ─── El link que se usó para la inicial (CRM#1107): solo lectura ────────────
+
+/** Una sesión de Checkout por su id (cs_…). */
+export function verSesion(apiKey, sessionId) {
+  return llamar(apiKey, 'GET', `/v1/checkout/sessions/${encodeURIComponent(sessionId)}`);
+}
+
+/** Las sesiones pagadas de un Payment Link, de la más nueva a la más vieja (como mucho 100). */
+export function sesionesPagadasDelLink(apiKey, paymentLinkId) {
+  return llamar(apiKey, 'GET',
+    `/v1/checkout/sessions?payment_link=${encodeURIComponent(paymentLinkId)}&status=complete&limit=100`);
+}
+
+/** Los cargos de un PaymentIntent, con lo liquidado en euros (como los trae el sondeo). */
+export function cargosDelPago(apiKey, paymentIntentId) {
+  return llamar(apiKey, 'GET',
+    `/v1/charges?payment_intent=${encodeURIComponent(paymentIntentId)}&expand[]=data.balance_transaction`);
+}
+
+/** Un cargo por su id (ch_… o py_…), con lo liquidado en euros. */
+export function verCargo(apiKey, chargeId) {
+  return llamar(apiKey, 'GET', `/v1/charges/${encodeURIComponent(chargeId)}?expand[]=balance_transaction`);
+}
+
 /** Desactivar un link (caducado o anulado). Un link de Stripe no se borra. */
 export function desactivarLink(apiKey, paymentLinkId) {
   return llamar(apiKey, 'POST', `/v1/payment_links/${encodeURIComponent(paymentLinkId)}`, {

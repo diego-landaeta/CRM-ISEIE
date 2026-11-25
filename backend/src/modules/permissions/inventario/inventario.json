@@ -214,6 +214,314 @@
   "puertas": []
  },
  {
+  "id": "GET /api/apostillas/",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/",
+  "relativa": "GET /",
+  "controlador": "listar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/cifras",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/cifras",
+  "relativa": "GET /cifras",
+  "controlador": "cifras",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/catalogo",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/catalogo",
+  "relativa": "GET /catalogo",
+  "controlador": "catalogo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/personas",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/personas",
+  "relativa": "GET /personas",
+  "controlador": "personas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/ajustes",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/ajustes",
+  "relativa": "GET /ajustes",
+  "controlador": "verAjustes",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/apostillas/ajustes",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "PUT",
+  "ruta": "/api/apostillas/ajustes",
+  "relativa": "PUT /ajustes",
+  "controlador": "guardarAjustes",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.config"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/de-cliente/:leadId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/de-cliente/:leadId",
+  "relativa": "GET /de-cliente/:leadId",
+  "controlador": "deLead",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/de-venta/:conversionId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/de-venta/:conversionId",
+  "relativa": "GET /de-venta/:conversionId",
+  "controlador": "deVenta",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/documentos/:docId",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/documentos/:docId",
+  "relativa": "GET /documentos/:docId",
+  "controlador": "descargarDocumento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/",
+  "relativa": "POST /",
+  "controlador": "crear",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.asociar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/apostillas/:id",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "GET",
+  "ruta": "/api/apostillas/:id",
+  "relativa": "GET /:id",
+  "controlador": "porId",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PATCH /api/apostillas/:id",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "PATCH",
+  "ruta": "/api/apostillas/:id",
+  "relativa": "PATCH /:id",
+  "controlador": "editar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/:id/enlazar",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/:id/enlazar",
+  "relativa": "POST /:id/enlazar",
+  "controlador": "enlazar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.asociar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/apostillas/:id/documentos",
+  "tipo": "ruta",
+  "modulo": "apostillas",
+  "metodo": "POST",
+  "ruta": "/api/apostillas/:id/documentos",
+  "relativa": "POST /:id/documentos",
+  "controlador": "subirDocumento",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "apostillas.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "POST /api/asignacion/entrada",
   "tipo": "ruta",
   "modulo": "asignacion",
@@ -3447,6 +3755,72 @@
   "puertas": []
  },
  {
+  "id": "GET /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "GET",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "GET /:id/baja",
+  "controlador": "get",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "PUT",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "PUT /:id/baja",
+  "controlador": "set",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.baja_alumno"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/conversions/:id/baja",
+  "tipo": "ruta",
+  "modulo": "conversions",
+  "metodo": "DELETE",
+  "ruta": "/api/conversions/:id/baja",
+  "relativa": "DELETE /:id/baja",
+  "controlador": "remove",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.baja_alumno"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "DELETE /api/conversions/:id",
   "tipo": "ruta",
   "modulo": "conversions",
@@ -5284,6 +5658,94 @@
   "puertas": []
  },
  {
+  "id": "GET /api/factura-automatica/venta/:conversionId/envio",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/venta/:conversionId/envio",
+  "relativa": "GET /venta/:conversionId/envio",
+  "controlador": "verEnvio",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/factura-automatica/venta/:conversionId/envio",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "PUT",
+  "ruta": "/api/factura-automatica/venta/:conversionId/envio",
+  "relativa": "PUT /venta/:conversionId/envio",
+  "controlador": "guardarEnvio",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.envio_auto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/factura-automatica/venta/:conversionId/datos-fiscales",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "PUT",
+  "ruta": "/api/factura-automatica/venta/:conversionId/datos-fiscales",
+  "relativa": "PUT /venta/:conversionId/datos-fiscales",
+  "controlador": "guardarDatosFiscales",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "conversions.edit"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/factura-automatica/panel",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "GET",
+  "ruta": "/api/factura-automatica/panel",
+  "relativa": "GET /panel",
+  "controlador": "panel",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.automatica"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/fd/:token",
   "tipo": "ruta",
   "modulo": "factura-automatica",
@@ -5337,6 +5799,28 @@
   "ruta": "/api/facturacion-auditoria/historial",
   "relativa": "GET /historial",
   "controlador": "historial",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.auditoria"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/facturacion-auditoria/simular",
+  "tipo": "ruta",
+  "modulo": "facturacion-auditoria",
+  "metodo": "GET",
+  "ruta": "/api/facturacion-auditoria/simular",
+  "relativa": "GET /simular",
+  "controlador": "simular",
   "publica": false,
   "guardias": [
    {
@@ -6989,6 +7473,58 @@
   "puertas": []
  },
  {
+  "id": "GET /api/integrations/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "GET",
+  "ruta": "/api/integrations/moodle/categorias",
+  "relativa": "GET /moodle/categorias",
+  "controlador": "ver",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/integrations/moodle/categorias",
+  "tipo": "ruta",
+  "modulo": "integrations",
+  "metodo": "PUT",
+  "ruta": "/api/integrations/moodle/categorias",
+  "relativa": "PUT /moodle/categorias",
+  "controlador": "guardar",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "integrations.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/integrations/:provider",
   "tipo": "ruta",
   "modulo": "integrations",
@@ -8029,6 +8565,28 @@
     "tipo": "puede",
     "claves": [
      "facturas.enviar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/invoices/:id/enviada-whatsapp",
+  "tipo": "ruta",
+  "modulo": "invoices",
+  "metodo": "POST",
+  "ruta": "/api/invoices/:id/enviada-whatsapp",
+  "relativa": "POST /:id/enviada-whatsapp",
+  "controlador": "enviadaPorWhatsapp",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "facturas.envio_auto"
     ]
    }
   ],
@@ -9304,6 +9862,32 @@
   "ruta": "/api/links-pago/cuotas-disponibles",
   "relativa": "GET /cuotas-disponibles",
   "controlador": "cuotasDisponibles",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "links_pago.crear"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/links-pago/buscar-cobro",
+  "tipo": "ruta",
+  "modulo": "links-pago",
+  "metodo": "GET",
+  "ruta": "/api/links-pago/buscar-cobro",
+  "relativa": "GET /buscar-cobro",
+  "controlador": "buscarCobro",
   "publica": false,
   "guardias": [
    {
@@ -13508,6 +14092,214 @@
   "puertas": []
  },
  {
+  "id": "GET /api/products/:id/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion",
+  "relativa": "GET /:id/formacion",
+  "controlador": "verFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.view"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/products/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "POST",
+  "ruta": "/api/products/formacion",
+  "relativa": "POST /formacion",
+  "controlador": "crearFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.create"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/products/:id/formacion",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "PUT",
+  "ruta": "/api/products/:id/formacion",
+  "relativa": "PUT /:id/formacion",
+  "controlador": "guardarFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/:id/formacion/moodle",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion/moodle",
+  "relativa": "GET /:id/formacion/moodle",
+  "controlador": "verMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.crear_cursos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/products/:id/formacion/moodle",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "POST",
+  "ruta": "/api/products/:id/formacion/moodle",
+  "relativa": "POST /:id/formacion/moodle",
+  "controlador": "llevarAMoodle",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "moodle.crear_cursos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/formaciones/alumnos",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/formaciones/alumnos",
+  "relativa": "GET /formaciones/alumnos",
+  "controlador": "resumenDelCampus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.alumnos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/products/:id/formacion/alumnos",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "GET",
+  "ruta": "/api/products/:id/formacion/alumnos",
+  "relativa": "GET /:id/formacion/alumnos",
+  "controlador": "alumnosDeFormacion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.alumnos"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/products/formaciones/acceso",
+  "tipo": "ruta",
+  "modulo": "products",
+  "metodo": "PUT",
+  "ruta": "/api/products/formaciones/acceso",
+  "relativa": "PUT /formaciones/acceso",
+  "controlador": "guardarReglaDeAcceso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "products.edit"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "projectAccess"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/project-channels/",
   "tipo": "ruta",
   "modulo": "project-channels",
@@ -17152,7 +17944,52 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/administracion",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/administracion",
+  "relativa": "GET /mi-campus/administracion",
+  "controlador": "campusAdministracion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.campus_administracion"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId",
+  "relativa": "GET /mi-campus/administracion/cursos/:projectId/:cursoId",
+  "controlador": "cursoAdministracion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17196,7 +18033,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17218,7 +18056,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17240,7 +18079,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17262,7 +18102,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "tutores.mis_cursos"
+     "tutores.mis_cursos",
+     "tutores.campus_administracion"
     ]
    }
   ],
@@ -17841,7 +18682,8 @@
    {
     "tipo": "puede",
     "claves": [
-     "users.view"
+     "users.view",
+     "equipos.su_equipo"
     ]
    }
   ],

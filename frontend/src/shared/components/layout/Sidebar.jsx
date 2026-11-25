@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import {
-  SquaresFour, Users, UserCheck, Package, ChartLineUp, Gear, SignOut,
+  SquaresFour, Users, UserCheck, Stamp, Package, ChartLineUp, Gear, SignOut,
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
@@ -12,23 +12,25 @@ import {
   GraduationCap, Warning, Certificate, ClipboardText, ChatsCircle, Kanban, ClockCounterClockwise, SlidersHorizontal, Key, Timer, WarningDiamond, ArrowsLeftRight,
   CalendarCheck, ArrowCounterClockwise, LinkSimple, EnvelopeSimple } from '@phosphor-icons/react';
 import { linksPagoEncendidos } from '@/shared/lib/linksPago';
+import { funcionEncendida } from '@/shared/lib/funcionesDelServidor';
 import { abrirPedirAcceso } from '@/modules/soporte/lib/accesos';
 import { useAuth } from '@/contexts/AuthContext';
-import { rolesDe, soloEsTutorRedactor } from '@/shared/lib/roles';
+import { rolesDe, soloEsTutorRedactor, ROLES_DE_GESTORA } from '@/shared/lib/roles';
 import usePermission from '@/shared/hooks/usePermission';
 import ContadorConsultas from './ContadorConsultas';
 import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
-import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
+import { VERSION_APP, ETIQUETA_VERSION } from '@/shared/config/version';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { reagruparMenu } from './bloquesDelMenu';
 
-const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
+const ROLE_LABELS = { superadmin: 'Superadmin', admin: 'Admin', gestor: 'Gestor', lider_equipo: 'Líder de equipo', soporte: 'Soporte', tutor: 'Tutor', colaborador: 'Colaborador', tutor_redactor: 'Tutor redactor' };
 
 // Quién tiene tablero de tareas: el mismo `ROLES_TAREAS` que el backend (#210).
 // El tutor redactor (CRM-ISEIE#420) tiene su tablero como un colaborador.
@@ -144,7 +146,10 @@ export const SECCIONES_DE_ANTES = [
       { to: '/mi-factura', label: 'Mi factura', icon: Receipt, roles: ['colaborador', 'tutor_redactor'], permiso: 'facturas_colaborador.subir', oPermiso: 'facturas_colaborador.subir', conFicha: true },
       // Monitask (#236): qué hace cada colaborador y el cotejo con sus facturas. Solo en
       // /staging y local hasta que Diego lo apruebe; además, con MONITASK_ACTIVO en el servidor.
-      ...(SOLO_EN_PRUEBAS ? [{ to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view' }] : []),
+      // Sale cuando el SERVIDOR lo tiene encendido (MONITASK_ACTIVO → `/auth/me` →
+      // `funciones.monitask`), también en producción (gemela de CRM#236). Antes iba
+      // detrás de SOLO_EN_PRUEBAS y en producción no salía nunca, aunque se encendiera.
+      { to: '/equipo/actividad', label: 'Actividad', icon: Timer, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'monitask.view', funcion: 'monitask' },
     ],
   },
   {
@@ -180,7 +185,7 @@ export const SECCIONES_DE_ANTES = [
       // productos», pero sus avisos («Te han asignado un curso») llevan aquí. Con
       // «Sus cursos» la pantalla se les abre (`rutaPermitida`); el menú no cambia,
       // porque la entrada sigue pidiendo `products.view` para salir.
-      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', 'gestor', 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
+      { to: '/products/pending', label: 'Cursos pendientes', icon: Clock, roles: ['admin', 'superadmin', ...ROLES_DE_GESTORA, 'tutor'], permiso: 'products.view', oPermiso: 'tutores.mis_cursos' },
       { to: '/woocommerce', label: 'WooCommerce', icon: ShoppingBag, roles: ['admin', 'superadmin'], permiso: 'woocommerce.view' },
       { to: '/configuracion/categorias-arbol', label: 'Árbol de categorías', icon: Sliders, roles: ['admin', 'superadmin'], permiso: 'products.categorias' },
       // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto; sin él, la
@@ -196,7 +201,8 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // #408 (gemela de CRM#681): sus cursos en Moodle, con lo que tiene por corregir y contestar.
-      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Y administración (Diego, 25/11, gemela de CRM), con «Mi campus de administración»: todo el campus.
+      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: ['tutores.mis_cursos', 'tutores.campus_administracion'] },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde. `end`: no se marca en «Mi campus».
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], end: true, permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
@@ -216,7 +222,7 @@ export const SECCIONES_DE_ANTES = [
       { to: '/accounting/income',    label: 'Ingresos', seguirPorRol: true,           icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
       { to: '/revenue',              label: 'Conversiones', seguirPorRol: true,       icon: ChartLineUp, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'conversions.view' },
       { to: '/expenses',             label: 'Egresos',            icon: Receipt,    roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'expenses.view' },
-      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', 'gestor'], permiso: 'accounting.por_cobrar' },
+      { to: '/accounting/receivable', label: 'Cuentas por cobrar', icon: Wallet,    roles: ['admin', 'superadmin', 'soporte', ...ROLES_DE_GESTORA], permiso: 'accounting.por_cobrar' },
       { to: '/accounting/payable',   label: 'Cuentas por pagar',  icon: Wallet,     roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'accounts_payable.view' },
       { to: '/commissions',          label: 'Comisiones',         icon: Bank,  roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'commissions.view' },
       { to: '/payroll',              label: 'Nóminas',            icon: Coins,      roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'payroll.view' },
@@ -232,7 +238,7 @@ export const SECCIONES_DE_ANTES = [
       // Registro automático de cobros (#766): solo en /staging y en local hasta que
       // Diego lo apruebe. Además, cada parte va con su interruptor del servidor.
       ...(SOLO_EN_PRUEBAS ? [{ to: '/accounting/cobros-externos', label: 'PayPal y banco', icon: Wallet, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'cobros_externos.view' }] : []),
-      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', 'gestor'], sectionPrefixes: ['/accounting/facturas'], permiso: ['facturas.emitir', 'facturas.configurar'], oPermiso: 'facturas.emitir' },
+      { to: '/accounting/facturas', label: 'Facturación', icon: FilePdf, roles: ['admin', 'superadmin', 'soporte', ...ROLES_DE_GESTORA], sectionPrefixes: ['/accounting/facturas'], permiso: ['facturas.emitir', 'facturas.configurar'], oPermiso: 'facturas.emitir' },
       // Facturas de colaboradores (#202): en evaluación, solo en /staging y en local.
       { to: '/accounting/facturas-colaboradores', label: 'Facturas de colaboradores', icon: Receipt, roles: ['admin', 'superadmin'], permiso: 'facturas_colaborador.ver_todas' },
       { to: '/accounting/integrations', label: 'Integraciones',   icon: PlugsConnected, roles: ['admin', 'superadmin'], statusTag: 'Pruebas', permiso: 'integrations.view' },
@@ -267,6 +273,9 @@ export const SECCIONES_DE_ANTES = [
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
+      // Apostilla de La Haya (gemela de CRM#1130): el trámite de cada apostilla vendida. La ven
+      // todos los que entran al CRM salvo tutores, colaboradores y redactoras (`apostillas.view`).
+      { to: '/clients/apostillas', label: 'Apostillas', icon: Stamp, permiso: 'apostillas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,
@@ -285,6 +294,7 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
       // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
+      // En el menú, «Moodle › Cursos y alumnos» (apartado Moodle, Diego 25/11: `bloquesDelMenu.js`).
       { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
       // Todos los webhooks en un sitio, señalados por su función (gemela de
@@ -299,22 +309,34 @@ export const SECCIONES_DE_ANTES = [
       { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
     ],
   },
+  // El apartado Moodle (Diego, 25/11/2026: «que en el menú salga un apartado de
+  // Moodle […] y poder meter todo lo de Moodle ahí»; gemela del 360). Sus entradas
+  // se declaran donde estaban, con sus permisos y roles, y `bloquesDelMenu.js` las
+  // trae aquí (Mi campus, Consultas, Cursos y alumnos, Cursos de Moodle, Cursos
+  // pendientes, Diplomas). La única propia es la conexión del campus: la tarjeta
+  // Moodle de Integraciones, con el mismo permiso que «Integraciones».
+  {
+    label: 'Moodle',
+    items: [
+      { to: '/moodle/conexion', label: 'Conexión del campus', icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'integrations.view' },
+    ],
+  },
   {
     label: 'Sistema',
     items: [
       // Lo que trae cada versión (Diego, 28/09). La 2.0.0 cuenta lo que aún está
       // en pruebas: sale con ello.
-      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'novedades.view' }] : []),
+      ...(PROCESO_EN_PRUEBAS ? [{ to: '/novedades', label: 'Novedades', icon: Sparkle, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'soporte'], permiso: 'novedades.view' }] : []),
       // El chat interno del equipo, como en MultiCRM.
       { to: '/mensajes', label: 'Mensajes', icon: ChatsCircle, permiso: 'mensajes.usar' },
       { to: '/solicitudes-cambio', label: 'Solicitudes de cambio', icon: GitMerge, permiso: 'change_requests.view' },
       { to: '/notificaciones', label: 'Notificaciones',   icon: Bell },
       // El tutor entra aqui: es donde cambia su contraseña.
-      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', 'gestor', 'tutor', 'colaborador', 'tutor_redactor'] },
+      { to: '/preferencias',    label: 'Mis preferencias', icon: Sliders, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'tutor', 'colaborador', 'tutor_redactor'] },
       { to: '/soporte',        label: 'Soporte',          icon: Headset },
       // Incidencias (gemela de CRM#612), al lado de Soporte. Los mismos roles
       // que traen `incidencias.view` de serie (la gestora ve las suyas).
-      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', 'gestor', 'soporte'], permiso: 'incidencias.view' },
+      { to: '/incidencias',    label: 'Incidencias',      icon: WarningDiamond, roles: ['superadmin', 'admin', ...ROLES_DE_GESTORA, 'soporte'], permiso: 'incidencias.view' },
       { to: '/manual',         label: 'Manual del CRM',   icon: BookOpen },
       { to: '/status',         label: 'Status',           icon: Pulse },
       // El registro (#111), como en MultiCRM: quién hizo qué y, en «todos», los sucesos
@@ -374,6 +396,7 @@ export function canSeeItem(item, role, soloColaboraciones, permisos, can) {
   if (item.apagable && APAGADOS.includes(item.apagable)) return false;
   // Una función que enciende el servidor (`/auth/me` → `funciones`): apagada, no sale.
   if (item.funcion === 'links_pago' && !linksPagoEncendidos(permisos)) return false;
+  if (item.funcion && item.funcion !== 'links_pago' && !funcionEncendida(permisos, item.funcion)) return false;
   // El permiso de la pantalla (#230, gemela de CRM#423): sin él no sale, sea quien
   // sea. Es el mismo mapa que mira el servidor; quitarle a alguien «Ver
   // prospectos» le quita también la entrada. Los `roles` de cada entrada siguen
@@ -477,6 +500,9 @@ const SIN_ENTRADA = {
   '/accounting/conciliacion/facturas': 'facturas.gestionar',
   // La de cargos de Stripe (CRM#906): la clave de «Asociar» en Pagos Stripe.
   '/accounting/conciliacion/cargos-stripe': 'stripe.edit',
+  // Productos › Formaciones (gemela de CRM#1113): crear y editar formaciones con sus
+  // módulos. A quien puede editar el catálogo; el servidor pide lo mismo.
+  '/products/formaciones': ['products.edit', 'products.create'],
 };
 // Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
 // del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
@@ -829,7 +855,8 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
                 : section.label === 'Comercial' ? 'menu-comercial'
                   : section.label === 'Académico' ? 'menu-academico'
                     : section.label === 'Finanzas' ? 'menu-finanzas'
-                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
+                      : section.label === 'Configuración' ? 'menu-configuracion'
+                        : section.label === 'Moodle' ? 'menu-moodle' : anclaDelBloque(section.label)}
           >
             <button
               type="button"
@@ -923,7 +950,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* Logo + badge BETA + toggle */}
+      {/* Logo + versión + toggle */}
       <div className={cn('flex items-center mb-4', collapsed ? 'flex-col gap-2' : 'gap-2 px-2')}>
         {collapsed ? (
           <img src="/iseie-icon-192.png" alt="ISEIE" className="w-8 h-8 object-contain flex-shrink-0" />
@@ -932,13 +959,15 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <img src="/iseie-logo-color.png" alt="ISEIE" className="h-7 w-auto object-contain object-left dark:hidden" />
               <img src="/iseie-logo.png"       alt="ISEIE" className="h-7 w-auto object-contain object-left hidden dark:block" />
-              {/* La versión, como en MultiCRM. Sale de la etiqueta de Git al compilar (11/11). */}
-              <span
-                title={BETA_VERSION ? `Versión ${BETA_VERSION} — beta` : 'Beta'}
-                className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[9px] font-bold uppercase tracking-wider self-start"
-              >
-                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
-              </span>
+              {/* La versión, como en MultiCRM: la de Novedades (25/11). Antes «Beta 1.0.0». */}
+              {ETIQUETA_VERSION && (
+                <span
+                  title={`Versión ${VERSION_APP}`}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-mono font-semibold tabular-nums self-start"
+                >
+                  {ETIQUETA_VERSION}
+                </span>
+              )}
             </div>
           </>
         )}

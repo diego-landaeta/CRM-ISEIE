@@ -321,6 +321,41 @@ export async function ventaDelCargo(projectId, payment, dbRow) {
   const datos = dbRow.checkout_externo || {};
   const email = String(payment.customer_email || dbRow.customer_email || datos.email || '').trim().toLowerCase() || null;
   const telefono = payment.customer_phone || datos.telefono || null;
+  // UN LINK DE LA APOSTILLA DE LA HAYA (CRM#1130): su cobro abre su propia venta
+  // de apostilla y NO se cuelga de otra venta como si fuera una cuota (lo que
+  // pasó en ISEIE el 23/11 con la venta #34, un máster). Si no se sabe de quién
+  // es, a la bandeja, y su apostilla sale en «Sin asociar».
+  const apostillas = await import('../apostillas/apostillas.alta.js');
+  if (await apostillas.esLinkDeApostilla(dbRow.stripe_link_externo_id)) {
+    const movil = movilNormalizado(telefono);
+    let fichas = email ? await model.fichasPorCorreo(projectId, email) : [];
+    const porMovil = !fichas.length && Boolean(movil);
+    if (porMovil) fichas = await model.fichasPorMovil(projectId, movil);
+    let r;
+    try {
+      r = await apostillas.ventaDeApostillaDelCargo({ projectId, payment, fichas, porMovil });
+    } catch (err) {
+      logger.warn({ projectId, stripeId: payment.stripe_id, err: err.message }, 'apostillas: no se pudo abrir la venta del cobro');
+      r = { motivo: 'error_al_crear_la_venta' };
+    }
+    if (!r.conversionId) {
+      // Los motivos de la bandeja son los de su CHECK (migración 317): lo demás
+      // (sin producto de apostilla en el campus, un fallo al crear la venta)
+      // queda como «sin venta», que es lo que se ve.
+      const motivo = !email && !movil ? 'sin_datos'
+        : ['sin_coincidencia', 'varias_coincidencias'].includes(r.motivo) ? r.motivo : 'sin_venta';
+      await model.aLaBandeja(dbRow.id, motivo, fichas.slice(0, 10).map((f) => ({ lead_id: Number(f.id), lead_nombre: f.nombre })));
+      logger.info({ projectId, stripeId: payment.stripe_id, motivo: r.motivo }, 'apostillas: cobro del link sin venta; por vincular');
+      return { porVincular: true, motivo };
+    }
+    return {
+      conv: { id: r.conversionId },
+      ficha: { id: Number(r.ficha.id), nombre: r.ficha.nombre, responsable_id: r.ficha.responsable_id },
+      metodoAuto: METODO,
+      email,
+      externo: { id: dbRow.stripe_link_externo_id, ...datos },
+    };
+  }
   const r = await quienEs(projectId, { email, telefono });
   if (!r.venta) {
     await model.aLaBandeja(dbRow.id, r.motivo, r.candidatos);

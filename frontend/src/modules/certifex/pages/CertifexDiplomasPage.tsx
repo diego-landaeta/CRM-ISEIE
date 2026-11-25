@@ -502,20 +502,49 @@ function Esqueleto() {
 }
 
 /**
- * Una tabla ancha: en pantallas estrechas se desliza a los lados. Se dice (no todo el
- * mundo ve que hay más columnas) y la barra de desplazamiento queda a la vista.
+ * Una tabla ancha: si no cabe, se desliza a los lados dentro de su caja (la página no se
+ * ensancha). Se dice cuando de verdad no cabe, a cualquier ancho —a 1280 px, con el menú
+ * abierto, Pendientes tampoco cabía y no se avisaba—, y la barra queda a la vista. Es el
+ * patrón de Monitask (CRM#1141).
+ *
+ * Y la columna de acciones va fija a la derecha (ACCIONES_TH, accionesTd): con la tabla
+ * sin deslizar, «Aprobar y emitir», «Rechazar» y «Editar» se ven igual; antes se cortaban
+ * por la derecha (QA del 25/11/2026). Lo que se desliza son las demás columnas.
  */
 function TablaDesplazable({ children, className }: { children: React.ReactNode; className?: string }) {
+  const caja = useRef<HTMLDivElement>(null);
+  const [noCabe, setNoCabe] = useState(false);
+  useEffect(() => {
+    const el = caja.current;
+    if (!el) return undefined;
+    const medir = () => setNoCabe(el.scrollWidth > el.clientWidth + 1);
+    medir();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    if (el.firstElementChild) ro.observe(el.firstElementChild);
+    return () => ro.disconnect();
+  }, []);
   return (
     <>
-      <p className="flex items-center gap-1 px-4 pt-2 text-[11px] text-muted-foreground lg:hidden" aria-hidden="true">
-        Desliza la tabla a los lados para ver todas las columnas y las acciones →
-      </p>
-      <div className={cn('overflow-x-auto pb-1 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]', className)} tabIndex={0} role="region" aria-label="Tabla desplazable">
+      {noCabe && (
+        <p className="flex items-center gap-1 px-4 pt-2 text-[11px] text-muted-foreground" aria-hidden="true" data-testid="aviso-desliza">
+          Desliza la tabla a los lados para ver todas las columnas →
+        </p>
+      )}
+      <div ref={caja} className={cn('overflow-x-auto pb-1 [scrollbar-color:hsl(var(--border))_transparent] [scrollbar-width:thin]', className)} tabIndex={0} role="region" aria-label="Tabla desplazable">
         {children}
       </div>
     </>
   );
+}
+
+/** La cabecera de la columna de acciones, fija a la derecha y opaca (lo que se desliza pasa por debajo). */
+const ACCIONES_TH = 'sticky right-0 z-[1] border-l border-border bg-card bg-gradient-to-r from-muted/40 to-muted/40';
+/** Su celda: opaca, con el color de la fila (elegida o al pasar por encima; el `tr` lleva `group`). */
+function accionesTd(elegida = false) {
+  return cn('sticky right-0 z-[1] border-l border-border bg-card',
+    elegida ? 'bg-gradient-to-r from-primary/5 to-primary/5' : 'group-hover:bg-gradient-to-r group-hover:from-muted/40 group-hover:to-muted/40');
 }
 
 /** «hace 3 h», «hace 2 días». */
@@ -1441,12 +1470,12 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                     <Th className="text-right">Nota · avance</Th>
                     <Th>En el CRM</Th>
                     <Th className={soloLectura ? 'pr-4' : undefined}>Aviso de Certifex</Th>
-                    {!soloLectura && <Th className="pr-4 text-right">Acción</Th>}
+                    {!soloLectura && <Th className={cn('pr-4 text-right', ACCIONES_TH)}>Acción</Th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {terminados.map((c) => (
-                    <tr key={c.matriculaId} className="align-top hover:bg-muted/40">
+                    <tr key={c.matriculaId} className="group align-top hover:bg-muted/40">
                       <td className="px-2 py-3 pl-4">
                         <div className="max-w-[260px] truncate font-semibold" title={c.titular.nombre ?? undefined}>{c.titular.nombre || '—'}</div>
                         <div className="max-w-[260px] truncate text-xs text-muted-foreground" title={c.titular.email ?? undefined}>{c.titular.email || 'sin correo'}</div>
@@ -1465,7 +1494,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                         {c.aviso?.recibidoEn ? fechaHora(c.aviso.recibidoEn) : <span className="text-muted-foreground">Sin aviso</span>}
                       </td>
                       {!soloLectura && (
-                        <td className="px-2 py-3 pr-4 text-right">
+                        <td className={cn('px-2 py-3 pr-4 text-right', accionesTd())}>
                           <Button size="sm" variant="secondary" disabled={trabajando || pidiendo !== null} aria-busy={pidiendo === c.matriculaId}
                             aria-label={`Pasar a pendientes a ${c.titular.nombre || c.titular.email || `la matrícula ${c.matriculaId}`}`}
                             title="Pide el diploma por el alumno: pasa a Pendientes para revisarlo, aprobarlo y emitirlo"
@@ -1563,7 +1592,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       <Th>Solicitado</Th>
                       <Th className="text-right">Nota · avance</Th>
                       <Th className={soloLectura ? 'pr-4' : undefined}>En el CRM</Th>
-                      {!soloLectura && <Th className="pr-4 text-right">Acciones</Th>}
+                      {!soloLectura && <Th className={cn('pr-4 text-right', ACCIONES_TH)}>Acciones</Th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -1574,7 +1603,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                       const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
                       const esperando = !!datos && !datos.puedeEmitir;
                       return (
-                        <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
+                        <tr key={k} className={cn('group align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                           {!soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
                           <td className={cn('px-2 py-3', soloLectura && 'pl-4')}>
                             <NombreDiploma c={c} />
@@ -1601,7 +1630,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           </td>
                           <td className={cn('px-2 py-3', soloLectura && 'pr-4')}><EnElCrmEtiqueta crm={c.crm} /></td>
                           {!soloLectura && (
-                            <td className="px-2 py-3 pr-4">
+                            <td className={cn('px-2 py-3 pr-4', accionesTd(elegidas.has(k)))}>
                               <div className="flex flex-col items-stretch gap-1.5">
                                 {esperando ? (
                                   <div role="status" data-confirmacion={c.confirmacion?.estado}
@@ -1662,7 +1691,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                     <Th>Motivo</Th>
                     <Th>Rechazada</Th>
                     <Th className={!administra ? 'pr-4' : undefined}>Aviso de rechazo</Th>
-                    {administra && <Th className="pr-4 text-right">Acción</Th>}
+                    {administra && <Th className={cn('pr-4 text-right', ACCIONES_TH)}>Acción</Th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -1670,7 +1699,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                     const k = String(c.matriculaId);
                     const a = c.avisoRechazo;
                     return (
-                      <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
+                      <tr key={k} className={cn('group align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                         {administra && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
                         <td className={cn('px-2 py-3', !administra && 'pl-4')}>
                           <NombreDiploma c={c} />
@@ -1687,7 +1716,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {a && <div className="mt-0.5 max-w-[170px] truncate text-[11px] text-muted-foreground" title={a.por}>{fecha(a.en)} · {a.por}</div>}
                         </td>
                         {administra && (
-                          <td className="px-2 py-3 pr-4 text-right">
+                          <td className={cn('px-2 py-3 pr-4 text-right', accionesTd(elegidas.has(k)))}>
                             <Button size="sm" variant={a?.resultado === 'enviado' ? 'outline' : 'secondary'} disabled={trabajando} onClick={() => setDialogo({ tipo: 'avisoRechazo', ids: [c.matriculaId] })}>
                               <Envelope size={14} className="mr-1.5" /> {a ? 'Reenviar aviso' : 'Enviar aviso de rechazo'}
                             </Button>
@@ -1716,14 +1745,14 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                   <Th>Titulación</Th>
                   <Th>Emitido</Th>
                   {pestana === 'enviados' ? <Th>Aviso al alumno</Th> : pestana === 'revertidos' ? <><Th>Revertido</Th><Th>Motivo</Th><Th>Reemitido como</Th></> : <><Th>Revocado</Th><Th>Motivo</Th></>}
-                  <Th className="pr-4 text-right">Acciones</Th>
+                  <Th className={cn('pr-4 text-right', ACCIONES_TH)}>Acciones</Th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {diplomas.map((d) => {
                   const k = d.nexpediente;
                   return (
-                    <tr key={k} className={cn('align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
+                    <tr key={k} className={cn('group align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                       {pestana === 'enviados' && !soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir ${k}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
                       <td className={cn('px-2 py-3', (pestana === 'revocados' || pestana === 'revertidos' || soloLectura) && 'pl-4')}>
                         <div className="max-w-[180px] truncate font-semibold" title={d.alumno}>{d.alumno}</div>
@@ -1762,7 +1791,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           <td className="px-2 py-3"><p className="max-w-[260px] text-sm italic text-muted-foreground">«{d.revocacion?.motivo || 'sin motivo'}»</p></td>
                         </>
                       )}
-                      <td className="px-2 py-3 pr-4">
+                      <td className={cn('px-2 py-3 pr-4', accionesTd(elegidas.has(k)))}>
                         <div className="flex justify-end gap-1.5 whitespace-nowrap">
                           {pestana === 'enviados' && !soloLectura && (
                             !d.aviso && !delCrm(d) ? (
@@ -2171,7 +2200,7 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
               <Th>Formación</Th>
               <Th>Nº de expediente</Th>
               <Th>Emitido</Th>
-              <Th className="pr-4 text-right">Acciones</Th>
+              <Th className={cn('pr-4 text-right', ACCIONES_TH)}>Acciones</Th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -2193,7 +2222,7 @@ function BloquePorAvisar({ filas, nombreCampus, elegidas, alternar, todas, ocupa
                   </td>
                   <td className="px-2 py-2.5 font-mono text-[11px] text-primary">{k}</td>
                   <td className="whitespace-nowrap px-2 py-2.5 text-xs">{fecha(c.diploma?.emitidoEn)}</td>
-                  <td className="px-2 py-2.5 pr-4">
+                  <td className={cn('px-2 py-2.5 pr-4', accionesTd())}>
                     <div className="flex justify-end gap-1.5">
                       <Button size="sm" variant="outline" onClick={() => verPdf(c)}><FilePdf size={14} className="mr-1.5" /> Ver PDF</Button>
                       {!soloLectura && <Button size="sm" disabled={ocupado} onClick={() => enviar([k])}><PaperPlaneTilt size={14} className="mr-1.5" /> Enviar diploma al alumno</Button>}

@@ -69,6 +69,20 @@ export function soloEsTutorRedactor(user: Quien | null | undefined): boolean {
   return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
 }
 
+/**
+ * Los roles que trabajan como una gestora (CRM-ISEIE#761 / CRM#1105): la gestora y
+ * la líder de equipo, que es una gestora que además ve a su equipo. Donde el menú
+ * o una pantalla enseñaban algo «a la gestora», también a la líder. Es
+ * comportamiento y lo que se enseña de serie; quién entra lo deciden los permisos
+ * (#423). Mismo nombre que en el servidor (`shared/utils/roles.js`) y en el 360.
+ */
+export const ROLES_DE_GESTORA: UserRole[] = ['gestor', 'lider_equipo'];
+
+/** Si su rol PRINCIPAL trabaja como una gestora (lo que antes era `role === 'gestor'`). */
+export function esRolDeGestora(rol: string | null | undefined): boolean {
+  return ROLES_DE_GESTORA.includes(rol as UserRole);
+}
+
 /** Los roles que dan clase: donde se pregunta «¿es tutor?», el redactor también cuenta. */
 export const ROLES_DE_TUTOR: UserRole[] = ['tutor', 'tutor_redactor'];
 
@@ -109,4 +123,42 @@ export function tieneWhatsapp(
   if (!permissions) return false;
   if (user?.usa_whatsapp === false) return false;
   return permissions[PERMISO_DEL_AVISO] === true;
+}
+
+/*
+  LAS LISTAS DE GESTORAS (filtro «Gestora», reasignar, la cola del equipo…).
+  Diego, 25/11/2026: «a Raquel no le funcionan los filtros de las gestoras al
+  reasignar o filtrar». Las pantallas cargaban la lista solo si el rol PRINCIPAL
+  era admin o superadmin; la líder de equipo (CRM-ISEIE#761 / CRM#1105) tenía el
+  botón «Reasignar» (por `leads.assign`) pero el desplegable salía vacío, y el
+  filtro «Gestora» ni aparecía. El servidor ya le daba su equipo en
+  `GET /users?alcance=comercial` (por `equipos.su_equipo`).
+
+  Ahora se decide con el permiso de pedir la lista y el ALCANCE, igual que el
+  servidor (`soloLoSuyo` en shared/utils/roles.js): ve la lista quien puede
+  pedirla y ve a más de una persona (todo el campus o su equipo).
+*/
+const VEN_TODO_EL_CAMPUS: UserRole[] = ['superadmin', 'admin', 'soporte'];
+const COMERCIAL_PROPIO = ['gestor', 'project_manager', 'lider_equipo'];
+
+/** «Solo lo suyo», como `soloLoSuyo` en el servidor: comercial sin ningún rol que vea el campus entero. */
+export function soloLoSuyo(user: Quien | null | undefined): boolean {
+  const suyos = rolesDe(user);
+  if (suyos.some((r) => VEN_TODO_EL_CAMPUS.includes(r))) return false;
+  return suyos.some((r) => COMERCIAL_PROPIO.includes(r));
+}
+
+/**
+ * Si se le enseñan las listas de gestoras: puede pedir la lista (`users.view`, o
+ * `equipos.su_equipo` la líder) y ve a más de una persona (no es «solo lo suyo»,
+ * o lleva un equipo). Una gestora o un project manager sin equipo, no.
+ */
+export function veListaDeGestoras(
+  user: Quien | null | undefined,
+  can: (clave: string) => boolean,
+  llevaEquipo: boolean,
+): boolean {
+  if (!user) return false;
+  if (!can('users.view') && !can('equipos.su_equipo')) return false;
+  return llevaEquipo || !soloLoSuyo(user);
 }

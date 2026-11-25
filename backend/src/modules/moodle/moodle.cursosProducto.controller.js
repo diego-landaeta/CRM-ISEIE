@@ -18,7 +18,7 @@ import * as model from './moodle.cursosProducto.model.js';
  * La lista de cursos se pide al Moodle del campus con `moodle.client`
  * (`cursosDelCampus`), por la conexión del plugin (Integraciones, la que usará la
  * matrícula en su fase 2) o, si el campus no la tiene, por la del panel de
- * Moodle (Conexión › Moodle). Al unir, el curso se comprueba contra esa lista y
+ * Moodle (Moodle › Cursos y alumnos). Al unir, el curso se comprueba contra esa lista y
  * su nombre sale de Moodle, no de lo que mande el navegador.
  */
 
@@ -106,7 +106,7 @@ export async function cursosMoodle(req, res, next) {
     const campus = await campusDe(req);
     const r = await cursosDe(campus.id, { refrescar: req.query.refrescar === '1' });
     if (!r) {
-      throw new AppError('Este campus no tiene su Moodle conectado: conéctalo en Integraciones (plugin del CRM) o en Conexión › Moodle.', 409, 'MOODLE_SIN_CONECTAR');
+      throw new AppError('Este campus no tiene su Moodle conectado: conéctalo en Integraciones (plugin del CRM) o en Moodle › Cursos y alumnos.', 409, 'MOODLE_SIN_CONECTAR');
     }
     res.json({ success: true, data: { cursos: r.cursos, via: r.via } });
   } catch (err) { next(err); }

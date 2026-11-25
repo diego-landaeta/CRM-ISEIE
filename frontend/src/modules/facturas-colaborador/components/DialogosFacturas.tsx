@@ -105,9 +105,10 @@ export function ColaboradorDialog({ colaborador, empresas, alCerrar, alGuardar, 
   // o tutor redactor (CRM#708), que también sube su factura del mes. A una
   // vendedora (CRM#710), las gestoras y comerciales: rol gestor o admin.
   useEffect(() => {
-    const roles = esVendedora ? ['gestor', 'admin'] : ['colaborador', 'tutor_redactor'];
+    const roles = esVendedora ? ['gestor', 'lider_equipo', 'admin'] : ['colaborador', 'tutor_redactor'];
     Promise.all(roles.map((rol) =>
-      client.get(`/users?role=${rol}&active=true&limit=200`).then((r: any) => r.data || []).catch(() => [])))
+      // 100 es el máximo del servidor: con 200 contestaba 400 y la lista salía vacía (25/11/2026).
+      client.get(`/users?role=${rol}&active=true&limit=100`).then((r: any) => r.data || []).catch(() => [])))
       .then((listas: UsuarioColaborador[][]) => {
         const vistos = new Set<number>();
         const todos = listas.flat().filter((u) => (vistos.has(u.id) ? false : (vistos.add(u.id), true)));

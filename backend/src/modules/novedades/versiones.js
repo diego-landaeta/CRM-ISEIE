@@ -22,6 +22,14 @@ const LISTA = [
         "titulo": "Moodle",
         "items": [
           {
+            "titulo": "Todo lo de Moodle, en un solo sitio del menú",
+            "texto": "Un apartado «Moodle» en el menú con Mi campus, Consultas, los cursos y alumnos del campus, el curso de Moodle de cada producto, los cursos pendientes, los diplomas y la conexión del campus. Cada uno ve lo mismo que antes: solo cambia de sitio. «Cursos y alumnos» abre directamente los cursos del campus y ya cuenta el Moodle conectado en Integraciones.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/conexion/moodle",
+            "boton": "Ir a Cursos y alumnos",
+            "recorrido": "menu-bloques"
+          },
+          {
             "titulo": "«Mi campus» para las tutoras",
             "texto": "Tus alumnos con su % hecho, las dudas por contestar, las entregas por corregir y los cursos por desarrollar, en una sola pantalla.",
             "roles": ["tutor", "tutor_redactor", "admin", "superadmin"],
@@ -69,6 +77,39 @@ const LISTA = [
         ]
       },
       {
+        "titulo": "Formaciones y alumnos",
+        "items": [
+          {
+            "titulo": "Formaciones con sus módulos",
+            "texto": "En Productos › Formaciones se crea y se edita cada formación: tipo, horas, precio, fechas, sus módulos con el temario y sus tutoras. Los módulos son los que imprime el diploma.",
+            "roles": ["admin", "superadmin", "soporte"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Alumnos activos por formación",
+            "texto": "En cada formación, sus alumnos activos, terminados y de baja; de los activos, quién va al día, quién tiene cuotas pendientes y quién está en impago. En la lista, las columnas «Activos» y «Con impago». Cada gestora ve los suyos.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Dar de baja al alumno",
+            "texto": "En la ficha de la venta: fecha, motivo (desistimiento, baja voluntaria, impago u otro) y nota. Desde esa fecha deja de contar como activo. Se puede deshacer y queda en el historial. No anula facturas ni cobros, ni le da de baja en Moodle.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "El curso de Moodle, desde la formación (preparado)",
+            "texto": "En Integraciones › Moodle se elige la categoría de cursos, diplomados y másteres de cada campus, y la ficha de la formación enseña el nombre corto y las secciones que tendrá el curso. El botón «Crear en Moodle» se enciende cuando el plugin nuevo llegue a los campus.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          }
+        ]
+      },
+      {
         "titulo": "Equipo",
         "items": [
           {
@@ -78,6 +119,13 @@ const LISTA = [
             "ruta": "/tareas",
             "boton": "Ir a Tareas",
             "recorrido": "tablero"
+          },
+          {
+            "titulo": "Rol nuevo: Líder de equipo",
+            "texto": "Para quien lleva un equipo comercial sin ser administradora: ve lo suyo y lo de las gestoras de su equipo (prospectos, ventas, la cola y el ranking en «Cómo voy», con su propio puesto) puede pasar un prospecto a otra de su equipo, repartir una venta entre su equipo y ve el informe mensual de su equipo. Nada de administración. Se da en Usuarios, y su equipo se elige en su ficha.",
+            "roles": ["lider_equipo", "admin", "superadmin"],
+            "ruta": "/",
+            "boton": "Ir al Dashboard"
           },
           {
             "titulo": "Recorridos, solo cuando los pides",
@@ -95,6 +143,28 @@ const LISTA = [
         "titulo": "Facturas",
         "items": [
           {
+            "titulo": "Facturación automática, encendida",
+            "texto": "Desde el 24/11, en todos los campus. Al entrar un cobro, el alumno recibe un correo con un formulario para sus datos fiscales. Al contestarlo, la factura sale sola, con el número siguiente de la serie, y le llega en PDF. A los 7 días sin respuesta sale con su ficha si está completa; si no, el cobro se queda en la cola y te avisamos. Las cuotas reutilizan los mismos datos.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática",
+            "recorrido": "facturacion-automatica"
+          },
+          {
+            "titulo": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo»",
+            "texto": "Al registrar la venta (también al crear un link de pago), en la ficha de la venta y en la cola de facturación. Sí, de serie: el CRM le manda el PDF. No: la factura se emite igual, pero no se manda y lleva «No se envía automáticamente: la envía la gestora». El correo del alumno sale ya relleno: «Confirmar» o «Editar»; el formulario y el PDF van a ese.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "Dónde se ve: Facturas › Facturación automática",
+            "texto": "Los formularios enviados, contestados y vencidos; las facturas que salieron solas, con su número y a qué correo fue el PDF; y las que necesitan a una persona (en revisión, posible duplicada…), con su motivo y qué hacer. La administración ve además la auditoría y su «Pasada en seco».",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
             "titulo": "Aviso de posible duplicada más claro",
             "texto": "Dice de quién es la otra factura y en qué se parece: la misma venta, el mismo NIF o el mismo nombre. Si es otra, «Es otra, emitir igualmente».",
             "roles": ["gestor", "admin", "superadmin"],
@@ -108,6 +178,33 @@ const LISTA = [
             "ruta": "/accounting/facturas-colaboradores",
             "boton": "Ir a Facturas de colaboradores",
             "recorrido": "facturas-colaboradores"
+          },
+          {
+            "titulo": "El envío de la factura, solo administración",
+            "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La factura no se le manda sola al alumno: queda «Por enviar» en Facturación › Facturación automática, y administración la verifica y la envía: por correo desde el CRM o por WhatsApp (se descarga el PDF y queda marcada «Enviada por WhatsApp»). La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
+            "titulo": "La cola de facturación, por campus",
+            "texto": "Con «Todos los proyectos» la cola sale separada por campus, y lo que no factura la automática sale marcado «A mano». Si un cobro anterior frena el turno, la cola dice cuál. Al registrar un cobro, la ficha de la venta ya no se cierra y sigue el botón «Emitir ya la factura de este cobro».",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturas"
+          }
+        ]
+      },
+      {
+        "titulo": "Links de pago",
+        "items": [
+          {
+            "titulo": "La venta nace con el link",
+            "texto": "Al crear un link desde un prospecto, su venta queda creada a tu nombre, pendiente de cobro (en cuotas, con su plan), y el prospecto pasa a «Convertido». Si caduca o se anula sin pagarse, te avisamos y decides tú. En la venta, «Link de pago usado» une el cobro de Stripe aunque pagara con otro correo.",
+            "roles": ["gestor", "admin", "superadmin"],
+            "ruta": "/links-pago",
+            "boton": "Ir a Links de pago",
+            "recorrido": "links-pago"
           }
         ]
       },
@@ -156,7 +253,8 @@ const LISTA = [
     ],
     "arreglos": [
       "Por cobrar y Conversiones suman solo los campus de la empresa elegida.",
-      "La paginación de Prospectos cabe en el móvil."
+      "La paginación de Prospectos cabe en el móvil.",
+      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola."
     ]
   },
   {

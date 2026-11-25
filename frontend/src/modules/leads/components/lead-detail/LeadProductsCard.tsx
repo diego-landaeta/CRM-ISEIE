@@ -38,7 +38,7 @@ const VIA_LABEL: Record<string, string> = {
 
 export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) {
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
-  const { can } = usePermission();
+  const { can, veGestoras } = usePermission();
   const [items, setItems] = useState<ProductItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [addOpen, setAddOpen] = useState(false);
@@ -57,7 +57,8 @@ export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) 
   useEffect(() => { load(); }, [leadId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Un booleano y no `can`: `can` se crea en cada render y el efecto se repetiría.
-  const veUsuarios = can('users.view');
+  // También la líder de equipo, que no ve Usuarios pero sí a su equipo (25/11/2026).
+  const veUsuarios = veGestoras || can('users.view');
   // El catálogo, solo de un campus suyo: si no, 403 PROJECT_FORBIDDEN (CRM#859).
   const esMio = useEsCampusMio();
   const catalogoMio = esMio(projectId);
@@ -76,7 +77,7 @@ export default function LeadProductsCard({ leadId, projectId, isAdmin }: Props) 
     // pantallas: a quien lleva un equipo, su equipo (QA 09/11/2026).
     if (!veUsuarios) { setGestores([]); return; }
     client.get<User[]>('/users', { params: { limit: 100, alcance: 'comercial' } })
-      .then((r: any) => setGestores(((r?.data) || []).filter((u: User) => u.role === 'gestor' || u.role === 'admin')))
+      .then((r: any) => setGestores(((r?.data) || []).filter((u: User) => ['gestor', 'lider_equipo', 'admin'].includes(u.role ?? ''))))
       .catch(() => {});
   }, [projectId, veUsuarios, catalogoMio]);
 

@@ -4,6 +4,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EstadoDeLaSincronizacion from '../components/EstadoDeLaSincronizacion';
 import SaludDeLasConexiones from '../components/SaludDeLasConexiones';
+import CategoriasFormacionesMoodle from '../components/CategoriasFormacionesMoodle';
 import usePermission from '@/shared/hooks/usePermission';
 import MonitaskCard from '@/modules/monitask/components/MonitaskCard';
 import { toast } from '@/shared/hooks/useToast';
@@ -75,6 +76,11 @@ const EVENTOS_DEL_WEBHOOK = [
   // El cobro automático de las cuotas (gemela de CRM 309): Stripe cobra cada cuota con una
   // factura de su calendario; pagada, salda su cuota; fallida, se avisa y se manda su link.
   'invoice.paid', 'invoice.payment_failed',
+  // CRM#1103: Stripe deja de cobrar una cuota (suscripción cancelada o impagada,
+  // calendario cancelado, factura anulada o incobrable): sigue pendiente, marcada y con aviso.
+  'customer.subscription.deleted', 'customer.subscription.updated',
+  'subscription_schedule.canceled', 'subscription_schedule.aborted',
+  'invoice.voided', 'invoice.marked_uncollectible',
   // Los links creados directamente en Stripe (gemela de CRM#1019): salen en Links de
   // pago como «Creado en Stripe» y su cobro se busca por el correo o el móvil.
   'payment_link.created', 'payment_link.updated',
@@ -105,6 +111,15 @@ export default function IntegrationsPage() {
     const t = setTimeout(() => document.getElementById('integracion-links-pago')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
     return () => clearTimeout(t);
   }, [irALinks]);
+  // «Moodle › Conexión del campus» (apartado Moodle, Diego 25/11) trae aquí con
+  // `?seccion=moodle`: baja hasta la tarjeta Moodle del campus, marcada.
+  const [irAMoodle] = useState(() => typeof window !== 'undefined'
+    && new URLSearchParams(window.location.search).get('seccion') === 'moodle');
+  useEffect(() => {
+    if (!irAMoodle || !pid) return undefined;
+    const t = setTimeout(() => document.getElementById('integracion-moodle')?.scrollIntoView?.({ behavior: 'smooth', block: 'start' }), 80);
+    return () => clearTimeout(t);
+  }, [irAMoodle, pid]);
   // La salud de las conexiones de cada campus (CRM#533): superadmin y admin.
   const { can } = usePermission();
   const verSalud = can('integrations.salud');
@@ -138,7 +153,7 @@ export default function IntegrationsPage() {
           <p><strong>3) Uso real:</strong></p>
           <ul className="list-disc list-inside pl-2 space-y-0.5">
             <li><strong>Stripe:</strong> con el access token guardado, el CRM sondea los cobros cada cinco minutos y los deja en <em>Pagos Stripe</em> para asociarlos a una venta. El webhook es <em>opcional</em>: sirve para no esperar esos cinco minutos, y sin su secreto de firma se rechaza.</li>
-            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Tutores › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
+            <li><strong>Campus (Moodle):</strong> las consultas de alumnos, «Moodle › Mi campus» y las notas. Con el token del campus, el CRM comprueba que cada tutor es usuario del campus de su proyecto. Su servicio necesita {TOTAL_FUNCIONES_MOODLE} funciones y «Puede descargar archivos»: «Probar conexión» dice cuáles faltan.</li>
             <li><strong>Brevo:</strong> envía emails transaccionales (lead asignado, recordatorios, confirmación de pago) usando el From email validado. La automatización de resúmenes diarios / SLA 30min está en desarrollo.</li>
           </ul>
           <p className="text-amber-700 dark:text-amber-400 pt-1">
@@ -174,7 +189,9 @@ export default function IntegrationsPage() {
             </div>
           )}
           <BrevoCard projectId={pid} />
-          <MoodleCard projectId={pid} />
+          <div id="integracion-moodle" data-testid="integracion-moodle" className={`scroll-mt-4 rounded-lg ${irAMoodle ? 'ring-2 ring-primary' : ''}`}>
+            <MoodleCard projectId={pid} />
+          </div>
         </div>
       )}
     </div>
@@ -1233,6 +1250,9 @@ function MoodleCard({ projectId }: { projectId: number }) {
             <p className="text-xs text-muted-foreground">Leyendo desde el {fmt(String(data.config_public.consultas_desde))}.</p>
           )}
         </div>
+
+        {/* CRM#1113, fase 2: la categoría de cada tipo para «Crear en Moodle» en Formaciones. */}
+        {data?.has_secret && <CategoriasFormacionesMoodle projectId={projectId} />}
 
         <TestStatus data={data} aviso={faltas.length > 0} />
         {funcionesProbadas?.grupos && (

@@ -10,6 +10,7 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
+import { esRolDeGestora } from '@/shared/lib/roles';
 import {
   CurrencyEur, WarningCircle, Wallet, Receipt, CaretLeft, CaretRight,
   ListBullets, CalendarBlank, Coins,
@@ -32,6 +33,19 @@ interface Row {
   project_id: number; proyecto_nombre: string;
   responsable_id: number | null; gestora_nombre: string | null;
   cuota_numero: number | null; importe: number; vence: string | null; vencido: boolean;
+  /** CRM#1103: Stripe ya no la cobrará sola (sigue pendiente). Opcionales: un servidor anterior no los manda. */
+  cobro_auto_cancelado_el?: string | null; cobro_auto_cancelado_motivo?: string | null;
+}
+
+/** «Cobro auto. cancelado»: la cuota ya no la cobra Stripe sola (CRM#1103). */
+function MarcaCancelada({ r }: { r: Row }) {
+  if (!r.cobro_auto_cancelado_el) return null;
+  return (
+    <span title={r.cobro_auto_cancelado_motivo || 'Stripe canceló su cobro automático'}
+      className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive whitespace-nowrap">
+      Cobro auto. cancelado
+    </span>
+  );
 }
 
 export default function ReceivablePage() {
@@ -40,7 +54,7 @@ export default function ReceivablePage() {
   // El filtro «Proyecto»: los campus del ámbito, sin los de pruebas con «Todos» (#346).
   const campusDelAmbito = useProyectosDelAmbito<{ id: number; nombre?: string }>();
   const { user } = useAuth() as { user: { role?: string } | null };
-  const isGestor = user?.role === 'gestor';
+  const isGestor = esRolDeGestora(user?.role);
 
   const [items, setItems] = useState<Row[]>([]);
   const [gestoras, setGestoras] = useState<{ id: number; nombre: string }[]>([]);
@@ -274,6 +288,7 @@ export default function ReceivablePage() {
                     <td className="px-4 py-3">
                       {r.producto}
                       {r.cuota_numero ? <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">Cuota {r.cuota_numero}</span> : null}
+                      <MarcaCancelada r={r} />
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">{r.proyecto_nombre}</td>
                     <td className="px-4 py-3 text-muted-foreground">{r.gestora_nombre || '—'}</td>
@@ -298,7 +313,7 @@ export default function ReceivablePage() {
               <button key={`${r.tipo}-${r.ref_id}`} type="button" onClick={() => navigate(`/leads/${r.lead_id}`)} className="w-full text-left p-4 space-y-1.5 hover:bg-muted/30">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="font-semibold truncate">{r.cliente} {r.cuota_numero ? <span className="text-[10px] font-bold text-primary">· Cuota {r.cuota_numero}</span> : ''}</div>
+                    <div className="font-semibold truncate">{r.cliente} {r.cuota_numero ? <span className="text-[10px] font-bold text-primary">· Cuota {r.cuota_numero}</span> : ''}<MarcaCancelada r={r} /></div>
                     <div className="text-xs text-muted-foreground truncate">{r.producto} · {r.proyecto_nombre}</div>
                   </div>
                   <span className="tabular-nums font-bold text-orange-600 dark:text-orange-400 flex-shrink-0">{fmt(r.importe)}</span>

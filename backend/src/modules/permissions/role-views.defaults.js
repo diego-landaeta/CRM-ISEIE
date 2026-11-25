@@ -21,6 +21,14 @@ export const SYSTEM_ROLE_VIEWS = {
     dashboard_widgets: ['my_leads_today', 'my_reminders', 'my_conversions_month'],
     compact_sidebar: false,
   },
+  // La líder de equipo (CRM#1105 / ISEIE#761) arranca como una gestora, en sus
+  // prospectos, pero con Reportes a la vista: es donde ve a su equipo.
+  lider_equipo: {
+    default_route: '/leads',
+    hidden_sidebar_items: ['accounting', 'payroll', 'settings_advanced', 'webhooks', 'campaigns', 'users'],
+    dashboard_widgets: ['my_leads_today', 'my_reminders', 'my_conversions_month'],
+    compact_sidebar: false,
+  },
   soporte: {
     default_route: '/status/soporte',
     hidden_sidebar_items: ['accounting', 'payroll', 'campaigns'],

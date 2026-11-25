@@ -7,11 +7,7 @@
 // Para mover un item de "Proximamente" a operativo, agregalo a BETA_ROUTES.
 // ============================================================
 
-// La versión que enseña el menú. Ya no se escribe a mano: se quedaba atrás
-// (2.6.0 con la v2.6.1 en producción; en el 360, «BETA 2.2.0» con la 2.5.24).
-// La pone Vite al compilar, de la etiqueta de Git (`scripts/versionDeLaApp.js`);
-// en las pruebas no hay compilación y queda vacía.
-export const BETA_VERSION: string = typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '';
+// La versión que enseña el CRM vive en `version.ts` (sale de Novedades).
 
 export const BETA_MODE: boolean = String(import.meta.env.VITE_BETA_MODE || '').toLowerCase() === 'true';
 
@@ -41,6 +37,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/whatsapp',                      // WhatsApp: cola, plantillas y el panel del equipo
   '/tutores',                       // Tutores: alta, colaboraciones y comisiones
   '/mis-cursos',                    // La pantalla del propio tutor
+  '/moodle',                        // Moodle › Conexión del campus (apartado Moodle, Diego 25/11)
   '/consultas',                     // Consultas de alumnos (#187–#190): bandeja, carga, tutores y métricas (2.6.0)
   '/secuencias-email',               // Email
   '/email-templates',

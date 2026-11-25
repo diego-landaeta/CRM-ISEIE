@@ -1,5 +1,5 @@
 import { useAuth } from '@/contexts/AuthContext';
-import { rolesDe, tieneRol as tieneRolDe } from '@/shared/lib/roles';
+import { rolesDe, tieneRol as tieneRolDe, veListaDeGestoras } from '@/shared/lib/roles';
 import type { UserRole } from '@/shared/types';
 
 export type PermissionKey = string;
@@ -28,6 +28,8 @@ export const FIXED_ROLES: ReadonlyArray<FixedRole> = [
   { key: 'superadmin', label: 'Superadmin', desc: 'Acceso total. Solo este rol gestiona usuarios.', color: 'rose' },
   { key: 'admin',      label: 'Admin',      desc: 'Acceso operativo completo, no gestiona usuarios.', color: 'violet' },
   { key: 'gestor',     label: 'Gestor',     desc: 'Solo sus leads asignados.', color: 'sky' },
+  // CRM-ISEIE#761: una gestora que además lleva un equipo comercial.
+  { key: 'lider_equipo', label: 'Líder de equipo', desc: 'Lo suyo y lo de las gestoras de su equipo. Sin administración.', color: 'sky' },
   // El tutor no entra al CRM normal: solo ve sus formaciones y lo suyo.
   { key: 'tutor',      label: 'Tutor',      desc: 'Colaborador externo. Solo sus formaciones y sus comisiones.', color: 'violet' },
   { key: 'soporte',    label: 'Soporte',    desc: 'Acceso de solo lectura para soporte técnico.', color: 'emerald' },
@@ -47,6 +49,12 @@ export interface UsePermissionResult {
    * la pantalla lo usa para no ofrecerle lo que le va a dar 403.
    */
   llevaEquipo: boolean;
+  /**
+   * Si se le enseñan las listas de gestoras (filtro «Gestora», reasignar, la
+   * cola del equipo). Por permiso y alcance, no por rol (Diego, 25/11/2026: a la
+   * líder de equipo le salían vacías). Ver `veListaDeGestoras`.
+   */
+  veGestoras: boolean;
 }
 
 /**
@@ -75,6 +83,8 @@ export function crearCan(user: Parameters<typeof rolesDe>[0] | null | undefined,
 export default function usePermission(): UsePermissionResult {
   const { user, permissions, alcanceComercial } = useAuth();
   const can = crearCan(user, permissions);
+  // La líder de equipo (CRM-ISEIE#761) lo es aunque hoy no tenga a nadie: como `alcanceDeLider` en el servidor.
+  const llevaEquipo = (Array.isArray(alcanceComercial) && alcanceComercial.length > 1) || tieneRolDe(user, 'lider_equipo');
 
   return {
     can,
@@ -82,6 +92,7 @@ export default function usePermission(): UsePermissionResult {
     roles: rolesDe(user),
     tieneRol: (...roles: UserRole[]) => tieneRolDe(user, ...roles),
     isAdmin: tieneRolDe(user, 'admin', 'superadmin'),
-    llevaEquipo: Array.isArray(alcanceComercial) && alcanceComercial.length > 1,
+    llevaEquipo,
+    veGestoras: veListaDeGestoras(user, can, llevaEquipo),
   };
 }

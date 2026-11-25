@@ -42,14 +42,15 @@ export default function RulesDialog({ onClose, onSaved }: Props) {
     try {
       const [r, u, pj] = await Promise.all([
         commissionsApi.listRules(),
-        client.get('/users?active=true'),
+        // Sin `limit` el servidor da 20 y faltaban personas en el desplegable (25/11/2026).
+        client.get('/users?active=true&limit=100'),
         client.get('/projects'),
       ]);
       if (r.success) setRules(Array.isArray(r.data) ? r.data : []);
       if (u.success) {
         const rawUsers = (u.data as { users?: User[] } | User[] | null);
         const list = Array.isArray(rawUsers) ? rawUsers : Array.isArray(rawUsers?.users) ? rawUsers.users : [];
-        setUsers(list.filter((x) => x.role === 'gestor' || x.role === 'admin'));
+        setUsers(list.filter((x) => ['gestor', 'lider_equipo', 'admin'].includes(x.role)));
       }
       if (pj.success) {
         const list = Array.isArray(pj.data) ? (pj.data as Project[]) : [];

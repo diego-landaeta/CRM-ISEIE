@@ -49,7 +49,35 @@ export function urlDelCampus(url) {
  * Moodle contesta 200 también cuando falla: el fallo viene dentro, como
  * `{ exception, errorcode, message }`. Por eso se mira el cuerpo, no el estado.
  */
-export async function llamar({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
+export async function llamar(conexion, funcion, parametros = {}, opciones = {}) {
+  const veces = reintentosBD();
+  for (let intento = 0; ; intento++) {
+    try {
+      return await llamarUnaVez(conexion, funcion, parametros, opciones);
+    } catch (err) {
+      // «Database connection failed»: el Moodle no ha llegado ni a abrir su base, así que no
+      // ha hecho nada y repetir es seguro, también en lo que escribe. Pasa cuando el servidor
+      // de los campus tiene sus conexiones a la base llenas (Psiko e ISAEG, 24/11: con 4
+      // llamadas a la vez fallaban 14-40 de 96 cursos; de una en una, ninguno).
+      if (!(err instanceof MoodleError) || err.codigo !== 'BD_CAMPUS' || intento >= veces) throw err;
+      await (opciones.esperarImpl || esperar)(pausaBD() * (intento + 1) + Math.floor(Math.random() * pausaBD()));
+    }
+  }
+}
+
+/** Cuántas veces se repite una llamada que el campus rechaza por su base llena. */
+const reintentosBD = () => {
+  const n = parseInt(process.env.MOODLE_REINTENTOS_BD ?? '3', 10);
+  return Number.isInteger(n) && n >= 0 ? Math.min(n, 5) : 3;
+};
+/** La pausa (ms) antes de cada repetición; crece con cada intento. */
+const pausaBD = () => {
+  const n = parseInt(process.env.MOODLE_REINTENTO_MS ?? '700', 10);
+  return Number.isInteger(n) && n >= 0 ? n : 700;
+};
+const esperar = (ms) => new Promise((r) => { setTimeout(r, ms); });
+
+async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
   const base = urlDelCampus(url);
   if (!base) throw new MoodleError('Falta la dirección del campus.', 'SIN_URL');
   if (!token) throw new MoodleError('Falta el token del campus.', 'SIN_TOKEN');
@@ -98,6 +126,11 @@ function traducir(datos, funcion) {
   if (codigo === 'accessexception' || codigo === 'servicerequireslogin') {
     return error(`El token no tiene permiso para «${funcion}»: añádela al servicio del token en el campus.`, 'PERMISO');
   }
+  // La base del Moodle saturada o caída. El mensaje de Moodle viene en HTML («<p>Error:
+  // Database connection failed</p>…»), y así lo veía la tutora en «Mi campus».
+  if (codigo === 'dbconnectionfailed') {
+    return error('La base de datos del campus no admite más conexiones ahora mismo (Moodle: «Database connection failed»). Pulsa «Actualizar» en unos minutos.', 'BD_CAMPUS');
+  }
   if (codigo === 'webservicesnotenabled' || codigo === 'enablewsdescription') {
     return error('El campus tiene los servicios web apagados.', 'WS_APAGADOS');
   }
@@ -116,8 +149,10 @@ function traducir(datos, funcion) {
  * otra función, se usa `debuginfo` si viene.
  */
 function motivoDelError(datos) {
-  const mensaje = String(datos.message || '').trim();
-  const debug = String(datos.debuginfo || '').trim();
+  // Algunos errores de Moodle llegan en HTML: se enseñan como texto.
+  const sinHtml = (t) => String(t || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  const mensaje = sinHtml(datos.message);
+  const debug = sinHtml(datos.debuginfo);
   const generico = !mensaje || datos.errorcode === 'invalidparameter' || /^invalid parameter value detected\.?$/i.test(mensaje);
   return generico && debug ? debug : mensaje;
 }
@@ -197,11 +232,15 @@ export async function cuentaDelToken(conexion, opciones) {
  *
  * Con un plugin anterior (o un campus sin el plugin) la función no está: devuelve null y
  * quien llama decide sin saberlo. Cualquier otro fallo sube como siempre.
+ *
+ * `permitida` (plugin 1.11.7, CRM#1118): es una administradora del sitio de la lista
+ * «Administradoras que dan clase» del campus, y el plugin envía y califica como ella en los
+ * cursos donde es tutora. Un plugin anterior no lo trae: false, como hasta ahora.
  */
 export async function cuentaDelCampus(conexion, moodleUserId, opciones) {
   try {
     const r = await llamar(conexion, 'local_crm_cuenta', { userid: moodleUserId }, opciones);
-    return { existe: Boolean(r?.existe), esAdministrador: Boolean(r?.siteadmin) };
+    return { existe: Boolean(r?.existe), esAdministrador: Boolean(r?.siteadmin), permitida: Boolean(r?.permitida) };
   } catch (err) {
     if (err instanceof MoodleError && (err.codigo === 'SIN_FUNCION' || err.codigo === 'PERMISO')) return null;
     throw err;
@@ -294,10 +333,45 @@ export async function conversacionesDe(conexion, moodleUserId, { limite = 50, de
   const r = await llamar(conexion, 'core_message_get_conversations', {
     userid: moodleUserId, type: 1, limitfrom: desde, limitnum: limite,
   }, opciones);
-  return (r?.conversations || []).map((c) => ({
-    id: Number(c.id),
-    miembros: (c.members || []).map((m) => ({ id: Number(m.id), nombre: m.fullname || null })),
-  }));
+  return (r?.conversations || []).map((c) => {
+    // Moodle manda con cada conversación su último mensaje (solo ese).
+    const u = (c.messages || [])[0];
+    return {
+      id: Number(c.id),
+      miembros: (c.members || []).map((m) => ({ id: Number(m.id), nombre: m.fullname || null })),
+      ultimo: u ? { id: Number(u.id), de: Number(u.useridfrom), fecha: new Date(Number(u.timecreated) * 1000) } : null,
+    };
+  });
+}
+
+/** Conversaciones por página al buscar las que esperan respuesta, y el tope por tutora. */
+const CONVERSACIONES_POR_PAGINA = 50;
+const maxConversaciones = () => {
+  const n = parseInt(process.env.MI_CAMPUS_MAX_CONVERSACIONES || '300', 10);
+  return Number.isInteger(n) && n > 0 ? n : 300;
+};
+
+/**
+ * Las conversaciones privadas de una tutora cuyo ÚLTIMO mensaje es del otro (el alumno): las
+ * que esperan su respuesta en Moodle, de cualquier fecha. Diego, 24/11: «tienen que tener
+ * TODAS las pendientes, no solamente desde que se subió el campus». Solo lee. Moodle las da de
+ * la más reciente a la más antigua; se pide página a página hasta el tope.
+ */
+export async function conversacionesSinResponder(conexion, moodleUserId, opciones) {
+  const yo = Number(moodleUserId);
+  const pendientes = [];
+  const tope = maxConversaciones();
+  for (let desde = 0; desde < tope; desde += CONVERSACIONES_POR_PAGINA) {
+    const pagina = await conversacionesDe(conexion, yo, { limite: CONVERSACIONES_POR_PAGINA, desde }, opciones);
+    for (const c of pagina) {
+      // Individual: el otro miembro es el alumno (Moodle no lista al propio usuario).
+      const otro = c.miembros.find((m) => m.id !== yo);
+      if (!otro || !c.ultimo || c.ultimo.de === yo || c.ultimo.de !== otro.id) continue;
+      pendientes.push({ conversacionId: c.id, alumnoId: otro.id, alumno: otro.nombre, mensajeId: c.ultimo.id, desde: c.ultimo.fecha });
+    }
+    if (pagina.length < CONVERSACIONES_POR_PAGINA) break;
+  }
+  return pendientes;
 }
 
 /**
@@ -776,6 +850,92 @@ export async function contenidoDelCurso(conexion, cursoId, opciones) {
 
 /** Tareas por llamada a Moodle: con muchas a la vez, una sola llamada pasa del tiempo de espera. */
 const TAREAS_POR_LLAMADA = 20;
+
+/**
+ * Crea en el campus el curso de una formación del CRM, o lo actualiza, con una sección
+ * por módulo (CRM#1113, plugin local_crm 1.12.0: `local_crm_curso_guardar`). Escribe en
+ * Moodle: detrás de PLUGIN_MOODLE_EN_PRODUCCION, como corregir; y quien lo llama, detrás
+ * de su propio interruptor (FORMACIONES_MOODLE_EN_PRODUCCION).
+ *
+ * `secciones`: [{ nombre, resumen }] en orden; el resumen, en HTML. Devuelve
+ * { cursoId, nombre, nombreCorto, creado, visible, secciones: [{ numero, id }], sobran }.
+ */
+export async function guardarCursoEnMoodle(conexion, {
+  cursoId = 0, idnumber = '', nombre, nombreCorto = '', categoria = 0, resumen = '', inicio = 0, fin = 0, visible = false, secciones = [],
+}, opciones) {
+  if (!pluginMoodleActivo()) {
+    throw new MoodleError('El plugin del CRM en Moodle aún no está aprobado en producción.', 'APAGADO');
+  }
+  const params = {
+    cursoid: cursoId || 0, idnumber, nombre, nombrecorto: nombreCorto, categoria: categoria || 0,
+    resumen, inicio: inicio || 0, fin: fin || 0, visible: visible ? 1 : 0,
+  };
+  secciones.forEach((s, i) => {
+    params[`secciones[${i}][nombre]`] = s.nombre;
+    params[`secciones[${i}][resumen]`] = s.resumen || '';
+  });
+  const r = await llamar(conexion, 'local_crm_curso_guardar', params, opciones);
+  if (!r?.cursoid) throw new MoodleError('El campus no ha devuelto el curso.', 'SIN_CURSO');
+  return {
+    cursoId: Number(r.cursoid),
+    nombre: r.nombre,
+    nombreCorto: r.nombrecorto,
+    creado: Boolean(r.creado),
+    visible: Boolean(r.visible),
+    secciones: (r.secciones || []).map((x) => ({ numero: Number(x.numero), id: Number(x.id) })),
+    sobran: Number(r.sobran) || 0,
+  };
+}
+
+/**
+ * Lo que hace falta saber del campus para crear en él el curso de una formación
+ * (CRM#1113, fase 2): sus categorías y los nombres cortos que ya están cogidos. SOLO LEE.
+ *
+ * Los nombres cortos salen de `core_course_get_courses_by_field`, que está en el servicio
+ * del plugin. Las categorías, con su árbol entero, de `core_course_get_categories`; pero el
+ * servicio del plugin (1.11.x) no la tiene, y entonces salen de los mismos cursos: solo las
+ * que tienen alguno, sin su categoría padre (por eso pueden repetirse nombres, como las
+ * facultades de ISEIE, y la pantalla enseña el id al lado).
+ *
+ * Devuelve { fuente: 'moodle' | 'cursos', categorias: [{ id, nombre, ruta, cursos }], cortos: [] }.
+ */
+export async function categoriasDelCampus(conexion, opciones) {
+  const r = await llamar(conexion, 'core_course_get_courses_by_field', {}, opciones);
+  const cursos = (Array.isArray(r?.courses) ? r.courses : []).filter((c) => c && c.format !== 'site' && Number(c.id) > 1);
+  const cortos = cursos.map((c) => String(c.shortname || '').trim()).filter(Boolean);
+  let categorias = null;
+  try {
+    const cats = await llamar(conexion, 'core_course_get_categories', {}, opciones);
+    if (Array.isArray(cats)) {
+      const porId = new Map(cats.map((c) => [Number(c.id), c]));
+      const ruta = (c) => {
+        const partes = [];
+        for (let x = c, n = 0; x && n < 20; x = porId.get(Number(x.parent)), n += 1) partes.unshift(String(x.name));
+        return partes.join(' › ');
+      };
+      categorias = cats.map((c) => ({
+        id: Number(c.id), nombre: String(c.name), ruta: ruta(c), profundidad: Number(c.depth) || 1, cursos: Number(c.coursecount) || 0,
+      }));
+    }
+  } catch (err) {
+    // Al token le falta la función: no es que el campus falle. Lo demás, sí se dice.
+    if (!(err instanceof MoodleError) || !['PERMISO', 'SIN_FUNCION'].includes(err.codigo)) throw err;
+  }
+  const fuente = categorias ? 'moodle' : 'cursos';
+  if (!categorias) {
+    const porId = new Map();
+    for (const c of cursos) {
+      const id = Number(c.categoryid);
+      if (!(id > 0)) continue;
+      const o = porId.get(id) || { id, nombre: String(c.categoryname || `Categoría ${id}`), ruta: null, profundidad: null, cursos: 0 };
+      o.cursos += 1;
+      porId.set(id, o);
+    }
+    categorias = [...porId.values()];
+  }
+  categorias.sort((a, b) => (a.ruta || a.nombre).localeCompare(b.ruta || b.nombre, 'es') || a.id - b.id);
+  return { fuente, categorias, cortos };
+}
 
 /**
  * Las entregas POR CORREGIR de esas tareas: { tareaId: [{ alumnoId, entregadaAt }] }.

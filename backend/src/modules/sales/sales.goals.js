@@ -97,7 +97,7 @@ export async function getGestoresStats({
         AND EXISTS (SELECT 1 FROM user_projects up
                      WHERE up.user_id = u.id AND up.active = TRUE
                        AND ${idxProyecto ? `up.project_id = ANY($${idxProyecto}::int[])` : SIN_PRUEBAS('up.project_id')}
-                       AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin') AND up.recibe_leads = TRUE))))`;
+                       AND (u.role = 'gestor' OR (u.role IN ('admin','superadmin','lider_equipo') AND up.recibe_leads = TRUE))))`;
 
   const { rows: stats } = await query(
     `SELECT u.id AS user_id, u.nombre, u.email, u.role, u.is_available,
@@ -124,7 +124,7 @@ export async function getGestoresStats({
      LEFT JOIN conversion_reparto c ON c.vendedora_id = u.id
        ${dateFilter}
        ${projectFilter}
-     WHERE u.active = TRUE AND u.role IN ('gestor', 'admin', 'superadmin')
+     WHERE u.active = TRUE AND u.role IN ('gestor', 'lider_equipo', 'admin', 'superadmin')
        ${userProjectJoin}
      GROUP BY u.id, u.nombre, u.email, u.role, u.is_available, u.gestor_colaboraciones
      -- El ranking va por lo cobrado; a igual cobrado, por ventas.

@@ -27,6 +27,9 @@ import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
 // #791: el diploma (datos pedidos, contestados o emitido).
 import DiplomaDelAlumno from '../components/DiplomaDelAlumno';
+// Apostilla de La Haya (gemela de CRM#1130): el bloque sale solo si el cliente tiene alguna.
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
+import { esRolDeGestora } from '@/shared/lib/roles';
 import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
 import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
 
@@ -147,7 +150,7 @@ export default function ClientDetailPage() {
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
   const canManage = user?.role === 'admin'
     || user?.role === 'superadmin'
-    || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
+    || (esRolDeGestora(user?.role) && lead?.responsable_id === user?.id);
 
   // Token de request: evita que la respuesta lenta de un cliente anterior pise
   // los datos del cliente actual al navegar rápido entre fichas.
@@ -214,8 +217,10 @@ export default function ClientDetailPage() {
   const totalPendiente = totalFacturado - totalPagado;
   const interacciones = lead.interactions || [];
 
+  // pb-24: el botón flotante de atajos (el rayo, abajo a la derecha) no tapa lo último
+  // de la ficha, sobre todo en el móvil (QA del 25/11/2026). Como en Diplomas y Emisiones.
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px]">
+    <div className="space-y-5 pb-24 max-w-[1100px]">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">
@@ -356,7 +361,7 @@ export default function ClientDetailPage() {
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
-                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspendido' : 'Campus', icon: GraduationCap }] : []),
+                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspensión' : 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
@@ -491,6 +496,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Su Apostilla de La Haya (gemela de CRM#1130): paso, si está pagada y cuánto lleva. */}
+          <ApostillasBloque leadId={lead.id} />
 
           {/* Datos fiscales del cliente (se rellenan al completar una factura y
               quedan globales; sirven para futuras facturas). */}
