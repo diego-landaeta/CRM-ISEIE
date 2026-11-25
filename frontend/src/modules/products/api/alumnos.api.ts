@@ -7,9 +7,11 @@ import type { ApiResponse } from '@/shared/types';
  * Ventas: una gestora solo recibe los suyos (`solo_lo_suyo`).
  */
 
-export type EstadoAlumno = 'activo' | 'terminado' | 'fuera';
+export type EstadoAlumno = 'activo' | 'terminado' | 'baja' | 'fuera';
+/** La baja apuntada en la venta (25/11): desistimiento en plazo, baja voluntaria, impago u otro. */
+export type MotivoBajaAlumno = 'desistimiento' | 'voluntaria' | 'impago' | 'otro';
 export type EstadoPago = 'al_dia' | 'pendiente' | 'impago';
-export type OrigenFin = 'fin_formacion' | 'duracion' | 'regla_campus' | 'regla_de_serie';
+export type OrigenFin = 'fin_formacion' | 'duracion' | 'regla_campus' | 'regla_de_serie' | 'baja';
 
 export interface ReglaDeAcceso {
   curso: number;
@@ -22,7 +24,9 @@ export interface ReglaDeAcceso {
 export interface ResumenAlumnos {
   activos: number;
   terminados: number;
-  /** Activos + terminados (sin los de ventas anuladas o devueltas). */
+  /** De baja (la baja apuntada en la venta ya llegó). Opcional: un servidor anterior no la manda. */
+  baja?: number;
+  /** Activos + terminados + de baja (sin los de ventas anuladas o devueltas). */
   total: number;
   /** Ventas anuladas o devueltas: no cuentan. */
   fuera: number;
@@ -47,6 +51,9 @@ export interface AlumnoFormacion {
   detalle_fin: string;
   estado: EstadoAlumno;
   motivo_fuera: 'anulada' | 'devuelta' | null;
+  /** La baja de la venta: la que ya llegó (estado «baja») o la programada (sigue activo hasta ese día). */
+  fecha_baja?: string | null;
+  motivo_baja?: MotivoBajaAlumno | null;
   pago: EstadoPago | null;
 }
 

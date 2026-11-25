@@ -130,6 +130,7 @@ export default function FormacionesPage() {
               <span>
                 <strong className="tabular-nums text-foreground">{totales.activos}</strong> alumnos activos
                 {totales.impago > 0 && <> · <strong className="tabular-nums text-destructive">{totales.impago}</strong> con impago</>}
+                {totales.baja > 0 && <> · <strong className="tabular-nums text-foreground">{totales.baja}</strong> de baja</>}
                 {alumnos?.solo_lo_suyo && ' (de tus ventas)'}
               </span>
               <span className="flex items-center gap-1" role="group" aria-label="Ordenar por">
@@ -160,7 +161,7 @@ export default function FormacionesPage() {
                     <span className="hidden shrink-0 text-xs text-muted-foreground sm:inline">
                       {[f.horas, f.num_modulos ? `${f.num_modulos} módulos` : null, f.modalidad].filter(Boolean).join(' · ')}
                     </span>
-                    {cifras && <CifrasAlumnos activos={cifras[String(f.id)]?.activos ?? 0} impago={cifras[String(f.id)]?.impago ?? 0} />}
+                    {cifras && <CifrasAlumnos activos={cifras[String(f.id)]?.activos ?? 0} impago={cifras[String(f.id)]?.impago ?? 0} baja={cifras[String(f.id)]?.baja ?? 0} />}
                     {f.precio != null && f.precio !== '' && (
                       <span className="shrink-0 text-xs font-semibold tabular-nums text-foreground">
                         {Number(f.precio).toLocaleString('es-ES')} {f.moneda || 'EUR'}
@@ -177,16 +178,21 @@ export default function FormacionesPage() {
   );
 }
 
-/** Activos y, si hay, con impago, de una formación de la lista. */
-function CifrasAlumnos({ activos, impago }: { activos: number; impago: number }) {
+/** Activos y, si hay, con impago y de baja, de una formación de la lista. */
+function CifrasAlumnos({ activos, impago, baja = 0 }: { activos: number; impago: number; baja?: number }) {
   return (
-    <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums" aria-label={`${activos} activos, ${impago} con impago`}>
+    <span className="flex shrink-0 items-center gap-1 text-xs tabular-nums" aria-label={`${activos} activos, ${impago} con impago, ${baja} de baja`}>
       <span className={activos ? 'rounded-full bg-primary/10 px-1.5 font-semibold text-primary' : 'px-1.5 text-muted-foreground'} title="Alumnos activos">
         {activos}
       </span>
       {impago > 0 && (
         <span className="rounded-full bg-destructive-soft px-1.5 font-semibold text-destructive-soft-foreground" title="Activos con impago">
           {impago}
+        </span>
+      )}
+      {baja > 0 && (
+        <span className="rounded-full bg-warning-soft px-1.5 font-semibold text-warning-soft-foreground" title="De baja">
+          {baja}
         </span>
       )}
     </span>

@@ -53,10 +53,13 @@ export async function guardarReglaDeAcceso(projectId, regla, { userId = null, ip
   · devuelto: lo apuntado en Devoluciones (`conversion_refunds`).
   · cuota_vencida / cuota_pendiente / con_cuotas: de `conversion_installments`.
   · gestora: las del reparto, como en Ventas.
+  · baja_fecha / baja_motivo: la baja del alumno apuntada en la venta (migración
+    341; 330 en el 360). Sin la migración, se lee como «sin baja» (`ventasDe`).
 */
-const VENTAS_SQL = `
+const ventasSql = (conBaja) => `
   SELECT c.id, c.lead_id, c.fecha_conversion, c.fecha_inicio, c.importe_total,
          c.fecha_compromiso_pago, c.suscripcion_estado,
+         ${conBaja ? 'c.baja_fecha, c.baja_motivo' : 'NULL::date AS baja_fecha, NULL::text AS baja_motivo'},
          ${COBRADO_DE('c')} AS cobrado,
          (SELECT COALESCE(SUM(r.importe), 0) FROM conversion_refunds r WHERE r.conversion_id = c.id) AS devuelto,
          EXISTS (SELECT 1 FROM conversion_installments i WHERE i.conversion_id = c.id) AS con_cuotas,
@@ -90,8 +93,14 @@ const VENTAS_SQL = `
 
 async function ventasDe(productIds, alcance, hoy) {
   if (!productIds.length) return [];
-  const { rows } = await query(VENTAS_SQL, [productIds, alcance && alcance.length ? alcance : (alcance ? [-1] : null), hoy]);
-  return rows;
+  const params = [productIds, alcance && alcance.length ? alcance : (alcance ? [-1] : null), hoy];
+  try {
+    return (await query(ventasSql(true), params)).rows;
+  } catch (err) {
+    // Sin la columna de la baja (falta la migración): como antes, sin bajas.
+    if (err?.code !== '42703') throw err;
+    return (await query(ventasSql(false), params)).rows;
+  }
 }
 
 /** Los alumnos de una formación, con sus cifras. Solo de ese campus. */

@@ -1,4 +1,5 @@
 import { tipoPorNombre } from '../cursos-pendientes/cursos-pendientes.venta.js';
+import { textoMotivoBaja } from '../conversions/baja-alumno.motivos.js';
 
 /**
  * Formaciones · alumnos activos (CRM-ISEIE#767, gemela de CRM#1113): las reglas, sin base.
@@ -7,9 +8,13 @@ import { tipoPorNombre } from '../cursos-pendientes/cursos-pendientes.venta.js';
  * venta o el de una de sus líneas). Está:
  *   · FUERA si todas sus ventas de esa formación están anuladas (facturas
  *     anuladas con su abono y ninguna vigente) o devueltas (devoluciones por
- *     todo lo cobrado). El CRM no guarda bajas ni desistimientos de alumnos
- *     aparte: anular la factura o devolver es como se apuntan hoy (las
- *     suspensiones de Moodle son CRM#531, en espera).
+ *     todo lo cobrado): como si no hubiera venta.
+ *   · DE BAJA si sus ventas vigentes tienen todas la baja del alumno apuntada
+ *     en la venta (`conversions.baja_fecha`, migración 341 / 330 en el 360) y esa
+ *     fecha ya llegó. Una baja con fecha futura lo deja activo hasta entonces:
+ *     su acceso acaba ese día. La baja no toca facturas ni cobros, así que una
+ *     venta anulada o devuelta sigue siendo FUERA aunque tenga baja. (Las
+ *     suspensiones de Moodle son CRM#531, en espera.)
  *   · ACTIVO si su acceso sigue vigente hoy (fin del acceso >= hoy).
  *   · TERMINADO si ya pasó.
  *
@@ -141,6 +146,17 @@ export function estadoDePago(v, hoy) {
 
 const PEOR = { al_dia: 0, pendiente: 1, impago: 2 };
 
+/**
+ * La baja del alumno apuntada en la venta, o null. `vigente` = ya llegó su
+ * fecha (desde ese día deja de ser activo); si no, es una baja programada.
+ */
+export function bajaDe(v, hoy) {
+  const fecha = fechaISO(v.baja_fecha);
+  if (!fecha) return null;
+  const motivo = v.baja_motivo || 'otro';
+  return { fecha, motivo, texto: textoMotivoBaja(motivo), vigente: fecha <= hoy };
+}
+
 /** Por qué una venta no cuenta: anulada o devuelta. null si cuenta. */
 export function motivoFuera(v) {
   if (v.anulada) return 'anulada';
@@ -159,14 +175,20 @@ export function alumnosDeVentas(ventas, producto, regla, hoy) {
   for (const v of ventas) {
     const clave = v.lead_id ? `l${v.lead_id}` : `v${v.id}`;
     const inicio = fechaISO(v.fecha_inicio) || fechaISO(v.fecha_conversion);
-    const acceso = finDeAcceso({ inicio, producto, regla });
+    let acceso = finDeAcceso({ inicio, producto, regla });
     const fuera = motivoFuera(v);
+    const baja = bajaDe(v, hoy);
+    // Con baja, el acceso acaba el día de la baja si es antes de su fin.
+    if (baja && (!acceso.fin || baja.fecha < acceso.fin)) {
+      acceso = { fin: baja.fecha, origen: 'baja', detalle: `Baja: ${baja.texto}` };
+    }
     const venta = {
       id: Number(v.id),
       fecha_venta: fechaISO(v.fecha_conversion),
       inicio,
       ...acceso,
       fuera,
+      baja,
       pago: fuera ? null : estadoDePago(v, hoy),
     };
     const a = porAlumno.get(clave) || {
@@ -182,14 +204,17 @@ export function alumnosDeVentas(ventas, producto, regla, hoy) {
 
   return [...porAlumno.values()].map((a) => {
     const vigentes = a.ventas.filter((v) => !v.fuera);
-    const cuentan = vigentes.length ? vigentes : a.ventas;
+    // Las que siguen en curso: vigentes y sin una baja que ya llegó.
+    const enCurso = vigentes.filter((v) => !v.baja?.vigente);
+    const cuentan = enCurso.length ? enCurso : (vigentes.length ? vigentes : a.ventas);
     // La venta que manda: la de acceso más largo (sin fin, la más reciente).
     const manda = [...cuentan].sort((x, y) => (y.fin || '').localeCompare(x.fin || '') || y.id - x.id)[0];
     const pago = vigentes.length
-      ? vigentes.map((v) => v.pago).sort((x, y) => PEOR[y] - PEOR[x])[0]
+      ? cuentan.map((v) => v.pago).sort((x, y) => PEOR[y] - PEOR[x])[0]
       : null;
     let estado;
     if (!vigentes.length) estado = 'fuera';
+    else if (!enCurso.length) estado = 'baja';
     else estado = manda.fin && manda.fin >= hoy ? 'activo' : 'terminado';
     return {
       lead_id: a.lead_id,
@@ -205,27 +230,35 @@ export function alumnosDeVentas(ventas, producto, regla, hoy) {
       detalle_fin: manda.detalle,
       estado,
       motivo_fuera: estado === 'fuera' ? manda.fuera : null,
+      // La baja de la venta que manda: la que ya llegó (estado «baja») o la programada.
+      fecha_baja: estado !== 'fuera' && manda.baja ? manda.baja.fecha : null,
+      motivo_baja: estado !== 'fuera' && manda.baja ? manda.baja.motivo : null,
       pago,
     };
   });
 }
 
-/** Las cifras de una lista de alumnos (las de pago, de los activos). */
+/**
+ * Las cifras de una lista de alumnos (las de pago, de los activos). `total` =
+ * activos + terminados + de baja: los de baja fueron alumnos; las ventas
+ * anuladas o devueltas (`fuera`), no.
+ */
 export function resumenDeAlumnos(alumnos) {
-  const r = { activos: 0, terminados: 0, total: 0, fuera: 0, al_dia: 0, pendiente: 0, impago: 0 };
+  const r = { activos: 0, terminados: 0, baja: 0, total: 0, fuera: 0, al_dia: 0, pendiente: 0, impago: 0 };
   for (const a of alumnos) {
     if (a.estado === 'fuera') { r.fuera += 1; continue; }
     r.total += 1;
     if (a.estado === 'terminado') { r.terminados += 1; continue; }
+    if (a.estado === 'baja') { r.baja += 1; continue; }
     r.activos += 1;
     r[a.pago] += 1;
   }
   return r;
 }
 
-const ORDEN_ESTADO = { activo: 0, terminado: 1, fuera: 2 };
+const ORDEN_ESTADO = { activo: 0, terminado: 1, baja: 2, fuera: 3 };
 
-/** La lista como se enseña: activos primero (con impago arriba), luego terminados y fuera; dentro, por fin de acceso. */
+/** La lista como se enseña: activos primero (con impago arriba), luego terminados, de baja y fuera; dentro, por fin de acceso. */
 export function ordenarAlumnos(alumnos) {
   return [...alumnos].sort((a, b) => ORDEN_ESTADO[a.estado] - ORDEN_ESTADO[b.estado]
     || (PEOR[b.pago] ?? -1) - (PEOR[a.pago] ?? -1)

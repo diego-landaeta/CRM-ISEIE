@@ -26,6 +26,7 @@ const FILTROS: Array<{ id: FiltroAlumnos; texto: string }> = [
   { id: 'impago', texto: 'Con impago' },
   { id: 'pendiente', texto: 'Cuotas pendientes' },
   { id: 'terminados', texto: 'Terminados' },
+  { id: 'baja', texto: 'De baja' },
   { id: 'todos', texto: 'Todos' },
 ];
 
@@ -68,16 +69,17 @@ export default function AlumnosDeFormacion({ productId, campusId }: { productId:
 
       {r && (
         <>
-          <dl className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          <dl className="grid grid-cols-3 gap-2 sm:grid-cols-7">
             <Dato etiqueta="Activos" valor={r.activos} fuerte />
             <Dato etiqueta="Terminados" valor={r.terminados} />
+            <Dato etiqueta="De baja" valor={r.baja ?? 0} />
             <Dato etiqueta="Total" valor={r.total} />
             <Dato etiqueta="Al día" valor={r.al_dia} tono={TONO_PAGO.al_dia} />
             <Dato etiqueta="Cuotas pendientes" valor={r.pendiente} tono={TONO_PAGO.pendiente} />
             <Dato etiqueta="Impago" valor={r.impago} tono={TONO_PAGO.impago} />
           </dl>
           <p className="text-xs text-muted-foreground">
-            Activo: venta sin anular ni devolver y con el acceso vigente. El acceso acaba con la fecha de fin de la formación, su
+            Activo: venta sin anular ni devolver, sin baja y con el acceso vigente (la baja se apunta en la venta y cuenta desde su fecha). El acceso acaba con la fecha de fin de la formación, su
             duración publicada o, sin ellas, la regla del campus (curso {datos.regla.curso}, diplomado {datos.regla.diplomado},
             máster {datos.regla.master} meses{datos.regla.configurada ? '' : ', la de serie'}). El estado de pago es de los activos:
             impago = una cuota vencida sin cobrar.
@@ -113,12 +115,18 @@ export default function AlumnosDeFormacion({ productId, campusId }: { productId:
                     </span>
                     <span className="flex flex-wrap items-center gap-1.5 sm:shrink-0">
                       <span className="text-xs text-muted-foreground" title={a.detalle_fin}>
-                        {a.fin_acceso ? `${a.estado === 'terminado' ? 'Acabó' : 'Hasta'} ${fechaCorta(a.fin_acceso)}` : 'Sin fecha'}
+                        {a.fin_acceso ? `${a.estado === 'terminado' ? 'Acabó' : a.estado === 'baja' ? 'Baja el' : 'Hasta'} ${fechaCorta(a.fin_acceso)}` : 'Sin fecha'}
                       </span>
                       <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold',
-                        a.estado === 'activo' ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+                        a.estado === 'activo' ? 'bg-primary/10 text-primary'
+                          : a.estado === 'baja' ? 'bg-warning-soft text-warning-soft-foreground' : 'bg-muted text-muted-foreground')}>
                         {textoEstado(a)}
                       </span>
+                      {a.estado === 'activo' && a.fecha_baja && (
+                        <span className="rounded-full bg-warning-soft px-2 py-0.5 text-[11px] font-semibold text-warning-soft-foreground">
+                          Baja el {fechaCorta(a.fecha_baja)}
+                        </span>
+                      )}
                       {a.pago && a.estado === 'activo' && (
                         <span className={cn('rounded-full px-2 py-0.5 text-[11px] font-semibold', TONO_PAGO[a.pago])}>{TEXTO_PAGO[a.pago]}</span>
                       )}

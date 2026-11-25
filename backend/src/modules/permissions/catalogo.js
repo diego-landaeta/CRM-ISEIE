@@ -310,6 +310,10 @@ export const SECCIONES = [
           a('cobros', 'Cobros y cuotas', 'Apuntar cobros, generar y pagar cuotas.', TODOS),
           a('reparto', 'Repartir una venta', 'Repartir una venta entre varias gestoras.', ADMIN),
           a('devoluciones', 'Devoluciones', 'Apuntar y quitar devoluciones.', ADMIN_SOPORTE),
+          // Diego, 25/11/2026 (sobre CRM#1113): la baja o el desistimiento del alumno en la venta.
+          // Como editar o cobrar la venta, la gestora la da en LAS SUYAS (ventaPorId) y la líder
+          // de equipo en las de su equipo: es quien habla con el alumno. No toca dinero.
+          a('baja_alumno', 'Dar de baja al alumno', 'Apuntar en la venta la baja o el desistimiento del alumno (fecha, motivo y nota) y deshacerla. Deja de contar como activo en Formaciones › Alumnos; no anula facturas ni toca cobros ni Moodle. Una gestora, en sus ventas.', [...ADMIN, 'gestor']),
           a('sin_gestora', 'Venta sin gestora', 'Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora.', ADMIN),
         ],
       },

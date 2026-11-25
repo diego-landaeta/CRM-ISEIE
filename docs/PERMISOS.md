@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-927 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
+930 rutas en 68 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -258,6 +258,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/conversions/:id/refunds` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/:id/refunds` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `conversions.devoluciones` |
 | remove | `DELETE /api/conversions/refunds/:refundId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `conversions.devoluciones` |
+| get | `GET /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.view` |
+| set | `PUT /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.baja_alumno` |
+| remove | `DELETE /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.baja_alumno` |
 | remove | `DELETE /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.delete` |
 | addPayment · que el cobro salga ya facturado (si no, queda en la cola; no da 403) | `POST /api/conversions/:id/payments` | cuando que el cobro salga ya facturado (si no, queda en la cola; no da 403): a mano, conversion.service.js · autoInvoice (puedeEmitirFactura) | superadmin, admin y gestor/soporte/project_manager con «factura_manager» | `facturas.emitir` |
 
@@ -1533,6 +1536,7 @@ lo que pide para tener sentido (editar pide ver).
 | Cobros y cuotas | `conversions.cobros` | Apuntar cobros, generar y pagar cuotas. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view` |
 | Repartir una venta | `conversions.reparto` | Repartir una venta entre varias gestoras. | Admin, Líder de equipo | `conversions.view` |
 | Devoluciones | `conversions.devoluciones` | Apuntar y quitar devoluciones. | Admin, Soporte | `conversions.view` |
+| Dar de baja al alumno | `conversions.baja_alumno` | Apuntar en la venta la baja o el desistimiento del alumno (fecha, motivo y nota) y deshacerla. Deja de contar como activo en Formaciones › Alumnos; no anula facturas ni toca cobros ni Moodle. Una gestora, en sus ventas. | Admin, Gestora, Líder de equipo | `conversions.view` |
 | Venta sin gestora | `conversions.sin_gestora` | Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora. | Admin | `conversions.view` |
 
 ### Facturación

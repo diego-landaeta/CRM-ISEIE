@@ -114,7 +114,7 @@ describe('alumnos de una formación', () => {
     expect(de(12)).toMatchObject({ estado: 'terminado', fin_acceso: '2026-03-01' });
     expect(de(13)).toMatchObject({ estado: 'fuera', motivo_fuera: 'anulada', pago: null });
 
-    expect(resumenDeAlumnos(alumnos)).toEqual({ activos: 2, terminados: 1, total: 3, fuera: 1, al_dia: 0, pendiente: 1, impago: 1 });
+    expect(resumenDeAlumnos(alumnos)).toEqual({ activos: 2, terminados: 1, baja: 0, total: 3, fuera: 1, al_dia: 0, pendiente: 1, impago: 1 });
     expect(ordenarAlumnos(alumnos).map((a) => a.lead_id)).toEqual([11, 10, 12, 13]);
   });
 
