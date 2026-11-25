@@ -32,6 +32,8 @@ import { textoDeMoodle } from '../../shared/services/moodle.client.js';
 import * as model from './consultas.model.js';
 import { entraMensajeDelAlumno, tutoresDelCampus, siYaEstaRepetido, campusConConsultas } from './consultas.service.js';
 import { claveDelCampus, firmaValida, apuntarAviso } from './consultas.plugin.js';
+// Plugin 1.12.0 (Campus-Moodle#24): cómo ha quedado el campus tras actualizarse solo.
+import { anotarActualizacion, leerEstado } from './consultas.actualizacion.js';
 import { avisoSchema } from './consultas.validation.js';
 
 const NO_VALE = () => new AppError('Firma no válida', 401, 'INVALID_SIGNATURE');
@@ -47,6 +49,10 @@ export async function recibirAviso(projectId, cuerpo, cabecera, { ahoraMs = Date
     aviso = JSON.parse(cuerpo.toString('utf8'));
   } catch {
     throw new AppError('El aviso no es JSON', 400, 'VALIDATION_ERROR');
+  }
+  if (aviso?.evento === 'plugin_estado') {
+    await apuntarAviso(projectId);
+    return anotarActualizacion(projectId, leerEstado(aviso));
   }
   await apuntarAviso(projectId);
   return procesarAviso(projectId, aviso);
