@@ -47,7 +47,7 @@ const CACHE_CON_FALLOS_MS = 15 * 1000;
  * tiene pocas conexiones a su base y, con 4, contestaba «Database connection failed» en 14 a
  * 40 de los 96 cursos de una tutora (24/11). Con 2, ninguno. `MI_CAMPUS_PARALELO` lo cambia.
  */
-const paralelo = () => {
+export const paralelo = () => {
   const n = parseInt(process.env.MI_CAMPUS_PARALELO || '2', 10);
   return Number.isInteger(n) && n > 0 ? Math.min(n, 8) : 2;
 };
@@ -112,7 +112,7 @@ export async function progresoDeAlumnos(conexion, cursos, opciones) {
 }
 
 /** Como Promise.all, pero de `n` en `n`: un campus no aguanta 95 peticiones a la vez. */
-async function enTandas(lista, n, fn) {
+export async function enTandas(lista, n, fn) {
   const salida = new Array(lista.length);
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, lista.length) }, async () => {

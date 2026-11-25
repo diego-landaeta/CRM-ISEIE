@@ -41,18 +41,25 @@ router.get('/anuncios', puede('tutores.gestionar'), ctrl.anunciosDeTutores);
 router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.cursoDetalle);
 // «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
 // por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
-router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
+// Con «Mi campus de administración» también: quien revisa el campus y además da clase con su
+// cuenta enlazada ve y corrige lo suyo como cualquier tutora. Lo de dentro solo es SUYO
+// (tutor_campus de quien pide y, para corregir, profesora del curso en Moodle).
+const MIS_CURSOS = ['tutores.mis_cursos', 'tutores.campus_administracion'];
+router.get('/mi-campus', puede(...MIS_CURSOS), ctrl.miCampus);
+// «Mi campus» de administración (gemela de CRM, 25/11): todo el campus con el token del campus, solo lectura.
+router.get('/mi-campus/administracion', puede('tutores.campus_administracion'), ctrl.campusAdministracion);
+router.get('/mi-campus/administracion/cursos/:projectId/:cursoId', puede('tutores.campus_administracion'), ctrl.cursoAdministracion);
 // Corregir desde el CRM (#408, gemela de CRM#681): la tarea con sus entregas, un archivo entregado y la nota.
-router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo', puede('tutores.mis_cursos'), ctrl.archivoEntregado);
-router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId', puede('tutores.mis_cursos'), ctrl.verTarea);
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo', puede(...MIS_CURSOS), ctrl.archivoEntregado);
+router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId', puede(...MIS_CURSOS), ctrl.verTarea);
 // El curso entero, como en Moodle: temas y todas sus actividades.
-router.get('/mi-campus/cursos/:projectId/:cursoId', puede('tutores.mis_cursos'), ctrl.verCurso);
+router.get('/mi-campus/cursos/:projectId/:cursoId', puede(...MIS_CURSOS), ctrl.verCurso);
 // Poner la nota ESCRIBE en el Moodle del alumno (por el plugin, `local_crm_calificar`):
 // con NODE_ENV=production no se monta —404— salvo en /staging o con
 // PLUGIN_MOODLE_EN_PRODUCCION=1, como las rutas del plugin en consultas.routes.js.
 // Leer (Mi campus, la tarea, el curso, los archivos) sí va siempre: no cambia nada.
 if (pluginMoodleActivo()) {
-  router.post('/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar', puede('tutores.mis_cursos'), ctrl.calificar);
+  router.post('/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar', puede(...MIS_CURSOS), ctrl.calificar);
 }
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
