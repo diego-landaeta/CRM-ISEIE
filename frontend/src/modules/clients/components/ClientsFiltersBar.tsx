@@ -1,7 +1,7 @@
 // Filtros operativos de Clientes. Mantiene el patrón visual de Prospectos,
 // pero evita importes y estados de venta: solo contacto, programa y cuotas.
-// Y los suspendidos en Moodle (gemela de CRM#531): server-side, solo si el servidor
-// lo tiene encendido.
+// Y «Con suspensión en Moodle» (gemela de CRM#531; sin género, QA del 25/11/2026):
+// server-side, solo si el servidor lo tiene encendido.
 
 import { useEffect, useRef, useState } from 'react';
 import { Funnel, MagnifyingGlass, X, CaretDown } from '@phosphor-icons/react';
@@ -114,7 +114,7 @@ export default function ClientsFiltersBar(props: Props) {
     });
   }
   if (filterMoodle && setFilterMoodle) {
-    activePills.push({ key: 'moodle', label: 'Suspendidos en Moodle', onClear: () => setFilterMoodle('') });
+    activePills.push({ key: 'moodle', label: 'Con suspensión en Moodle', onClear: () => setFilterMoodle('') });
   }
 
   function clearAll() {
@@ -227,7 +227,7 @@ export default function ClientsFiltersBar(props: Props) {
                       className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
                     >
                       <option value="">Todos</option>
-                      <option value="suspendidos">Suspendidos en Moodle</option>
+                      <option value="suspendidos">Con suspensión en Moodle</option>
                     </select>
                   </Row>
                 )}

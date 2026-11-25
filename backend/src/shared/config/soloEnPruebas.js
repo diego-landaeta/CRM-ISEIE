@@ -134,7 +134,7 @@ export function redactorasMoodleActivo(env = process.env) {
 /**
  * Suspensiones y reactivaciones de Moodle en la ficha del alumno (CRM#531): recibir el
  * aviso `estado_alumno` del plugin 1.13.0, apuntarlo, el estado y el historial en la
- * ficha, el filtro «Suspendidos» de Clientes y la campana a la gestora.
+ * ficha, el filtro «Con suspensión en Moodle» de Clientes y la campana a la gestora.
  *
  * Va con su propio interruptor, ADEMÁS del del plugin: el plugin puede aprobarse para los
  * mensajes antes que esto, y esto necesita la migración 333. Apagado, el CRM contesta al aviso como uno que aún no lo
