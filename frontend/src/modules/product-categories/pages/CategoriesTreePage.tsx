@@ -28,6 +28,8 @@ import {
 } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
 import { useConfirm } from '@/shared/components/ui/useConfirm';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type SourceFilter = 'all' | 'manual' | 'wc' | 'wp_menu';
 
@@ -96,7 +98,7 @@ function NodeRow({
             <span style={{ width: 16, display: 'inline-block' }} />
           )}
         </button>
-        <span className="font-medium truncate">{node.nombre}</span>
+        <span className="font-medium truncate min-w-0">{node.nombre}</span>
         {node.productos_count > 0 && (
           <span className="text-xs px-2 py-0.5 rounded bg-primary/10 text-primary font-mono">
             {node.productos_count}
@@ -107,7 +109,9 @@ function NodeRow({
         >
           {node.source}
         </span>
-        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+        {/* Con ratón, al pasar por encima; en el móvil o una pantalla táctil, siempre: allí
+            no hay «encima» y no había forma de verlos (#619, tanda I). */}
+        <div className="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 max-sm:opacity-100 [@media(hover:none)]:opacity-100 transition-opacity">
           <button
             type="button"
             title="Crear subcategoria"
@@ -368,18 +372,22 @@ export default function CategoriesTreePage() {
   }, [tree]);
 
   return (
-    <div className="container mx-auto py-6 max-w-5xl">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="container mx-auto py-6 max-w-5xl [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <div className="flex items-start justify-between gap-4 mb-6 flex-wrap">
-        <div className="flex items-center gap-3">
-          <Tree size={28} className="text-primary" />
-          <div>
+        <div className="flex items-center gap-3 min-w-0">
+          <Tree size={28} className="text-primary shrink-0" />
+          <div className="min-w-0">
             <h1 className="text-2xl font-semibold">Arbol de categorias</h1>
             <p className="text-sm text-muted-foreground">
               Jerarquia N niveles. Pasa el raton sobre un nodo para ver acciones.
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <VerRecorrido id="arbol-categorias" listo={!loading} />
+          <div data-recorrido="arbol-acciones" className="flex flex-wrap items-center gap-2">
           <button
             onClick={handleStartSync}
             disabled={syncStarting || sync?.status === 'running'}
@@ -394,6 +402,7 @@ export default function CategoriesTreePage() {
           >
             <Plus size={16} /> Categoria raiz
           </button>
+          </div>
         </div>
       </div>
 
@@ -431,7 +440,7 @@ export default function CategoriesTreePage() {
       )}
 
       {/* Filtros */}
-      <div className="flex flex-wrap items-center gap-3 mb-4 p-3 border rounded-lg bg-muted/30">
+      <div data-recorrido="arbol-filtros" className="flex flex-wrap items-center gap-3 mb-4 p-3 border rounded-lg bg-muted/30">
         <div className="flex items-center gap-2 flex-1 min-w-[200px]">
           <MagnifyingGlass size={16} className="text-muted-foreground" />
           <input
@@ -483,7 +492,7 @@ export default function CategoriesTreePage() {
           <div className="text-xs text-muted-foreground mb-3">
             <strong>{stats.total}</strong> categorias - <strong>{stats.productos}</strong> productos asignados
           </div>
-          <div className="border rounded-lg p-2 bg-card">
+          <div data-recorrido="arbol-lista" className="border rounded-lg p-2 bg-card">
             {tree
               .filter((n) => nodeMatchesRecursive(n, search, hideEmpty, sourceFilter))
               .map((node) => (

@@ -11,6 +11,8 @@ import {
 import FichaDelPendiente from '../components/FichaDelPendiente';
 import NuevoPendiente from '../components/NuevoPendiente';
 import ControlDeSubidas from '../components/ControlDeSubidas';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * Cursos pendientes, por campus (#336): sustituye al Excel de las tutoras.
@@ -121,10 +123,13 @@ export default function CursosPendientesPage() {
   const tutoras = resumen?.carga_por_tutora || [];
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Cursos pendientes"
         subtitle="Las formaciones vendidas que todavía no existen en el campus: quién las crea, para cuándo y qué alumnas esperan"
+        actions={<VerRecorrido id="cursos-pendientes" listo={!cargando} />}
       />
 
       {venceEstaSemana > 0 && (
@@ -134,7 +139,7 @@ export default function CursosPendientesPage() {
       )}
 
       {/* El campus es lo primero: una pestaña por campus, con sus contadores, también los que están a 0. */}
-      <div className="flex flex-wrap gap-2" role="tablist" aria-label="Campus">
+      <div data-recorrido="pendientes-campus" className="flex flex-wrap gap-2" role="tablist" aria-label="Campus">
         <PestañaCampus
           activa={campus === 'todos'} onClick={() => setCampus('todos')}
           nombre="Todos los campus" abiertos={resumen?.total.abiertos ?? 0} retrasados={resumen?.total.retrasados ?? 0} esperando={resumen?.total.alumnas_esperando ?? 0}
@@ -148,7 +153,7 @@ export default function CursosPendientesPage() {
       </div>
 
       {veSubidas && (
-        <div className="inline-flex rounded-md border border-border bg-card p-0.5 text-xs font-bold" role="tablist" aria-label="Vista">
+        <div data-recorrido="pendientes-vista" className="inline-flex rounded-md border border-border bg-card p-0.5 text-xs font-bold" role="tablist" aria-label="Vista">
           {([['cursos', 'Cursos'], ['subidas', 'Control de subidas']] as const).map(([v, etiqueta]) => (
             <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
               className={`rounded px-3 py-1.5 ${vista === v ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted'}`}>
@@ -161,7 +166,7 @@ export default function CursosPendientesPage() {
       {enSubidas ? (
         <ControlDeSubidas projectId={campus === 'todos' ? null : campus} issuerId={null} onAbrirCurso={setAbierto} />
       ) : (<>
-      <div className="flex flex-wrap items-center gap-2">
+      <div data-recorrido="pendientes-filtros" className="flex flex-wrap items-center gap-2">
         {contadores && (
           <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
             <span><strong className="tabular-nums">{contadores.abiertos}</strong> abiertos</span>
@@ -191,7 +196,7 @@ export default function CursosPendientesPage() {
           <ArrowClockwise size={14} className={cargando ? 'animate-spin' : ''} />
         </button>
         {puedeCrear && (
-          <button type="button" onClick={() => setCreando(true)}
+          <button type="button" data-recorrido="pendientes-nuevo" onClick={() => setCreando(true)}
             className="inline-flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-xs font-bold text-primary-foreground hover:opacity-90">
             <Plus size={14} weight="bold" /> Nuevo pendiente
           </button>
@@ -209,7 +214,7 @@ export default function CursosPendientesPage() {
           />
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <div data-recorrido="pendientes-lista" className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-[11px] uppercase text-muted-foreground">
               <tr>
@@ -300,8 +305,8 @@ function PestañaCampus({ activa, onClick, nombre, abiertos, retrasados, esperan
 /** La carga de cada tutora y el tiempo medio venta → habilitada, por campus (solo supervisión). */
 function SupervisionCarga({ resumen }: { resumen: Resumen }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2">
-      <div className="rounded-lg border border-border bg-card p-4">
+    <div data-recorrido="pendientes-carga" className="grid gap-4 md:grid-cols-2">
+      <div className="rounded-lg border border-border bg-card p-4 min-w-0">
         <h2 className="text-sm font-semibold">Carga por tutora</h2>
         <p className="mb-2 text-xs text-muted-foreground">Cursos abiertos; un máster pesa más que un curso.</p>
         <table className="w-full text-xs">
