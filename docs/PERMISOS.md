@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-946 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
+948 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1164,11 +1164,13 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | marcarBusqueda | `PUT /api/tutores/formaciones/:productId/busqueda` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | anunciosDeTutores | `GET /api/tutores/anuncios` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cursoDetalle | `GET /api/tutores/curso/:productId` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
-| miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| campusAdministracion | `GET /api/tutores/mi-campus/administracion` | (no existía) | (ruta nueva) | `tutores.campus_administracion` |
+| cursoAdministracion | `GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.campus_administracion` |
+| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
 | brochureDelCurso | `GET /api/tutores/curso/:productId/brochure` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | buscar | `GET /api/tutores/buscar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
@@ -1523,6 +1525,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor, Tutor redactor |  |
+| Mi campus de administración | `tutores.campus_administracion` | Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle. | Admin |  |
 | Gestionar colaboraciones | `tutores.gestionar` | Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus. | Admin |  |
 | Liquidar comisiones | `tutores.liquidar` | Pagar o revertir las comisiones de un tutor (mueve dinero). | Admin | `tutores.gestionar` |
 | Ajustes de comisiones | `tutores.ajustes` | Cambiar los porcentajes y reglas de las comisiones. | Admin | `tutores.gestionar` |

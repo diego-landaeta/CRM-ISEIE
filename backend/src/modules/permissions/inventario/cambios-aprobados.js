@@ -576,6 +576,17 @@ export const CAMBIOS_DE_MENU = [
     rutas: { 'Comercial › Apostillas': 'GET /api/apostillas/' },
     aprobadoPor: 'Diego, 25/11',
   },
+  {
+    id: 'menu-mi-campus-administracion',
+    que: '«Mi campus» sale también a admin (y a quien tenga `tutores.campus_administracion`): la vista de administración, con todos los cursos del Moodle de sus campus. El super admin ya la veía. Tutoras y redactoras, igual.',
+    motivo: 'Diego (25/11/2026): «que los admin puedan verlo también y los superadmin». Bárbara (ISEIE) revisa los 314 cursos y no es profesora en ninguno. Es un permiso nuevo con su ruta nueva y solo lee: nadie pierde nada.',
+    perfiles: {
+      admin: ['+ Académico › Mi campus'],
+      'gestora+admin': ['+ Académico › Mi campus'],
+    },
+    rutas: { 'Académico › Mi campus': 'GET /api/tutores/mi-campus/administracion' },
+    aprobadoPor: 'Diego, 25/11',
+  },
 ];
 
 /**

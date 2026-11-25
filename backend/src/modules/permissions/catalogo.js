@@ -275,6 +275,10 @@ export const SECCIONES = [
       {
         clave: 'tutores', nombre: 'Tutores', acciones: [
           a('mis_cursos', 'Sus cursos y comisiones', 'El tutor ve sus colaboraciones, sus cursos y sus comisiones.', ['tutor', 'tutor_redactor'], { propia: true }),
+          // «Mi campus» de administración (Diego, 25/11, gemela de CRM): todo el Moodle de sus
+          // campus, con el token del campus, aunque no tenga cuenta enlazada. Solo lee;
+          // corregir y responder siguen siendo de la profesora del curso.
+          a('campus_administracion', 'Mi campus de administración', 'Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle.', ADMIN),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
           a('liquidar', 'Liquidar comisiones', 'Pagar o revertir las comisiones de un tutor (mueve dinero).', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('ajustes', 'Ajustes de comisiones', 'Cambiar los porcentajes y reglas de las comisiones.', ADMIN, { requiere: ['tutores.gestionar'] }),

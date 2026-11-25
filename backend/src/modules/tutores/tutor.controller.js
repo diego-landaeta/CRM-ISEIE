@@ -14,6 +14,7 @@ import * as campusTutor from './tutor.campus.js';
 import * as campusDeLaTutora from './tutor.micampus.js';
 // Corregir desde el CRM (#408, gemela de CRM#681): la tarea, el curso, el archivo y la nota.
 import * as correccion from './tutor.correccion.js';
+import * as administracion from './tutor.campusAdministracion.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
@@ -604,6 +605,18 @@ export async function miCampus(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/tutores/mi-campus/administracion?campus=ID — «Mi campus» de administración (25/11):
+// todo el campus elegido, leído con el token del campus. Solo lee.
+export async function campusAdministracion(req, res, next) {
+  try {
+    const campus = parseInt(req.query.campus, 10);
+    res.json({ success: true, data: await administracion.campusAdministracion(req, {
+      campus: Number.isInteger(campus) && campus > 0 ? campus : null,
+      refrescar: req.query.refrescar === '1',
+    }) });
+  } catch (err) { next(err); }
+}
+
 const entero = (v) => { const n = parseInt(v); if (!Number.isInteger(n) || n <= 0) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR'); return n; };
 
 // GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId — la tarea con sus entregas (#681)
@@ -619,6 +632,17 @@ export async function verCurso(req, res, next) {
   try {
     const { projectId, cursoId } = req.params;
     res.json({ success: true, data: await correccion.verCurso(req.user.userId, entero(projectId), entero(cursoId)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId — un curso del campus
+// al abrirlo: profesoras, alumnos con su % hecho y sus tareas. Solo lee.
+export async function cursoAdministracion(req, res, next) {
+  try {
+    const { projectId, cursoId } = req.params;
+    res.json({ success: true, data: await administracion.cursoDeAdministracion(req, entero(projectId), entero(cursoId), {
+      refrescar: req.query.refrescar === '1',
+    }) });
   } catch (err) { next(err); }
 }
 
