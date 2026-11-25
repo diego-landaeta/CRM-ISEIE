@@ -9,6 +9,7 @@ import { certifex, certifexPuede, recorrer } from './certifex.cliente.js';
 import { alcanceDe, acotar, exigirCentro, exigirExpedientes, NO_ENCONTRADA } from './certifex.alcance.js';
 import { prepararEmision, emitirConPrograma, emitirMatriculas, resultadoBloqueado } from './certifex.emision.js';
 import { conDestinatario } from './certifex.envios.js';
+import { pasarAPendientes, REF_CURSO_CRM } from './certifex.pendientes.js';
 import { anotarEnvios } from '../diploma-confirmacion/diploma-confirmacion.puerta.js';
 import { conReversiones } from './certifex.revertir.js';
 import { conEdicion, conProgramaCrm } from './certifex.enriquecer.js';
@@ -16,12 +17,13 @@ import { emitidoPorElCrm, revertiblePorEsteCrm } from './certifex.marcas.js';
 
 // Se siguen exportando desde aquí (los usaban así); viven en sus módulos (#351: sin ciclos).
 export { conEdicion, conProgramaCrm, emitidoPorElCrm };
+export { avisoSinTerminar } from './certifex.pendientes.js';
 import { conFirma, correoDe, firmaTransparente, guardarFirmaSubida, origenesDeFirma, pngDe } from './certifex.firma.js';
 import {
   listarSolicitudesSchema, listarDiplomasSchema, porAvisarSchema, aprobarEmitirSchema, rechazarSchema, emitirDiplomasSchema,
   avisosSchema, avisosRechazoSchema, revocarSchema, corregirSchema, editarSchema, formacionesSchema, listarTerminadosSchema,
   sincronizarTemarioSchema, nuevoDiplomaSchema, pedirDiplomaSchema,
-  mensajeDeValidacion, normalizarNombreDiploma,
+  mensajeDeValidacion,
 } from './certifex.validation.js';
 
 /**
@@ -608,12 +610,9 @@ export async function verFirma(req, res, next) {
   } catch (err) { next(err); }
 }
 
-/**
- * Referencias de curso de lo que se crea desde el CRM: 900.000.000 + el id de la formación.
- * Es el rango que Certifex reserva a lo que no viene de Moodle (REF_CURSO_CRM): ni un
- * barrido del campus lo pisa ni se busca en Moodle al emitir.
- */
-const REF_CURSO_CRM = 900_000_000;
+// Referencias de curso de lo que se crea desde el CRM: REF_CURSO_CRM (900.000.000, en
+// certifex.pendientes.js) + el id de la formación. Es el rango que Certifex reserva a lo
+// que no viene de Moodle: ni un barrido del campus lo pisa ni se busca en Moodle al emitir.
 
 /**
  * POST /diplomas/nuevo { centro, leadId, productoId, nombre?, dni } — «Nuevo diploma»: crea la
@@ -694,35 +693,6 @@ async function candidatoDe(matriculaId, centro, cursoRef) {
 }
 
 /**
- * ¿Le falta algo para darlo por terminado? (#629 / CRM-ISEIE #356). null si no.
- *
- * Certifex lo da por terminado si ha entregado todas las tareas que cuenta su plugin, y
- * hasta el plugin 2.8.2 contaba solo las visibles: en un máster con los módulos ocultos,
- * entregar el módulo 1 ya era «todas». Así que antes de pedirle el diploma se mira lo
- * que de verdad dice que terminó: la nota y las actividades calificadas. Con el campus sin
- * actividades publicadas (total 0) el avance no se sabe y no cuenta como que falte.
- * La misma regla y el mismo texto están en el frontal (piezas.tsx, `avisoSinTerminar`).
- */
-export function avisoSinTerminar(c) {
-  const total = Number(c?.actividades?.total) || 0;
-  const calificadas = Number(c?.actividades?.calificadas) || 0;
-  const faltaAvance = total > 0 && calificadas < total;
-  const faltaNota = c?.notaFinal == null;
-  if (!faltaAvance && !faltaNota) return null;
-  const e = c?.entregas;
-  const partes = [];
-  if (e && Number(e.total) > 0) {
-    partes.push(`${Number(e.entregadas) < Number(e.total) ? 'Solo ha' : 'Ha'} entregado ${Number(e.entregadas)} de ${Number(e.total)} tareas visibles`);
-  } else {
-    partes.push('No hay datos de sus tareas entregadas');
-  }
-  if (faltaAvance) partes.push(`tiene ${calificadas} de ${total} actividades calificadas`);
-  if (faltaNota) partes.push('no tiene nota');
-  const frase = partes.length > 1 ? `${partes.slice(0, -1).join(', ')} y ${partes[partes.length - 1]}` : partes[0];
-  return { faltaAvance, faltaNota, mensaje: `${frase}: ¿seguro?` };
-}
-
-/**
  * POST /diplomas/pedir { matriculaId, centro, cursoRef?, forzar? } — «Pasar a pendientes». Diego,
  * 22/10/2026: «que se pueda pasar de sin emitir a pendientes». Hay alumnos con su
  * matrícula de Moodle (y su nota) que no salen en Pendientes porque Moodle no los da por
@@ -744,6 +714,9 @@ export function avisoSinTerminar(c) {
  * Sin terminar (#629: avance de calificadas < 100 % o sin nota) devuelve 409
  * `SIN_TERMINAR` con el aviso, salvo que llegue `forzar: true`, que el panel manda solo
  * tras confirmarlo en la página. Lo de quién lo forzó queda en el log.
+ *
+ * Lo hace `pasarAPendientes` (certifex.pendientes.js), que usa también el aviso de Moodle
+ * de curso terminado (#768, paso 1).
  */
 export async function pedir(req, res, next) {
   try {
@@ -752,61 +725,10 @@ export async function pedir(req, res, next) {
     exigirCentro(await alcanceDe(req.user), cod, `${NO_ENCONTRADA} (${d.matriculaId})`);
     const c = await candidatoDe(d.matriculaId, cod, d.cursoRef);
     if (!c) throw new AppError(`${NO_ENCONTRADA} (${d.matriculaId})`, 404, 'NOT_FOUND');
-    if (c.nexpediente) {
-      throw new AppError(`Ya tiene el diploma emitido (${c.nexpediente}): está en Emitidos.`, 409, 'YA_EMITIDO');
-    }
-    if (c.solicitud) {
-      throw new AppError('Ya está pedido: búscalo en Pendientes (o en Rechazados, si se rechazó).', 409, 'YA_PEDIDO');
-    }
-    // Lo creado desde el CRM («Nuevo diploma») no es de Moodle: no hay matrícula que enganchar.
-    if (Number(c.curso?.ref) >= REF_CURSO_CRM) {
-      throw new AppError('Esta matrícula no viene de Moodle: se creó desde el CRM. Búscala en Pendientes.', 409, 'NO_ES_DE_MOODLE');
-    }
-    const sinTerminar = avisoSinTerminar(c);
-    if (sinTerminar && !d.forzar) throw new AppError(sinTerminar.mensaje, 409, 'SIN_TERMINAR');
-    const email = String(c.titular?.email ?? '').trim().toLowerCase() || null;
-    const dni = String(c.titular?.dni ?? '').trim() || null;
-    if (!email && !dni) {
-      throw new AppError('Este alumno no tiene correo ni DNI en Moodle: Certifex no puede encontrarlo para pedir su diploma.', 400, 'SIN_CORREO');
-    }
-    const curso = String(c.curso?.nombre ?? '').trim();
-    if (!curso) throw new AppError('Certifex no da el nombre del curso de esta matrícula: no se puede pedir el diploma.', 502, 'CERTIFEX_SIN_CURSO');
-    const nombre = normalizarNombreDiploma(c.titular?.nombre ?? '');
-    if (!nombre) {
-      throw new AppError(
-        `El nombre que tiene en Moodle («${String(c.titular?.nombre ?? '').trim() || 'vacío'}») no vale para un diploma: hace falta nombre y apellidos, solo con letras. Corrígelo en Moodle y vuelve a intentarlo.`,
-        400, 'NOMBRE_NO_VALIDO',
-      );
-    }
-
-    const r = await certifex('POST', '/matriculas', {
-      centro: cod, nombre, email, ...(dni ? { dni } : {}), curso, creadoPor: quien(req),
-    });
-    const misma = Number(r?.matriculaId) === d.matriculaId;
-    if (!r?.vinculadaMoodle || !misma) {
-      logger.error({
-        userId: req.user.userId, centro: cod, matriculaId: d.matriculaId,
-        devuelta: r?.matriculaId ?? null, vinculadaMoodle: !!r?.vinculadaMoodle, nexpediente: r?.nexpediente ?? null,
-      }, 'Certifex: «Pasar a pendientes» no enganchó la matrícula de Moodle');
-      const queHizo = !r?.matriculaId
-        ? 'Certifex no ha dicho qué matrícula ha usado.'
-        : r.nexpediente
-          ? `Ha encontrado otra matrícula de ese alumno en el mismo curso (nº ${r.matriculaId}) que ya tiene el diploma ${r.nexpediente}.`
-          : r.vinculadaMoodle
-            ? `Ha usado otra matrícula de Moodle de ese alumno en el mismo curso (nº ${r.matriculaId}): revisa en Pendientes cuál es la buena antes de aprobar.`
-            : `Ha creado una solicitud aparte (nº ${r.matriculaId}), sin lo de Moodle, que saldrá en Pendientes: no la apruebes y pide a administración que la rechace.`;
-      throw new AppError(`Certifex no ha enganchado esta matrícula de Moodle, así que no se ha pasado a Pendientes. ${queHizo}`, 502, 'CERTIFEX_NO_ENGANCHA');
-    }
-    if (r.nexpediente) {
-      throw new AppError(`Ya tiene el diploma emitido (${r.nexpediente}): está en Emitidos.`, 409, 'YA_EMITIDO');
-    }
-    logger.info({
-      userId: req.user.userId, centro: cod, matriculaId: d.matriculaId, yaPedido: !!r.yaExistia,
-      ...(sinTerminar ? { forzado: true, faltaNota: sinTerminar.faltaNota, faltaAvance: sinTerminar.faltaAvance } : {}),
-    }, 'Certifex: pasado a Pendientes desde el CRM');
+    const r = await pasarAPendientes(c, cod, { creadoPor: quien(req), forzar: !!d.forzar, log: { userId: req.user.userId } });
     res.json({
       success: true,
-      data: { matriculaId: d.matriculaId, centro: cod, curso, nombre, yaPedido: !!r.yaExistia },
+      data: { matriculaId: d.matriculaId, centro: cod, curso: r.curso, nombre: r.nombre, yaPedido: r.yaPedido },
     });
   } catch (err) { next(err); }
 }

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { verifyToken } from '../../shared/middleware/auth.js';
 import { puede } from '../../shared/middleware/permissions.js';
-import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
+import { pluginMoodleActivo, redactorasMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import * as ctrl from './tutor.controller.js';
 
 const router = Router();
@@ -42,6 +42,11 @@ router.get('/curso/:productId', puede('tutores.mis_cursos', 'tutores.gestionar')
 // «Mi campus» (#408, gemela de CRM#681): sus cursos de Moodle con alumnos, dudas y entregas
 // por corregir, y lo que tiene por desarrollar. Solo lee Moodle; solo lo suyo.
 router.get('/mi-campus', puede('tutores.mis_cursos'), ctrl.miCampus);
+// La redactora ve lo suyo (CRM#1026): su cuenta y su rol en los cursos que redacta, con el
+// id del token (sin `:id`: no puede pedir el de otra). Antes que `/:id/...`. Aún sin aprobar.
+if (redactorasMoodleActivo()) {
+  router.get('/mi-campus/redaccion-moodle', puede('tutores.mis_cursos'), ctrl.miRedaccionMoodle);
+}
 // Corregir desde el CRM (#408, gemela de CRM#681): la tarea con sus entregas, un archivo entregado y la nota.
 router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo', puede('tutores.mis_cursos'), ctrl.archivoEntregado);
 router.get('/mi-campus/tareas/:projectId/:cursoId/:tareaId', puede('tutores.mis_cursos'), ctrl.verTarea);
@@ -80,6 +85,11 @@ router.post('/:id/campus/:projectId/desvincular', puede('tutores.gestionar'), ct
 // Su correo del CRM no es el de Moodle: buscar su cuenta y vincularla a mano.
 router.get('/:id/campus/:projectId/buscar-cuenta', puede('tutores.gestionar'), ctrl.buscarCuentaMoodle);
 router.post('/:id/campus/:projectId/vincular', puede('tutores.gestionar'), ctrl.vincularCuentaMoodle);
+// La redactora en Moodle (CRM#1026): su cuenta y su rol en los cursos que redacta. Solo LEE,
+// pero aún sin aprobar: en producción, 404 salvo REDACTORAS_MOODLE_EN_PRODUCCION=1.
+if (redactorasMoodleActivo()) {
+  router.get('/:id/redaccion-moodle', puede('tutores.gestionar'), ctrl.redaccionMoodle);
+}
 router.post('/:id/empresas', puede('tutores.gestionar'), ctrl.asignarEmpresa);
 router.delete('/:id/empresas/:issuerId', puede('tutores.gestionar'), ctrl.quitarEmpresa);
 router.patch('/:id/disponible', puede('tutores.gestionar'), ctrl.cambiarDisponible);

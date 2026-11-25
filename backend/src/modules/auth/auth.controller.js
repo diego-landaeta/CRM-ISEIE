@@ -10,7 +10,9 @@ import { loginSchema, setPasswordSchema, changePasswordSchema, updateMyProfileSc
 import { sendPasswordResetEmail } from '../../shared/services/brevo.service.js';
 import { logger } from '../../shared/utils/logger.js';
 import { buildPermissionsMap } from '../permissions/permissions.service.js';
-import { pluginMoodleActivo, linksPagoActivos, seguimientoLinksActivo } from '../../shared/config/soloEnPruebas.js';
+import {
+  pluginMoodleActivo, linksPagoActivos, suspensionesMoodleActivas, seguimientoLinksActivo,
+} from '../../shared/config/soloEnPruebas.js';
 import { monitaskActivo } from '../monitask/interruptor.js';
 
 // /api/auth/me devuelve el mapa de `permissions` calculado (rol, rol a medida
@@ -233,6 +235,9 @@ export async function me(req, res, next) {
             // aquí dice que sí: en producción, con LINKS_PAGO_EN_PRODUCCION=1; en /staging y
             // en local, siempre. Quién los usa lo dicen después los permisos `links_pago.*`.
             links_pago: linksPagoActivos(),
+            // Las suspensiones de Moodle en la ficha (gemela de CRM#531), con
+            // SUSPENSIONES_MOODLE_EN_PRODUCCION.
+            suspensiones_moodle: suspensionesMoodleActivas(),
             // Los recordatorios al alumno de un link sin pagar (LINKS_PAGO_SEGUIMIENTO_EN_PRODUCCION,
             // gemela de MultiCRM): «Crear link» y la venta dicen si al alumno se le recordará
             // cada cuota o hay que mandársela (24/11).

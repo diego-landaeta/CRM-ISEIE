@@ -84,6 +84,9 @@ import certifexModule from './modules/certifex/index.js';
 import diplomaConfirmacionModule from './modules/diploma-confirmacion/index.js';
 // Sistema → Registro (#111), como en MultiCRM: quién hizo qué y los sucesos del sistema.
 import registroModule from './modules/registro/index.js';
+// Sistema → Correos: la Bandeja de los buzones conectados (#701, gemela de CRM#146 y CRM#1032).
+import correosModule from './modules/correos/index.js';
+import { startCorreoEntranteScheduler } from './jobs/correoEntranteScheduler.js';
 // Sistema → Mensajes: el chat interno del equipo, como en MultiCRM. Migración 232.
 import messagesModule from './modules/messages/index.js';
 import mcpModule from './modules/mcp/index.js';
@@ -401,6 +404,8 @@ const MODULES = [
   diplomaConfirmacionModule,
   // Sistema → Registro (#111): solo lectura sobre lo que ya se apunta. Admin y superadmin.
   registroModule,
+  // Sistema → Correos (#701): lo que llega a los buzones conectados. Solo leer.
+  correosModule,
   // Mensajes del equipo (/api/mensajes, con /api/messages de alias).
   messagesModule,
   // Conexion de Claude por MCP: solo consulta, con token personal (como MultiCRM).
@@ -709,6 +714,13 @@ if (process.env.NODE_ENV !== 'test') {
       startInformeMensualScheduler();
     } catch (err) {
       logger.error({ err }, 'Informe mensual a la gestoría: falló al arrancar');
+    }
+    // Leer los buzones conectados cada media hora (#701). Sin buzones —ni en la base
+    // ni en el .env— cada vuelta es una consulta vacía. Se apaga con CORREO_ENTRANTE_DISABLED=1.
+    try {
+      startCorreoEntranteScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Correo entrante: la lectura de los buzones falló al arrancar');
     }
     // Correos del equipo bloqueados en Brevo (17/11). Apagada de serie: BREVO_BLOQUEADOS_ACTIVO.
     try {

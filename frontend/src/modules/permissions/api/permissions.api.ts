@@ -154,6 +154,16 @@ export type Origen =
 export interface ApunteDelRegistro {
   id: number; cuando: string; quien_nombre: string | null; clave: string;
   antes: string | null; despues: string | null; origen: string;
+  /** #703: el permiso como se lee en pantalla («Facturación · Cambiar fechas»). */
+  nombre?: string;
+  /** A quién: en el registro de un rol, la persona no va; en el de la ficha, es ella. */
+  usuario_nombre?: string | null;
+}
+
+/** #703: los cambios de un rol fijo o de un rol a medida (quien tiene «Cambiar roles»). */
+export async function getRegistro(filtro: { rol?: string; customRoleId?: number }): Promise<ApunteDelRegistro[]> {
+  const res = await client.get('/permissions/registro', { params: filtro });
+  return (Array.isArray(res.data) ? res.data : []) as ApunteDelRegistro[];
 }
 
 export interface FichaDePermisos {
@@ -165,6 +175,10 @@ export interface FichaDePermisos {
   rolesAMedida: { id: number; nombre: string; base: string }[];
   registro: ApunteDelRegistro[];
   puedeEditar: boolean;
+  /** #703: por qué se ve en solo lectura (sus propios permisos, es admin, falta el permiso…). */
+  motivo?: string | null;
+  /** #703: lo que tiene quien edita (null = superadmin, o no edita): no se ofrece dar más. */
+  misPermisos?: string[] | null;
 }
 
 export async function getFicha(userId: number): Promise<FichaDePermisos> {

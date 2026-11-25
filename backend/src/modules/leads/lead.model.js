@@ -7,6 +7,7 @@ import { esRolDeGestora } from '../../shared/utils/roles.js';
 import { paisDeEntrada, sqlPaisDelLead } from './pais.js';
 import { gestoresDelReparto } from './reparto.js';
 import { telefonoParaGuardar } from '../../shared/utils/normalizePhone.js';
+import { SUSPENDIDO_EN_MOODLE, suspensionesListas } from './suspensiones-moodle.js';
 
 // ============================================================
 // WEBHOOK + ROUND-ROBIN
@@ -814,7 +815,7 @@ export async function contarFiltrosRapidos({ projectId, projectIds, responsableI
   return rows[0];
 }
 
-export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus, qf }) {
+export async function findAll({ projectId, projectIds, status, pasoProceso, responsableId, unassigned, canal, paisEntrada = null, productId, search, page, limit, includeConverted, dateFrom, dateTo, sort, dir, duplicated, reincidente, conConversion, installmentStatus, qf, suspendidoMoodle }) {
   const conditions = [];
   const params = [];
   let paramIdx = 1;
@@ -877,6 +878,12 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
       conditions.push(`NOT ${hasInstallments}`);
     }
   }
+  // Suspendidos en Moodle (gemela de CRM#531): siguen suspendidos (la cuenta o un curso)
+  // según el último aviso del plugin. Solo con SUSPENSIONES_MOODLE_EN_PRODUCCION y la
+  // migración 333 aplicada (`suspensionesListas`): si no, no sale nadie (nunca «todos»).
+  // SQL fijo, sin parámetros: no toca `paramIdx`.
+  const conSuspensiones = (suspendidoMoodle || conConversion) && await suspensionesListas();
+  if (suspendidoMoodle) conditions.push(conSuspensiones ? SUSPENDIDO_EN_MOODLE('l') : 'FALSE');
   if (status) {
     conditions.push(`l.status = $${paramIdx++}`);
     params.push(status);
@@ -991,7 +998,8 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
             client_stats.cuotas_pagadas,
             client_stats.cuotas_pendientes,
             client_stats.total_pagos,
-            client_stats.proximo_vencimiento` : '';
+            client_stats.proximo_vencimiento${conSuspensiones ? `,
+            ${SUSPENDIDO_EN_MOODLE('l')} AS suspendido_moodle` : ''}` : '';
   const clientStatsJoin = conConversion ? `
      LEFT JOIN LATERAL (
        -- Compras, facturado, cobrado y pendiente de cada cliente, como en MultiCRM:
