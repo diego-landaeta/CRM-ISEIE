@@ -309,7 +309,8 @@ export async function rolesAsignables(quien) {
  * Las altas que soporte hace aunque el rol nuevo traiga lo que soporte no tiene
  * (Diego, 26/10, punto 3). Exportada para la prueba.
  */
-export const ALTAS_DE_SOPORTE = ['admin', 'gestor', 'colaborador'];
+// La líder de equipo (CRM#1105 / ISEIE#761) es una gestora con equipo: soporte la da de alta igual.
+export const ALTAS_DE_SOPORTE = ['admin', 'gestor', 'lider_equipo', 'colaborador'];
 export function puedeDarDeAltaComoSoporte(quien, { role, roles_extra = [] }) {
   if (!tieneRol(quien, 'soporte')) return false;
   const pedidos = [role, ...(roles_extra || [])].filter(Boolean);

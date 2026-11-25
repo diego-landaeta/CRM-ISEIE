@@ -6,7 +6,7 @@ import { exigirFechaSiTieneCurso } from '../conversions/fecha-inicio.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceComercial, personasDentro } from '../../shared/utils/roles.js';
+import { alcanceComercial, alcanceDeLider, personasDentro } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
 
 export async function create(req, res, next) {
@@ -113,8 +113,9 @@ export async function gestoresStats(req, res, next) {
     const result = await goalsService.getGestoresStats({ projectId, projectIds, periodo, from, to });
     // Una administradora con equipo comercial (09/11/2026) ve el ranking de su
     // equipo, no el de todas las compañeras del campus.
-    const alcance = await alcanceComercial(req.user);
-    if (alcance && alcance.length > 1) {
+    // La líder de equipo (CRM#1105 / ISEIE#761), también con el equipo vacío: ella sola.
+    const alcance = await alcanceDeLider(req.user);
+    if (alcance) {
       result.gestores = result.gestores.filter((g) => alcance.includes(Number(g.user_id)));
     }
     res.json({ success: true, data: result });

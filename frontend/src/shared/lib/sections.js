@@ -13,6 +13,7 @@ import {
   FilePdf, ListNumbers,
 } from '@phosphor-icons/react';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
+import { ROLES_DE_GESTORA } from '@/shared/lib/roles';
 
 export const SECTIONS = [
   {
@@ -44,7 +45,7 @@ export const SECTIONS = [
       { to: '/products',                       label: 'Catálogo',          icon: Package,        end: true },
       { to: '/products/tree',                  label: 'Árbol',             icon: Tree },
       // Por campus, con tutora y fecha (#336): también gestoras y tutoras, como en MultiCRM.
-      { to: '/products/pending',               label: 'Cursos pendientes', icon: GraduationCap, roles: ['admin', 'superadmin', 'gestor', 'tutor'] },
+      { to: '/products/pending',               label: 'Cursos pendientes', icon: GraduationCap, roles: ['admin', 'superadmin', ...ROLES_DE_GESTORA, 'tutor'] },
       { to: '/configuracion/categorias-arbol', label: 'Categorías',        icon: TreeStructure },
       { to: '/woocommerce',                    label: 'WooCommerce',       icon: ShoppingCart,  roles: ['admin', 'superadmin'] },
     ],

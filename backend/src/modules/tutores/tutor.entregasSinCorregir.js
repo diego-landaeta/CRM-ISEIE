@@ -199,7 +199,7 @@ export async function avisarEntregasSinCorregir({
     try {
       let campus;
       try {
-        campus = await leerSusCampus(tutora.id, { ...opciones, conProgreso: false });
+        campus = await leerSusCampus(tutora.id, { ...opciones, conProgreso: false, conMensajes: false });
       } catch (err) {
         recogida?.fallos.add('*');
         throw err;

@@ -8,6 +8,8 @@ import {
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { chatApi, type ConexionWhatsapp } from '../api/whatsapp.api';
+// El recorrido guiado de la pantalla (#941, tanda D).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Los paneles comparten aspecto con los del chat: es la misma pantalla.
 import './chat.css';
 
@@ -226,7 +228,7 @@ export default function ConexionPage() {
   // `color-scheme` oscuro en el tema oscuro: las casillas y los botones de opcion los pinta el
   // navegador y no siguen los tokens; sin esto salian claros (#128).
   return (
-    <div className="max-w-5xl mx-auto space-y-4 dark:[color-scheme:dark]">
+    <div className="max-w-5xl mx-auto space-y-4 dark:[color-scheme:dark] [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <div className="bg-card border border-border rounded-lg p-5">
         {/* Se parte en dos filas cuando no cabe. Antes era una sola fila con el
             titulo, el selector y dos botones: en un telefono el titulo se
@@ -244,7 +246,7 @@ export default function ConexionPage() {
                 : `Estás enlazando el número de ${sesion.nombre}. Necesitas su móvil delante para meter el código.`}
             </p>
           </div>
-          <div className="flex items-center gap-1 ml-auto shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-1 ml-auto">
             <SelectorDeSesion valor={sesion} onCambiar={setSesion} />
             <Link to="/whatsapp/ayuda" title="Como se usa"
               className="p-2 rounded-md hover:bg-muted text-muted-foreground text-xs font-medium whitespace-nowrap">
@@ -254,10 +256,11 @@ export default function ConexionPage() {
               className="p-2 rounded-md hover:bg-muted text-muted-foreground">
               <ArrowClockwise size={16} />
             </button>
+            <VerRecorrido id="whatsapp-conexion" compacto />
           </div>
         </div>
 
-        <div className="mt-4 flex items-center gap-2 text-sm">
+        <div data-recorrido="wa-conexion-estado" className="mt-4 flex items-center gap-2 text-sm">
           {estado === null ? (
             <span className="text-muted-foreground">Comprobando…</span>
           ) : !estado.configurado ? (
@@ -287,7 +290,7 @@ export default function ConexionPage() {
             apilados dejaban media pantalla vacia a la derecha. */}
         <div className="grid lg:grid-cols-2 gap-4 items-start">
         {estado?.configurado && !conectado && !qr && (
-          <div className="mt-4 border border-warning/30 bg-warning-soft rounded-lg p-4">
+          <div data-recorrido="wa-conexion-aviso" className="mt-4 border border-warning/30 bg-warning-soft rounded-lg p-4">
             <p className="font-semibold text-warning-soft-foreground mb-2 text-sm">
               {sesion.esMia
                 ? 'Antes de enlazar tu número, lee esto'
@@ -322,7 +325,7 @@ export default function ConexionPage() {
         )}
 
         {estado?.configurado && !conectado && !qr && (
-          <div className="mt-4">
+          <div data-recorrido="wa-conexion-historial" className="mt-4">
             <p className="text-sm font-semibold mb-1">¿Qué se trae del móvil?</p>
             <p className="text-xs text-muted-foreground mb-2">
               Lo que traigas se guarda en la base del CRM y ya no se quita solo.
@@ -371,7 +374,7 @@ export default function ConexionPage() {
         )}
         </div>
 
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div data-recorrido={estado?.configurado || conectado ? 'wa-conexion-boton' : undefined} className="mt-4 flex flex-wrap gap-2">
           {estado?.configurado && !conectado && (
             <button type="button" onClick={() => pedirQR()} disabled={pidiendo || (!enterado && !qr)}
               className="h-9 px-3 rounded-md bg-success text-success-foreground text-sm font-semibold inline-flex items-center gap-2 hover:bg-success/90 disabled:opacity-50">
@@ -413,7 +416,7 @@ export default function ConexionPage() {
       )}
 
       {conectado && (
-        <div className="bg-card border border-border rounded-lg p-5 text-sm space-y-3">
+        <div data-recorrido="wa-conexion-traido" className="bg-card border border-border rounded-lg p-5 text-sm space-y-3">
           {sync?.entrando ? (
             <>
               <p className="font-semibold flex items-center gap-2">
@@ -501,7 +504,7 @@ export default function ConexionPage() {
           Va por sesion y se puede apagar: una gestora que si coge el telefono no
           debe rechazar automaticamente a nadie. Es el punto 2 de la tarea #47. */}
       {conectado && llamada && (
-        <div className="bg-card border border-border rounded-lg p-5 text-sm space-y-3">
+        <div data-recorrido="wa-conexion-llamadas" className="bg-card border border-border rounded-lg p-5 text-sm space-y-3">
           <p className="font-semibold flex items-center gap-2">
             <PhoneX size={16} className="text-muted-foreground" />
             Si te llaman por WhatsApp

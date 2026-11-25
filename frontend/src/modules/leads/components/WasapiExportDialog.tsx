@@ -5,6 +5,7 @@ import Portal from '@/shared/components/ui/portal';
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useAuth } from '@/contexts/AuthContext';
+import { esRolDeGestora } from '@/shared/lib/roles';
 
 // Modal de exportación con formato Wasapi (plantilla bulk WhatsApp).
 // - Filtros opcionales: gestor, fechas, producto, país, sólo con teléfono.
@@ -67,7 +68,7 @@ export default function WasapiExportDialog({
   nombreFichero = 'wasapi-leads',
 }: Props) {
   const { user } = useAuth() as { user: { userId: number; role: string } | null };
-  const isGestor = user?.role === 'gestor';
+  const isGestor = esRolDeGestora(user?.role);
   const seVe = (b: 'gestor' | 'producto' | 'fechas' | 'convertidos') => !ocultar.includes(b);
 
   const [gestores, setGestores] = useState<Gestor[]>([]);

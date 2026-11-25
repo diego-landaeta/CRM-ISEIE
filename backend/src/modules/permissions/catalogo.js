@@ -64,6 +64,8 @@ export const ROLES_FIJOS = [
   { clave: 'superadmin', nombre: 'Superadmin', descripcion: 'Todo, siempre. El único que cambia los roles fijos y lo que vale para todas las empresas.' },
   { clave: 'admin', nombre: 'Admin', descripcion: 'Lleva sus campus: prospectos, ventas, finanzas y su equipo.' },
   { clave: 'gestor', nombre: 'Gestora', descripcion: 'Atiende prospectos y registra ventas, solo los suyos.' },
+  // CRM#1105 / ISEIE#761 (Diego, 24/11/2026): «maneja un equipo de personas y ve eso y lo suyo».
+  { clave: 'lider_equipo', nombre: 'Líder de equipo', descripcion: 'Una gestora que además lleva un equipo comercial: lo suyo y lo de sus gestoras (prospectos, ventas, cola, ranking y su WhatsApp). Nada de administración.' },
   { clave: 'soporte', nombre: 'Soporte', descripcion: 'Soporte técnico: ve todos los campus y la configuración del sistema.' },
   { clave: 'project_manager', nombre: 'Project manager', descripcion: 'Lleva las solicitudes de cambio y ve todas las pantallas de sus campus, sin tocarlas; en lo demás, como una gestora.' },
   { clave: 'tutor', nombre: 'Tutor', descripcion: 'Da clase: sus cursos, sus comisiones y su perfil.' },
@@ -650,6 +652,9 @@ export const SECCIONES = [
         // concretas y ver lo suyo (migración 274, `alcanceComercial`).
         clave: 'equipos', nombre: 'Equipos comerciales', acciones: [
           a('gestionar', 'Equipo comercial de una administradora', 'Decidir qué gestoras tiene a su cargo una administradora.', NADIE, { requiere: ['users.view'] }),
+          // CRM#1105 / ISEIE#761: la líder de equipo no ve Usuarios, pero necesita a su equipo en los
+          // desplegables (filtro de gestora, reasignar, la cola). Solo su equipo, nunca la lista entera.
+          a('su_equipo', 'Ver a su equipo', 'Las gestoras de su equipo comercial en los desplegables (filtros, reasignar, la cola), sin entrar en Usuarios.', NADIE),
         ],
       },
       {
@@ -694,6 +699,54 @@ export const SECCIONES = [
     ],
   },
 ];
+
+/*
+  LA LÍDER DE EQUIPO (CRM#1105 / ISEIE#761, Diego 24/11/2026): «Raquel no es admin
+  como tal: maneja un equipo de personas y ve eso y lo suyo, como si fuera líder
+  de equipo con cosas de gestora».
+
+  De serie trae TODO lo de una gestora —lo que lleva `gestor` en `roles`, aquí
+  arriba— y además lo de equipo de `DEL_EQUIPO`. Se calcula aquí, una vez, para
+  que un permiso nuevo de gestora le llegue solo y no haya que copiarlo a mano.
+  Nada de administración: ni usuarios, ni roles, ni configuración, ni
+  integraciones, ni finanzas de la empresa, ni la facturación de la serie, ni MCP.
+
+  QUÉ VE de su equipo no lo decide esto: es ALCANCE, `alcanceComercial` (regla 2,
+  por `equipo_comercial`) y `alcanceDeLider` (shared/utils/roles.js). Sin nadie a
+  su cargo, lo de equipo se queda en ella sola. Igual que en el 360 (paridad).
+*/
+export const LIDER_EQUIPO = 'lider_equipo';
+export const DEL_EQUIPO = [
+  // Su puesto y la tabla del ranking, de su equipo (report.controller.js · miPuesto).
+  'reports.puesto_ajeno',
+  // Reportes y la actividad de WhatsApp de su equipo (asesoraDelInforme, alcanceDeLider).
+  'reports.view',
+  // El resumen y las ventas por asesora de su equipo (sales.controller.js).
+  'ventas.view_equipo',
+  // Pasar un prospecto de su equipo a otra de su equipo (lead.controller.js · reassign).
+  // Repartir los sin gestora del campus, no (reassignPending).
+  'leads.assign',
+  // Abrir el WhatsApp de una de su equipo, y de nadie más (chat.controller.js · usuarioObjetivo).
+  'whatsapp.supervisar',
+  // Su equipo en los desplegables, sin la lista de Usuarios (user.controller.js · list).
+  'equipos.su_equipo',
+  // Diego, 24/11/2026: repartir una venta, solo entre ella y las gestoras de su equipo
+  // (reparto.controller.js · set y remove, con alcanceDeLider).
+  'conversions.reparto',
+  // Diego, 24/11/2026: el informe mensual de ventas (CRM#772), recortado a su equipo
+  // (informe-mensual.controller.js · informeDe); el ZIP de facturas de la empresa, no.
+  'reports.informe_mensual',
+];
+for (const s of SECCIONES) {
+  for (const r of s.recursos) {
+    for (const x of r.acciones) {
+      const deGestora = x.roles.includes('gestor');
+      if ((deGestora || DEL_EQUIPO.includes(`${r.clave}.${x.accion}`)) && !x.roles.includes(LIDER_EQUIPO)) {
+        x.roles = [...x.roles, LIDER_EQUIPO];
+      }
+    }
+  }
+}
 
 /** Todas las acciones, planas, con su clave entera y su sección. */
 export const ACCIONES = SECCIONES.flatMap((s) => s.recursos.flatMap((r) => r.acciones.map((x) => ({

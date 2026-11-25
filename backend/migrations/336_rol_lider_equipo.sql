@@ -1,0 +1,21 @@
+-- Líder de equipo · el rol nuevo (CRM-ISEIE#761 / CRM#1105, en el 360 es la 324)
+--
+-- Diego, 24/11/2026: «Raquel en ISEIE no es admin como tal: maneja un equipo de
+-- personas y ve eso y lo suyo, como si fuera líder de equipo con cosas de
+-- gestora». Lo de una gestora y, además, lo de las gestoras que tiene a su
+-- cargo en `equipo_comercial` (migración 274, `alcanceComercial`). Nada de
+-- administración: usuarios, roles, configuración, integraciones, finanzas de
+-- la empresa. Lo que trae de serie lo dice el catálogo de permisos
+-- (modules/permissions/catalogo.js), no esta migración.
+--
+-- En su propio fichero, como la 123 del tutor, la 208 del colaborador y la 277
+-- del tutor redactor: «ALTER TYPE ... ADD VALUE» no se puede usar en la misma
+-- transacción en la que se usa el valor nuevo, así que va sin BEGIN/COMMIT.
+--
+-- users.role es un ENUM (user_role), no texto con CHECK: sin este valor, un
+-- INSERT o un `u.role IN (..., 'lider_equipo')` falla con «invalid input value
+-- for enum». `roles_extra` es un array del mismo ENUM y también lo necesita.
+-- Ninguna restricción CHECK lista los roles de users (comprobado en las
+-- migraciones). IF NOT EXISTS hace que se pueda pasar dos veces.
+
+ALTER TYPE user_role ADD VALUE IF NOT EXISTS 'lider_equipo';

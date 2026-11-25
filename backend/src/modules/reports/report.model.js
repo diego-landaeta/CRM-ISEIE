@@ -2193,7 +2193,7 @@ export async function ventasSinFacturaEnRango({ projectId, projectIds, from, to,
  *
  * El orden NO cambia: por lo cobrado (decidido el 08/10).
  */
-export async function miPuesto({ userId, projectId, projectIds, from, to, base = 'cobro', esJefe = false }) {
+export async function miPuesto({ userId, projectId, projectIds, from, to, base = 'cobro', esJefe = false, soloEstas = null }) {
   // `base = 'cobro'` cuenta cada venta POR SU FECHA DE VENTA; 'factura', por la
   // fecha de la factura. Para «cuantas llevo este mes» manda la de venta: una
   // venta cerrada hoy cuenta hoy, y una que todavia no se ha facturado cuenta
@@ -2263,7 +2263,12 @@ export async function miPuesto({ userId, projectId, projectIds, from, to, base =
   for (const a of porAsesora.values()) cerrar(a);
   cerrar(sinGestora);
   cerrar(total);
-  const tabla = [...porAsesora.values()].sort((x, y) => y.cobrado - x.cobrado || y.ventas - x.ventas);
+  // Quien lleva un equipo (CRM#1105 / ISEIE#761): la clasificación es la de su
+  // equipo. Su puesto, «de cuántas», la media y quién va delante salen de esas
+  // filas, no del campus entero.
+  const tabla = [...porAsesora.values()]
+    .filter((a) => !Array.isArray(soloEstas) || soloEstas.includes(Number(a.user_id)))
+    .sort((x, y) => y.cobrado - x.cobrado || y.ventas - x.ventas);
 
   const equipo = tabla.reduce((s, a) => ({
     leads: s.leads + a.leads, ventas: s.ventas + a.ventas, cobrado: s.cobrado + a.cobrado, facturado: s.facturado + a.facturado,

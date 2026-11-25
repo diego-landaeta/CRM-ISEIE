@@ -21,6 +21,8 @@ export interface EstadoMonitask {
   ultima_sync: {
     desde?: string; hasta?: string; personas?: number; dias?: number; emparejadas?: number; avisos?: number;
     sin_actividad?: boolean; errores?: Array<{ que: string; error: string }>; fallo?: string;
+    // Cuántas entradas y tramos de actividad mandó Monitask y cuántas entendió el CRM.
+    leidas?: { entradas?: { llegan: number; se_entienden: number }; actividad?: { llegan: number; se_entienden: number } };
   } | null;
   ultimo_error: string | null;
   ultimo_error_at: string | null;

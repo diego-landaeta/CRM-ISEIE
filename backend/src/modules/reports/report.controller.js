@@ -157,6 +157,8 @@ export async function miPuesto(req, res, next) {
     const { asesoraId, base, ...sinAsesora } = ambito;
     const data = await model.miPuesto({
       userId, from: desde, to: hasta, ...sinAsesora, esJefe,
+      // Quien lleva un equipo, la clasificación de su equipo (CRM#1105 / ISEIE#761).
+      soloEstas: lider,
       // Por fecha de VENTA salvo que pidan lo contrario: es lo que la gestora
       // reconoce como suyo el dia que cierra.
       base: ['factura', 'cerrado'].includes(req.query.base) ? req.query.base : 'cobro',
@@ -167,6 +169,8 @@ export async function miPuesto(req, res, next) {
       data.sin_gestora = null;
       data.total = null;
     }
+    // Para «Cómo voy»: además de la tabla de su equipo, su propio puesto (CRM#1105 / ISEIE#761).
+    data.lider = Boolean(lider);
     res.json({ success: true, data });
   } catch (err) { next(err); }
 }

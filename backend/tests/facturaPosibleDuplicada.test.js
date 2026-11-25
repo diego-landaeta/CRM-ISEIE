@@ -129,10 +129,21 @@ describe('al emitir a mano (POST /api/invoices)', () => {
   });
 
   it('la fecha: a 7 dias avisa; a 8 ya no', async () => {
+    // En una serie propia y vacía: con fechas de hace días en la serie de las
+    // demás pruebas (que ya tiene facturas de hoy), la fecha iría por detrás de
+    // la de la anterior, y eso ya no se puede (CRM#764, fecha-en-orden.js).
+    const s = `Q${Date.now().toString(36).slice(-7)}`;
+    const e = await one(`INSERT INTO invoice_issuers (razon_social, nif, serie) VALUES ($1, '', $2) RETURNING id`,
+      [`${MARCA} Emisora fechas`, s]);
+    ids.issuers.push(e.id);
+    const P2 = (await one(`INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+      [`${MARCA} campus fechas`, `${MARCA.toLowerCase()}-f`, `${MARCA}-kf`, e.id])).id;
+    ids.projects.push(P2);
     const nombre = `${MARCA} Fechas Lejos`;
-    expect((await emitir({ nombre, nifCliente: nif(), total: 45, fecha: await dia(-10) })).status).toBe(200);
-    expect((await emitir({ nombre, nifCliente: nif(), total: 45, fecha: await dia(-3) })).status).toBe(409);
-    expect((await emitir({ nombre, nifCliente: nif(), total: 45, fecha: await dia(-2) })).status).toBe(200);
+    const en = (fecha) => emitir({ nombre, nifCliente: nif(), total: 45, fecha, projectId: P2 });
+    expect((await en(await dia(-10))).status).toBe(200);
+    expect((await en(await dia(-3))).status).toBe(409);
+    expect((await en(await dia(-2))).status).toBe(200);
   });
 
   it('una anulada no cuenta', async () => {

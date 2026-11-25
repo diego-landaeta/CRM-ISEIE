@@ -15,6 +15,8 @@ import { datosParaFacturar } from '../factura-automatica/factura-automatica.mode
 import { exigirFacturacionActiva } from '../facturacion-auditoria/facturacion-auditoria.pausa.js';
 // Lo emitido no se borra ni se cambia (CRM#793): se anula con su motivo.
 import { esFacturaEmitida, exigirNoEmitida } from './invoices.inmutable.js';
+// La fecha va en el orden del número dentro de la serie (CRM#764 / ISEIE#452, 24/11).
+import { exigirFechaEnOrden, fechaParaNumeroNuevo } from './fecha-en-orden.js';
 import { phoneToCountryName } from '../../shared/utils/countryPrefix.js';
 
 // Sociedad emisora de un proyecto (null si no tiene). Helper para numeración.
@@ -237,6 +239,12 @@ export async function create(data, userId) {
     // Borrador: NO consume correlativo. numero/codigo quedan NULL hasta emitir.
     const numero = isBorrador ? null : await nextNumero(client, data.projectId, iss?.id || null, ano, serie);
     const codigo = isBorrador ? null : `${ano}/${String(numero).padStart(4, '0')}`;
+
+    // Y su fecha, en el orden del número (CRM#764): ni por detrás de la anterior
+    // de la serie ni por delante de la siguiente, si se rellena un hueco.
+    if (!isBorrador) {
+      await exigirFechaEnOrden(client, { ano, serie, numero, fecha: data.fechaEmision || null });
+    }
 
     const { rows } = await client.query(
       `INSERT INTO invoices (
@@ -908,6 +916,16 @@ export async function esFacturaQueGestiona(userId, role, invoiceId) {
 
 // Actualiza SOLO fecha_emision y/o fecha_pago. Regenera el PDF (pdf_path=NULL).
 export async function updateFechas(id, { fechaEmision, fechaPago }) {
+  // La de emisión, en el orden del número (CRM#764, 24/11): una corrección no
+  // puede dejar la 0040 con fecha anterior a la de la 0039.
+  if (fechaEmision) {
+    const { rows: [inv] } = await query('SELECT id, ano, serie, numero FROM invoices WHERE id = $1', [id]);
+    if (inv?.numero != null) {
+      await exigirFechaEnOrden({ query }, {
+        ano: inv.ano, serie: inv.serie, numero: inv.numero, fecha: fechaEmision, excluirId: inv.id,
+      });
+    }
+  }
   // Diego, 19/11/2026: quien tiene «Cambiar fechas» (admin y superadmin) corrige
   // las fechas también de una emitida. La ruta ya exige el permiso.
   const { rows } = await query(
@@ -1609,8 +1627,17 @@ export async function emitirBorrador(id, patch = {}) {
     const serie = (inv.serie && inv.serie.trim()) || 'A';
     const numero = inv.numero != null ? inv.numero : await nextNumero(client, inv.project_id, inv.issuer_id || null, ano, serie);
     const codigo = inv.codigo || `${ano}/${String(numero).padStart(4, '0')}`;
-    // Si ya tenía fecha propia (borrador reservado), la conserva; si no, hoy.
-    const fecha = inv.fecha_emision || new Date();
+    // Con número reservado conserva su fecha. Con número NUEVO, la suya solo si
+    // no va por detrás de la última de la serie; si no, hoy: un borrador
+    // guardado el día 10 y emitido el 24 salía con fecha del 10 y el número del
+    // 24 (CRM#764, 24/11). Y en los dos casos, en el orden del número.
+    const fecha = inv.numero != null
+      ? (inv.fecha_emision || new Date())
+      : await fechaParaNumeroNuevo(client, { ano, serie, fechaBorrador: inv.fecha_emision || null });
+    await exigirFechaEnOrden(client, {
+      ano, serie, numero, excluirId: inv.id,
+      fecha: fecha instanceof Date ? null : fecha,
+    });
 
     const { rows } = await client.query(
       `UPDATE invoices SET
@@ -2338,7 +2365,20 @@ export async function listPagosSinFactura(projectId, hasta = null) {
 
 // ¿Queda algun cobro pendiente de facturar ANTERIOR a este? Si lo hay, este no
 // puede emitir todavia: la numeracion tiene que salir en orden de fecha.
-export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
+//
+// `saltarEsperandoDatos` (la emisión automática, CRM#764 / ISEIE#452, 24/11): no
+// cuentan los cobros de ventas cuya factura espera los datos fiscales del alumno
+// (hasta 7 días) o a una persona (revisión). Si contaran, un solo alumno sin
+// contestar paraba TODAS las facturas automáticas del campus: el día 7 tampoco
+// salía la de quien tenía la ficha completa. Saltárselos no desordena la serie:
+// la factura sale con la fecha del día en que se emite, así que número y fecha
+// siguen subiendo juntos cuando la de ese alumno salga después.
+export async function hayPendientesAnteriores(projectId, fecha, paymentId, { saltarEsperandoDatos = false } = {}) {
+  const esperando = saltarEsperandoDatos
+    ? `AND NOT EXISTS (SELECT 1 FROM factura_datos_fiscales fd
+                        WHERE fd.conversion_id = cp.conversion_id
+                          AND fd.estado IN ('pendiente', 'revision'))`
+    : '';
   const { rows } = await query(
     `SELECT EXISTS (
        SELECT 1
@@ -2357,6 +2397,7 @@ export async function hayPendientesAnteriores(projectId, fecha, paymentId) {
                            WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
           ${FACTURA_HUERFANA_LO_CUBRE}
           ${VENTA_YA_FACTURADA_LO_CUBRE}
+          ${esperando}
      ) AS hay`,
     [projectId, fecha, paymentId || 0]
   );

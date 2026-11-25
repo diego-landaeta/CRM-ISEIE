@@ -55,7 +55,7 @@ export async function esResponsableValido(userId) {
   return !!t;
 }
 
-const puedeCrear = (user) => ['admin', 'superadmin', 'soporte', 'gestor'].includes(user?.role);
+const puedeCrear = (user) => ['admin', 'superadmin', 'soporte', 'gestor', 'lider_equipo'].includes(user?.role);
 
 /** Los campus que la persona puede ver; null = todos. */
 async function campusPermitidos(user) {

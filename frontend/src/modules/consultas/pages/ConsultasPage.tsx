@@ -158,8 +158,10 @@ export default function ConsultasPage() {
   }
 
   return (
-    <div className="space-y-4 pb-8">
-      <ConsultasNav />
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+      <div data-recorrido="consultas-pestanas"><ConsultasNav /></div>
       <PageHeader
         title="Consultas de alumnos"
         subtitle={vista === 'mias'
@@ -180,7 +182,7 @@ export default function ConsultasPage() {
       <CampusSinTutorAviso campus={sinTutorCampus} />
 
       {esTutor && esAdmin && (
-        <div role="tablist" aria-label="Qué consultas" className="inline-flex rounded-md border border-border bg-muted p-0.5">
+        <div role="tablist" aria-label="Qué consultas" data-recorrido="consultas-vista" className="inline-flex rounded-md border border-border bg-muted p-0.5">
           {(['mias', 'todas'] as Vista[]).map((v) => (
             <button key={v} type="button" role="tab" aria-selected={vista === v} onClick={() => setVista(v)}
               className={`h-8 px-3 rounded text-sm font-semibold ${vista === v ? 'bg-card shadow-sm' : 'text-muted-foreground'}`}>

@@ -25,6 +25,7 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+import { esRolDeGestora } from '@/shared/lib/roles';
 import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
 import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
 
@@ -145,7 +146,7 @@ export default function ClientDetailPage() {
   // devoluciones). Admin/superadmin siempre. Otros gestores no ven los botones.
   const canManage = user?.role === 'admin'
     || user?.role === 'superadmin'
-    || (user?.role === 'gestor' && lead?.responsable_id === user?.id);
+    || (esRolDeGestora(user?.role) && lead?.responsable_id === user?.id);
 
   // Token de request: evita que la respuesta lenta de un cliente anterior pise
   // los datos del cliente actual al navegar rápido entre fichas.

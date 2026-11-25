@@ -69,6 +69,20 @@ export function soloEsTutorRedactor(user: Quien | null | undefined): boolean {
   return suyos.length > 0 && suyos.every((r) => r === 'tutor_redactor');
 }
 
+/**
+ * Los roles que trabajan como una gestora (CRM-ISEIE#761 / CRM#1105): la gestora y
+ * la líder de equipo, que es una gestora que además ve a su equipo. Donde el menú
+ * o una pantalla enseñaban algo «a la gestora», también a la líder. Es
+ * comportamiento y lo que se enseña de serie; quién entra lo deciden los permisos
+ * (#423). Mismo nombre que en el servidor (`shared/utils/roles.js`) y en el 360.
+ */
+export const ROLES_DE_GESTORA: UserRole[] = ['gestor', 'lider_equipo'];
+
+/** Si su rol PRINCIPAL trabaja como una gestora (lo que antes era `role === 'gestor'`). */
+export function esRolDeGestora(rol: string | null | undefined): boolean {
+  return ROLES_DE_GESTORA.includes(rol as UserRole);
+}
+
 /** Los roles que dan clase: donde se pregunta «¿es tutor?», el redactor también cuenta. */
 export const ROLES_DE_TUTOR: UserRole[] = ['tutor', 'tutor_redactor'];
 
