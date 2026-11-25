@@ -65,7 +65,10 @@ beforeAll(async () => {
     await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, A]);
     return u;
   };
-  for (const r of ROLES) P[r] = await persona(r.replace(/_/g, ''), r);
+  // El super admin, uno que ya exista: dar de alta uno nuevo cambia cuántos hay
+  // mientras otra prueba los cuenta (consultas190 avisa a todos los super admin).
+  const sa = await one("SELECT id, role FROM users WHERE role = 'superadmin' AND active ORDER BY id LIMIT 1");
+  for (const r of ROLES) P[r] = r === 'superadmin' && sa ? sa : await persona(r.replace(/_/g, ''), r);
   G1 = await persona('g1', 'gestor');
   FUERA = P.gestor; // otra gestora del campus, de fuera del equipo
   await q('INSERT INTO equipo_comercial (lider_id, gestora_id) VALUES ($1, $2)', [P.lider_equipo.id, G1.id]);
