@@ -29,6 +29,8 @@ import EmitirFacturaCobro, { AvisoCobroEnCola, QueEsCadaUna } from '@/modules/in
 // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
 import EnvioFacturaCampos from '@/modules/factura-automatica/components/EnvioFacturaCampos';
 import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
+import DatosFiscalesVenta, { DATOS_FISCALES_VACIOS, aDatosFiscales, deLaFicha as fiscalesDeLaFicha, faltanDatosFiscales, type DatosFiscalesEnVenta } from '@/modules/factura-automatica/components/DatosFiscalesVenta';
+import { useModoPorEnviar } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
 import { useFacturaAutomaticaActiva } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
 
 const FiscalDataDialog = lazy(() => import('@/modules/invoices/components/FiscalDataDialog'));
@@ -234,10 +236,13 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
   // la factura automática encendida: apagada, no se pregunta nada.
   const facturaAuto = useFacturaAutomaticaActiva();
   const [emailFicha, setEmailFicha] = useState<string | null | undefined>(undefined);
+  // Los datos de la persona para la factura (25/11): de la ficha, o los carga la gestora.
+  const porEnviar = useModoPorEnviar();
+  const [fiscales, setFiscales] = useState<DatosFiscalesEnVenta>(DATOS_FISCALES_VACIOS);
   useEffect(() => {
     if (facturaAuto !== true || !lead?.id) return;
-    client.get<{ email?: string | null }>(`/leads/${lead.id}`)
-      .then((r) => setEmailFicha(r?.data?.email || null))
+    client.get<{ email?: string | null } & Record<string, unknown>>(`/leads/${lead.id}`)
+      .then((r) => { setEmailFicha(r?.data?.email || null); setFiscales(fiscalesDeLaFicha(r?.data)); })
       .catch(() => setEmailFicha(null));
   }, [facturaAuto, lead?.id]);
   const envioFactura = useEnvioFacturaAlta(emailFicha, { sinCorreoVale: true });
@@ -646,6 +651,12 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
     }
     const faltaEnvio = envioFactura.falta();
     if (faltaEnvio) { toast({ ...faltaEnvio, variant: 'destructive' }); return; }
+    // «Por enviar» (ISEIE): con cobro, la factura sale con estos datos y administración la verifica.
+    const faltanFiscales = porEnviar === true && hayPago ? faltanDatosFiscales(fiscales) : [];
+    if (faltanFiscales.length) {
+      toast({ title: 'Faltan datos de la persona para la factura', description: `Completa ${faltanFiscales.join(', ')}.`, variant: 'destructive' });
+      return;
+    }
     if (!pagoMode) {
       toast({ title: 'Falta decir si ha pagado', description: 'Elige «Sin pago», «Parcial» o «Pagó TODO». La forma de pago sola no registra el cobro.', variant: 'destructive' });
       return;
@@ -684,6 +695,8 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
       subtotal_bruto: calc.bruto,
       // Sin la factura automática encendida, no va (undefined).
       envio_factura: envioFactura.cuerpo(),
+      // Los datos de la persona: a la ficha, antes del primer cobro (25/11).
+      datos_fiscales: facturaAuto === true ? aDatosFiscales(fiscales) : undefined,
     } as any;
     setSaving(true);
     try {
@@ -1416,6 +1429,11 @@ function FormularioConversion({ open, onClose, lead, projectId, onCreated, produ
             {envioFactura.visible && emailFicha !== undefined && (
               <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
                 emailFicha={emailFicha} idBase="venta-envio-factura" sinCorreoVale />
+            )}
+
+            {facturaAuto === true && (
+              <DatosFiscalesVenta value={fiscales} onChange={setFiscales} idBase="venta-fiscales"
+                obligatorios={porEnviar === true && hayPago} />
             )}
 
             <Field label="Notas" htmlFor="venta-notas">

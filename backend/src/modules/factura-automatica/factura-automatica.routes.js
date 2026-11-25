@@ -17,7 +17,11 @@ router.post('/venta/:conversionId/reenviar', puede('facturas.cola'), ventaDelPar
 // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (24/11):
 // verlo, quien ve la venta; cambiarlo, quien la edita (una gestora, las suyas).
 router.get('/venta/:conversionId/envio', puede('facturas.view'), ventaDelParametro, ctrl.verEnvio);
-router.put('/venta/:conversionId/envio', puede('conversions.edit'), ventaDelParametro, ctrl.guardarEnvio);
+// Cambiarlo: solo administración (Diego, 25/11: las gestoras no eligen el envío).
+router.put('/venta/:conversionId/envio', puede('facturas.envio_auto'), ventaDelParametro, ctrl.guardarEnvio);
+// Los datos fiscales que carga la gestora en la venta: con ellos no se le pide el
+// formulario al alumno y, en «Por enviar», administración los verifica.
+router.put('/venta/:conversionId/datos-fiscales', puede('conversions.edit'), ventaDelParametro, ctrl.guardarDatosFiscales);
 // La pantalla de la facturación automática (Finanzas › Facturas › Facturación automática).
 router.get('/panel', puede('facturas.automatica'), ctrl.panel);
 

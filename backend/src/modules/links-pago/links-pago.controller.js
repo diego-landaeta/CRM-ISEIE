@@ -237,6 +237,9 @@ export async function crear(req, res, next) {
     const parsed = crearSchema.safeParse(req.body || {});
     if (!parsed.success) throw fallo(parsed);
     const b = parsed.data;
+    // «Enviar factura automáticamente»: solo quien tiene `facturas.envio_auto` (25/11).
+    const { quitarSiNoPuede } = await import('../factura-automatica/factura-automatica.envio.js');
+    await quitarSiNoPuede(req, b);
     const destino = b.leadId || b.conversionId ? await destinoSuyo(req, b) : await campusSuyo(req, b.projectId);
 
     const prod = await model.producto(b.productId);

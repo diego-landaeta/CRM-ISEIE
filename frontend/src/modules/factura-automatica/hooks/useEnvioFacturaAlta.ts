@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import usePermission from '@/shared/hooks/usePermission';
 import { useFacturaAutomaticaActiva } from './useFacturaAutomatica';
 import { aEnvioFactura, envioInicial, faltaConfirmar, type EnvioEnEdicion } from '../components/EnvioFacturaCampos';
 import type { EnvioFactura } from '../api/facturaAutomatica.api';
@@ -12,7 +13,11 @@ import type { EnvioFactura } from '../api/facturaAutomatica.api';
   manda; uno ya confirmado no se toca.
 */
 export function useEnvioFacturaAlta(emailFicha: string | null | undefined, { sinCorreoVale = false } = {}) {
-  const activa = useFacturaAutomaticaActiva();
+  // Solo administración elige el envío (Diego, 25/11): sin `facturas.envio_auto`
+  // no se enseña ni se manda, y la venta sigue el modo del CRM.
+  const { can } = usePermission();
+  const encendida = useFacturaAutomaticaActiva();
+  const activa = encendida === true && !can('facturas.envio_auto') ? false : encendida;
   const [envio, setEnvio] = useState<EnvioEnEdicion>(() => envioInicial(emailFicha));
   const ultimo = useRef(emailFicha);
 
