@@ -36,6 +36,7 @@ const DECLARADAS = {
   'reports/report.controller.js': [3, 'comportamiento: el baremo general de la tasa de cierre solo lo cambia un super admin; alcance: de quién son los informes (admin, superadmin y soporte, el campus entero)'],
   // 25/11/2026: antes `rol === 'admin'` en una variable que esta prueba no veía; soporte salía vacío.
   'proceso/proceso.controller.js': [1, 'alcance: de quién es la cola (admin, superadmin y soporte, el campus entero)'],
+  'convocatorias/convocatoria.controller.js': [1, 'alcance: de quién son las convocatorias pendientes (admin, superadmin y soporte, el campus entero)'],
   'connectors/connectors.controller.js': [4, 'alcance: el superadmin ve los conectores de todos los campus'],
   'consultas/consultas.controller.js': [2, 'alcance: lo suyo de Consultas (su carga, sus alumnos, sus métricas) solo existe para un tutor'],
   'facturas-colaborador/facturas-colaborador.service.js': [1, 'alcance: el superadmin, todas las empresas'],

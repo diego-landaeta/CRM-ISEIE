@@ -333,7 +333,7 @@ export default function ReportsPage() {
 
 function PantallaDeReportes() {
   const { activeProject, user } = useAuth();
-  const { can } = usePermission();
+  const { can, veGestoras } = usePermission();
   // Arranca en el MES en curso, no en los ultimos 30 dias.
   const [rango, setRango] = useState(() => rangoPorDefecto());
   // Lo que trae el panel de seguimiento, para que la descarga se lo lleve.
@@ -359,6 +359,8 @@ function PantallaDeReportes() {
   const [iaModal, setIaModal] = useState(false);
   const [claudeConfigured, setClaudeConfigured] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Los números por asesora: también quien ve a más de una persona sin ser admin
+  // (soporte, la líder de equipo con el suyo). El servidor lo recorta (25/11/2026).
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -614,6 +616,8 @@ function PantallaDeReportes() {
           </>
         )}
       </div>
+
+      {!isAdmin && veGestoras && <AsesorasPanel from={rango.from} to={rango.to} />}
 
       {/* Reportes descargables (varios, con rango de fechas) */}
       {isAdmin && (
