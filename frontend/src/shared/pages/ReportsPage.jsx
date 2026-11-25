@@ -31,6 +31,8 @@ import TasaDeCierre from '@/modules/reports/components/TasaDeCierre';
 import DondePonerElDinero from '@/modules/reports/components/DondePonerElDinero';
 import PaisesDeEntrada from '@/modules/reports/components/PaisesDeEntrada';
 import InformeMensual from '@/modules/reports/components/InformeMensual';
+// Apostillas de La Haya (gemela de CRM#1130): cuántas, cuánto dinero, por estado, campus y mes.
+import CifrasApostillas from '@/modules/apostillas/components/CifrasApostillas';
 
 const REPORT_CATEGORIES = [
   {
@@ -331,6 +333,7 @@ export default function ReportsPage() {
 
 function PantallaDeReportes() {
   const { activeProject, user } = useAuth();
+  const { can } = usePermission();
   // Arranca en el MES en curso, no en los ultimos 30 dias.
   const [rango, setRango] = useState(() => rangoPorDefecto());
   // Lo que trae el panel de seguimiento, para que la descarga se lo lleve.
@@ -631,6 +634,11 @@ function PantallaDeReportes() {
               rango. Como todo el feedback, de momento solo en pruebas. */}
           {PROCESO_EN_PRUEBAS && (
             <FeedbackEnReportes from={rango.from} to={rango.to} issuerId={null} project={activeProject} />
+          )}
+
+          {/* Apostillas de La Haya (gemela de CRM#1130): las del rango. Sin ninguna, no se pinta. */}
+          {can('apostillas.view') && (
+            <CifrasApostillas conTitulo from={rango.from} to={rango.to} ambito={ambitoComoObjeto({ activeProject })} />
           )}
 
           <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />

@@ -48,6 +48,9 @@ const LIST_COLS = [
   'p.active', 'p.created_at', 'p.updated_at',
   // descripcion va recortada (los textos largos rompen perf)
   "LEFT(p.descripcion, 280) AS descripcion",
+  // 'apostilla' en la Apostilla de La Haya (gemela de CRM#1130): Formaciones la deja fuera.
+  // Necesita la migración 344 (va antes que el código, como siempre).
+  'p.servicio',
 ].join(', ');
 
 // Un campus o varios (#218: con «Todos» o una empresa, los del ámbito). Cada

@@ -25,6 +25,8 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+// Apostilla de La Haya (gemela de CRM#1130): el bloque sale solo si el cliente tiene alguna.
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 import { esRolDeGestora } from '@/shared/lib/roles';
 
 const ConversionDialog = lazy(() => import('@/modules/conversions/components/ConversionDialog'));
@@ -477,6 +479,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Su Apostilla de La Haya (gemela de CRM#1130): paso, si está pagada y cuánto lleva. */}
+          <ApostillasBloque leadId={lead.id} />
 
           {/* Datos fiscales del cliente (se rellenan al completar una factura y
               quedan globales; sirven para futuras facturas). */}

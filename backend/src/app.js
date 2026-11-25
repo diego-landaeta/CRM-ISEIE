@@ -62,6 +62,7 @@ import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
+import { startApostillasScheduler } from './jobs/apostillasScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -93,6 +94,8 @@ import moodleModule from './modules/moodle/index.js';
 import soporteModule from './modules/soporte/index.js';
 // Incidencias (gemela de CRM#612): al lado de Soporte, sobre todo las de capa 8.
 import incidenciasModule from './modules/incidencias/index.js';
+// Apostilla de La Haya (gemela de CRM#1130): el trámite de cada apostilla vendida.
+import apostillasModule from './modules/apostillas/index.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
@@ -366,6 +369,8 @@ const MODULES = [
   permissionsModule,
   fieldDefinitionsModule,
   matriculasModule,
+  // Clientes › Apostillas (gemela de CRM#1130). Migración 344.
+  apostillasModule,
   formsModule,
   webhookTokensModule,
   emailSequencesModule,
@@ -715,6 +720,13 @@ if (process.env.NODE_ENV !== 'test') {
       startBrevoBloqueadosScheduler();
     } catch (err) {
       logger.error({ err }, 'Correos bloqueados en Brevo: la vigilancia falló al arrancar');
+    }
+    // Apostillas (gemela de CRM#1130): fichas nuevas cada 10 minutos y el aviso de
+    // atascadas, solo en la campana. Se apaga con APOSTILLAS_DESACTIVADAS=1.
+    try {
+      startApostillasScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Apostillas: la tarea falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

@@ -314,6 +314,17 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Link de pago sin pagar con la venta pendiente', agrupa: false,
     descripcion: 'Un link tuyo caducó o se anuló sin pagarse y su venta sigue pendiente',
   },
+  // Apostilla de La Haya (CRM#1130): solo campana, a la gestora de la venta (o a
+  // quien la lleve) y, si no tiene, a los admins del campus. Nunca un correo al
+  // alumno (apostillas.avisos.js).
+  apostilla_nueva: {
+    clase: ACCION, etiqueta: 'Apostilla nueva', agrupa: false,
+    descripcion: 'Se ha vendido o pagado una Apostilla de La Haya y hay que empezar el trámite',
+  },
+  apostilla_atascada: {
+    clase: ACCION, etiqueta: 'Apostilla atascada', agrupa: false,
+    descripcion: 'Una apostilla lleva los días del aviso (7 de serie) en el mismo paso',
+  },
   task_aprobada: {
     clase: AVISO, etiqueta: 'Tarea aprobada', agrupa: false,
     descripcion: 'Cuando aprueban una tarea tuya y pasa a «Hecha»',

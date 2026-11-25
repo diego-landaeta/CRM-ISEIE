@@ -475,6 +475,20 @@ export const SECCIONES = [
         ],
       },
       {
+        // Apostilla de La Haya (CRM#1130, Diego 25/11/2026): «lo ven todos los que
+        // entran al CRM» (no tutores, colaboradores ni redactoras: no van en TODOS) y
+        // la gestionan admin y la gestora de esa venta. La líder de equipo trae lo de
+        // gestora (las suyas y las de su equipo). Soporte solo la ve: da soporte
+        // técnico, no lleva el trámite. QUÉ apostillas gestiona cada una es alcance
+        // (apostillas.service.js), no casilla.
+        clave: 'apostillas', nombre: 'Apostillas de La Haya', acciones: [
+          a('view', 'Ver apostillas', 'Las apostillas de sus campus, sus cifras y su paso, y el bloque en la ficha del cliente y de la venta.', TODOS),
+          a('edit', 'Gestionar apostillas', 'Cambiar el paso, quién la lleva, el envío y las notas, y subir y abrir sus documentos (una gestora, solo las de sus clientes y ventas).', ['admin', 'gestor']),
+          a('asociar', 'Crear y enlazar apostillas', 'Crear una apostilla a mano y enlazar las «Sin asociar» con su cliente y su venta.', ADMIN),
+          a('config', 'Configurar el aviso de atascadas', 'A los cuántos días en el mismo paso avisa la campana, en sus campus.', ADMIN),
+        ],
+      },
+      {
         clave: 'diplomas', nombre: 'Diplomas (Certifex)', acciones: [
           a('view', 'Ver diplomas', 'La pantalla Diplomas en solo lectura (de sus campus).', yPM(ADMIN)),
           // Diego, 22/10 (#437/#438): «que Dayana pueda emitir». Quien emite también ve.

@@ -129,7 +129,9 @@ export async function alumnosDeFormacion(productId, projectId, { alcance = null,
  */
 export async function resumenDelCampus(projectId, { alcance = null, hoy = hoyEnMadrid() } = {}) {
   const [{ rows: productos }, regla] = await Promise.all([
-    query('SELECT id, nombre, tipo_formacion, duracion, fecha_fin FROM products WHERE project_id = $1', [projectId]),
+    // Sin los servicios (la Apostilla de La Haya, CRM#1130): no son formaciones ni tienen alumnos.
+    query(`SELECT p.id, p.nombre, p.tipo_formacion, p.duracion, p.fecha_fin FROM products p
+            WHERE p.project_id = $1 AND p.servicio IS NULL`, [projectId]),
     reglaDeAcceso(projectId),
   ]);
   const porId = new Map(productos.map((p) => [Number(p.id), p]));

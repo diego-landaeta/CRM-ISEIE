@@ -46,6 +46,14 @@ export async function programar(db, conversionId) {
       WHERE c.id = $1${campus}
         -- Las plataformas de IA no son campus: no tienen Moodle (como en el panel, #335).
         AND COALESCE(p.type::text, '') <> 'ia'
+        -- Una venta solo de servicios (la Apostilla de La Haya, CRM#1130) no lleva
+        -- curso: no se matricula. Con una formación al lado, sí (sin el servicio).
+        AND NOT (EXISTS (SELECT 1 FROM products sx WHERE (to_jsonb(sx)->>'servicio') IS NOT NULL
+                          AND sx.id IN (SELECT c.producto_contratado_id
+                                        UNION SELECT ci.product_id FROM conversion_items ci WHERE ci.conversion_id = c.id))
+                 AND NOT EXISTS (SELECT 1 FROM products fx WHERE (to_jsonb(fx)->>'servicio') IS NULL
+                          AND fx.id IN (SELECT c.producto_contratado_id
+                                        UNION SELECT ci.product_id FROM conversion_items ci WHERE ci.conversion_id = c.id)))
         AND NOT EXISTS (SELECT 1 FROM matriculas_moodle m
                          WHERE m.conversion_id = c.id AND m.estado <> 'cancelada')
      ON CONFLICT DO NOTHING
@@ -134,6 +142,8 @@ export async function productosConCursos(conversionId) {
                      FILTER (WHERE mc.product_id IS NOT NULL), '[]') AS cursos
        FROM prods JOIN products pr ON pr.id = prods.product_id
        LEFT JOIN moodle_cursos_producto mc ON mc.product_id = pr.id
+      -- Los servicios (la Apostilla de La Haya, CRM#1130) no tienen curso: no cuentan.
+      WHERE (to_jsonb(pr)->>'servicio') IS NULL
       GROUP BY pr.id, pr.nombre
       ORDER BY pr.id`,
     [conversionId]

@@ -1,4 +1,5 @@
 import { AppError } from '../../shared/utils/AppError.js';
+import { programarAlta } from '../apostillas/apostillas.alta.js';
 import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
@@ -174,6 +175,10 @@ export async function create(data, userId, opciones = {}) {
   if (repetida && !forzar) throw errorVentaYaExiste(repetida);
 
   const conv = await conversionModel.create({ ...data, changed_by: userId });
+
+  // Apostilla de La Haya (CRM#1130): si la venta la lleva, nace su ficha y se
+  // avisa a su gestora. Después de responder y sin poder tumbar la venta.
+  programarAlta(conv.id);
 
   // «Enviar factura automáticamente» y «Enviar a este correo» (#764, 24/11):
   // antes de que el primer cobro llegue a la factura automática (más abajo,

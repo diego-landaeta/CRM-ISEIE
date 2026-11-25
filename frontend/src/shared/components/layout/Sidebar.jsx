@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import {
-  SquaresFour, Users, UserCheck, Package, ChartLineUp, Gear, SignOut,
+  SquaresFour, Users, UserCheck, Stamp, Package, ChartLineUp, Gear, SignOut,
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
@@ -271,6 +271,9 @@ export const SECCIONES_DE_ANTES = [
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
+      // Apostilla de La Haya (gemela de CRM#1130): el trámite de cada apostilla vendida. La ven
+      // todos los que entran al CRM salvo tutores, colaboradores y redactoras (`apostillas.view`).
+      { to: '/clients/apostillas', label: 'Apostillas', icon: Stamp, permiso: 'apostillas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,

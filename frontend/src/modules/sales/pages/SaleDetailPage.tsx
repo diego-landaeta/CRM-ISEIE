@@ -15,6 +15,7 @@ import FechaInicioEditable from '@/modules/conversions/components/FechaInicioEdi
 import usePermission from '@/shared/hooks/usePermission';
 import EnlazarStripeCard from '../components/EnlazarStripeCard';
 import BajaAlumnoCard from '../components/BajaAlumnoCard';
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
@@ -234,6 +235,8 @@ export default function SaleDetailPage() {
         <FacturaAutomaticaVentaCard conversionId={venta.id} />
         {/* La baja o el desistimiento del alumno (25/11): no toca facturas, cobros ni Moodle. */}
         <BajaAlumnoCard conversionId={venta.id} />
+        {/* La Apostilla de La Haya de la venta (gemela de CRM#1130): solo si la lleva. */}
+        <ApostillasBloque conversionId={venta.id} />
         {venta.project_id != null && (
           <LinksDePagoCard projectId={venta.project_id} leadId={venta.lead_id} conversionId={venta.id} conRecorrido />
         )}
