@@ -9231,6 +9231,28 @@
   "puertas": []
  },
  {
+  "id": "GET /api/leads/:id/diploma",
+  "tipo": "ruta",
+  "modulo": "leads",
+  "metodo": "GET",
+  "ruta": "/api/leads/:id/diploma",
+  "relativa": "GET /:id/diploma",
+  "controlador": "diplomaDelAlumno",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "leads.view"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/leads/:id/suspensiones-moodle",
   "tipo": "ruta",
   "modulo": "leads",
