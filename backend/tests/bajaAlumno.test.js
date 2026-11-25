@@ -77,11 +77,14 @@ beforeAll(async () => {
     `INSERT INTO conversion_installments (conversion_id, numero, importe_previsto, fecha_vencimiento, fecha_cobro, importe_cobrado)
      VALUES ($1, 1, 100, CURRENT_DATE - 10, CURRENT_DATE - 10, 100), ($1, 2, 100, CURRENT_DATE + 20, NULL, NULL),
             ($1, 3, 100, CURRENT_DATE + 50, NULL, NULL)`, [VENTA]);
+  // Un número que no use ninguna otra prueba: la A-2026-1 fija chocaba con
+  // `uq_invoice_ano_serie_numero` cuando otra la creaba a la vez (CI del 25/11).
+  const NUMERO_SUELTO = 900000000 + Math.floor(Math.random() * 90000000);
   [{ id: FACTURA }] = await q(
     `INSERT INTO invoices (project_id, serie, ano, numero, codigo, cliente_nombre, cliente_nif, cliente_direccion, cliente_ciudad,
                            cliente_cp, cliente_pais, items, base_imponible, total, estado, tipo, conversion_id)
-     VALUES ($1, 'A', 2026, 1, $2, 'Alumno', '—', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 100, 100, 'emitida', 'normal', $3)
-     RETURNING id`, [CAMPUS, `${MARCA}-1`, VENTA]);
+     VALUES ($1, 'A', 2026, $4, $2, 'Alumno', '—', 'Calle 1', 'Madrid', '28001', 'España', '[]'::jsonb, 100, 100, 'emitida', 'normal', $3)
+     RETURNING id`, [CAMPUS, `${MARCA}-1`, VENTA, NUMERO_SUELTO]);
   ({ venta: OTRA_VENTA } = await venta('SIGUE', OTRA, 100, 100));
 }, 60000);
 
