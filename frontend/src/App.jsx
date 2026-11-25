@@ -215,7 +215,7 @@ const ROUTE_TITLES = {
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
-  '/conexion/moodle':                 'Moodle',
+  '/conexion/moodle':                 'Cursos y alumnos',
   '/mis-cursos/campus':               'Mi campus',
   '/consultas':                       'Consultas',
   '/consultas/alumnos':               'Alumnos sin mensajes',
@@ -402,6 +402,8 @@ function App() {
           {/* Conexión → Moodle (#335). Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/moodle" element={<MoodlePage />} />
           <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
+          {/* Moodle › Conexión del campus (apartado Moodle, Diego 25/11): la tarjeta Moodle de Integraciones. */}
+          <Route path="/moodle/conexion" element={<Navigate to="/accounting/integrations?seccion=moodle" replace />} />
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhooks (gemela de CRM#755): el resumen por función y, en
               pestañas, las pantallas que estaban sueltas. Cada una la corta el

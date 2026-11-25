@@ -29,13 +29,13 @@ export const _reiniciar = () => racha.clear();
 
 /** Lo que se le dice a quien lo lee, por motivo. Siempre con lo que hay que hacer. */
 const QUE_HACER = {
-  token_no_valido: 'El token es inválido o ha caducado. Cámbialo en Conexión → Moodle.',
+  token_no_valido: 'El token es inválido o ha caducado. Cámbialo en Moodle › Cursos y alumnos.',
   sin_respuesta: 'Su Moodle no contesta (caído o sin conexión desde el servidor del CRM). Si dura, revisa el servidor del campus.',
   servicios_web_apagados: 'Los servicios web están desactivados en ese Moodle. Actívalos en Administración del sitio → Servidor → Servicios web.',
-  redireccion: 'La dirección guardada redirige a otra: seguramente falta el https o ha cambiado. Vuelve a conectarlo en Conexión → Moodle.',
+  redireccion: 'La dirección guardada redirige a otra: seguramente falta el https o ha cambiado. Vuelve a conectarlo en Moodle › Cursos y alumnos.',
   http: 'Su Moodle contesta con un error del servidor. Si dura, revisa el servidor del campus.',
-  credencial_ilegible: 'La clave guardada no se puede leer. Vuelve a conectarlo en Conexión → Moodle.',
-  credencial_mal_formada: 'La clave guardada está mal formada. Vuelve a conectarlo en Conexión → Moodle.',
+  credencial_ilegible: 'La clave guardada no se puede leer. Vuelve a conectarlo en Moodle › Cursos y alumnos.',
+  credencial_mal_formada: 'La clave guardada está mal formada. Vuelve a conectarlo en Moodle › Cursos y alumnos.',
 };
 
 async function campusConectados() {
@@ -109,7 +109,7 @@ export async function vuelta({ destinatarios = null } = {}) {
       targetUserIds: para,
       type: TIPO,
       title: `El Moodle de ${c.nombre} no responde`,
-      message: QUE_HACER[fallo] || 'Su Moodle no responde. Mira Conexión → Moodle.',
+      message: QUE_HACER[fallo] || 'Su Moodle no responde. Mira Moodle › Cursos y alumnos.',
       link_path: `/conexion/moodle/${c.id}`,
       metadata: { campus_id: c.id, motivo: fallo },
     });

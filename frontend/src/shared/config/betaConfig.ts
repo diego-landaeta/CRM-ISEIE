@@ -37,6 +37,7 @@ export const BETA_ROUTES: readonly string[] = [
   '/whatsapp',                      // WhatsApp: cola, plantillas y el panel del equipo
   '/tutores',                       // Tutores: alta, colaboraciones y comisiones
   '/mis-cursos',                    // La pantalla del propio tutor
+  '/moodle',                        // Moodle › Conexión del campus (apartado Moodle, Diego 25/11)
   '/consultas',                     // Consultas de alumnos (#187–#190): bandeja, carga, tutores y métricas (2.6.0)
   '/secuencias-email',               // Email
   '/email-templates',

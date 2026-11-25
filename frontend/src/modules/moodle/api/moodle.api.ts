@@ -13,6 +13,11 @@ export interface CampusMoodle {
   nombre: string;
   /** Hay un token de Moodle guardado para este campus. */
   configurado: boolean;
+  /**
+   * De dónde sale la conexión: la de este panel y de Claude (`panel`), la de Integraciones › Moodle
+   * (`integraciones`, la que usa el resto del CRM) o ninguna (null). Diego, 25/11.
+   */
+  conexion?: 'panel' | 'integraciones' | null;
   cursos?: { total: number; activos: number; proximos: number; terminados: number; ocultos: number };
   /** El Moodle del campus no contestó (token caducado, caído…). */
   error?: string;

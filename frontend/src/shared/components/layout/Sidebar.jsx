@@ -294,6 +294,7 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
       // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
+      // En el menú, «Moodle › Cursos y alumnos» (apartado Moodle, Diego 25/11: `bloquesDelMenu.js`).
       { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
       // Todos los webhooks en un sitio, señalados por su función (gemela de
@@ -306,6 +307,18 @@ export const SECCIONES_DE_ANTES = [
       { to: '/conexion/webhooks', label: 'Webhooks', icon: WebhooksLogo, roles: ['admin', 'superadmin'], permiso: PERMISOS_WEBHOOKS,
         partes: [{ permiso: 'webhooks.view', tambienPermiso: 'forms.view' }, { permiso: 'make.view' }, { permiso: 'webhooks_salientes.view' }] },
       { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
+    ],
+  },
+  // El apartado Moodle (Diego, 25/11/2026: «que en el menú salga un apartado de
+  // Moodle […] y poder meter todo lo de Moodle ahí»; gemela del 360). Sus entradas
+  // se declaran donde estaban, con sus permisos y roles, y `bloquesDelMenu.js` las
+  // trae aquí (Mi campus, Consultas, Cursos y alumnos, Cursos de Moodle, Cursos
+  // pendientes, Diplomas). La única propia es la conexión del campus: la tarjeta
+  // Moodle de Integraciones, con el mismo permiso que «Integraciones».
+  {
+    label: 'Moodle',
+    items: [
+      { to: '/moodle/conexion', label: 'Conexión del campus', icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'integrations.view' },
     ],
   },
   {
@@ -839,7 +852,8 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
                 : section.label === 'Comercial' ? 'menu-comercial'
                   : section.label === 'Académico' ? 'menu-academico'
                     : section.label === 'Finanzas' ? 'menu-finanzas'
-                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
+                      : section.label === 'Configuración' ? 'menu-configuracion'
+                        : section.label === 'Moodle' ? 'menu-moodle' : anclaDelBloque(section.label)}
           >
             <button
               type="button"
