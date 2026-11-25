@@ -313,6 +313,7 @@ describe('cobro automático: la factura de una cuota, anulada o incobrable', { t
     const inv = factura(v, v.precios[0].stripe_price_id);
     await q('UPDATE cobro_auto_cuotas SET estado = \'cancelada\', stripe_invoice_id = $2 WHERE installment_id = $1', [v.cuotas[1].id, inv.id]);
     respuestas.push(['GET', `/v1/invoices/${inv.id}`, 200, { id: inv.id, status: 'paid' }]);
+    llamadas = [];
     const r = await plan(p.gestora, { conversionId: v.venta, cuotaIds: [v.cuotas[1].id] });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('CUOTA_YA_COBRADA_EN_STRIPE');
