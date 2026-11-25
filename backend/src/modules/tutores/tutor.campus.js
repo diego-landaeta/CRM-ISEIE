@@ -60,7 +60,7 @@ export async function campusDelTutor(tutorId) {
      )
      SELECT p.id AS project_id, p.nombre AS campus, uno.via,
             ii.id AS issuer_id, COALESCE(ii.alias, ii.razon_social) AS empresa,
-            tc.estado, tc.comprobado_at, tc.error, tc.admin_sitio_excepcion_at,
+            tc.estado, tc.comprobado_at, tc.error, tc.admin_sitio_excepcion_at, tc.admin_sitio_permitida,
             (pi.id IS NOT NULL AND pi.active AND pi.encrypted_value IS NOT NULL) AS campus_conectado
        FROM uno
        JOIN projects p ON p.id = uno.project_id
@@ -81,9 +81,12 @@ export async function campusDelTutor(tutorId) {
     comprobado_at: r.comprobado_at || null,
     error: r.error || null,
     // Enlazada con la cuenta de administración del sitio, como excepción confirmada:
-    // en ese campus responde y corrige desde Moodle.
+    // en ese campus responde y corrige desde Moodle, salvo que el campus la permita.
     admin_sitio_excepcion: r.admin_sitio_excepcion_at != null,
     admin_sitio_excepcion_at: r.admin_sitio_excepcion_at || null,
+    // El plugin del campus (1.11.7, CRM#1118) la tiene en «Administradoras que dan clase»: responde
+    // y corrige desde el CRM, en los cursos donde es tutora. Lo de la última comprobación.
+    admin_sitio_permitida: r.admin_sitio_excepcion_at != null && Boolean(r.admin_sitio_permitida),
   }));
 }
 
@@ -171,7 +174,8 @@ async function comprobarUno(tutor, projectId, anterior, opciones = {}) {
     // La tutora puede cambiar su correo del CRM. Si con el correo nuevo sale OTRA cuenta del
     // campus, no se cambia la vinculada: con eso podría escribir y calificar como otro profesor.
     const { rows: [vinculada] } = await query(
-      'SELECT moodle_user_id FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2', [tutor.id, projectId]);
+      'SELECT moodle_user_id, admin_sitio_excepcion_at FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2',
+      [tutor.id, projectId]);
     const yaVinculada = vinculada?.moodle_user_id != null ? Number(vinculada.moodle_user_id) : null;
     if (yaVinculada && usuario?.id && Number(usuario.id) !== yaVinculada) {
       const mensaje = OTRA_CUENTA;
@@ -202,6 +206,15 @@ async function comprobarUno(tutor, projectId, anterior, opciones = {}) {
              comprobado_at = NOW(), error = NULL`,
       [tutor.id, projectId, estado, cuenta?.id || null]
     );
+    // Con la excepción de la cuenta de administración del sitio: lo que dice hoy el campus de
+    // ella (1.11.7). Si cambia su lista «Administradoras que dan clase», aquí se entera.
+    if (yaVinculada && vinculada?.admin_sitio_excepcion_at) {
+      const permitida = await adminPermitida(conexion, yaVinculada, opciones);
+      if (permitida !== null) {
+        await query('UPDATE tutor_campus SET admin_sitio_permitida = $3 WHERE tutor_id = $1 AND project_id = $2',
+          [tutor.id, projectId, permitida]);
+      }
+    }
     return { project_id: projectId, estado, antes: anterior };
   } catch (err) {
     const mensaje = err instanceof MoodleError ? err.message : 'No se ha podido comprobar en el campus.';
@@ -257,13 +270,31 @@ async function esAdminDelSitio(conexion, moodleUserId, opciones) {
 }
 
 /**
- * ¿En ese campus está enlazada con la cuenta de administración del sitio (excepción)?
- * Entonces responder y corregir van en Moodle: el CRM lo dice en vez de intentarlo.
+ * ¿El plugin del campus deja al CRM enviar y calificar como esa administradora del sitio?
+ * (1.11.7, «Administradoras que dan clase», CRM#1118.) true / false, o null si no se puede
+ * saber (el campus no contesta, o su plugin no tiene `local_crm_cuenta`): entonces quien
+ * llama deja lo que había.
+ */
+async function adminPermitida(conexion, moodleUserId, opciones) {
+  try {
+    const datos = await cuentaDelCampus(conexion, moodleUserId, opciones);
+    return datos ? Boolean(datos.esAdministrador && datos.permitida) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ¿En ese campus está enlazada con la cuenta de administración del sitio (excepción) y el
+ * campus no la deja responder ni calificar desde el CRM? Entonces responder y corregir van en
+ * Moodle: el CRM lo dice en vez de intentarlo. Si el campus la tiene en «Administradoras que
+ * dan clase» (plugin 1.11.7, `admin_sitio_permitida`), no: va como cualquier tutora.
  */
 export async function soloDesdeMoodle(tutorId, projectId) {
   if (!tutorId || !projectId) return false;
   const { rows } = await query(
-    'SELECT 1 FROM tutor_campus WHERE tutor_id = $1 AND project_id = $2 AND admin_sitio_excepcion_at IS NOT NULL',
+    `SELECT 1 FROM tutor_campus
+      WHERE tutor_id = $1 AND project_id = $2 AND admin_sitio_excepcion_at IS NOT NULL AND NOT admin_sitio_permitida`,
     [tutorId, projectId]);
   return rows.length > 0;
 }
@@ -318,6 +349,8 @@ async function exigirCuentaDeProfesora(conexion, cuenta, opciones, { excepcionAd
       'tutores/campus: el plugin del campus no tiene local_crm_cuenta (anterior a la 1.10.2): no se puede saber si es el administrador del sitio');
   }
   const adminDelSitio = Boolean(datos?.esAdministrador);
+  // Plugin 1.11.7: el campus la tiene en «Administradoras que dan clase» (CRM#1118).
+  const permitida = adminDelSitio && Boolean(datos?.permitida);
   // Primero, que dé clase con ella: la excepción solo se ofrece a quien da clase.
   if (!(await daClase(conexion, cuenta.id, opciones))) {
     throw new AppError('Esa cuenta no es profesora de ningún curso de este campus: solo se vincula la cuenta con la que da clase.', 409, 'NO_ES_PROFESORA');
@@ -331,7 +364,7 @@ async function exigirCuentaDeProfesora(conexion, cuenta, opciones, { excepcionAd
         aviso: AVISO_EXCEPCION_ADMIN,
       });
   }
-  return { adminDelSitio };
+  return { adminDelSitio, permitida };
 }
 
 /** ¿Es profesora de algún curso del campus? De uno en uno y parando en el primero: lo normal es que lo sea del primero. */
@@ -352,7 +385,8 @@ async function daClase(conexion, moodleUserId, opciones) {
 export async function desvincularCuenta(tutorId, projectId, opciones = {}) {
   await exigirCampusDeLaTutora(tutorId, projectId);
   await query(
-    `UPDATE tutor_campus SET moodle_user_id = NULL, error = NULL, admin_sitio_excepcion_at = NULL, admin_sitio_excepcion_por = NULL
+    `UPDATE tutor_campus SET moodle_user_id = NULL, error = NULL, admin_sitio_excepcion_at = NULL, admin_sitio_excepcion_por = NULL,
+            admin_sitio_permitida = false
       WHERE tutor_id = $1 AND project_id = $2`,
     [tutorId, projectId]);
   return comprobarTutor(tutorId, { soloProyectos: [Number(projectId)], ...opciones });
@@ -394,29 +428,33 @@ export async function vincularAMano(tutorId, projectId, moodleUserId, { excepcio
   const conexion = await conexionUsable(projectId);
   let cuenta;
   let adminDelSitio = false;
+  let permitida = false;
   try {
     cuenta = await usuarioPor(conexion, 'id', moodleUserId, opciones);
     if (!cuenta) throw new AppError('Esa cuenta no existe en el campus', 404, 'NOT_FOUND');
-    ({ adminDelSitio } = await exigirCuentaDeProfesora(conexion, cuenta, opciones, { excepcionAdmin: excepcionAdminDelSitio === true }));
+    ({ adminDelSitio, permitida } = await exigirCuentaDeProfesora(conexion, cuenta, opciones, { excepcionAdmin: excepcionAdminDelSitio === true }));
   } catch (err) {
     throw errorDelCampus(err, 'No se ha podido leer el campus.');
   }
   const { rowCount } = await query(
     `UPDATE tutor_campus SET estado = $3, moodle_user_id = $4, comprobado_at = NOW(), error = NULL,
             admin_sitio_excepcion_at = CASE WHEN $5::boolean THEN NOW() ELSE NULL END,
-            admin_sitio_excepcion_por = CASE WHEN $5::boolean THEN $6::int ELSE NULL END
+            admin_sitio_excepcion_por = CASE WHEN $5::boolean THEN $6::int ELSE NULL END,
+            admin_sitio_permitida = $5::boolean AND $7::boolean
       WHERE tutor_id = $1 AND project_id = $2`,
-    [tutorId, projectId, estadoDeLaMatricula(cuenta), cuenta.id, adminDelSitio, porQuien]);
+    [tutorId, projectId, estadoDeLaMatricula(cuenta), cuenta.id, adminDelSitio, porQuien, permitida]);
   if (!rowCount) {
     // Tiene el campus, pero aún no se ha mirado en él (se le dio sin el Moodle conectado,
     // o el campus no contestó): primero esa comprobación, que es la que crea la fila.
     throw new AppError('Aún no se ha comprobado su matrícula en este campus: pulsa «Comprobar en los campus» y vuelve a vincular.', 409, 'SIN_COMPROBAR');
   }
   if (adminDelSitio) {
-    logger.warn({ tutorId, projectId: Number(projectId), moodleUserId: Number(cuenta.id), porQuien },
-      'tutores/campus: enlazada con la cuenta de administración del sitio, como excepción confirmada (responde y corrige desde Moodle)');
+    logger.warn({ tutorId, projectId: Number(projectId), moodleUserId: Number(cuenta.id), porQuien, permitida },
+      permitida
+        ? 'tutores/campus: enlazada con la cuenta de administración del sitio, como excepción confirmada (el campus la permite: responde y corrige desde el CRM)'
+        : 'tutores/campus: enlazada con la cuenta de administración del sitio, como excepción confirmada (responde y corrige desde Moodle)');
   }
-  return { ...cuenta, adminDelSitio };
+  return { ...cuenta, adminDelSitio, adminPermitida: permitida };
 }
 
 /**
