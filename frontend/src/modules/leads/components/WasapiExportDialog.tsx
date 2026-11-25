@@ -4,8 +4,7 @@ import { X, WhatsappLogo, DownloadSimple, Info } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
-import { useAuth } from '@/contexts/AuthContext';
-import { esRolDeGestora } from '@/shared/lib/roles';
+import usePermission from '@/shared/hooks/usePermission';
 
 // Modal de exportación con formato Wasapi (plantilla bulk WhatsApp).
 // - Filtros opcionales: gestor, fechas, producto, país, sólo con teléfono.
@@ -67,8 +66,10 @@ export default function WasapiExportDialog({
   resumenFiltros = null,
   nombreFichero = 'wasapi-leads',
 }: Props) {
-  const { user } = useAuth() as { user: { userId: number; role: string } | null };
-  const isGestor = esRolDeGestora(user?.role);
+  // Quien solo ve lo suyo (una gestora). La líder de equipo elige entre ella y
+  // su equipo: por permiso y alcance, no por rol (Diego, 25/11/2026).
+  const { veGestoras } = usePermission();
+  const isGestor = !veGestoras;
   const seVe = (b: 'gestor' | 'producto' | 'fechas' | 'convertidos') => !ocultar.includes(b);
 
   const [gestores, setGestores] = useState<Gestor[]>([]);
@@ -96,14 +97,18 @@ export default function WasapiExportDialog({
         .then((res: any) => setGestores(Array.isArray(res?.data) ? res.data : []))
         .catch(() => setGestores([]));
     }
-    if (projectId && seVe('producto')) {
+    // Con «Todos» (-1) no: `/products?projectId=-1` es un 400 (25/11).
+    if (Number(projectId) > 0 && seVe('producto')) {
       client.get('/products', { params: { projectId, limit: 500 } })
         .then((res: any) => setProductos(Array.isArray(res?.data) ? res.data : []))
         .catch(() => setProductos([]));
     }
-    // `seVe` se recalcula en cada pintada; lo que importa es `ocultar`.
+    // `seVe` se recalcula en cada pintada; lo que importa es `ocultar`, por su
+    // CONTENIDO: sin la prop (Prospectos no la pasa) el `[]` por defecto es otro en
+    // cada pintada, y cada respuesta volvía a pedir /users y /products sin parar
+    // mientras el diálogo estaba abierto (25/11/2026).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, projectId, isGestor, ocultar]);
+  }, [open, projectId, isGestor, ocultar.join(',')]);
 
   async function handleDownload() {
     setLoading(true);

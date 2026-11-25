@@ -1,7 +1,7 @@
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useState, useRef, useEffect } from 'react';
 import {
-  SquaresFour, Users, UserCheck, Package, ChartLineUp, Gear, SignOut,
+  SquaresFour, Users, UserCheck, Stamp, Package, ChartLineUp, Gear, SignOut,
   Moon, Sun, CaretLeft, CaretRight, UserCircle,
   CaretUp, CaretDown, Bell, Pulse, Calculator, Envelope, Globe,
   FilePdf, ShieldCheck, MagnifyingGlass, Headset, BookOpen, Sliders,
@@ -22,7 +22,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
-import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
+import { VERSION_APP, ETIQUETA_VERSION } from '@/shared/config/version';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
@@ -200,7 +201,8 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/tutores', label: 'Tutores', icon: GraduationCap, roles: ['admin', 'superadmin'], sectionPrefixes: ['/tutores'], permiso: 'tutores.gestionar', oPermiso: 'tutores.gestionar' },
       // #408 (gemela de CRM#681): sus cursos en Moodle, con lo que tiene por corregir y contestar.
-      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: 'tutores.mis_cursos' },
+      // Y administración (Diego, 25/11, gemela de CRM), con «Mi campus de administración»: todo el campus.
+      { to: '/mis-cursos/campus', label: 'Mi campus', icon: ClipboardText, roles: ['superadmin', 'admin', 'tutor', 'tutor_redactor'], statusTag: 'Pruebas', permiso: ['tutores.mis_cursos', 'tutores.campus_administracion'] },
       // Lo unico que ve un tutor: sus cursos y lo que le corresponde. `end`: no se marca en «Mi campus».
       { to: '/mis-cursos', label: 'Mis cursos', icon: GraduationCap, roles: ['tutor', 'tutor_redactor'], end: true, permiso: 'tutores.mis_cursos' },
       // Consultas de alumnos (#188), como en MultiCRM: el tutor, su bandeja; administración, todas.
@@ -271,6 +273,9 @@ export const SECCIONES_DE_ANTES = [
       { to: '/leads/revision-duplicados', label: 'Revisión duplicados', icon: GitMerge, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/leads/duplicados', label: 'Buscar duplicados', icon: CopySimple, roles: ['admin', 'superadmin'], permiso: 'leads.duplicados' },
       { to: '/matriculas', label: 'Solicitud de admisión', icon: UserCheck, permiso: 'matriculas.view' },
+      // Apostilla de La Haya (gemela de CRM#1130): el trámite de cada apostilla vendida. La ven
+      // todos los que entran al CRM salvo tutores, colaboradores y redactoras (`apostillas.view`).
+      { to: '/clients/apostillas', label: 'Apostillas', icon: Stamp, permiso: 'apostillas.view' },
       // Diplomas de Certifex (#272): lo que piden los alumnos desde Moodle, aprobarlo,
       // enviarlo y revocarlo. Administración, como en MultiCRM, y además, para VERLO en
       // solo lectura, quien tenga `diplomas.view` (#223, `oPermiso`), y para emitir,
@@ -289,6 +294,7 @@ export const SECCIONES_DE_ANTES = [
     items: [
       { to: '/conexion/mcp', label: 'MCP', icon: Robot, accesoMcp: true },
       // #335, como en MultiCRM: los cursos, alumnos y recursos de los Moodle de cada campus.
+      // En el menú, «Moodle › Cursos y alumnos» (apartado Moodle, Diego 25/11: `bloquesDelMenu.js`).
       { to: '/conexion/moodle', label: 'Moodle', icon: GraduationCap, roles: ['admin', 'superadmin'], permiso: 'moodle.view' },
       { to: '/conexion/conectores', label: 'Conectores', icon: CloudArrowDown, roles: ['admin', 'superadmin'], permiso: 'connectors.view' },
       // Todos los webhooks en un sitio, señalados por su función (gemela de
@@ -301,6 +307,18 @@ export const SECCIONES_DE_ANTES = [
       { to: '/conexion/webhooks', label: 'Webhooks', icon: WebhooksLogo, roles: ['admin', 'superadmin'], permiso: PERMISOS_WEBHOOKS,
         partes: [{ permiso: 'webhooks.view', tambienPermiso: 'forms.view' }, { permiso: 'make.view' }, { permiso: 'webhooks_salientes.view' }] },
       { to: '/conexion/asignacion-leads', label: 'Asignación de leads', icon: Shuffle, roles: ['admin', 'superadmin'], permiso: 'webhooks_salientes.view' },
+    ],
+  },
+  // El apartado Moodle (Diego, 25/11/2026: «que en el menú salga un apartado de
+  // Moodle […] y poder meter todo lo de Moodle ahí»; gemela del 360). Sus entradas
+  // se declaran donde estaban, con sus permisos y roles, y `bloquesDelMenu.js` las
+  // trae aquí (Mi campus, Consultas, Cursos y alumnos, Cursos de Moodle, Cursos
+  // pendientes, Diplomas). La única propia es la conexión del campus: la tarjeta
+  // Moodle de Integraciones, con el mismo permiso que «Integraciones».
+  {
+    label: 'Moodle',
+    items: [
+      { to: '/moodle/conexion', label: 'Conexión del campus', icon: PlugsConnected, roles: ['admin', 'superadmin'], permiso: 'integrations.view' },
     ],
   },
   {
@@ -482,6 +500,9 @@ const SIN_ENTRADA = {
   '/accounting/conciliacion/facturas': 'facturas.gestionar',
   // La de cargos de Stripe (CRM#906): la clave de «Asociar» en Pagos Stripe.
   '/accounting/conciliacion/cargos-stripe': 'stripe.edit',
+  // Productos › Formaciones (gemela de CRM#1113): crear y editar formaciones con sus
+  // módulos. A quien puede editar el catálogo; el servidor pide lo mismo.
+  '/products/formaciones': ['products.edit', 'products.create'],
 };
 // Lo que esas rutas piden ADEMÁS (todos), como `tambienPermiso` en una entrada
 // del menú. La pestaña Prospectos es la pantalla de Captación › Webhooks, que
@@ -834,7 +855,8 @@ function CollapsibleNav({ sections, role, soloColab, permisos, can, collapsed, o
                 : section.label === 'Comercial' ? 'menu-comercial'
                   : section.label === 'Académico' ? 'menu-academico'
                     : section.label === 'Finanzas' ? 'menu-finanzas'
-                      : section.label === 'Configuración' ? 'menu-configuracion' : anclaDelBloque(section.label)}
+                      : section.label === 'Configuración' ? 'menu-configuracion'
+                        : section.label === 'Moodle' ? 'menu-moodle' : anclaDelBloque(section.label)}
           >
             <button
               type="button"
@@ -928,7 +950,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* Logo + badge BETA + toggle */}
+      {/* Logo + versión + toggle */}
       <div className={cn('flex items-center mb-4', collapsed ? 'flex-col gap-2' : 'gap-2 px-2')}>
         {collapsed ? (
           <img src="/iseie-icon-192.png" alt="ISEIE" className="w-8 h-8 object-contain flex-shrink-0" />
@@ -937,13 +959,15 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <img src="/iseie-logo-color.png" alt="ISEIE" className="h-7 w-auto object-contain object-left dark:hidden" />
               <img src="/iseie-logo.png"       alt="ISEIE" className="h-7 w-auto object-contain object-left hidden dark:block" />
-              {/* La versión, como en MultiCRM. Sale de la etiqueta de Git al compilar (11/11). */}
-              <span
-                title={BETA_VERSION ? `Versión ${BETA_VERSION} — beta` : 'Beta'}
-                className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[9px] font-bold uppercase tracking-wider self-start"
-              >
-                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
-              </span>
+              {/* La versión, como en MultiCRM: la de Novedades (25/11). Antes «Beta 1.0.0». */}
+              {ETIQUETA_VERSION && (
+                <span
+                  title={`Versión ${VERSION_APP}`}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-mono font-semibold tabular-nums self-start"
+                >
+                  {ETIQUETA_VERSION}
+                </span>
+              )}
             </div>
           </>
         )}

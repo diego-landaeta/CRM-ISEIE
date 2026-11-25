@@ -527,14 +527,16 @@ export const CAMBIOS_DE_MENU = [
     id: 'menu-cursos-moodle-957',
     que: '«Académico › Cursos de Moodle» (y la pestaña del mismo nombre en Productos): cada producto del catálogo de un campus con su curso de Moodle, o «Sin curso», y elegirlo de la lista de cursos de su Moodle, cambiarlo o quitarlo (CRM#957). Avisa de los productos vendidos sin curso. La ve quien tiene `moodle.cursos_producto`, clave nueva: admin y soporte de serie, cada uno en sus campus.',
     motivo: 'Diego (19/11, CRM#957, a petición de CRM-ISEIE#355): sin esta unión la matrícula automática (#767) no sabe en qué curso matricular a quien compra. Hasta ahora solo se podía con SQL a mano en `moodle_cursos_producto`.',
+    // Diego, 25/11: apartado Moodle. La entrada sigue siendo la misma; desde ese día vive en
+    // el bloque «Moodle» (`bloquesDelMenu.js`), y aquí se nombra ya con su sitio nuevo.
     perfiles: {
-      superadmin: ['+ Académico › Cursos de Moodle'],
-      admin: ['+ Académico › Cursos de Moodle'],
-      soporte: ['+ Académico › Cursos de Moodle'],
-      'gestora+admin': ['+ Académico › Cursos de Moodle'],
+      superadmin: ['+ Moodle › Cursos de Moodle'],
+      admin: ['+ Moodle › Cursos de Moodle'],
+      soporte: ['+ Moodle › Cursos de Moodle'],
+      'gestora+admin': ['+ Moodle › Cursos de Moodle'],
     },
     rutas: {
-      'Académico › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
+      'Moodle › Cursos de Moodle': 'GET /api/moodle/campus/:id/productos-cursos',
     },
     aprobadoPor: 'Pendiente de Diego (CRM#957)',
   },
@@ -563,6 +565,39 @@ export const CAMBIOS_DE_MENU = [
       'Finanzas › Conciliación': 'GET /api/stripe-payments/conciliacion',
     },
     aprobadoPor: 'Pendiente de Diego (CRM#906)',
+  },
+  {
+    id: 'menu-apostillas',
+    que: 'Clientes › Apostillas (el trámite de la Apostilla de La Haya) sale a todos los que entran al CRM: admin, gestoras, líder, soporte y project manager. Tutores y colaboradores, no.',
+    motivo: 'CRM-ISEIE#786, gemela de CRM#1130 (Diego, 25/11/2026): «lo ven todos», un producto propio que tiene que poder medirse. Es una pantalla nueva con su permiso `apostillas.view` y su ruta nueva: nadie pierde nada.',
+    perfiles: Object.fromEntries([
+      'superadmin', 'admin', 'soporte', 'project_manager', 'gestora', 'gestora+admin', 'gestora+tutor',
+      'gestora con factura_manager', 'gestora con editar_fechas_factura', 'gestora con usa_mcp',
+      'gestora con diplomas.view', 'gestora con tasks.close',
+    ].map((perfil) => [perfil, ['+ Comercial › Apostillas']])),
+    rutas: { 'Comercial › Apostillas': 'GET /api/apostillas/' },
+    aprobadoPor: 'Diego, 25/11',
+  },
+  {
+    id: 'menu-mi-campus-administracion',
+    que: '«Mi campus» sale también a admin (y a quien tenga `tutores.campus_administracion`): la vista de administración, con todos los cursos del Moodle de sus campus. El super admin ya la veía. Tutoras y redactoras, igual.',
+    motivo: 'Diego (25/11/2026): «que los admin puedan verlo también y los superadmin». Bárbara (ISEIE) revisa los 314 cursos y no es profesora en ninguno. Es un permiso nuevo con su ruta nueva y solo lee: nadie pierde nada.',
+    // Diego, 25/11: apartado Moodle. «Mi campus» vive desde ese día en el bloque «Moodle».
+    perfiles: {
+      admin: ['+ Moodle › Mi campus'],
+      'gestora+admin': ['+ Moodle › Mi campus'],
+    },
+    rutas: { 'Moodle › Mi campus': 'GET /api/tutores/mi-campus/administracion' },
+    aprobadoPor: 'Diego, 25/11',
+  },
+  {
+    id: 'menu-apartado-moodle',
+    que: 'Un apartado «Moodle» en el menú con todo lo de Moodle junto (Mi campus, Consultas, Cursos y alumnos, Cursos de Moodle, Cursos pendientes y Diplomas, que solo cambian de sitio) y una entrada nueva, «Moodle › Conexión del campus», que lleva a la tarjeta Moodle de Integraciones. La ve quien ya veía «Integraciones»: superadmin, admin, soporte, gestora+admin y project manager.',
+    motivo: 'Diego, 25/11: apartado Moodle («necesito que en el menú salga un apartado de Moodle, porque no se entiende del todo, y poder meter todo lo de Moodle ahí»). La conexión del campus es la misma pantalla de Integraciones con el mismo permiso (`integrations.view`): nadie gana ni pierde nada.',
+    perfiles: Object.fromEntries(['superadmin', 'admin', 'soporte', 'gestora+admin', 'project_manager']
+      .map((perfil) => [perfil, ['+ Moodle › Conexión del campus']])),
+    rutas: { 'Moodle › Conexión del campus': 'GET /api/integrations/' },
+    aprobadoPor: 'Diego, 25/11',
   },
 ];
 

@@ -76,6 +76,8 @@ router.patch('/:id/entregada',        puede('facturas.completar'), facturaDeSuCa
 router.patch('/:id/asociar',          puede('facturas.gestionar'), facturaDeSuCampus, ctrl.asociarVenta);
 router.get('/:id/pdf',                puede('facturas.view'), facturaDeSuCampus, ctrl.pdf);
 router.post('/:id/send',              puede('facturas.enviar'), facturaDeSuCampus, ctrl.send);
+// «Por enviar» › «Enviar por WhatsApp» (25/11): solo la marca de enviada.
+router.post('/:id/enviada-whatsapp',  puede('facturas.envio_auto'), facturaDeSuCampus, ctrl.enviadaPorWhatsapp);
 router.post('/:id/mark-paid',         puede('facturas.cobrar'), facturaDeSuCampus, ctrl.markPaid);
 // «Cobrada» en una proforma: apunta el cobro y la pasa a factura. El servicio
 // deja solo a quien lleva la facturacion, y a una gestora, con las suyas.

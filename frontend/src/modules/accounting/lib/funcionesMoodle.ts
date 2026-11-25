@@ -26,7 +26,7 @@ export const GRUPOS_DE_FUNCIONES_MOODLE: GrupoDeFunciones[] = [
   },
   {
     clave: 'mi_campus', titulo: 'Mi campus',
-    para: 'en «Tutores › Mi campus», los cursos, alumnos, tareas, entregas y el temario de cada tutor',
+    para: 'en «Moodle › Mi campus», los cursos, alumnos, tareas, entregas y el temario de cada tutor',
     funciones: [
       'core_enrol_get_users_courses', 'core_enrol_get_enrolled_users',
       'mod_assign_get_assignments', 'mod_assign_get_submissions', 'mod_assign_get_grades',
