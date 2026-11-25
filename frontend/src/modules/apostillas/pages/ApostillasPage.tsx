@@ -7,6 +7,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { ambitoComoObjeto } from '@/shared/lib/ambitoInforme';
 import { cn } from '@/shared/lib/utils';
+import { inputClass } from '@/shared/lib/ui';
 import { apostillasApi, type Apostilla, type AjusteApostillas } from '../api/apostillas.api';
 import { ESTADOS, textoDelEstado, estaAtascada, diasTexto, eur, type EstadoApostilla } from '../lib/apostillas';
 import BarraDePasos from '../components/BarraDePasos';
@@ -120,7 +121,8 @@ export default function ApostillasPage() {
 
   const campusElegibles = (projects || []).filter((p) => p.id > 0 && p.type !== 'ia');
   const paginas = Math.max(1, Math.ceil(total / LIMITE));
-  const inputClass = 'h-8 rounded-md border border-border bg-background px-2 text-sm';
+  // La clase del campo vive en un solo sitio (#106): aquí solo se ajusta el alto y el ancho.
+  const campo = cn(inputClass, 'h-8 px-2 w-auto');
 
   return (
     <div className="p-4 sm:p-6 space-y-4">
@@ -155,7 +157,7 @@ export default function ApostillasPage() {
             {ajustes.map((x) => (
               <li key={x.project_id} className="flex items-center justify-between gap-2 text-[12px]">
                 <span className="truncate">{x.campus}</span>
-                <select className={inputClass} value={x.dias_aviso} aria-label={`Días del aviso en ${x.campus}`}
+                <select className={campo} value={x.dias_aviso} aria-label={`Días del aviso en ${x.campus}`}
                   onChange={(e) => guardarDias(x.project_id, Number(e.target.value))}>
                   {[3, 5, 7, 10, 14, 21, 30].concat([x.dias_aviso]).filter((v, i, a) => a.indexOf(v) === i).sort((m, n) => m - n)
                     .map((d) => <option key={d} value={d}>{d} días</option>)}
@@ -173,14 +175,14 @@ export default function ApostillasPage() {
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
             <label className="text-[12px]"><span className="text-muted-foreground">Campus</span>
-              <select className={cn(inputClass, 'mt-1 block w-full')} value={nueva.projectId} onChange={(e) => setNueva({ ...nueva, projectId: e.target.value })}>
+              <select className={cn(campo, 'mt-1 block w-full')} value={nueva.projectId} onChange={(e) => setNueva({ ...nueva, projectId: e.target.value })}>
                 <option value="">{activeProject?.id && activeProject.id > 0 ? 'El campus de arriba' : 'Elige…'}</option>
                 {campusElegibles.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select></label>
             <label className="text-[12px]"><span className="text-muted-foreground">N.º de ficha del cliente (opcional)</span>
-              <input className={cn(inputClass, 'mt-1 block w-full')} inputMode="numeric" value={nueva.leadId} onChange={(e) => setNueva({ ...nueva, leadId: e.target.value })} /></label>
+              <input className={cn(campo, 'mt-1 block w-full')} inputMode="numeric" value={nueva.leadId} onChange={(e) => setNueva({ ...nueva, leadId: e.target.value })} /></label>
             <label className="text-[12px]"><span className="text-muted-foreground">Título que se apostilla</span>
-              <input className={cn(inputClass, 'mt-1 block w-full')} maxLength={500} value={nueva.formacion} onChange={(e) => setNueva({ ...nueva, formacion: e.target.value })} /></label>
+              <input className={cn(campo, 'mt-1 block w-full')} maxLength={500} value={nueva.formacion} onChange={(e) => setNueva({ ...nueva, formacion: e.target.value })} /></label>
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setNueva(null)} className="h-8 px-3 rounded-md border border-border text-[12px] font-semibold hover:bg-muted">Cancelar</button>
@@ -200,13 +202,13 @@ export default function ApostillasPage() {
             </button>
           ))}
         </div>
-        <select className={inputClass} value={estado} aria-label="Paso" onChange={(e) => setEstado(e.target.value as EstadoApostilla | '')}>
+        <select className={campo} value={estado} aria-label="Paso" onChange={(e) => setEstado(e.target.value as EstadoApostilla | '')}>
           <option value="">Todos los pasos</option>
           {ESTADOS.map((e) => <option key={e.clave} value={e.clave}>{e.texto}</option>)}
         </select>
         <label className="relative">
           <MagnifyingGlass size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input className={cn(inputClass, 'pl-7 w-56')} placeholder="Cliente, correo o título" aria-label="Buscar"
+          <input className={cn(campo, 'pl-7 w-56')} placeholder="Cliente, correo o título" aria-label="Buscar"
             value={q} onChange={(e) => setQ(e.target.value)} />
         </label>
         {puedeGestionar && (

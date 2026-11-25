@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { X, WarningCircle, UploadSimple, FileText, ClockCounterClockwise, LinkSimple } from '@phosphor-icons/react';
 import Portal from '@/shared/components/ui/portal';
+import { inputClass } from '@/shared/lib/ui';
+import { cn } from '@/shared/lib/utils';
 import { useModalAccesible } from '@/shared/hooks/useDialogA11y';
 import usePermission from '@/shared/hooks/usePermission';
 import { toast } from '@/shared/hooks/useToast';
@@ -27,7 +29,8 @@ import BarraDePasos from './BarraDePasos';
 const cuando = (t: string | null | undefined) => (t
   ? new Date(t).toLocaleString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
   : '');
-const inputClass = 'mt-1 block h-8 w-full rounded-md border border-border bg-background px-2 text-sm';
+// La clase del campo vive en un solo sitio (#106): aquí solo se ajusta el alto.
+const campo = cn(inputClass, 'mt-1 block h-8 px-2');
 
 function lineaDelHistorial(e: EventoApostilla): string {
   switch (e.tipo) {
@@ -192,9 +195,9 @@ export default function ApostillaDialog({ id, onCerrar, onCambio }: Props) {
                     <legend className="px-1 text-[12px] font-semibold flex items-center gap-1"><LinkSimple size={13} /> Enlazar con su cliente</legend>
                     <div className="grid grid-cols-2 gap-2">
                       <label className="text-[12px]"><span className="text-muted-foreground">N.º de ficha del cliente</span>
-                        <input className={inputClass} inputMode="numeric" value={enlace.leadId} onChange={(e) => setEnlace({ ...enlace, leadId: e.target.value })} /></label>
+                        <input className={campo} inputMode="numeric" value={enlace.leadId} onChange={(e) => setEnlace({ ...enlace, leadId: e.target.value })} /></label>
                       <label className="text-[12px]"><span className="text-muted-foreground">N.º de venta (opcional)</span>
-                        <input className={inputClass} inputMode="numeric" value={enlace.conversionId} onChange={(e) => setEnlace({ ...enlace, conversionId: e.target.value })} /></label>
+                        <input className={campo} inputMode="numeric" value={enlace.conversionId} onChange={(e) => setEnlace({ ...enlace, conversionId: e.target.value })} /></label>
                     </div>
                     <div className="flex justify-end">
                       <button type="button" onClick={enlazar} className="h-8 px-3 rounded-md border border-border text-[12px] font-semibold hover:bg-muted">Enlazar</button>
@@ -205,11 +208,11 @@ export default function ApostillaDialog({ id, onCerrar, onCambio }: Props) {
                 <fieldset disabled={!a.gestionable || guardando} className="space-y-2.5">
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <label className="text-[12px]"><span className="text-muted-foreground">Paso</span>
-                      <select className={inputClass} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as EstadoApostilla })}>
+                      <select className={campo} value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as EstadoApostilla })}>
                         {ESTADOS.map((e) => <option key={e.clave} value={e.clave}>{e.texto}</option>)}
                       </select></label>
                     <label className="text-[12px]"><span className="text-muted-foreground">La lleva</span>
-                      <select className={inputClass} value={form.responsableId ?? ''}
+                      <select className={campo} value={form.responsableId ?? ''}
                         onChange={(e) => setForm({ ...form, responsableId: e.target.value ? Number(e.target.value) : null })}>
                         <option value="">{a.gestora ? `Su gestora (${a.gestora})` : 'Nadie en concreto'}</option>
                         {a.responsable_id && !personas.some((p) => p.id === a.responsable_id) && <option value={a.responsable_id}>{a.responsable}</option>}
@@ -217,15 +220,15 @@ export default function ApostillaDialog({ id, onCerrar, onCambio }: Props) {
                       </select></label>
                   </div>
                   <label className="block text-[12px]"><span className="text-muted-foreground">Título que se apostilla</span>
-                    <input className={inputClass} maxLength={500} value={form.formacion || ''} onChange={(e) => setForm({ ...form, formacion: e.target.value })} /></label>
+                    <input className={campo} maxLength={500} value={form.formacion || ''} onChange={(e) => setForm({ ...form, formacion: e.target.value })} /></label>
                   <div className="grid grid-cols-1 sm:grid-cols-[2fr_1fr] gap-2">
                     <label className="text-[12px]"><span className="text-muted-foreground">Dirección de envío</span>
-                      <input className={inputClass} maxLength={1000} value={form.direccionEnvio || ''} onChange={(e) => setForm({ ...form, direccionEnvio: e.target.value })} /></label>
+                      <input className={campo} maxLength={1000} value={form.direccionEnvio || ''} onChange={(e) => setForm({ ...form, direccionEnvio: e.target.value })} /></label>
                     <label className="text-[12px]"><span className="text-muted-foreground">N.º de seguimiento</span>
-                      <input className={inputClass} maxLength={120} value={form.numeroSeguimiento || ''} onChange={(e) => setForm({ ...form, numeroSeguimiento: e.target.value })} /></label>
+                      <input className={campo} maxLength={120} value={form.numeroSeguimiento || ''} onChange={(e) => setForm({ ...form, numeroSeguimiento: e.target.value })} /></label>
                   </div>
                   <label className="block text-[12px]"><span className="text-muted-foreground">Nota{form.estado === 'cancelada' && form.estado !== a.estado ? ' (el motivo, obligatoria)' : ''}</span>
-                    <textarea className={`${inputClass} h-auto py-1`} rows={2} maxLength={2000} value={form.nota || ''} onChange={(e) => setForm({ ...form, nota: e.target.value })} /></label>
+                    <textarea className={cn(campo, 'h-auto py-1')} rows={2} maxLength={2000} value={form.nota || ''} onChange={(e) => setForm({ ...form, nota: e.target.value })} /></label>
                   {a.notas && <p className="text-[12px] text-muted-foreground whitespace-pre-line">Última nota: {a.notas}</p>}
                   {a.gestionable && (
                     <div className="flex justify-end">
@@ -255,7 +258,7 @@ export default function ApostillaDialog({ id, onCerrar, onCambio }: Props) {
                   {a.gestionable && (
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="text-[12px]"><span className="text-muted-foreground">Tipo</span>
-                        <select className={inputClass} value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value as TipoDocumento)}>
+                        <select className={campo} value={tipoDoc} onChange={(e) => setTipoDoc(e.target.value as TipoDocumento)}>
                           {TIPOS_DOCUMENTO.map((t) => <option key={t.clave} value={t.clave}>{t.texto}</option>)}
                         </select></label>
                       <label className="h-8 px-3 inline-flex items-center gap-1.5 rounded-md border border-border text-[12px] font-semibold hover:bg-muted cursor-pointer">
