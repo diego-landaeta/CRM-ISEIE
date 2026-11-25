@@ -1038,6 +1038,20 @@ export async function handleWebhookEvent(duenoId, event) {
       }
       return { processed: event.type, stripeId: obj.id };
     }
+    case 'customer.subscription.deleted':
+    case 'customer.subscription.updated':
+    case 'subscription_schedule.canceled':
+    case 'subscription_schedule.aborted':
+    case 'invoice.voided':
+    case 'invoice.marked_uncollectible': {
+      // CRM#1103: Stripe canceló (o dio por perdido) el cobro de unas cuotas: el del
+      // cobro automático (309) o el de una venta a plazos (#747). Las cuotas siguen
+      // pendientes, marcadas, y se avisa una vez. Un aviso repetido no hace nada.
+      const { desdeElAviso } = await import('./cobro-cancelado.service.js');
+      const r = await desdeElAviso(projectId, event);
+      if (r?.skipped) return { skipped: r.skipped, stripeId: obj.id };
+      return { processed: event.type, stripeId: obj.id, ...(r?.repetido ? { repetido: true } : {}) };
+    }
     default:
       return { skipped: event.type };
   }

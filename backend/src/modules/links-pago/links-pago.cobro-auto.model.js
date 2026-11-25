@@ -90,7 +90,8 @@ export async function anotarSincronizacion(conversionId, { scheduleId, firma, er
 export async function planDeLaVenta(conversionId) {
   const [{ rows: cuotas }, { rows: [v] }] = await Promise.all([
     query(
-      `SELECT id, numero, importe_previsto::float8 AS importe, fecha_vencimiento::text AS vence
+      `SELECT id, numero, importe_previsto::float8 AS importe, fecha_vencimiento::text AS vence,
+              cobro_auto_cancelado_el AS cancelado_el, cobro_auto_cancelado_motivo AS cancelado_motivo
          FROM conversion_installments
         WHERE conversion_id = $1 AND fecha_cobro IS NULL
         ORDER BY fecha_vencimiento, numero`, [conversionId]),
@@ -114,6 +115,10 @@ const nota = (que, datos = {}) => JSON.stringify([{ el: new Date().toISOString()
 
 /** La cuota, programada en Stripe con este precio, fecha e importe. */
 export async function programar(c) {
+  // Si Stripe la había dejado de cobrar (CRM#1103) y se vuelve a programar, fuera la marca.
+  await query(
+    `UPDATE conversion_installments SET cobro_auto_cancelado_el = NULL, cobro_auto_cancelado_motivo = NULL
+      WHERE id = $1 AND cobro_auto_cancelado_el IS NOT NULL`, [c.installmentId]);
   await query(
     `INSERT INTO cobro_auto_cuotas (installment_id, conversion_id, project_id, estado, stripe_price_id,
         fecha_programada, importe_programado, historial)

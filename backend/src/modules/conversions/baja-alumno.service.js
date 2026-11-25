@@ -44,7 +44,7 @@ async function avisosDe(conversionId) {
             (SELECT COALESCE(SUM(i.importe_previsto), 0) FROM conversion_installments i
               WHERE i.conversion_id = c.id AND i.fecha_cobro IS NULL) AS importe_cuotas_pendientes,
             GREATEST(COALESCE(c.importe_total, 0) - ${COBRADO_DE('c')}, 0) AS pendiente,
-            c.suscripcion_estado
+            c.suscripcion_estado, c.suscripcion_cerrada_at
        FROM conversions c WHERE c.id = $1`,
     [conversionId]
   );
@@ -58,7 +58,11 @@ async function avisosDe(conversionId) {
     importe_cuotas_pendientes: Number(a?.importe_cuotas_pendientes || 0),
     pendiente: Math.round(Number(a?.pendiente || 0) * 100) / 100,
     cobro_automatico: cobroAutomatico,
-    suscripcion_activa: ['active', 'trialing', 'past_due'].includes(String(a?.suscripcion_estado || '')),
+    // Los estados de la venta a plazos (#747) van en castellano: «activa», «revisar»…
+    // Antes se miraba 'active' (el de Stripe) y nunca avisaba. Cancelada en Stripe
+    // (CRM#1103) o cerrada por el CRM, ya no cobra sola.
+    suscripcion_activa: !a?.suscripcion_cerrada_at
+      && ['activa', 'revisar', 'error', 'cerrando'].includes(String(a?.suscripcion_estado || '')),
   };
 }
 
