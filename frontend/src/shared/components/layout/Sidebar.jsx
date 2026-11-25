@@ -22,7 +22,8 @@ import { useTheme } from '@/contexts/ThemeContext';
 import { cn } from '@/shared/lib/utils';
 import client from '@/shared/api/client';
 import NotificationsBell from './NotificationsBell';
-import { isBetaAllowed, BETA_MODE, BETA_VERSION } from '@/shared/config/betaConfig';
+import { isBetaAllowed, BETA_MODE } from '@/shared/config/betaConfig';
+import { VERSION_APP, ETIQUETA_VERSION } from '@/shared/config/version';
 import { PROCESO_EN_PRUEBAS, SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { CERTIFEX_PANEL } from '@/shared/lib/certifexPanel';
 import { PANTALLAS_IA } from '@/shared/lib/pantallasIA';
@@ -931,7 +932,7 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
         collapsed ? 'w-16 p-2' : 'w-60 lg:w-64 p-4'
       )}
     >
-      {/* Logo + badge BETA + toggle */}
+      {/* Logo + versión + toggle */}
       <div className={cn('flex items-center mb-4', collapsed ? 'flex-col gap-2' : 'gap-2 px-2')}>
         {collapsed ? (
           <img src="/iseie-icon-192.png" alt="ISEIE" className="w-8 h-8 object-contain flex-shrink-0" />
@@ -940,13 +941,15 @@ export default function Sidebar({ collapsed = false, onToggleCollapsed, onNaviga
             <div className="flex-1 min-w-0 flex items-center gap-1.5">
               <img src="/iseie-logo-color.png" alt="ISEIE" className="h-7 w-auto object-contain object-left dark:hidden" />
               <img src="/iseie-logo.png"       alt="ISEIE" className="h-7 w-auto object-contain object-left hidden dark:block" />
-              {/* La versión, como en MultiCRM. Sale de la etiqueta de Git al compilar (11/11). */}
-              <span
-                title={BETA_VERSION ? `Versión ${BETA_VERSION} — beta` : 'Beta'}
-                className="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-300 text-[9px] font-bold uppercase tracking-wider self-start"
-              >
-                Beta{BETA_VERSION ? ` ${BETA_VERSION}` : ''}
-              </span>
+              {/* La versión, como en MultiCRM: la de Novedades (25/11). Antes «Beta 1.0.0». */}
+              {ETIQUETA_VERSION && (
+                <span
+                  title={`Versión ${VERSION_APP}`}
+                  className="inline-flex items-center px-1.5 py-0.5 rounded bg-muted text-muted-foreground text-[10px] font-mono font-semibold tabular-nums self-start"
+                >
+                  {ETIQUETA_VERSION}
+                </span>
+              )}
             </div>
           </>
         )}
