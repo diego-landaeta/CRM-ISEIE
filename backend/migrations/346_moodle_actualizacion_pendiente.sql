@@ -1,4 +1,4 @@
--- 345 · El Moodle de un campus con una actualización pendiente (Campus-Moodle#24)
+-- 346 · El Moodle de un campus con una actualización pendiente (Campus-Moodle#24)
 --
 -- El 25/11/2026 el Moodle de ISEIE recibió los ficheros de local_crm 1.11.4 pero no el paso
 -- de base de datos y se quedó en «Comprobación de plugins» sin que nadie se enterara. Desde la

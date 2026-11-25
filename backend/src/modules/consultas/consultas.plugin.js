@@ -67,7 +67,7 @@ export async function desactivar(projectId) {
 export async function estado(projectId) {
   const { rows } = await query(
     // `to_jsonb(m)->…`: la actualización pendiente (Campus-Moodle#24) sale NULL también si
-    // todavía no está la columna (migración 345), en lugar de romper el panel.
+    // todavía no está la columna (migración 346), en lugar de romper el panel.
     `SELECT activo, ultimo_aviso_at, updated_at, sincronizado_at, sincronizacion_error, version_plugin,
             to_jsonb(m)->'actualizacion_pendiente' AS actualizacion_pendiente
        FROM moodle_plugin_campus m WHERE project_id = $1`, [projectId]);

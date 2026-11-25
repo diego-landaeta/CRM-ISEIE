@@ -85,7 +85,7 @@ beforeAll(async () => {
     const { rows: [r] } = await query(
       `SELECT COUNT(*)::int AS n FROM information_schema.columns
         WHERE table_name = 'moodle_plugin_campus' AND column_name = 'actualizacion_pendiente'`);
-    if (r.n !== 1) throw new Error('Falta la migración 345 (moodle_plugin_campus.actualizacion_pendiente).');
+    if (r.n !== 1) throw new Error('Falta la migración 346 (moodle_plugin_campus.actualizacion_pendiente).');
   } catch (err) {
     hayBase = false;
     porQueNo = err.message;
@@ -106,7 +106,7 @@ afterAll(async () => {
 });
 
 describe('hay base', () => {
-  it('con la migración 345', () => { expect(hayBase, porQueNo || '').toBe(true); });
+  it('con la migración 346', () => { expect(hayBase, porQueNo || '').toBe(true); });
 });
 
 describe('Campus-Moodle#24 · lo que dice el plugin', () => {
