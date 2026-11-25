@@ -763,6 +763,22 @@ export async function markPaid(id, fechaPago) {
   );
 }
 
+/**
+ * «Enviar por WhatsApp» desde «Por enviar» (Diego, 25/11): quien la manda se
+ * descarga el PDF y la factura queda enviada, por WhatsApp, con quién y cuándo.
+ */
+export const NOTA_ENVIADA_WHATSAPP = 'Enviada por WhatsApp';
+export async function markSentWhatsapp(id, quien) {
+  const { rows } = await query(
+    `UPDATE invoices SET estado = CASE WHEN estado = 'emitida' THEN 'enviada' ELSE estado END,
+       sent_at = NOW(), sent_to_email = NULL,
+       envio_nota = $2, updated_at = NOW()
+     WHERE id = $1 AND sent_at IS NULL
+     RETURNING id, sent_at, envio_nota`,
+    [id, `${NOTA_ENVIADA_WHATSAPP}${quien ? ` (por ${quien})` : ''}`]);
+  return rows[0] || null;
+}
+
 export async function markSent(id, email) {
   await query(
     `UPDATE invoices SET estado = CASE WHEN estado = 'emitida' THEN 'enviada' ELSE estado END,

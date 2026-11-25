@@ -310,6 +310,12 @@ export const TIPOS = {
   // CRM#1107 (Diego, 24/11): el link traía su venta y caducó o se anuló sin
   // pagarse. La venta sigue pendiente y decide quien lo creó: link nuevo, pago por
   // otra vía o anular la venta. Uno por link (links-pago.venta.js).
+  // CRM#1103: Stripe canceló (o dio por perdido) el cobro automático de unas cuotas.
+  // A la gestora de la venta y a los admins del campus; una vez por cancelación.
+  stripe_cobro_cancelado: {
+    clase: ACCION, etiqueta: 'Cobro automático cancelado en Stripe', agrupa: false,
+    descripcion: 'Stripe ya no cobrará solas unas cuotas de una venta: siguen pendientes y hay que mandar un link',
+  },
   link_pago_sin_pagar: {
     clase: ACCION, etiqueta: 'Link de pago sin pagar con la venta pendiente', agrupa: false,
     descripcion: 'Un link tuyo caducó o se anuló sin pagarse y su venta sigue pendiente',

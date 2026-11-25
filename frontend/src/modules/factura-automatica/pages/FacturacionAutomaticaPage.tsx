@@ -12,6 +12,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { formatDateNumeric } from '@/shared/lib/format';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { facturaAutomaticaApi, type Panel, type Formulario } from '../api/facturaAutomatica.api';
+import PorEnviar from '../components/PorEnviar';
 
 /*
   FACTURACIÓN AUTOMÁTICA (#764) Y AUDITORÍA (#765), EN UN SITIO (24/11).
@@ -118,6 +119,11 @@ export default function FacturacionAutomaticaPage() {
           <KpiCard icon={Receipt} iconBg="bg-primary/10 text-primary" label="Facturas solas" numericValue={r.facturas}
             badge={`${r.pdf_enviados} PDF enviados · ${r.las_envia_la_gestora} los envía la gestora`} badgeColor="bg-muted text-muted-foreground" />
         </div>
+      )}
+
+      {/* «Por enviar» (25/11): con el modo de revisión, o si queda alguna de antes. */}
+      {panel && (panel.revision || (panel.por_enviar?.length ?? 0) > 0) && (
+        <PorEnviar facturas={panel.por_enviar || []} rutaVenta={(id) => `/ventas/${id}`} onEnviada={cargar} />
       )}
 
       {/* Lo que necesita a una persona */}
@@ -261,7 +267,7 @@ export default function FacturacionAutomaticaPage() {
                     <td className="px-3 py-2 text-right tabular-nums font-semibold">{euros(i.total)}</td>
                     <td className="px-3 py-2 text-[12px]">
                       {i.sent_at
-                        ? <span className="text-success">Enviado a {i.sent_to_email} · {cuando(i.sent_at)}</span>
+                        ? <span className="text-success">{i.sent_to_email ? `Enviado a ${i.sent_to_email}` : (i.envio_nota || 'Enviada')} · {cuando(i.sent_at)}</span>
                         : i.envio_nota
                           ? <span className="text-warning-soft-foreground">{i.envio_nota}</span>
                           : <span className="text-muted-foreground">No se envió{panel.enviar_pdf ? '' : ' (envío del PDF apagado)'}</span>}

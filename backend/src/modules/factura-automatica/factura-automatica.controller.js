@@ -1,6 +1,6 @@
 import { AppError } from '../../shared/utils/AppError.js';
 import * as service from './factura-automatica.service.js';
-import { activa, diasDePlazo, enviarPdf } from './factura-automatica.config.js';
+import { activa, diasDePlazo, enviarPdf, revisionAdmin } from './factura-automatica.config.js';
 import { datosFiscalesSchema, envioFacturaSchema, panelSchema } from './factura-automatica.validation.js';
 import * as envio from './factura-automatica.envio.js';
 import * as model from './factura-automatica.model.js';
@@ -39,7 +39,7 @@ const idDeVenta = (req) => {
 // Lo pregunta el recorrido guiado (#856): apagada, dice que la enciende Diego.
 // Solo el sí o el no y el plazo; la lista de campus se queda en el .env.
 export function interruptor(req, res) {
-  res.json({ success: true, data: { activa: activa(), dias: diasDePlazo() } });
+  res.json({ success: true, data: { activa: activa(), dias: diasDePlazo(), revision: revisionAdmin() } });
 }
 
 // GET /api/factura-automatica/venta/:conversionId
@@ -95,6 +95,17 @@ export async function guardarEnvio(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// PUT /api/factura-automatica/venta/:conversionId/datos-fiscales  { nif, direccion, … }
+// Los datos de la persona que carga la gestora en la venta (25/11).
+export async function guardarDatosFiscales(req, res, next) {
+  try {
+    const id = idDeVenta(req);
+    const parsed = datosFiscalesSchema.safeParse(req.body || {});
+    if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    res.json({ success: true, data: await service.datosDeLaGestora(id, parsed.data) });
+  } catch (err) { next(err); }
+}
+
 // GET /api/factura-automatica/panel?projectId=|issuerId=|projectIds=
 // Formularios, facturas que salieron solas y lo que espera a una persona.
 export async function panel(req, res, next) {
@@ -103,6 +114,6 @@ export async function panel(req, res, next) {
     const projectIds = await listaDelAmbito(req);
     const personas = await alcanceComercial(req.user);
     const data = await panelDe({ projectIds, personas, limite: q.limite || 200 });
-    res.json({ success: true, data: { ...data, activa: activa(), dias: diasDePlazo(), enviar_pdf: enviarPdf() } });
+    res.json({ success: true, data: { ...data, activa: activa(), dias: diasDePlazo(), enviar_pdf: enviarPdf(), revision: revisionAdmin() } });
   } catch (err) { next(err); }
 }

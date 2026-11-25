@@ -330,6 +330,10 @@ export const SECCIONES = [
           a('gestionar', 'Anular y abonar', 'Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar facturas, proformas y borradores. Diego, 19/11/2026: también las gestoras, cualquier factura de su campus.', [...ADMIN, 'gestor']),
           a('cola', 'Emitir desde la cola', 'Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día».', NADIE),
           a('auditoria', 'Auditoría de facturación', 'Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado».', ADMIN),
+          // Diego, 25/11: «Enviar factura automáticamente: Sí / No» y «Enviar a este
+          // correo» solo los ven las administradoras; una gestora no elige nada y la
+          // factura sigue el modo del CRM (en ISEIE, «Por enviar» para administración).
+          a('envio_auto', 'Elegir el envío de la factura', '«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» al registrar una venta o crear un link, y cambiarlo en la venta.', ADMIN),
           a('automatica', 'Ver la facturación automática', 'Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos.', [...ADMIN, 'gestor']),
           a('editar_fechas', 'Cambiar fechas', 'Cambiar la fecha de emisión y de pago, sin tocar importes.', [...ADMIN, 'gestor']),
           a('edit', 'Editar facturas', 'Cambiar cualquier dato de una factura.', [...ADMIN_SOPORTE, 'gestor']),

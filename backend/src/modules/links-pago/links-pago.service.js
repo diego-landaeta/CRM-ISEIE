@@ -628,6 +628,13 @@ export const EVENTOS_DE_LOS_LINKS = [
   'invoice.paid',
   'invoice.payment_failed',
   'customer.subscription.deleted',
+  // CRM#1103: Stripe deja de cobrar una cuota (suscripción cancelada o impagada,
+  // calendario cancelado, factura anulada o incobrable). Ver cobro-cancelado.service.js.
+  'customer.subscription.updated',
+  'subscription_schedule.canceled',
+  'subscription_schedule.aborted',
+  'invoice.voided',
+  'invoice.marked_uncollectible',
   // Los links creados directamente en Stripe (CRM#1019): que salgan en Links de pago al momento.
   'payment_link.created',
   'payment_link.updated',

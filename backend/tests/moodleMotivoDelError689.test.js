@@ -54,7 +54,15 @@ describe('#689 · el motivo del rechazo del campus no se pierde', () => {
 describe('#689 · local_crm_cuenta: si una cuenta es el administrador del sitio', () => {
   it('con el plugin 1.10.2, lo que dice el campus', async () => {
     const r = await cuentaDelCampus(conexion, 2, contesta({ existe: true, siteadmin: true }));
-    expect(r).toEqual({ existe: true, esAdministrador: true });
+    // Sin `permitida` (llega con la 1.11.7): no permitida, como hasta ahora.
+    expect(r).toMatchObject({ existe: true, esAdministrador: true, permitida: false });
+  });
+
+  it('con el plugin 1.11.7, también si está en «Administradoras que dan clase» (CRM#1118)', async () => {
+    expect(await cuentaDelCampus(conexion, 2, contesta({ existe: true, siteadmin: true, permitida: true })))
+      .toMatchObject({ existe: true, esAdministrador: true, permitida: true });
+    expect(await cuentaDelCampus(conexion, 2, contesta({ existe: true, siteadmin: true, permitida: false })))
+      .toMatchObject({ permitida: false });
   });
 
   it('con un plugin anterior (la función no está o no está en el servicio): null, sin error', async () => {

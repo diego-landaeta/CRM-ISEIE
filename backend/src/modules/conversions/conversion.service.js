@@ -97,6 +97,8 @@ export async function create(data, userId, opciones = {}) {
   delete data.forzar;
   const envioFactura = data.envio_factura || null;
   delete data.envio_factura;
+  const datosFiscales = data.datos_fiscales || null;
+  delete data.datos_fiscales;
   // Validar que el lead pertenece al project_id
   const ok = await conversionModel.leadBelongsToProject(data.lead_id, data.project_id);
   if (!ok) throw new AppError('El lead no pertenece a este proyecto', 400, 'LEAD_PROJECT_MISMATCH');
@@ -189,6 +191,18 @@ export async function create(data, userId, opciones = {}) {
       await guardarEnLaVenta(conv.id, envioFactura, userId);
     } catch (err) {
       logger.warn({ err: err.message, conversionId: conv.id }, 'no se pudo guardar el envío de la factura (no bloqueante)');
+    }
+  }
+
+  // Los datos fiscales que cargó la gestora (25/11), en la ficha, antes de que
+  // el primer cobro llegue a la factura automática (`autoInvoice`, más abajo).
+  if (datosFiscales && data.lead_id) {
+    try {
+      const { normalizar } = await import('../factura-automatica/datos-fiscales.js');
+      const { guardarFichaFiscal } = await import('../factura-automatica/factura-automatica.model.js');
+      await guardarFichaFiscal(data.lead_id, normalizar(datosFiscales));
+    } catch (err) {
+      logger.warn({ err: err.message, conversionId: conv.id }, 'no se pudieron guardar los datos fiscales de la venta (no bloqueante)');
     }
   }
 

@@ -1,6 +1,6 @@
 import { query } from '../../shared/config/db.js';
 import { motivoDelError, MOTIVOS_CORTOS } from './factura-automatica.service.js';
-import { NOTA_LA_ENVIA_LA_GESTORA } from './factura-automatica.envio.js';
+import { NOTA_LA_ENVIA_LA_GESTORA, NOTA_POR_ENVIAR } from './factura-automatica.envio.js';
 
 /*
   LA PANTALLA DE LA FACTURACIÓN AUTOMÁTICA (#764, 24/11).
@@ -87,10 +87,12 @@ export async function panel({ projectIds = null, personas = null, limite = 200, 
   const { rows: facturas } = await query(
     `SELECT i.id, i.codigo, i.fecha_emision::text AS fecha, i.total, i.cliente_nombre, i.cliente_nif,
             i.estado, i.sent_at, i.sent_to_email, i.envio_nota, i.conversion_id, i.lead_id, i.project_id,
-            p.nombre AS campus, f.origen_datos
+            p.nombre AS campus, f.origen_datos,
+            COALESCE(c.factura_envio_email, f.email, l.email) AS envio_email
        FROM invoices i
        JOIN factura_datos_fiscales f ON f.id = i.datos_fiscales_id
        JOIN projects p ON p.id = i.project_id
+       LEFT JOIN conversions c ON c.id = i.conversion_id
        LEFT JOIN leads l ON l.id = f.lead_id
       WHERE ${FILTRO('i.project_id', 1)}
         AND ${FILTRO('l.responsable_id', 2)}
@@ -113,6 +115,10 @@ export async function panel({ projectIds = null, personas = null, limite = 200, 
     }));
 
   const cuenta = (pred) => formularios.filter(pred).length;
+  // «Por enviar» (25/11): salieron solas y esperan a que administración las
+  // verifique y las mande. Con el PDF ya enviado o anuladas, ya no.
+  const porEnviar = facturas.filter((i) => i.envio_nota === NOTA_POR_ENVIAR && !i.sent_at
+    && !['cancelada', 'anulada'].includes(String(i.estado)));
   return {
     resumen: {
       formularios: formularios.length,
@@ -125,10 +131,12 @@ export async function panel({ projectIds = null, personas = null, limite = 200, 
       atencion: atencion.length,
       facturas: facturas.length,
       pdf_enviados: facturas.filter((i) => i.sent_at).length,
-      las_envia_la_gestora: facturas.filter((i) => i.envio_nota).length,
+      las_envia_la_gestora: facturas.filter((i) => i.envio_nota && i.envio_nota !== NOTA_POR_ENVIAR).length,
+      por_enviar: porEnviar.length,
     },
     formularios,
     facturas,
+    por_enviar: porEnviar,
     atencion,
     limite,
   };

@@ -304,6 +304,9 @@ export async function estadoDeLaVenta(conversionId, projectId, { hoy = hoyEnMadr
     reintento_dias: disp.campus?.reintento_dias ?? null,
     activo: ca?.activo === true,
     activado_el: ca?.activado_el ?? null,
+    // CRM#1103: Stripe canceló el cobro (el alumno, el panel o un impago): cuándo y por qué.
+    cancelado_en_stripe: ca?.cancelado_en_stripe_el
+      ? { el: ca.cancelado_en_stripe_el, motivo: ca.cancelado_en_stripe_motivo || null } : null,
     tarjeta: tarjetaDe(ca),
     stripe_schedule_id: ca?.stripe_schedule_id || null,
     sincronizado_el: ca?.sincronizado_el || null,
@@ -324,6 +327,9 @@ export async function estadoDeLaVenta(conversionId, projectId, { hoy = hoyEnMadr
         error_codigo: r?.error_codigo ?? null,
         reintento_el: r?.reintento_el ?? null,
         url_pago: r?.estado === 'fallida' ? r.url_pago : null,
+        // CRM#1103: Stripe ya no la cobrará; sigue pendiente y se cobra con un link.
+        cancelada_el: c.cancelado_el || null,
+        cancelada_motivo: c.cancelado_motivo || null,
         historial: r?.historial ?? [],
         // La primera, sin tarjeta todavía, la paga el alumno con su link (y la guarda).
         guarda_tarjeta: esLaPrimera,
@@ -481,7 +487,8 @@ export async function trasPagarseUnLink(link, payment, conversionId) {
 
 const idDe = (x) => (x && typeof x === 'object' ? x.id : x) || null;
 
-async function conCandado(conversionId, fn) {
+/** El candado por venta: lo que toca el calendario de una venta, de uno en uno (también CRM#1103). */
+export async function conCandado(conversionId, fn) {
   const c = await getClient();
   try {
     await c.query('SELECT pg_advisory_lock(hashtext($1), $2)', ['cobro_auto', Number(conversionId)]);
@@ -664,6 +671,56 @@ export async function antesDeBorrarLaVenta(conversionId) {
 }
 
 // ─── Lo que llega de Stripe: las facturas de las cuotas ─────────────────────
+
+/** La cuota del CRM de una factura de Stripe (por el precio de su línea), o null. */
+export function cuotaDeLaFactura(projectId, inv) {
+  return model.cuotaDelPrecio(projectId, preciosDeFactura(inv));
+}
+
+/*
+  ANTES DE MANDAR UN LINK DE UNA CUOTA QUE STRIPE YA NO COBRARÁ (CRM#1103).
+
+  Una cuota cuyo cobro automático falló o se canceló puede tener todavía su
+  factura en Stripe, y una factura abierta o «incobrable» se puede seguir
+  pagando desde su página. Si además se le manda un link, el alumno podría
+  pagarla dos veces. Así que, antes de crear el link, esa factura se anula en
+  Stripe. Si Stripe ya la cobró, no se crea el link (entrará sola); si no deja
+  anularla, tampoco (409/424): mejor sin link que con dos maneras de pagar.
+*/
+export async function antesDeUnLinkDeCuota(projectId, cuotaIds) {
+  const ids = [...new Set((cuotaIds || []).map(Number).filter((n) => n > 0))];
+  if (!ids.length) return [];
+  const anuladas = [];
+  for (const id of ids) {
+    const c = await model.cuotaPorId(id);
+    if (!c?.stripe_invoice_id || !['fallida', 'cancelada'].includes(c.estado)) continue;
+    const clave = await linksService.claveObligatoria(projectId);
+    let inv;
+    try {
+      inv = await stripe.verFactura(clave, c.stripe_invoice_id);
+    } catch (err) {
+      if (err instanceof stripe.ErrorDeStripe && err.status === 404) continue;
+      throw new AppError(`No se ha podido mirar en Stripe la factura de esta cuota (${err.message}). No se crea el link: inténtalo en un rato.`, 424, 'STRIPE_ERROR');
+    }
+    if (inv?.status === 'paid') {
+      throw new AppError('Stripe ya ha cobrado esta cuota con su factura: el cobro entrará solo en la venta. No se crea otro link.', 409, 'CUOTA_YA_COBRADA_EN_STRIPE');
+    }
+    if (['open', 'uncollectible'].includes(inv?.status)) {
+      // Se apunta ANTES de llamar a Stripe: su aviso `invoice.voided` puede llegar
+      // enseguida y no debe tomarse por una cancelación (ni avisar a nadie).
+      await model.anotar(id, 'se anula su factura en Stripe: se cobra con un link del CRM', { factura: c.stripe_invoice_id },
+        c.estado === 'fallida' ? 'quitada' : null);
+      try {
+        await stripe.anularFactura(clave, c.stripe_invoice_id);
+      } catch (err) {
+        await model.anotar(id, 'Stripe no dejó anular la factura', { factura: c.stripe_invoice_id, error: err.message }, c.estado);
+        throw new AppError(`Stripe no ha dejado anular la factura de esta cuota (${err.message}), y se podría pagar dos veces. No se crea el link.`, 424, 'STRIPE_ERROR');
+      }
+      anuladas.push(id);
+    }
+  }
+  return anuladas;
+}
 
 /** Los precios de las líneas de una factura (las versiones de la API los ponen en sitios distintos). */
 export function preciosDeFactura(inv) {

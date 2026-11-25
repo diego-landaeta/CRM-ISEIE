@@ -69,6 +69,39 @@ const LISTA = [
         ]
       },
       {
+        "titulo": "Formaciones y alumnos",
+        "items": [
+          {
+            "titulo": "Formaciones con sus módulos",
+            "texto": "En Productos › Formaciones se crea y se edita cada formación: tipo, horas, precio, fechas, sus módulos con el temario y sus tutoras. Los módulos son los que imprime el diploma.",
+            "roles": ["admin", "superadmin", "soporte"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Alumnos activos por formación",
+            "texto": "En cada formación, sus alumnos activos, terminados y de baja; de los activos, quién va al día, quién tiene cuotas pendientes y quién está en impago. En la lista, las columnas «Activos» y «Con impago». Cada gestora ve los suyos.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          },
+          {
+            "titulo": "Dar de baja al alumno",
+            "texto": "En la ficha de la venta: fecha, motivo (desistimiento, baja voluntaria, impago u otro) y nota. Desde esa fecha deja de contar como activo. Se puede deshacer y queda en el historial. No anula facturas ni cobros, ni le da de baja en Moodle.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/ventas",
+            "boton": "Ir a Ventas"
+          },
+          {
+            "titulo": "El curso de Moodle, desde la formación (preparado)",
+            "texto": "En Integraciones › Moodle se elige la categoría de cursos, diplomados y másteres de cada campus, y la ficha de la formación enseña el nombre corto y las secciones que tendrá el curso. El botón «Crear en Moodle» se enciende cuando el plugin nuevo llegue a los campus.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/products/formaciones",
+            "boton": "Ir a Formaciones"
+          }
+        ]
+      },
+      {
         "titulo": "Equipo",
         "items": [
           {
@@ -137,6 +170,20 @@ const LISTA = [
             "ruta": "/accounting/facturas-colaboradores",
             "boton": "Ir a Facturas de colaboradores",
             "recorrido": "facturas-colaboradores"
+          },
+          {
+            "titulo": "El envío de la factura, solo administración",
+            "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La factura no se le manda sola al alumno: queda «Por enviar» en Facturación › Facturación automática, y administración la verifica y la envía: por correo desde el CRM o por WhatsApp (se descarga el PDF y queda marcada «Enviada por WhatsApp»). La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
+            "titulo": "La cola de facturación, por campus",
+            "texto": "Con «Todos los proyectos» la cola sale separada por campus, y lo que no factura la automática sale marcado «A mano». Si un cobro anterior frena el turno, la cola dice cuál. Al registrar un cobro, la ficha de la venta ya no se cierra y sigue el botón «Emitir ya la factura de este cobro».",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/accounting/facturas",
+            "boton": "Ir a Facturas"
           }
         ]
       },
@@ -198,7 +245,8 @@ const LISTA = [
     ],
     "arreglos": [
       "Por cobrar y Conversiones suman solo los campus de la empresa elegida.",
-      "La paginación de Prospectos cabe en el móvil."
+      "La paginación de Prospectos cabe en el móvil.",
+      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola."
     ]
   },
   {

@@ -40,7 +40,7 @@ export type FacturaSola = {
   id: number; codigo: string; fecha: string; total: number | string; cliente_nombre: string | null;
   cliente_nif: string | null; estado: string; sent_at: string | null; sent_to_email: string | null;
   envio_nota: string | null; conversion_id: number | null; lead_id: number | null; project_id: number;
-  campus: string; origen_datos: string | null;
+  campus: string; origen_datos: string | null; envio_email?: string | null;
 };
 
 export type Atencion = {
@@ -55,15 +55,21 @@ export type Panel = {
   resumen: {
     formularios: number; enviados: number; contestados: number; vencidos: number; esperando: number;
     en_revision: number; posibles_duplicadas: number; atencion: number; facturas: number;
-    pdf_enviados: number; las_envia_la_gestora: number;
+    pdf_enviados: number; las_envia_la_gestora: number; por_enviar?: number;
   };
   formularios: Formulario[];
   facturas: FacturaSola[];
+  /** «Por enviar» (25/11): salieron solas y esperan a administración. */
+  por_enviar?: FacturaSola[];
+  revision?: boolean;
   atencion: Atencion[];
 };
 
 export const facturaAutomaticaApi = {
-  interruptor: () => client.get<{ activa: boolean; dias: number }>('/factura-automatica/interruptor'),
+  interruptor: () => client.get<{ activa: boolean; dias: number; revision?: boolean }>('/factura-automatica/interruptor'),
+  /** Los datos fiscales de la persona, cargados por la gestora en la venta (25/11). */
+  guardarDatosFiscales: (conversionId: number, datos: Record<string, string>) =>
+    client.put<{ guardado: boolean; faltan?: string[] }>(`/factura-automatica/venta/${conversionId}/datos-fiscales`, datos),
   envio: (conversionId: number) => client.get<EnvioDeLaVenta>(`/factura-automatica/venta/${conversionId}/envio`),
   guardarEnvio: (conversionId: number, cuerpo: EnvioFactura) =>
     client.put<EnvioDeLaVenta>(`/factura-automatica/venta/${conversionId}/envio`, cuerpo),

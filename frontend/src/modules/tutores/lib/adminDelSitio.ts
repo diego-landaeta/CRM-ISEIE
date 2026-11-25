@@ -8,3 +8,8 @@
 */
 export const AVISO_EXCEPCION_ADMIN = 'Es la cuenta de administración del sitio; se enlaza igual porque ella da clase con ella.';
 export const SOLO_DESDE_MOODLE = 'Es la cuenta de administración del sitio: responde y corrige desde Moodle.';
+/**
+ * Con el plugin 1.11.7 (CRM#1118) el campus puede tenerla en «Administradoras que dan clase»:
+ * entonces responde y corrige desde el CRM, en los cursos donde da clase.
+ */
+export const ADMIN_PERMITIDA = 'Es la cuenta de administración del sitio; el campus la deja responder y corregir desde el CRM en los cursos donde da clase.';

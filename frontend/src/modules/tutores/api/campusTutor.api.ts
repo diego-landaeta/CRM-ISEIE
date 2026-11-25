@@ -34,6 +34,11 @@ export interface CampusDelTutor {
    */
   admin_sitio_excepcion?: boolean;
   admin_sitio_excepcion_at?: string | null;
+  /**
+   * Con la excepción: el campus (plugin 1.11.7, CRM#1118) la tiene en «Administradoras que dan
+   * clase», así que responde y corrige desde el CRM. Lo de la última comprobación.
+   */
+  admin_sitio_permitida?: boolean;
 }
 
 /** Una cuenta de Moodle encontrada al vincular a mano. */
