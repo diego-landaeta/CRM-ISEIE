@@ -14,6 +14,7 @@ import { CreditCard, User, Receipt, CheckCircle } from '@phosphor-icons/react';
 import usePermission from '@/shared/hooks/usePermission';
 import { posibleDuplicada, preguntarSiEmitirDuplicada, textoDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
 import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
+import EnvioFacturaDialog from '@/modules/factura-automatica/components/EnvioFacturaDialog';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -24,7 +25,26 @@ type ColaItem = {
   motivo?: string | null; posible_duplicada?: OtraFactura | null;
   /** Factura automática (#452): en qué están los datos fiscales de esa venta. */
   datos_fiscales?: DatosFiscalesEnCola | null;
+  /** «Enviar factura automáticamente» y su correo (24/11). Solo con la automática encendida. */
+  envio_factura?: { auto: boolean; email: string | null; confirmado: boolean } | null;
 };
+
+/**
+ * A quién le llega el PDF de la factura de este cobro, y «Cambiar» (#452, 24/11):
+ * la gestora decide aquí, antes de que salga, si la manda el CRM o ella.
+ */
+function EnvioEnLaCola({ c, puedeCambiar, onCambiar }: { c: ColaItem; puedeCambiar: boolean; onCambiar: () => void }) {
+  const e = c.envio_factura;
+  if (!e) return null;
+  return (
+    <span className="block whitespace-normal text-[10px] text-muted-foreground" data-recorrido="cola-envio-factura">
+      {e.auto ? `PDF al alumno: ${e.email || 'sin correo'}` : 'PDF: lo envía la gestora'}
+      {puedeCambiar && (
+        <button type="button" onClick={onCambiar} className="ml-1 font-semibold text-primary hover:underline">Cambiar</button>
+      )}
+    </span>
+  );
+}
 
 /**
  * La etiqueta de la factura automática, debajo del cliente. Sin ella, nada.
@@ -80,6 +100,8 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   // «Emitir desde la cola» del catálogo (#423; antes, la casilla factura_manager).
   const { can } = usePermission();
   const puedeFacturar = can('facturas.cola');
+  const puedeCambiarEnvio = can('facturas.envio_auto');
+  const [envioDe, setEnvioDe] = useState<ColaItem | null>(null);
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
   const [aprobando, setAprobando] = useState<number | null>(null);
@@ -182,6 +204,11 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   if (ocultarSiVacia && (estado.pagos_sin_factura || 0) === 0 && (estado.proformas_pendientes?.length || 0) === 0) return null;
 
   return (
+    <>
+    {envioDe && (
+      <EnvioFacturaDialog conversionId={envioDe.conversion_id} cliente={envioDe.cliente}
+        onClose={() => setEnvioDe(null)} onGuardado={() => { cargar(); }} />
+    )}
     <div className="bg-card border border-border rounded-lg p-4" data-recorrido="cola-facturacion">
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
@@ -285,6 +312,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
                         </span>
                       )}
                       <EstadoDatosFiscales d={c.datos_fiscales} />
+                      <EnvioEnLaCola c={c} puedeCambiar={puedeCambiarEnvio} onCambiar={() => setEnvioDe(c)} />
                     </td>
                     <td className="px-2 py-1.5 truncate max-w-[130px] text-muted-foreground">{c.gestora || '—'}</td>
                     <td className="px-2 py-1.5">
@@ -359,5 +387,6 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
       )}
 
     </div>
+    </>
   );
 }

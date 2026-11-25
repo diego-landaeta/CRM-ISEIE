@@ -48,7 +48,7 @@ const CACHE_CON_FALLOS_MS = 15 * 1000;
  * tiene pocas conexiones a su base y, con 4, contestaba «Database connection failed» en 14 a
  * 40 de los 96 cursos de una tutora (24/11). Con 2, ninguno. `MI_CAMPUS_PARALELO` lo cambia.
  */
-const paralelo = () => {
+export const paralelo = () => {
   const n = parseInt(process.env.MI_CAMPUS_PARALELO || '2', 10);
   return Number.isInteger(n) && n > 0 ? Math.min(n, 8) : 2;
 };
@@ -158,7 +158,7 @@ export async function progresoDeAlumnos(conexion, cursos, opciones) {
 }
 
 /** Como Promise.all, pero de `n` en `n`: un campus no aguanta 95 peticiones a la vez. */
-async function enTandas(lista, n, fn) {
+export async function enTandas(lista, n, fn) {
   const salida = new Array(lista.length);
   let i = 0;
   await Promise.all(Array.from({ length: Math.min(n, lista.length) }, async () => {
@@ -175,7 +175,8 @@ const mensaje = (err, porDefecto) => (err instanceof MoodleError ? err.message :
 /** Los campus de la tutora, con su usuario de Moodle. */
 async function campusDeLaTutora(tutorId) {
   const { rows } = await query(
-    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error
+    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error, tc.admin_sitio_excepcion_at,
+            tc.admin_sitio_permitida
        FROM tutor_campus tc JOIN projects p ON p.id = tc.project_id AND p.active
       WHERE tc.tutor_id = $1 AND tc.estado = 'activa' AND tc.moodle_user_id IS NOT NULL
       ORDER BY p.nombre`, [tutorId]);
@@ -184,6 +185,11 @@ async function campusDeLaTutora(tutorId) {
     // Lo que dijo la última comprobación (p. ej. «el correo apunta a otra cuenta»): con la
     // cuenta vinculada equivocada no sale ningún curso, y la tutora tiene que saber por qué.
     aviso: r.error || null,
+    // Enlazada con la cuenta de administración del sitio (excepción, 24/11): se lee todo,
+    // pero responder y corregir van en Moodle (el plugin no lo hace como el administrador).
+    // Salvo que el campus la tenga en «Administradoras que dan clase» (plugin 1.11.7, CRM#1118):
+    // entonces responde y corrige desde el CRM como cualquier tutora.
+    soloDesdeMoodle: r.admin_sitio_excepcion_at != null && !r.admin_sitio_permitida,
   }));
 }
 
@@ -264,6 +270,7 @@ async function unCampus(tutorId, c, { conProgreso = true, conMensajes = true, ..
   const base = {
     projectId: c.projectId, campus: c.campus, url: null, error: null, aviso: c.aviso || null,
     cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+    soloDesdeMoodle: Boolean(c.soloDesdeMoodle),
   };
   const conexion = await conexionDelCampus(c.projectId);
   if (!conexion) return { ...base, error: 'Este campus no está conectado en Integraciones.' };
@@ -415,6 +422,7 @@ async function leerUnCampus(tutorId, c, opciones) {
     return {
       projectId: c.projectId, campus: c.campus, url: null, error: 'No se ha podido leer este campus.', aviso: c.aviso || null,
       cursos: [], dudasSinCurso: [], sinResponderSinCurso: [], avisoMensajes: null,
+      soloDesdeMoodle: Boolean(c.soloDesdeMoodle),
     };
   }
 }

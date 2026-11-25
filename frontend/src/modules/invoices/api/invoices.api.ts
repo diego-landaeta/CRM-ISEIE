@@ -107,6 +107,8 @@ export interface Invoice {
   /** Solo en GET /:id de un borrador: qué falta para poder emitir. */
   faltantes?: string[];
   sent_at: string | null;
+  /** La factura salió sola sin mandarse: «No se envía automáticamente: la envía la gestora» (#764). */
+  envio_nota?: string | null;
   notas?: string | null;
   leyenda_iva?: string | null;
   items?: InvoiceItem[];
@@ -322,6 +324,8 @@ export const invoicesApi = {
     setTimeout(() => { a.remove(); URL.revokeObjectURL(url); }, 60000);
   },
   send: (id: number, email?: string) => client.post(`/invoices/${id}/send`, email ? { email } : {}),
+  /** «Por enviar» › «Enviar por WhatsApp» (25/11): marca la factura como enviada por WhatsApp. */
+  enviadaPorWhatsapp: (id: number) => client.post(`/invoices/${id}/enviada-whatsapp`, {}),
   markPaid: (id: number, fechaPago?: string) => client.post(`/invoices/${id}/mark-paid`, fechaPago ? { fechaPago } : {}),
   // «Cobrada» en una proforma: apunta el cobro en la venta y la proforma pasa a factura.
   cobrarProforma: (id: number, body: { importe: number; fecha: string; metodo?: string | null; notas?: string | null; referencia?: string | null }) =>

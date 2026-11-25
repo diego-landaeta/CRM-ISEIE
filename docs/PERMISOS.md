@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-926 rutas en 69 módulos, y 31 acciones con condición dentro de una ruta.
+962 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -41,6 +41,25 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
 |---|---|---|---|---|
 | listar | `GET /api/actividad/` | (no existía) | (ruta nueva) | lo de cada uno |
+
+## apostillas
+
+| Acción | Método y ruta | Qué la protegía | Quién podía | Permiso |
+|---|---|---|---|---|
+| listar | `GET /api/apostillas/` | (no existía) | (ruta nueva) | `apostillas.view` |
+| cifras | `GET /api/apostillas/cifras` | (no existía) | (ruta nueva) | `apostillas.view` |
+| catalogo | `GET /api/apostillas/catalogo` | (no existía) | (ruta nueva) | `apostillas.view` |
+| personas | `GET /api/apostillas/personas` | (no existía) | (ruta nueva) | `apostillas.edit` |
+| verAjustes | `GET /api/apostillas/ajustes` | (no existía) | (ruta nueva) | `apostillas.view` |
+| guardarAjustes | `PUT /api/apostillas/ajustes` | (no existía) | (ruta nueva) | `apostillas.config` |
+| deLead | `GET /api/apostillas/de-cliente/:leadId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| deVenta | `GET /api/apostillas/de-venta/:conversionId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| descargarDocumento | `GET /api/apostillas/documentos/:docId` | (no existía) | (ruta nueva) | `apostillas.view` |
+| crear | `POST /api/apostillas/` | (no existía) | (ruta nueva) | `apostillas.asociar` |
+| porId | `GET /api/apostillas/:id` | (no existía) | (ruta nueva) | `apostillas.view` |
+| editar | `PATCH /api/apostillas/:id` | (no existía) | (ruta nueva) | `apostillas.edit` |
+| enlazar | `POST /api/apostillas/:id/enlazar` | (no existía) | (ruta nueva) | `apostillas.asociar` |
+| subirDocumento | `POST /api/apostillas/:id/documentos` | (no existía) | (ruta nueva) | `apostillas.edit` |
 
 ## asignacion
 
@@ -258,6 +277,9 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/conversions/:id/refunds` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.view` |
 | create | `POST /api/conversions/:id/refunds` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `conversions.devoluciones` |
 | remove | `DELETE /api/conversions/refunds/:refundId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `conversions.devoluciones` |
+| get | `GET /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.view` |
+| set | `PUT /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.baja_alumno` |
+| remove | `DELETE /api/conversions/:id/baja` | (no existía) | (ruta nueva) | `conversions.baja_alumno` |
 | remove | `DELETE /api/conversions/:id` | sesión | superadmin, admin, gestor, soporte, project_manager | `conversions.delete` |
 | addPayment · que el cobro salga ya facturado (si no, queda en la cola; no da 403) | `POST /api/conversions/:id/payments` | cuando que el cobro salga ya facturado (si no, queda en la cola; no da 403): a mano, conversion.service.js · autoInvoice (puedeEmitirFactura) | superadmin, admin y gestor/soporte/project_manager con «factura_manager» | `facturas.emitir` |
 
@@ -402,6 +424,10 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | interruptor | `GET /api/factura-automatica/interruptor` | (no existía) | (ruta nueva) | `facturas.view` |
 | estado | `GET /api/factura-automatica/venta/:conversionId` | (no existía) | (ruta nueva) | `facturas.view` |
 | reenviar | `POST /api/factura-automatica/venta/:conversionId/reenviar` | (no existía) | (ruta nueva) | `facturas.cola` |
+| verEnvio | `GET /api/factura-automatica/venta/:conversionId/envio` | (no existía) | (ruta nueva) | `facturas.view` |
+| guardarEnvio | `PUT /api/factura-automatica/venta/:conversionId/envio` | (no existía) | (ruta nueva) | `facturas.envio_auto` |
+| guardarDatosFiscales | `PUT /api/factura-automatica/venta/:conversionId/datos-fiscales` | (no existía) | (ruta nueva) | `conversions.edit` |
+| panel | `GET /api/factura-automatica/panel` | (no existía) | (ruta nueva) | `facturas.automatica` |
 | formulario | `GET /api/fd/:token` | (no existía) | (ruta nueva) | — |
 | responder | `POST /api/fd/:token` | (no existía) | (ruta nueva) | — |
 
@@ -411,6 +437,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 |---|---|---|---|---|
 | estado | `GET /api/facturacion-auditoria/estado` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | historial | `GET /api/facturacion-auditoria/historial` | (no existía) | (ruta nueva) | `facturas.auditoria` |
+| simular | `GET /api/facturacion-auditoria/simular` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | auditar | `POST /api/facturacion-auditoria/auditar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 | reanudar | `POST /api/facturacion-auditoria/reanudar` | (no existía) | (ruta nueva) | `facturas.auditoria` |
 
@@ -539,6 +566,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | list | `GET /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | salud | `GET /api/integrations/salud` | (no existía) | (ruta nueva) | `integrations.salud` |
 | comprobar | `POST /api/integrations/salud/comprobar` | (no existía) | (ruta nueva) | `integrations.salud` |
+| ver | `GET /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.view` |
+| guardar | `PUT /api/integrations/moodle/categorias` | (no existía) | (ruta nueva) | `integrations.edit` |
 | getOne | `GET /api/integrations/:provider` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.view` |
 | upsert | `PUT /api/integrations/` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
 | test | `POST /api/integrations/:provider/test` | sesión · roleGuard(superadmin, admin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `integrations.edit` |
@@ -589,6 +618,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | asociarVenta | `PATCH /api/invoices/:id/asociar` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.model.js · puedeGestionarFactura | superadmin, admin y gestor con «factura_manager» | `facturas.gestionar` |
 | pdf | `GET /api/invoices/:id/pdf` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.view` |
 | send | `POST /api/invoices/:id/send` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.enviar` |
+| enviadaPorWhatsapp | `POST /api/invoices/:id/enviada-whatsapp` | (no existía) | (ruta nueva) | `facturas.envio_auto` |
 | markPaid | `POST /api/invoices/:id/mark-paid` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.cobrar` |
 | cobrarProforma | `POST /api/invoices/:id/cobrar-proforma` | sesión · roleGuard(admin, superadmin, gestor) +superadmin +soporte por el atajo · a mano: invoices.controller.js · esFacturaManager | superadmin y admin/gestor/soporte con «factura_manager» | `facturas.cola` |
 | cancel | `POST /api/invoices/:id/cancel` | sesión | superadmin, admin, gestor, soporte, project_manager | `facturas.anular` |
@@ -659,6 +689,7 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | crearCodigo | `POST /api/links-pago/codigos` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | desactivarCodigo | `POST /api/links-pago/codigos/:id/desactivar` | (no existía) | (ruta nueva) | `links_pago.configurar` |
 | cuotasDisponibles | `GET /api/links-pago/cuotas-disponibles` | (no existía) | (ruta nueva) | `links_pago.crear` |
+| buscarCobro | `GET /api/links-pago/buscar-cobro` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | conectarStripe | `GET /api/links-pago/conectar-stripe` | (no existía) | (ruta nueva) | `links_pago.crear` o `links_pago.ver_todos` |
 | ventasDelProspecto | `GET /api/links-pago/ventas-del-prospecto` | (no existía) | (ruta nueva) | `links_pago.crear` |
 | verPlan | `GET /api/links-pago/plan` | (no existía) | (ruta nueva) | `links_pago.crear` |
@@ -923,6 +954,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | updateModule | `PATCH /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | deleteModule | `DELETE /api/products/:id/modules/:moduleId` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
 | reorderModules | `POST /api/products/:id/modules/reorder` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · projectAccess (campus) | superadmin, admin, soporte | `products.edit` |
+| verFormacion | `GET /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.view` |
+| crearFormacion | `POST /api/products/formacion` | (no existía) | (ruta nueva) | `products.create` |
+| guardarFormacion | `PUT /api/products/:id/formacion` | (no existía) | (ruta nueva) | `products.edit` |
+| verMoodle | `GET /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
+| llevarAMoodle | `POST /api/products/:id/formacion/moodle` | (no existía) | (ruta nueva) | `moodle.crear_cursos` |
+| resumenDelCampus | `GET /api/products/formaciones/alumnos` | (no existía) | (ruta nueva) | `products.alumnos` |
+| alumnosDeFormacion | `GET /api/products/:id/formacion/alumnos` | (no existía) | (ruta nueva) | `products.alumnos` |
+| guardarReglaDeAcceso | `PUT /api/products/formaciones/acceso` | (no existía) | (ruta nueva) | `products.edit` |
 
 ## project-channels
 
@@ -1142,12 +1181,14 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | marcarBusqueda | `PUT /api/tutores/formaciones/:productId/busqueda` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | anunciosDeTutores | `GET /api/tutores/anuncios` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
 | cursoDetalle | `GET /api/tutores/curso/:productId` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
-| miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| miCampus | `GET /api/tutores/mi-campus` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| campusAdministracion | `GET /api/tutores/mi-campus/administracion` | (no existía) | (ruta nueva) | `tutores.campus_administracion` |
+| cursoAdministracion | `GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.campus_administracion` |
 | miRedaccionMoodle | `GET /api/tutores/mi-campus/redaccion-moodle` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
-| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` |
+| archivoEntregado | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/archivo` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| verTarea | `GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| verCurso | `GET /api/tutores/mi-campus/cursos/:projectId/:cursoId` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
+| calificar | `POST /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId/calificar` | (no existía) | (ruta nueva) | `tutores.mis_cursos` o `tutores.campus_administracion` |
 | brochureDelCurso | `GET /api/tutores/curso/:productId/brochure` | sesión · a mano: tutor.controller.js · esTutor \|\| exigirGestion | superadmin, admin, tutor y gestor/soporte/project_manager con «gestor_colaboraciones» | `tutores.mis_cursos` o `tutores.gestionar` |
 | buscar | `GET /api/tutores/buscar` | (no existía) | (ruta nueva) | `tutores.gestionar` |
 | listar | `GET /api/tutores/` | sesión · a mano: tutor.controller.js · exigirGestion | superadmin, admin y gestor/soporte/project_manager/tutor con «gestor_colaboraciones» | `tutores.gestionar` |
@@ -1478,6 +1519,7 @@ lo que pide para tener sentido (editar pide ver).
 | Borrar productos | `products.delete` | Quitar un producto. | Admin, Soporte | `products.view` |
 | Árbol de categorías | `products.categorias` | Crear, mover y quitar categorías. | Admin, Soporte | `products.view` |
 | Exportar el catálogo | `products.export` | Descargar el catálogo. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `products.view` |
+| Ver los alumnos de cada formación | `products.alumnos` | Cuántos alumnos activos tiene cada formación, hasta cuándo y cómo van de pagos (una gestora, los suyos). | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view`, `products.view` |
 
 ### Dossieres
 
@@ -1502,6 +1544,7 @@ lo que pide para tener sentido (editar pide ver).
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
 |---|---|---|---|---|
 | Sus cursos y comisiones | `tutores.mis_cursos` | El tutor ve sus colaboraciones, sus cursos y sus comisiones. | Tutor, Tutor redactor |  |
+| Mi campus de administración | `tutores.campus_administracion` | Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle. | Admin |  |
 | Gestionar colaboraciones | `tutores.gestionar` | Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus. | Admin |  |
 | Liquidar comisiones | `tutores.liquidar` | Pagar o revertir las comisiones de un tutor (mueve dinero). | Admin | `tutores.gestionar` |
 | Ajustes de comisiones | `tutores.ajustes` | Cambiar los porcentajes y reglas de las comisiones. | Admin | `tutores.gestionar` |
@@ -1536,6 +1579,7 @@ lo que pide para tener sentido (editar pide ver).
 | Cobros y cuotas | `conversions.cobros` | Apuntar cobros, generar y pagar cuotas. | Admin, Gestora, Soporte, Project manager, Líder de equipo | `conversions.view` |
 | Repartir una venta | `conversions.reparto` | Repartir una venta entre varias gestoras. | Admin, Líder de equipo | `conversions.view` |
 | Devoluciones | `conversions.devoluciones` | Apuntar y quitar devoluciones. | Admin, Soporte | `conversions.view` |
+| Dar de baja al alumno | `conversions.baja_alumno` | Apuntar en la venta la baja o el desistimiento del alumno (fecha, motivo y nota) y deshacerla. Deja de contar como activo en Formaciones › Alumnos; no anula facturas ni toca cobros ni Moodle. Una gestora, en sus ventas. | Admin, Gestora, Líder de equipo | `conversions.view` |
 | Venta sin gestora | `conversions.sin_gestora` | Registrar una venta que no es de nadie: no cuenta en el informe de ninguna gestora. | Admin | `conversions.view` |
 
 ### Facturación
@@ -1553,6 +1597,8 @@ lo que pide para tener sentido (editar pide ver).
 | Anular y abonar | `facturas.gestionar` | Anular una emitida con su motivo (sale su abono), abonar (rectificativa), asociar a una venta, y corregir o borrar facturas, proformas y borradores. Diego, 19/11/2026: también las gestoras, cualquier factura de su campus. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Emitir desde la cola | `facturas.cola` | Emitir los cobros de la cola, cobrar proformas y mover la fecha «al día». | solo superadmin | `facturas.view` |
 | Auditoría de facturación | `facturas.auditoria` | Ver el aviso de facturación pausada, auditar y reanudarla con «Marcar como solucionado». | Admin | `facturas.view` |
+| Elegir el envío de la factura | `facturas.envio_auto` | «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» al registrar una venta o crear un link, y cambiarlo en la venta. | Admin | `facturas.view` |
+| Ver la facturación automática | `facturas.automatica` | Los formularios de datos fiscales (enviados, contestados y vencidos), las facturas que salieron solas y las que esperan revisión. Una gestora, las de sus alumnos. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Cambiar fechas | `facturas.editar_fechas` | Cambiar la fecha de emisión y de pago, sin tocar importes. | Admin, Gestora, Líder de equipo | `facturas.view` |
 | Editar facturas | `facturas.edit` | Cambiar cualquier dato de una factura. | Admin, Soporte, Gestora, Líder de equipo | `facturas.view` |
 | Configurar la facturación | `facturas.configurar` | Empresas emisoras, regímenes, plantillas, series y ajustes. | Admin, Soporte | `facturas.view` |
@@ -1690,6 +1736,15 @@ lo que pide para tener sentido (editar pide ver).
 | Cambiar el estado | `matriculas.cambiar_estado` | Validar, rechazar o cerrar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 | Borrar solicitudes de admisión | `matriculas.delete` | Quitar una solicitud de admisión. | Admin, Soporte | `matriculas.view` |
 
+### Apostillas de La Haya
+
+| Permiso | Clave | Qué deja hacer | De serie | Necesita |
+|---|---|---|---|---|
+| Ver apostillas | `apostillas.view` | Las apostillas de sus campus, sus cifras y su paso, y el bloque en la ficha del cliente y de la venta. | Admin, Gestora, Soporte, Project manager, Líder de equipo |  |
+| Gestionar apostillas | `apostillas.edit` | Cambiar el paso, quién la lleva, el envío y las notas, y subir y abrir sus documentos (una gestora, solo las de sus clientes y ventas). | Admin, Gestora, Líder de equipo | `apostillas.view` |
+| Crear y enlazar apostillas | `apostillas.asociar` | Crear una apostilla a mano y enlazar las «Sin asociar» con su cliente y su venta. | Admin | `apostillas.view` |
+| Configurar el aviso de atascadas | `apostillas.config` | A los cuántos días en el mismo paso avisa la campana, en sus campus. | Admin | `apostillas.view` |
+
 ### Diplomas (Certifex)
 
 | Permiso | Clave | Qué deja hacer | De serie | Necesita |
@@ -1738,6 +1793,7 @@ lo que pide para tener sentido (editar pide ver).
 | Ver el Moodle de los campus | `moodle.view` | Los cursos, alumnos y recursos del Moodle de cada campus. Solo lectura. | Admin, Project manager |  |
 | Conectar un Moodle | `moodle.conectar` | Guardar o quitar el token de un campus. | solo superadmin | `moodle.view` |
 | Unir productos con cursos de Moodle | `moodle.cursos_producto` | Elegir, cambiar o quitar el curso de Moodle de cada producto de sus campus. | Admin, Soporte |  |
+| Crear cursos en Moodle | `moodle.crear_cursos` | Crear o actualizar en el Moodle de sus campus el curso de una formación, con una sección por módulo. | Admin, Soporte |  |
 
 ### Webhooks de salida
 

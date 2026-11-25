@@ -5,6 +5,7 @@ import { projectAccess } from '../../shared/middleware/projectAccess.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './integrations.controller.js';
 import * as salud from './salud.controller.js';
+import * as categoriasMoodle from './moodle-categorias.controller.js';
 
 const router = Router();
 
@@ -33,6 +34,10 @@ router.get('/',                puede('integrations.view'), projectAccess, ctrl.l
 // ámbito de quien pide. Solo superadmin y admin (`integrations.salud`).
 router.get('/salud',            puede('integrations.salud'), salud.salud);
 router.post('/salud/comprobar', puede('integrations.salud'), salud.comprobar);
+// En qué categoría del Moodle va el curso de cada tipo de formación (CRM#1113, fase 2).
+// Leer lee el Moodle del campus; guardar solo escribe en `config_public`. Antes de `/:provider`.
+router.get('/moodle/categorias', puede('integrations.view'), projectAccess, categoriasMoodle.ver);
+router.put('/moodle/categorias', puede('integrations.edit'), projectAccess, categoriasMoodle.guardar);
 router.get('/:provider',       puede('integrations.view'), projectAccess, ctrl.getOne);
 router.put('/',                puede('integrations.edit'), projectAccess, ctrl.upsert);
 router.post('/:provider/test', puede('integrations.edit'), projectAccess, ctrl.test);
