@@ -22,6 +22,13 @@ const LISTA = [
         "titulo": "Moodle",
         "items": [
           {
+            "titulo": "Aviso si un Moodle se queda a medio actualizar",
+            "texto": "Si el Moodle del campus se actualiza solo y se queda con la actualización a medias (y el campus sin entrar), te llega un aviso en la campana y la tarjeta Moodle de Integraciones dice desde cuándo, de qué versión a cuál y qué hay que hacer para terminarla.",
+            "roles": ["admin", "superadmin"],
+            "ruta": "/accounting/integrations?seccion=moodle",
+            "boton": "Ir a la conexión del campus"
+          },
+          {
             "titulo": "Todo lo de Moodle, en un solo sitio del menú",
             "texto": "Un apartado «Moodle» en el menú con Mi campus, Consultas, los cursos y alumnos del campus, el curso de Moodle de cada producto, los cursos pendientes, los diplomas y la conexión del campus. Cada uno ve lo mismo que antes: solo cambia de sitio. «Cursos y alumnos» abre directamente los cursos del campus y ya cuenta el Moodle conectado en Integraciones.",
             "roles": ["admin", "superadmin"],
@@ -254,7 +261,11 @@ const LISTA = [
     "arreglos": [
       "Por cobrar y Conversiones suman solo los campus de la empresa elegida.",
       "La paginación de Prospectos cabe en el móvil.",
-      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola."
+      "Una factura hecha a mano se une sola al cobro del mismo importe, y ese cobro ya no frena la cola.",
+      "Los avisos de Moodle de una cuenta o una matrícula suspendida ya no hablan en masculino de todas.",
+      "En el móvil, el botón del rayo ya no tapa lo último de la ficha del cliente.",
+      "En Diplomas, «Aprobar y emitir», «Rechazar» y «Editar» se ven siempre, aunque la tabla no quepa.",
+      "La tabla de Actividad (Monitask) cabe en el móvil."
     ]
   },
   {
