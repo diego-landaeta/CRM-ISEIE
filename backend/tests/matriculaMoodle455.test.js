@@ -309,7 +309,9 @@ describe('#455 · lo que no se reintenta', () => {
     expect(b.enviados).toHaveLength(0);
     const [aviso] = await avisosDe(m.id);
     expect(aviso.type).toBe(mm.TIPO_REVISAR);
-    expect(aviso.title).toMatch(/Alumno suspendido en Moodle/);
+    // Sin género (QA 25/11): lo suspendido es la cuenta.
+    expect(aviso.title).toMatch(/^Cuenta suspendida en Moodle: /);
+    expect(aviso.title).not.toMatch(/suspendido/);
     expect(aviso.target_user_ids).toEqual(DESTINO);
     expect((await notasDe(v))[0]).toMatch(/Matrícula en Moodle sin hacer/);
     // No se vuelve a intentar.
@@ -326,7 +328,7 @@ describe('#455 · lo que no se reintenta', () => {
     expect(r.suspendido).toBe(1);
     const m = await matriculaDe(v);
     expect(m.estado).toBe('fallo');
-    expect((await avisosDe(m.id))[0].title).toMatch(/Alumno suspendido/);
+    expect((await avisosDe(m.id))[0].title).toMatch(/^Matrícula suspendida en Moodle: /);
   });
 
   it.each([
