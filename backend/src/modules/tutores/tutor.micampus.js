@@ -129,7 +129,8 @@ const mensaje = (err, porDefecto) => (err instanceof MoodleError ? err.message :
 /** Los campus de la tutora, con su usuario de Moodle. */
 async function campusDeLaTutora(tutorId) {
   const { rows } = await query(
-    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error, tc.admin_sitio_excepcion_at
+    `SELECT tc.project_id, tc.moodle_user_id, p.nombre AS campus, tc.error, tc.admin_sitio_excepcion_at,
+            tc.admin_sitio_permitida
        FROM tutor_campus tc JOIN projects p ON p.id = tc.project_id AND p.active
       WHERE tc.tutor_id = $1 AND tc.estado = 'activa' AND tc.moodle_user_id IS NOT NULL
       ORDER BY p.nombre`, [tutorId]);
@@ -140,7 +141,9 @@ async function campusDeLaTutora(tutorId) {
     aviso: r.error || null,
     // Enlazada con la cuenta de administración del sitio (excepción, 24/11): se lee todo,
     // pero responder y corregir van en Moodle (el plugin no lo hace como el administrador).
-    soloDesdeMoodle: r.admin_sitio_excepcion_at != null,
+    // Salvo que el campus la tenga en «Administradoras que dan clase» (plugin 1.11.7, CRM#1118):
+    // entonces responde y corrige desde el CRM como cualquier tutora.
+    soloDesdeMoodle: r.admin_sitio_excepcion_at != null && !r.admin_sitio_permitida,
   }));
 }
 

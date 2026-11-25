@@ -9,7 +9,7 @@ import { inputClass } from '@/shared/lib/ui';
 import {
   campusTutorApi, type CampusDelTutor, type CuentaMoodle, type EstadoMatricula, type PanelCampusTutor,
 } from '../api/campusTutor.api';
-import { AVISO_EXCEPCION_ADMIN, SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
+import { ADMIN_PERMITIDA, AVISO_EXCEPCION_ADMIN, SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
 import { consultasApi, type TokenDelTutor } from '@/modules/consultas/api/consultas.api';
 
 /*
@@ -223,9 +223,11 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
                 <span>
                   <Matricula c={c} />
                   {c.admin_sitio_excepcion && (
-                    // La excepción confirmada (24/11): que se vea en la ficha y por qué.
-                    <span data-testid={`excepcion-admin-${c.project_id}`} className="mt-1 block text-xs text-warning-soft-foreground">
-                      {SOLO_DESDE_MOODLE}
+                    // La excepción confirmada (24/11): que se vea en la ficha y por qué. Si el campus
+                    // la permite (plugin 1.11.7, CRM#1118), responde y corrige desde el CRM.
+                    <span data-testid={`excepcion-admin-${c.project_id}`}
+                      className={`mt-1 block text-xs ${c.admin_sitio_permitida ? 'text-muted-foreground' : 'text-warning-soft-foreground'}`}>
+                      {c.admin_sitio_permitida ? ADMIN_PERMITIDA : SOLO_DESDE_MOODLE}
                     </span>
                   )}
                 </span>

@@ -232,11 +232,15 @@ export async function cuentaDelToken(conexion, opciones) {
  *
  * Con un plugin anterior (o un campus sin el plugin) la función no está: devuelve null y
  * quien llama decide sin saberlo. Cualquier otro fallo sube como siempre.
+ *
+ * `permitida` (plugin 1.11.7, CRM#1118): es una administradora del sitio de la lista
+ * «Administradoras que dan clase» del campus, y el plugin envía y califica como ella en los
+ * cursos donde es tutora. Un plugin anterior no lo trae: false, como hasta ahora.
  */
 export async function cuentaDelCampus(conexion, moodleUserId, opciones) {
   try {
     const r = await llamar(conexion, 'local_crm_cuenta', { userid: moodleUserId }, opciones);
-    return { existe: Boolean(r?.existe), esAdministrador: Boolean(r?.siteadmin) };
+    return { existe: Boolean(r?.existe), esAdministrador: Boolean(r?.siteadmin), permitida: Boolean(r?.permitida) };
   } catch (err) {
     if (err instanceof MoodleError && (err.codigo === 'SIN_FUNCION' || err.codigo === 'PERMISO')) return null;
     throw err;
