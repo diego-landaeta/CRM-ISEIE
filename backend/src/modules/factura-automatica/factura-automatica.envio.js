@@ -24,6 +24,20 @@ import { logger } from '../../shared/utils/logger.js';
 
 export const NOTA_LA_ENVIA_LA_GESTORA = 'No se envía automáticamente: la envía la gestora';
 
+/** La factura salió sola pero espera a administración (FACTURA_ENVIO_REVISION_ADMIN). */
+export const NOTA_POR_ENVIAR = 'Por enviar: la verifica y la envía administración';
+
+/**
+ * Una gestora no elige el envío (Diego, 25/11): sin `facturas.envio_auto`, lo
+ * que llegue en `envio_factura` no se guarda y la venta se queda con lo de serie.
+ */
+export async function quitarSiNoPuede(req, body, { puede = null } = {}) {
+  if (!body || body.envio_factura === undefined) return body;
+  const comprobar = puede || (await import('../../shared/middleware/permissions.js')).tienePermiso;
+  if (!(await comprobar(req, 'facturas.envio_auto'))) delete body.envio_factura;
+  return body;
+}
+
 const limpio = (email) => {
   const t = String(email ?? '').trim().toLowerCase();
   return t || null;

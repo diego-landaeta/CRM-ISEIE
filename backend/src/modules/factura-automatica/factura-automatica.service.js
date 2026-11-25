@@ -5,7 +5,7 @@ import * as model from './factura-automatica.model.js';
 import * as cfg from './factura-automatica.config.js';
 import { problemas, normalizar, deLaFicha } from './datos-fiscales.js';
 import { armarPeticion, armarFactura } from './factura-automatica.emails.js';
-import { correoDeEnvio, enviaElCrm, NOTA_LA_ENVIA_LA_GESTORA, anotarEnLaFactura } from './factura-automatica.envio.js';
+import { correoDeEnvio, enviaElCrm, NOTA_LA_ENVIA_LA_GESTORA, NOTA_POR_ENVIAR, anotarEnLaFactura } from './factura-automatica.envio.js';
 
 /*
   FACTURA AUTOMÁTICA CON FORMULARIO DE DATOS FISCALES (#452, gemela de CRM#764).
@@ -127,8 +127,50 @@ export async function pedirDatos(conversionId, paymentId) {
     conversionId, projectId: v.project_id, leadId: v.lead_id, paymentId, tokenHash: hash, caducaAt,
   });
   if (!fila) return model.deLaVenta(conversionId); // otra llamada se adelantó
+  // «Por enviar» (FACTURA_ENVIO_REVISION_ADMIN, ISEIE 25/11): al alumno no se le
+  // escribe. Con la ficha completa (la cargó la gestora o vino de la admisión),
+  // la factura sale ya y queda para administración; si no, a revisión y aviso a
+  // la gestora para que complete los datos en la venta.
+  if (cfg.revisionAdmin()) return conLosDatosDeLaFicha(fila, v);
   await mandarPeticion(fila, v, token);
   return fila;
+}
+
+/** Sin formulario: la factura con los datos de la ficha, o a revisión si faltan. */
+async function conLosDatosDeLaFicha(fila, v) {
+  const d = deLaFicha(v || {});
+  const fuera = problemas(d);
+  if (fuera.length) {
+    const motivo = `Faltan datos fiscales en la ficha: ${fuera.join(', ')}. Complétalos en la venta.`;
+    await model.aRevision(fila.id, motivo);
+    await nota(fila.lead_id ?? v.lead_id, `🧾 ${motivo}`);
+    await avisarGestora(fila.conversion_id ?? v.id, motivo);
+    return model.porId(fila.id);
+  }
+  const lista = await model.guardarDatos(fila.id, d, { origen: 'ficha', estado: 'ficha' });
+  if (lista) await emitirPendientes(lista.id);
+  return model.porId(fila.id);
+}
+
+/**
+ * Los datos fiscales que carga la gestora en la venta (25/11). Van a la ficha
+ * del alumno (de ahí los leen la factura y la factura automática). Si la venta
+ * tenía la factura esperando datos (pendiente o en revisión) y ahora están
+ * completos, sale ya; en «Por enviar», queda para administración.
+ */
+export async function datosDeLaGestora(conversionId, datos) {
+  const v = await model.venta(conversionId);
+  if (!v || !v.lead_id) return { guardado: false };
+  const d = normalizar({ ...deLaFicha(v), ...Object.fromEntries(Object.entries(datos || {}).filter(([, x]) => x != null && String(x).trim() !== '')) });
+  await model.guardarFichaFiscal(v.lead_id, d);
+  const fuera = problemas(d);
+  const fila = await model.deLaVenta(conversionId);
+  if (!fuera.length && fila && ['pendiente', 'revision'].includes(fila.estado) && cfg.activaEn(await model.campusDeLaVenta(conversionId))) {
+    const lista = await model.guardarDatos(fila.id, d, { origen: 'ficha', estado: 'ficha', desde: ['pendiente', 'revision'] });
+    if (lista) await emitirPendientes(lista.id);
+    await nota(v.lead_id, '🧾 La gestora completó los datos fiscales en la venta.');
+  }
+  return { guardado: true, faltan: fuera };
 }
 
 async function mandarPeticion(fila, v, token, { reenvio = false } = {}) {
@@ -344,6 +386,13 @@ async function emitirDeLaFila(filaId) {
  * automáticamente: No» no sale: la factura lleva la coletilla y la manda ella.
  */
 async function mandarFactura(inv, v, f) {
+  // «Por enviar» (ISEIE, 25/11): no sale al alumno; la verifica y la manda administración.
+  if (cfg.revisionAdmin()) {
+    try { await anotarEnLaFactura(inv.id, NOTA_POR_ENVIAR); } catch (err) {
+      logger.warn({ err: err.message, invoiceId: inv.id }, 'factura automática: no se pudo dejar «Por enviar»');
+    }
+    return;
+  }
   if (!enviaElCrm(v)) {
     try { await anotarEnLaFactura(inv.id, NOTA_LA_ENVIA_LA_GESTORA); } catch (err) {
       logger.warn({ err: err.message, invoiceId: inv.id }, 'factura automática: no se pudo anotar que la envía la gestora');

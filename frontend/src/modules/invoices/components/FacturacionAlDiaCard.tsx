@@ -100,7 +100,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   // «Emitir desde la cola» del catálogo (#423; antes, la casilla factura_manager).
   const { can } = usePermission();
   const puedeFacturar = can('facturas.cola');
-  const puedeCambiarEnvio = can('conversions.edit');
+  const puedeCambiarEnvio = can('facturas.envio_auto');
   const [envioDe, setEnvioDe] = useState<ColaItem | null>(null);
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);

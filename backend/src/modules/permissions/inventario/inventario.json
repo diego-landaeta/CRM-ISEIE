@@ -5145,6 +5145,28 @@
    {
     "tipo": "puede",
     "claves": [
+     "facturas.envio_auto"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "PUT /api/factura-automatica/venta/:conversionId/datos-fiscales",
+  "tipo": "ruta",
+  "modulo": "factura-automatica",
+  "metodo": "PUT",
+  "ruta": "/api/factura-automatica/venta/:conversionId/datos-fiscales",
+  "relativa": "PUT /venta/:conversionId/datos-fiscales",
+  "controlador": "guardarDatosFiscales",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
      "conversions.edit"
     ]
    }

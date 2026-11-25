@@ -10,15 +10,36 @@ import { facturaAutomaticaApi } from '../api/facturaAutomatica.api';
   verlo, o si no contesta, apagada: entonces no se enseña «Enviar factura
   automáticamente», que no haría nada.
 */
-let pendiente: Promise<boolean> | null = null;
+let pendiente: Promise<{ activa: boolean; revision: boolean }> | null = null;
 
-export function preguntarSiEstaActiva(): Promise<boolean> {
+function preguntarInterruptor(): Promise<{ activa: boolean; revision: boolean }> {
   if (!pendiente) {
     pendiente = facturaAutomaticaApi.interruptor()
-      .then((r) => !!r?.data?.activa)
-      .catch(() => { pendiente = null; return false; });
+      .then((r) => ({ activa: !!r?.data?.activa, revision: !!r?.data?.revision }))
+      .catch(() => { pendiente = null; return { activa: false, revision: false }; });
   }
   return pendiente;
+}
+
+export function preguntarSiEstaActiva(): Promise<boolean> {
+  return preguntarInterruptor().then((r) => r.activa);
+}
+
+/**
+ * «Por enviar» (FACTURA_ENVIO_REVISION_ADMIN, ISEIE 25/11): la factura no sale
+ * sola al alumno; administración la verifica y la envía. null mientras no se sabe.
+ */
+export function useModoPorEnviar(): boolean | null {
+  const { can } = usePermission();
+  const puedeVer = can('facturas.view');
+  const [modo, setModo] = useState<boolean | null>(puedeVer ? null : false);
+  useEffect(() => {
+    if (!puedeVer) { setModo(false); return undefined; }
+    let vivo = true;
+    preguntarInterruptor().then((r) => { if (vivo) setModo(r.activa && r.revision); });
+    return () => { vivo = false; };
+  }, [puedeVer]);
+  return modo;
 }
 
 /** null mientras no se sabe; luego true/false. */

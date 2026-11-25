@@ -29,7 +29,8 @@ const ESTADO: Record<string, string> = {
 
 export default function FacturaAutomaticaVentaCard({ conversionId }: { conversionId: number }) {
   const { can } = usePermission();
-  const puedeEditar = can('conversions.edit');
+  // Cambiar el envío: solo administración (25/11).
+  const puedeEditar = can('facturas.envio_auto');
   const puedeReenviar = can('facturas.cola');
   const [datos, setDatos] = useState<EnvioDeLaVenta | null>(null);
   const [envio, setEnvio] = useState<EnvioEnEdicion | null>(null);

@@ -172,6 +172,13 @@ const LISTA = [
             "recorrido": "facturas-colaboradores"
           },
           {
+            "titulo": "El envío de la factura, solo administración",
+            "texto": "«Enviar factura automáticamente: Sí / No» y «Enviar a este correo» ya solo los ven las administradoras. La factura no se le manda sola al alumno: queda «Por enviar» en Facturación › Facturación automática, y administración la verifica y la envía. La gestora carga en la venta los datos de la persona para la factura (documento, dirección, ciudad, código postal y país; si llegaron por la admisión, salen rellenos). Sin cobro no sale ninguna factura: la factura es siempre de lo cobrado.",
+            "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
+            "ruta": "/accounting/facturas/automatica",
+            "boton": "Ir a Facturación automática"
+          },
+          {
             "titulo": "La cola de facturación, por campus",
             "texto": "Con «Todos los proyectos» la cola sale separada por campus, y lo que no factura la automática sale marcado «A mano». Si un cobro anterior frena el turno, la cola dice cuál. Al registrar un cobro, la ficha de la venta ya no se cierra y sigue el botón «Emitir ya la factura de este cobro».",
             "roles": ["gestor", "lider_equipo", "admin", "superadmin"],
