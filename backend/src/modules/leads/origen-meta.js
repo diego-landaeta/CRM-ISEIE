@@ -49,6 +49,11 @@ export function idsMetaDelEnvio(leadData = {}) {
     ad: primero(leadData.meta_ad_id, leadData.ad_id, extra.meta_ad_id, extra.ad_id, url.get('ad_id')),
     adset: primero(leadData.meta_adset_id, leadData.adset_id, extra.meta_adset_id, extra.adset_id, extra.ad_set_id, url.get('adset_id')),
     campaign: primero(leadData.meta_campaign_id, leadData.campaign_id, extra.meta_campaign_id, extra.campaign_id, url.get('campaign_id')),
+    // El lead y el formulario del Lead Ad (#474). Sin alias suelto "form_id":
+    // form.controller.js ya usa ese nombre para el id INTERNO del formulario de
+    // Elementor, que no tiene nada que ver con el formulario de Meta.
+    lead: primero(leadData.meta_lead_id, leadData.leadgen_id, extra.meta_lead_id, extra.leadgen_id),
+    form: primero(leadData.meta_form_id, extra.meta_form_id),
   };
   const candidatos = [...new Set([
     leadData.utm_content, leadData.utm_term, leadData.utm_campaign, leadData.utm_id,
@@ -63,7 +68,7 @@ export function idsMetaDelEnvio(leadData = {}) {
  */
 export async function resolverOrigenMeta(projectId, leadData, { q = query } = {}) {
   const { explicitos, candidatos } = idsMetaDelEnvio(leadData);
-  const hayExplicitos = Boolean(explicitos.ad || explicitos.adset || explicitos.campaign);
+  const hayExplicitos = Boolean(explicitos.ad || explicitos.adset || explicitos.campaign || explicitos.lead || explicitos.form);
   if (!hayExplicitos && !candidatos.length) return null;
 
   const todos = [...new Set([...candidatos, explicitos.ad, explicitos.adset].filter(Boolean))];
@@ -95,11 +100,13 @@ export async function resolverOrigenMeta(projectId, leadData, { q = query } = {}
     campaign = rows[0]?.campaign_id || null;
   }
 
-  if (!ad && !adset && !campaign) return null;
+  if (!ad && !adset && !campaign && !explicitos.lead && !explicitos.form) return null;
   return {
     meta_campaign_id: campaign || null,
     meta_adset_id: adset || null,
     meta_ad_id: ad || null,
+    meta_lead_id: explicitos.lead || null,
+    meta_form_id: explicitos.form || null,
     meta_origen_por: hayExplicitos ? 'envio' : 'url',
   };
 }
@@ -131,14 +138,16 @@ export async function formacionDeLaPublicidad(projectId, origen, { q = query } =
 export async function guardarOrigenMeta(leadId, origen, { canal = null, q = query } = {}) {
   if (!leadId || !origen) return;
   await q(
-    `INSERT INTO lead_utms (lead_id, canal_detectado, meta_campaign_id, meta_adset_id, meta_ad_id, meta_origen_por)
-     VALUES ($1, $2, $3, $4, $5, $6)
+    `INSERT INTO lead_utms (lead_id, canal_detectado, meta_campaign_id, meta_adset_id, meta_ad_id, meta_origen_por, meta_lead_id, meta_form_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      ON CONFLICT (lead_id) DO UPDATE SET
        meta_campaign_id = EXCLUDED.meta_campaign_id,
        meta_adset_id    = EXCLUDED.meta_adset_id,
        meta_ad_id       = EXCLUDED.meta_ad_id,
-       meta_origen_por  = EXCLUDED.meta_origen_por`,
-    [leadId, canal, origen.meta_campaign_id, origen.meta_adset_id, origen.meta_ad_id, origen.meta_origen_por]
+       meta_origen_por  = EXCLUDED.meta_origen_por,
+       meta_lead_id     = EXCLUDED.meta_lead_id,
+       meta_form_id     = EXCLUDED.meta_form_id`,
+    [leadId, canal, origen.meta_campaign_id, origen.meta_adset_id, origen.meta_ad_id, origen.meta_origen_por, origen.meta_lead_id, origen.meta_form_id]
   );
 }
 
