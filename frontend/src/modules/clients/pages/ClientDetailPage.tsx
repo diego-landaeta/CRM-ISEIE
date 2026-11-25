@@ -359,7 +359,7 @@ export default function ClientDetailPage() {
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
-                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspendido' : 'Campus', icon: GraduationCap }] : []),
+                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspensión' : 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
