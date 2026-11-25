@@ -269,6 +269,12 @@ export const TIPOS = {
     clase: ACCION, etiqueta: 'Moodle de un campus', agrupa: false,
     descripcion: 'El Moodle de un campus no responde o su token ya no vale',
   },
+  // Campus-Moodle#24: el Moodle de un campus se ha quedado con una actualización pendiente
+  // («Comprobación de plugins») y puede no dejar entrar. A los super admin, una vez por vez.
+  moodle_actualizacion_pendiente: {
+    clase: ACCION, etiqueta: 'Moodle con actualización pendiente', agrupa: false,
+    descripcion: 'El Moodle de un campus espera a que un administrador complete una actualización',
+  },
   // Matrícula automática (#767): a administración del campus (sus admins y los super admin).
   // Una por alumno: cada una es una matrícula que hacer o que arreglar.
   matricula_moodle_lista: {
