@@ -801,6 +801,12 @@ export async function sendByEmail(invoiceId, customEmail = null) {
 const cobroDelEquipo = (personas) => (p) =>
   !personas || p.gestora_id == null || personas.includes(Number(p.gestora_id));
 
+// La etiqueta del cobro que la factura automática no toma (ver `alCobrar`).
+export const A_MANO_EN_COLA = Object.freeze({
+  estado: 'a_mano', caduca_at: null, sale_sola: false, motivo_codigo: 'A_MANO',
+  motivo: 'la factura automática no se encarga de este cobro: se emite a mano', detalle: null,
+});
+
 export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const estado = await model.getFacturacionAlDia(projectId);
   // La cola: todo cobro posterior a lo ya hecho que aun no tiene factura.
@@ -823,7 +829,12 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
   const pausada = datosFiscales.size ? !!(await pausaAbierta()) : false;
   // «Enviar factura automáticamente: Sí / No» y su correo (#764, 24/11), por venta.
   // Solo con la factura automática encendida: apagada, nada sale solo.
-  const { activa: facturaAutoActiva } = await import('../factura-automatica/factura-automatica.config.js');
+  const { activa: facturaAutoActiva, activaEn: facturaAutoEn } = await import('../factura-automatica/factura-automatica.config.js');
+  // Con la automática encendida en el campus, el cobro de una venta que no tiene
+  // formulario de datos fiscales es de los que NO toma (la venta ya se facturaba
+  // a mano, o tenía proforma; o el cobro es de antes de encenderla): se dice,
+  // para que nadie espere a que salga sola (25/11, la venta 540 de Ana).
+  const aManoEnCola = facturaAutoEn({ id: projectId }) ? A_MANO_EN_COLA : null;
   let envios = new Map();
   if (facturaAutoActiva()) {
     try {
@@ -857,7 +868,7 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
       // que la emisión automática había parado por posible duplicada).
       datos_fiscales: comoVaEnLaCola(datosFiscales.get(Number(p.conversion_id)), {
         posibleDuplicada: duplicadas.has(Number(p.payment_id)), pausada,
-      }),
+      }) || aManoEnCola,
       envio_factura: envios.get(Number(p.conversion_id)) || null,
     })),
     por_dia: Object.values(cola.reduce((acc, p) => {
@@ -874,6 +885,35 @@ export async function getFacturacionAlDia(projectId, { personas = null } = {}) {
 export async function setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta) {
   const guardado = await model.setFacturacionAlDia(projectId, alDiaHasta, userId, stripeOkHasta);
   return { ...guardado, emitidas: 0, detalle: [], fallidas: [] };
+}
+
+const dos = (n) => String(n).padStart(2, '0');
+const diaDe = (f) => (f instanceof Date
+  ? `${f.getFullYear()}-${dos(f.getMonth() + 1)}-${dos(f.getDate())}`
+  : String(f || '').slice(0, 10));
+const fechaEs = (f) => { const [a, m, d] = diaDe(f).split('-'); return d ? `${d}/${m}/${a}` : ''; };
+
+/**
+ * El primer cobro de la cola que va antes que `pg` (por fecha y, a igual fecha,
+ * por id): el que hace saltar HAY_ANTERIORES. La cola sale con los mismos filtros
+ * que `hayPendientesAnteriores` y ordenada igual, así que es el que lo para.
+ */
+export function primeroAnterior(cola, pg) {
+  const dia = diaDe(pg.fecha);
+  return (cola || []).find((x) => Number(x.payment_id) !== Number(pg.payment_id)
+    && (diaDe(x.fecha) < dia || (diaDe(x.fecha) === dia && Number(x.payment_id) < Number(pg.payment_id)))) || null;
+}
+
+export function datosDelCobro(p) {
+  return {
+    payment_id: Number(p.payment_id), conversion_id: Number(p.conversion_id),
+    fecha: diaDe(p.fecha), importe: Number(p.importe || 0), cliente: p.cliente || null,
+  };
+}
+
+export function textoDelCobro(p) {
+  const euros = Number(p.importe || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${euros} € del ${fechaEs(p.fecha)}${p.cliente ? ` de ${p.cliente}` : ''} (venta ${p.conversion_id}, cobro ${p.payment_id})`;
 }
 
 // Genera la factura de UN cobro concreto de la cola. Solo si no queda nada mas
@@ -893,9 +933,13 @@ export async function generarFacturaDePago(projectId, paymentId, userId, { forza
   // mira antes que el orden para que el motivo que se lee sea el de verdad.
   await exigirFacturacionActiva({ paymentId: pg.payment_id });
   if (!forzar && await model.hayPendientesAnteriores(projectId, pg.fecha, pg.payment_id)) {
+    // Cuál, con nombre (25/11): «hay cobros anteriores» a secas no dejaba saber
+    // qué cobro paraba el turno ni dónde ir a facturarlo.
+    const anterior = primeroAnterior(cola, pg);
     throw new AppError(
-      'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.',
-      409, 'HAY_ANTERIORES');
+      'Hay cobros anteriores sin facturar. Se emiten por orden de fecha para que la numeración no se descoloque.'
+        + (anterior ? ` El primero: ${textoDelCobro(anterior)}.` : ''),
+      409, 'HAY_ANTERIORES', anterior ? { anterior: datosDelCobro(anterior) } : undefined);
   }
   const inv = await model.emitirFacturaDePago(
     pg.conversion_id, { paymentId: pg.payment_id, importe: Number(pg.importe), saltarTotal: forzar, confirmarDuplicada }, userId

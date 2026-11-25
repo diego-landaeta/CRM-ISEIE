@@ -96,7 +96,8 @@ export default function WasapiExportDialog({
         .then((res: any) => setGestores(Array.isArray(res?.data) ? res.data : []))
         .catch(() => setGestores([]));
     }
-    if (projectId && seVe('producto')) {
+    // Con «Todos» (-1) no: `/products?projectId=-1` es un 400 (25/11).
+    if (Number(projectId) > 0 && seVe('producto')) {
       client.get('/products', { params: { projectId, limit: 500 } })
         .then((res: any) => setProductos(Array.isArray(res?.data) ? res.data : []))
         .catch(() => setProductos([]));

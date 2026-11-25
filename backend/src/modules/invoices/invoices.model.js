@@ -154,6 +154,39 @@ export async function nextNumero(client, projectId, issuerId, ano, serie) {
   return n;
 }
 
+/*
+  LA FACTURA HECHA A MANO, CON SU COBRO (25/11).
+
+  El 23/11 Ana registró dos ventas con su cobro (999: 395 € de la venta 720;
+  1000: 380 € de la 721) y en el mismo minuto les hizo la factura desde
+  Finanzas › Ventas (`POST /invoices`, botón «Factura»): la 2026/0311 y la
+  0312. Ese camino no lleva `paymentId`, así que las dos quedaron con
+  `payment_id` vacío. La cola solo las reconoce por la regla de la huérfana
+  (mismo importe, fecha más cercana); con dos cobros iguales en la venta 720
+  (999 y el de Stripe 1006) uno de los dos se quedaba «sin facturar», y cuenta
+  en el turno de su campus (`hayPendientesAnteriores`).
+
+  Ahora, al emitir a mano la factura normal de una venta sin decir de qué cobro
+  es, va con el cobro de esa venta que aún no tiene factura y es del MISMO
+  importe (en euros), el de fecha más cercana a la de la factura; a igual
+  distancia, el más antiguo. Es la misma elección que la huérfana, pero queda
+  escrita. Sin ninguno que case, como hasta hoy: sin cobro. Nada se emite solo.
+*/
+export async function cobroQueFactura(db, { conversionId, total, fecha = null }) {
+  if (!conversionId || !Number.isFinite(Number(total))) return null;
+  const { rows } = await db.query(
+    `SELECT cp.id
+       FROM conversion_payments cp
+      WHERE cp.conversion_id = $1
+        AND ABS(cp.importe - $2::numeric) < 0.01
+        AND NOT EXISTS (SELECT 1 FROM invoices i
+                         WHERE i.payment_id = cp.id AND i.estado <> 'cancelada')
+      ORDER BY ABS(cp.fecha - COALESCE($3::date, CURRENT_DATE)), cp.id
+      LIMIT 1`,
+    [conversionId, Number(total), fecha]);
+  return rows[0]?.id || null;
+}
+
 export async function create(data, userId) {
   const client = await getClient();
   try {
@@ -231,6 +264,15 @@ export async function create(data, userId) {
         nombre: data.clienteNombre, nif: data.clienteNif, total: data.total,
         fecha: data.fechaEmision || null, conversionId: data.conversionId || null,
       }, { confirmada: vieneConfirmada(data), exec: (sql, params) => client.query(sql, params) });
+    }
+
+    // La factura hecha a mano de una venta va con SU cobro (25/11). Ver
+    // `cobroQueFactura`: sin esto quedaba con payment_id vacío y el cobro, en la
+    // cola, como si nadie lo hubiera facturado.
+    if (!isBorrador && !isProforma && !data.paymentId && data.conversionId) {
+      data = { ...data, paymentId: await cobroQueFactura(client, {
+        conversionId: data.conversionId, total: data.total, fecha: data.fechaEmision || null,
+      }) };
     }
 
     // Con la facturacion pausada por la auditoria (#765) no se gasta ningun
