@@ -17,7 +17,8 @@ import { isIP } from 'node:net';
  *   · «Probar conexión» dice si entra o por qué no, sin devolver la contraseña;
  *   · quién puede: el permiso `correos.buzones` y los campus de cada admin;
  *   · el buzón del .env sigue leyéndose si no hay ninguno en la base, y al pasarlo
- *     al panel sus correos se adoptan en vez de duplicarse;
+ *     al panel sus correos se adoptan en vez de duplicarse, y ya no se vuelve a
+ *     leer por el .env aunque se quite del panel (CRM#1058);
  *   · el buzón de facturación de una empresa sin correo se ofrece como su correo.
  *
  * El servidor IMAP es de mentira (no se toca ningún buzón real): cada usuario
@@ -476,5 +477,36 @@ describe('en ISEIE la Bandeja es solo de lo recibido', () => {
   it('un id que no es un número es un 404, no un error de la base', async () => {
     expect((await request.get('/api/correos/abc').set(como(SUPER))).status).toBe(404);
     expect((await request.patch('/api/correos/buzones/abc').set(como(SUPER)).send({ nombre: 'x' })).status).toBe(404);
+  });
+});
+
+// Diego (CRM#1058): «cuando se adopta deja de leerse para que no salga
+// duplicado». El mismo arreglo que el 360 en CRM#1058.
+describe('el buzón del .env ya adoptado (CRM#1058)', () => {
+  it('no se vuelve a leer, ni aunque se quite del panel', async () => {
+    vi.stubEnv('IMAP_USER', ENV); vi.stubEnv('IMAP_PASSWORD', CLAVE_BUENA);
+    const adoptado = await one(`SELECT id FROM correo_buzones WHERE direccion = $1 AND activo`, [ENV]);
+    expect((await request.delete(`/api/correos/buzones/${adoptado.id}`).set(como(SUPER))).status).toBe(200);
+    // Ninguno activo en la base: lo que antes hacía volver a leer el del .env,
+    // con la clave sin buzón, y guardar sus correos otra vez.
+    await q(`UPDATE correo_buzones SET activo = false WHERE activo AND direccion LIKE $1`, [`%@${dom}`]);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.motivo).toBe('SIN_BUZON');
+    expect(conexiones).toHaveLength(0);
+    // Sus dos correos, una vez y con el buzón al que se adoptaron.
+    const filas = await q(`SELECT buzon_id FROM email_envios WHERE clave LIKE $1`, [`%<e_@${dom}>`]);
+    expect(filas).toHaveLength(2);
+    expect(filas.every((f) => f.buzon_id === adoptado.id)).toBe(true);
+  });
+
+  it('un .env que nunca se conectó en el panel sí se lee si no hay ninguno en la base', async () => {
+    const NUEVO = `nuevo@${dom}`;
+    BUZONES_FALSOS[NUEVO] = [crudo('n1', NUEVO, 'Del nuevo')];
+    vi.stubEnv('IMAP_USER', NUEVO); vi.stubEnv('IMAP_PASSWORD', CLAVE_BUENA);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.nuevos).toBe(1);
+    expect(conexiones.map((c) => c.auth.user)).toEqual([NUEVO]);
   });
 });
