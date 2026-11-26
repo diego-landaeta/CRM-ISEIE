@@ -32,6 +32,9 @@ router.get('/comisiones', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl
 router.post('/comisiones/liquidar', puede('tutores.liquidar'), ctrl.liquidar);
 router.patch('/comisiones/:id/estado', puede('tutores.gestionar'), ctrl.cambiarEstadoComision);
 router.post('/comisiones/:id/revertir', puede('tutores.liquidar'), ctrl.revertirComision);
+// «Avisar al tutor» (CRM-ISEIE#188, gemela de CRM#165): la vista previa y el envío.
+router.get('/comisiones/aviso', puede('tutores.avisar'), ctrl.previoDelAviso);
+router.post('/comisiones/avisar', puede('tutores.avisar'), ctrl.avisarTutor);
 router.get('/formaciones-sin-tutor', puede('tutores.gestionar'), ctrl.formacionesSinTutor);
 router.get('/pagos-sin-formacion', puede('tutores.gestionar'), ctrl.pagosSinFormacion);
 router.put('/formaciones/:productId/busqueda', puede('tutores.gestionar'), ctrl.marcarBusqueda);

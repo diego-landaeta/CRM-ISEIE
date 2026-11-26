@@ -159,3 +159,27 @@ export const disponibleSchema = z.object({
   disponible: z.boolean({ required_error: 'Falta si está disponible o no' }),
   motivo: z.string().trim().max(200, 'El motivo, en 200 caracteres como mucho').nullable().optional(),
 });
+
+/*
+  «Avisar al tutor» desde Comisiones (CRM#165 / CRM-ISEIE#188). El tutor y el
+  mes, y el recorte de la pantalla —el campus o la empresa elegidos— para que
+  el correo diga la misma cifra que la fila. De fuera solo entra el asunto y
+  una nota: a quién va y cuánto, lo decide el servidor.
+*/
+const idOpcional = z.coerce.number().int().positive().optional().nullable();
+const periodoMes = z.string({ required_error: 'Falta el mes (AAAA-MM).' })
+  .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'El mes, en formato AAAA-MM');
+
+export const avisoTutorQuerySchema = z.object({
+  tutorId: z.coerce.number({ invalid_type_error: 'Falta el tutor' }).int().positive('Falta el tutor'),
+  periodo: periodoMes,
+  projectId: idOpcional,
+  issuerId: idOpcional,
+});
+
+export const avisarTutorSchema = avisoTutorQuerySchema.extend({
+  asunto: z.string().trim().max(200, 'El asunto, en 200 caracteres como mucho').optional().nullable(),
+  nota: z.string().trim().max(2000, 'La nota, en 2000 caracteres como mucho').optional().nullable(),
+  // Ya se le mandó el de ese mes: hace falta decirlo a propósito para repetirlo.
+  repetir: z.boolean().optional().default(false),
+});

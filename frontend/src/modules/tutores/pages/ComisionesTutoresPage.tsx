@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy } from '@phosphor-icons/react';
+import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy, PaperPlaneTilt } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -9,6 +9,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
+import AvisarTutorDialog from '../components/AvisarTutorDialog';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import usePermission from '@/shared/hooks/usePermission';
 // El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
@@ -84,6 +85,8 @@ export default function ComisionesTutoresPage() {
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
   const [cambiando, setCambiando] = useState<number | null>(null);
+  // «Avisar al tutor»: la fila de la que se abre el diálogo (CRM#165 / CRM-ISEIE#188).
+  const [avisando, setAvisando] = useState<ResumenComision | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -336,6 +339,28 @@ export default function ComisionesTutoresPage() {
                         <CheckCircle size={14} weight="bold" className="mr-1.5" /> Marcar pagado
                       </Button>
                     )}
+                    {/* «Avisar al tutor» (CRM#165 / CRM-ISEIE#188). Va junto a pagar
+                        y no dentro del desplegable: es la otra cosa que se hace
+                        con una fila. Lo que pide el servidor: `tutores.avisar` y
+                        gestionar colaboraciones (`exigirGestion`), no liquidar. */}
+                    {puede && can('tutores.avisar') && Number(r.pendiente) > 0 && (
+                      <Button size="sm" variant="outline"
+                        title={r.tutor_email ? `Escribir a ${r.tutor_email}` : 'Este tutor no tiene correo en su ficha'}
+                        onClick={() => setAvisando(r)}>
+                        <PaperPlaneTilt size={14} weight="bold" className="mr-1.5" />
+                        Avisar al tutor
+                      </Button>
+                    )}
+
+                    {/* Que ya se le avisó, quién y cuántas veces, al lado: no en el
+                        estado del dinero, que sigue debiéndosele hasta que se pague. */}
+                    {r.avisado_at && (
+                      <span className="text-xs text-muted-foreground shrink-0" title={r.avisado_at}>
+                        avisado el {soloFecha(r.avisado_at)}
+                        {r.avisado_por_nombre ? ` por ${r.avisado_por_nombre}` : ''}
+                        {(r.avisos_enviados || 0) > 1 ? ` (${r.avisos_enviados} veces)` : ''}
+                      </span>
+                    )}
                     {Number(r.pendiente) === 0 && r.ultima_liquidacion && (
                       <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
                         pagado el {soloFecha(r.ultima_liquidacion)}
@@ -444,6 +469,17 @@ export default function ComisionesTutoresPage() {
           </div>
         )}
       </div>
+      {/* La vista previa y el envío (CRM#165 / CRM-ISEIE#188): primero se ve el
+          correo tal cual sale, y si ya se le mandó el de ese mes, se dice. */}
+      {avisando && (
+        <AvisarTutorDialog
+          tutorId={avisando.tutor_id}
+          periodo={avisando.periodo}
+          ambito={{ projectId, issuerId }}
+          onClose={() => setAvisando(null)}
+          onEnviado={() => { setAvisando(null); cargar(); }}
+        />
+      )}
     </div>
   );
 }

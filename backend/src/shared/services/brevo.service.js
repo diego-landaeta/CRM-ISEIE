@@ -82,7 +82,7 @@ const esperar = (ms) => new Promise((r) => setTimeout(r, ms));
  *              tenga la suya. Sin nada: la de la marca si la tiene
  *              (`cuentaDeLaMarca`), la del CRM si no.
  */
-async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, attachment, clave = null, cuenta = null }) {
+async function sendEmail({ to, subject, htmlContent, textContent, tags = [], projectId = null, fromEmail, fromName, replyTo, attachment, clave = null, cuenta = null }) {
   // `to` llega de cuatro formas: cadena, objeto, lista de objetos, y una cadena
   // con varios correos separados por comas (los avisos a administradores).
   const destinatarios = Array.isArray(to)
@@ -147,6 +147,10 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
   if (Array.isArray(attachment) && attachment.length > 0) {
     payload.attachment = attachment;
   }
+  // A quién contesta quien lo recibe, si no es el remitente (como en MultiCRM).
+  // Lo usa «Avisar al tutor» (#188): el tutor contesta con su factura al buzón
+  // de facturación, no al «no responder» de la marca.
+  if (replyTo) payload.replyTo = typeof replyTo === 'string' ? { email: replyTo } : replyTo;
 
   let ultimoFallo = { reason: 'DESCONOCIDO', details: null };
   // Los intentos que se hicieron DE VERDAD, no el tope. Un 4xx corta a la
@@ -198,7 +202,7 @@ async function sendEmail({ to, subject, htmlContent, textContent, tags = [], pro
     logger.warn({ remitente, to: destinatarios, subject, fallo: ultimoFallo.reason },
       'Brevo: no salio con el remitente de la marca; se intenta por la cuenta del CRM');
     const otra = await sendEmail({ to, subject, htmlContent, textContent, tags, projectId,
-      fromEmail: undefined, fromName, attachment, clave, cuenta: 'crm' });
+      fromEmail: undefined, fromName, replyTo, attachment, clave, cuenta: 'crm' });
     return { ...otra, primerFallo: ultimoFallo.reason };
   }
   return { sent: false, ...ultimoFallo, intentos: hechos };

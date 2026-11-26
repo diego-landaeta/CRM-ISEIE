@@ -193,7 +193,6 @@ describe('cada pantalla, con datos', () => {
   }, 15000);
 
   it.each([
-    ['comisiones-tutores', 'tutores.liquidar', 'Marcar pagado'],
     ['por-pagar', 'accounts_payable.create', 'Nueva factura'],
     ['nominas', 'payroll.edit', 'Añadir un plan'],
   ])('%s: sin «%s», no se explica «%s»', (id, permiso, titulo) => {
@@ -202,7 +201,15 @@ describe('cada pantalla, con datos', () => {
     expect(pasosPara(r, TODO).map((p) => p.titulo)).toContain(titulo);
   });
 
-  it('Comisiones de tutores: «Marcar pagado» señala solo la primera fila', async () => {
+  it('Comisiones de tutores: sin liquidar ni avisar, no se explica «Pagar y avisar» (#188)', () => {
+    const r = RECORRIDOS_FINANZAS['comisiones-tutores'];
+    const sinNinguno = (k) => k !== 'tutores.liquidar' && k !== 'tutores.avisar';
+    expect(pasosPara(r, sinNinguno).map((p) => p.titulo)).not.toContain('Pagar y avisar');
+    expect(pasosPara(r, (k) => k !== 'tutores.liquidar').map((p) => p.titulo)).toContain('Pagar y avisar');
+    expect(pasosPara(r, TODO).map((p) => p.titulo)).toContain('Pagar y avisar');
+  });
+
+  it('Comisiones de tutores: «Pagar y avisar» señala solo la primera fila', async () => {
     localStorage.setItem(claveRecorrido('comisiones-tutores', 7), '1');
     const { default: Pantalla } = await PANTALLAS['comisiones-tutores']();
     render(<MemoryRouter initialEntries={['/tutores/comisiones']}><Routes><Route path="/tutores/comisiones" element={<Pantalla />} /></Routes></MemoryRouter>);

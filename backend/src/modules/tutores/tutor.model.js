@@ -742,7 +742,18 @@ export async function resumenComisiones({ periodo = null, tutorId = null, projec
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado NOT IN ('pagada', 'revertida')), 0) AS pendiente,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'pagada'), 0) AS pagada,
             COALESCE(SUM(tc.importe) FILTER (WHERE tc.estado = 'revertida'), 0) AS revertida,
-            MAX(tc.fecha_liquidacion) AS ultima_liquidacion
+            MAX(tc.fecha_liquidacion) AS ultima_liquidacion,
+            -- El ultimo «Avisar al tutor» de ese mes: cuando, quien y cuantos van
+            -- (CRM#165 / CRM-ISEIE#188). Va aparte del estado a proposito: avisar
+            -- no es cobrar, y una comision avisada sigue contando en «pendiente».
+            (SELECT MAX(a.enviado_at) FROM tutor_avisos_comisiones a
+              WHERE a.tutor_id = tc.tutor_id AND a.periodo = tc.periodo) AS avisado_at,
+            (SELECT ua.nombre FROM tutor_avisos_comisiones a
+               LEFT JOIN users ua ON ua.id = a.enviado_por
+              WHERE a.tutor_id = tc.tutor_id AND a.periodo = tc.periodo
+              ORDER BY a.enviado_at DESC LIMIT 1) AS avisado_por_nombre,
+            (SELECT COUNT(*)::int FROM tutor_avisos_comisiones a
+              WHERE a.tutor_id = tc.tutor_id AND a.periodo = tc.periodo) AS avisos_enviados
        FROM tutor_commissions tc
        JOIN users u ON u.id = tc.tutor_id
        -- El IBAN y el correo viajan con el resumen: pagar a un profesor

@@ -280,6 +280,8 @@ export const SECCIONES = [
           // corregir y responder siguen siendo de la profesora del curso.
           a('campus_administracion', 'Mi campus de administración', 'Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle.', ADMIN),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
+          // «Avisar al tutor» desde Comisiones (CRM-ISEIE#188, gemela de CRM#165). Como en el 360.
+          a('avisar', 'Avisar de comisiones', 'Ver el aviso de comisiones y mandarlo al tutor.', TODOS),
           a('liquidar', 'Liquidar comisiones', 'Pagar o revertir las comisiones de un tutor (mueve dinero).', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('ajustes', 'Ajustes de comisiones', 'Cambiar los porcentajes y reglas de las comisiones.', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('contrasena', 'Contraseña de un tutor', 'Ponerle contraseña nueva a un tutor de sus campus.', ADMIN, { requiere: ['tutores.gestionar'] }),
