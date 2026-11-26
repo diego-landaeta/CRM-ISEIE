@@ -34,6 +34,7 @@ import crypto from 'node:crypto';
 import { query } from '../../shared/config/db.js';
 import { encrypt, decrypt, maskSecret } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
+import { AppError } from '../../shared/utils/AppError.js';
 import { sendEmail } from '../../shared/services/brevo.service.js';
 import {
   correo, parrafo, boton, nota, enlace, esc,
@@ -44,7 +45,9 @@ import {
 } from '../../shared/services/moodle.client.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
 import { pluginActivo, campusConPluginAlDia } from './consultas.plugin.js';
-import { tutoresQueRecibenConsultas, conexionDelCampus } from '../tutores/tutor.campus.js';
+import {
+  tutoresQueRecibenConsultas, conexionDelCampus, soloDesdeMoodle, SOLO_DESDE_MOODLE,
+} from '../tutores/tutor.campus.js';
 import * as model from './consultas.model.js';
 import { marcarContactado } from './consultas.alumnos.js';
 
@@ -530,6 +533,10 @@ export async function enviarAlCampus(mensaje, consulta, adjuntos = [], { db = nu
     const desde = await moodleIdDelTutor(consulta.tutor_id, consulta.project_id);
     if (!desde) {
       error = 'La tutora no tiene su usuario del campus en el CRM: compruébala en Tutores → Campus.';
+    } else if (await soloDesdeMoodle(consulta.tutor_id, consulta.project_id)) {
+      // La cuenta de administración del sitio (excepción, 24/11): el plugin no envía como
+      // ella. Se dice claro en vez de un error del campus.
+      error = SOLO_DESDE_MOODLE;
     } else {
       try {
         // Plugin 1.9.0: si la consulta es de un chat de grupo, la respuesta va a ese chat (la
@@ -570,6 +577,11 @@ export async function enviarAlCampus(mensaje, consulta, adjuntos = [], { db = nu
 export async function responder(consultaId, tutorId, texto, archivos = [], { guardarArchivo, ...opciones } = {}) {
   const c = await model.cabecera(consultaId);
   if (!c) return null;
+  // Con la cuenta de administración del sitio (excepción, 24/11) la respuesta no saldría por
+  // el plugin: no se guarda una respuesta que no va a llegar; se contesta en Moodle.
+  if (await respondePorElPlugin(c.project_id) && await soloDesdeMoodle(c.tutor_id, c.project_id)) {
+    throw new AppError(SOLO_DESDE_MOODLE, 409, 'RESPONDE_DESDE_MOODLE');
+  }
   // Primero los archivos: si alguno no se puede guardar, no queda una respuesta
   // a medias (guardada y «respondida», pero sin sus adjuntos).
   const subidos = [];

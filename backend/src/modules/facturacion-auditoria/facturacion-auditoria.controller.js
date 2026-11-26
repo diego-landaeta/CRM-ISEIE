@@ -2,7 +2,8 @@ import { AppError } from '../../shared/utils/AppError.js';
 import * as service from './facturacion-auditoria.service.js';
 import * as model from './facturacion-auditoria.model.js';
 import { leerConfig } from './facturacion-auditoria.config.js';
-import { sinDatosSchema, historialSchema } from './facturacion-auditoria.validation.js';
+import { sinDatosSchema, historialSchema, simularSchema } from './facturacion-auditoria.validation.js';
+import { fechaValida } from './facturacion-auditoria.config.js';
 
 const APAGADA = () => new AppError('La auditoría de facturación está apagada.', 409, 'AUDITORIA_APAGADA');
 
@@ -32,6 +33,21 @@ export async function auditar(req, res, next) {
     if (!leerConfig().activa) throw APAGADA();
     const r = await service.auditar({ origen: 'manual', userId: req.user.userId });
     res.json({ success: true, data: { auditoria: r.auditoria, limpia: r.limpia, resumen: r.resumen, pausada: !!r.pausa } });
+  } catch (err) { next(err); }
+}
+
+// GET /api/facturacion-auditoria/simular?desde= — la pasada en seco (24/11): las
+// mismas comprobaciones sin guardar, pausar ni avisar. También apagada: es para
+// ver qué saldría antes de encenderla.
+export async function simular(req, res, next) {
+  try {
+    const q = simularSchema.safeParse(req.query || {});
+    if (!q.success) throw new AppError(q.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    const desde = q.data.desde ? fechaValida(q.data.desde) : null;
+    if (q.data.desde && !desde) throw new AppError('Esa fecha no existe', 400, 'VALIDATION_ERROR');
+    const r = await service.simular({ desde });
+    // Como mucho 300 incidencias en la respuesta: el resumen las cuenta todas.
+    res.json({ success: true, data: { ...r, incidencias: r.incidencias.slice(0, 300), total: r.incidencias.length } });
   } catch (err) { next(err); }
 }
 

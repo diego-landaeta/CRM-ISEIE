@@ -202,9 +202,8 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   });
 
   it('entre ellos, los del día a día, tercera tanda (#619, tanda E; gemela de CRM#941), con todos sus pasos', () => {
-    // Correos no: aquí la pantalla llega con #750, y su recorrido con ella.
     expect(Object.keys(RECORRIDOS_GESTORA_C)).toEqual([
-      'whatsapp-banco', 'whatsapp-actividad',
+      'whatsapp-banco', 'whatsapp-actividad', 'correos',
       'consultas-alumnos', 'consultas-carga', 'consultas-tutores', 'consultas-metricas', 'consultas-respuestas',
     ]);
     for (const r of Object.values(RECORRIDOS_GESTORA_C)) {

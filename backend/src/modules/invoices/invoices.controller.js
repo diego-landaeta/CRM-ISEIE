@@ -420,6 +420,22 @@ export async function pdf(req, res, next) {
   } catch (e) { next(e); }
 }
 
+// POST /api/invoices/:id/enviada-whatsapp — «Por enviar»: se descargó el PDF y
+// se mandó por WhatsApp. Solo la marca; el PDF lo baja la pantalla.
+export async function enviadaPorWhatsapp(req, res, next) {
+  try {
+    const id = Number(req.params.id);
+    const inv = await model.findById(id);
+    if (!inv) throw new AppError('Factura no encontrada', 404, 'NOT_FOUND');
+    if (inv.estado === 'borrador') throw new AppError('Un borrador no se envía: emítela antes', 409, 'BORRADOR');
+    const { query: q } = await import('../../shared/config/db.js');
+    const { rows: [u] } = await q('SELECT nombre FROM users WHERE id = $1', [req.user.userId]);
+    const r = await model.markSentWhatsapp(id, u?.nombre || null);
+    if (!r) throw new AppError('Esta factura ya estaba enviada', 409, 'YA_ENVIADA');
+    res.json({ success: true, data: r });
+  } catch (err) { next(err); }
+}
+
 export async function send(req, res, next) {
   try {
     const id = Number(req.params.id);

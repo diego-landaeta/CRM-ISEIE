@@ -68,6 +68,16 @@ export function pluginMoodleActivo(env = process.env) {
 }
 
 /**
+ * Formaciones desde el CRM, fase 2 (CRM#1113): crear o actualizar el curso de Moodle de
+ * una formación, con una sección por módulo. ESCRIBE en el Moodle del campus, así que en
+ * producción va apagado hasta que se apruebe con FORMACIONES_MOODLE_EN_PRODUCCION=1 (y
+ * necesita además el plugin, PLUGIN_MOODLE_EN_PRODUCCION, y la 1.12.0 en el campus).
+ */
+export function formacionesMoodleActivas(env = process.env) {
+  return enPruebasOAprobado('FORMACIONES_MOODLE_EN_PRODUCCION', env);
+}
+
+/**
  * Cobro automático de las cuotas (#680; Diego, 19/11/2026): el CRM cobra solo cada
  * cuota en su fecha con la tarjeta que el alumno guardó al pagar su link. Mueve
  * dinero sin que nadie pulse nada, así que en producción va APAGADO hasta que
@@ -124,7 +134,7 @@ export function redactorasMoodleActivo(env = process.env) {
 /**
  * Suspensiones y reactivaciones de Moodle en la ficha del alumno (CRM#531): recibir el
  * aviso `estado_alumno` del plugin 1.13.0, apuntarlo, el estado y el historial en la
- * ficha, el filtro «Suspendidos» de Clientes y la campana a la gestora.
+ * ficha, el filtro «Con suspensión en Moodle» de Clientes y la campana a la gestora.
  *
  * Va con su propio interruptor, ADEMÁS del del plugin: el plugin puede aprobarse para los
  * mensajes antes que esto, y esto necesita la migración 333. Apagado, el CRM contesta al aviso como uno que aún no lo

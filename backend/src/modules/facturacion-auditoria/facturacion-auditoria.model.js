@@ -25,6 +25,19 @@ export async function auditarDesdeGuardado() {
   return rows[0].desde;
 }
 
+/**
+ * El día guardado, SIN guardarlo: para enseñarlo y para la pasada en seco.
+ * Null si la auditoría no ha dado ninguna vuelta (la primera guardará ese día).
+ */
+export async function auditarDesdeLeido() {
+  try {
+    const { rows } = await query('SELECT auditar_desde::text AS desde FROM facturacion_auditoria_estado WHERE id = 1');
+    return rows[0]?.desde || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── 1 · Números repetidos en una serie ──────────────────────────────────────
 //
 // La numeración es por SERIE y año, no por campus: en el 360 la serie de CEDIA
@@ -125,6 +138,13 @@ export async function ultimaAuditoria() {
        FROM facturacion_auditorias a
        LEFT JOIN users u ON u.id = a.ejecutada_por
       ORDER BY a.id DESC LIMIT 1`);
+  return rows[0] || null;
+}
+
+/** La vuelta de antes de esta (para el modo aviso). */
+export async function vueltaAnterior(id) {
+  const { rows } = await query(
+    'SELECT id, limpia FROM facturacion_auditorias WHERE id < $1 ORDER BY id DESC LIMIT 1', [id]);
   return rows[0] || null;
 }
 

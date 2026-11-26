@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as mcpModel from '../mcp/mcp.model.js';
 import { construirAmbito } from '../mcp/mcp.acceso.js';
-import { campusConMoodle, credencialesMoodle, ErrorMoodle, FUNCIONES_MOODLE, normalizarUrlMoodle } from '../mcp/mcp.moodle.cliente.js';
+import { campusConMoodle, conexionesDeIntegraciones, credencialesMoodle, ErrorMoodle, FUNCIONES_MOODLE, normalizarUrlMoodle } from '../mcp/mcp.moodle.cliente.js';
 import * as moodle from '../mcp/mcp.moodle.js';
 import * as credenciales from '../credentials/credentials.model.js';
 import { anotar, ACCIONES } from '../credentials/credentials.registro.js';
@@ -34,8 +34,13 @@ async function ambitoDe(req) {
   const user = await mcpModel.findUserById(req.user.userId);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'NOT_FOUND');
   // Un campus es un proyecto de educación: las plataformas de IA (tipo «ia») no tienen Moodle.
-  const proyectos = (await mcpModel.proyectosDeLaPersona(user)).filter((p) => p.tipo !== 'ia');
-  return construirAmbito(user, proyectos);
+  // Un campus de pruebas solo sale si se ha ELEGIDO (migración 148): con `proyecto_id` o en
+  // la ruta de un campus. La lista de todos (`/campus` sin nada), sin ellos.
+  const elegido = (req.query?.proyecto_id != null && req.query.proyecto_id !== '') || req.params?.id != null;
+  const proyectos = (await mcpModel.proyectosDeLaPersona(user, { conPruebas: elegido })).filter((p) => p.tipo !== 'ia');
+  // `conIntegraciones`: un campus conectado en Integraciones › Moodle cuenta como conectado
+  // aquí también (Diego, 25/11: «entro y no me sale nada en el Moodle»). Claude, no.
+  return { ...construirAmbito(user, proyectos), conIntegraciones: true };
 }
 
 const conTope = (trabajo) => trabajo({ signal: AbortSignal.timeout(TOPE_MS) });
@@ -66,9 +71,16 @@ export async function campus(req, res, next) {
     const { proyecto_id: elegido } = validar(z.object({ proyecto_id: num.optional() }), req.query);
     const proyectos = elegido ? ambito.proyectos.filter((p) => Number(p.id) === elegido) : ambito.proyectos;
     if (elegido && !proyectos.length) throw new AppError('No tienes acceso a ese campus', 403, 'FORBIDDEN');
-    const con = await campusConMoodle(proyectos.map((p) => Number(p.id)));
+    const ids = proyectos.map((p) => Number(p.id));
+    // Conectado = con la credencial de este panel (y de Claude) o con la de Integraciones › Moodle,
+    // la que usa el resto del CRM. Antes solo contaba la primera, y los campus conectados en
+    // Integraciones salían «sin conectar» y sin cursos (Diego, 25/11).
+    const con = await campusConMoodle(ids);
+    const deIntegraciones = await conexionesDeIntegraciones(ids.filter((id) => !con.has(id)));
     const filas = await Promise.all(proyectos.map(async (p) => {
-      const base = { id: Number(p.id), nombre: p.nombre, configurado: con.has(Number(p.id)) };
+      const id = Number(p.id);
+      const conexion = con.has(id) ? 'panel' : deIntegraciones.has(id) ? 'integraciones' : null;
+      const base = { id, nombre: p.nombre, configurado: conexion !== null, conexion };
       if (!base.configurado) return base;
       try {
         const r = await conTope((o) => moodle.moodleCursos(ambito, { proyecto_id: p.id, estado: 'todos', limite: 1, con_alumnos: false, refrescar: refrescar(req.query) }, o));

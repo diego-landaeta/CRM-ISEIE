@@ -93,6 +93,25 @@ async function exigirDestino(conexion) {
   if (!d.ok) throw new AppError(d.motivo, 400, 'DESTINO_NO_PERMITIDO');
 }
 
+/**
+ * La contraseña guardada solo va al servidor y al puerto con los que se guardó.
+ * Si llega otro servidor u otro puerto, hay que escribirla: si no, quien tenga
+ * `correos.buzones` pondría un IMAP suyo y la recibiría en el LOGIN, al probar
+ * o en la lectura programada (revisión de Diego en CRM#1058, 24/11).
+ */
+function exigirClaveSiCambiaServidor(d, guardada) {
+  const cambiaHost = Boolean(d.host)
+    && d.host.toLowerCase() !== String(guardada.host || '').toLowerCase();
+  const cambiaPuerto = d.puerto != null && Number(d.puerto) !== Number(guardada.puerto);
+  if ((cambiaHost || cambiaPuerto) && !d.clave) {
+    throw new AppError(
+      'Si cambias el servidor o el puerto, escribe también la contraseña del buzón',
+      400,
+      'CLAVE_OBLIGATORIA',
+    );
+  }
+}
+
 /** El error de la base por dirección repetida, en palabras. */
 function siRepetido(err) {
   if (err?.code === '23505') {
@@ -148,6 +167,7 @@ export async function cambiar(req, res, next) {
       // Con Hostinger el usuario es la dirección: si cambia la dirección y el
       // usuario era la dirección de antes, cambia con ella.
       const usuarioEraLaDireccion = (antes.usuario || '').toLowerCase() === actual.direccion;
+      exigirClaveSiCambiaServidor(d, antes);
       if (d.host || d.puerto) {
         await exigirDestino({ host: d.host || antes.host, puerto: d.puerto || antes.puerto });
       }
@@ -182,7 +202,9 @@ export async function quitar(req, res, next) {
 /**
  * «Probar conexión» con lo que hay en el formulario, sin guardar. Para un buzón
  * ya guardado (`/:id/probar`), lo que no se escriba se toma de lo guardado: así
- * se prueba una contraseña nueva sin volver a escribir lo demás.
+ * se prueba una contraseña nueva sin volver a escribir lo demás. La guardada,
+ * en cambio, solo se usa contra su propio servidor y puerto, y solo la prueba
+ * quien puede cambiar el buzón (CRM#1058).
  */
 export async function probar(req, res, next) {
   try {
@@ -190,7 +212,9 @@ export async function probar(req, res, next) {
     let base = { host: 'imap.hostinger.com', puerto: 993, usuario: '', clave: '' };
     if (req.params.id) {
       const b = await buzonVisible(req, req.params.id);
+      await exigirTocable(req, b);
       base = descifrarConexion(await model.conexionCifrada(b.id));
+      exigirClaveSiCambiaServidor(d, base);
     }
     const conexion = {
       host: d.host || base.host,

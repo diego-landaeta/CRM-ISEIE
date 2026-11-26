@@ -13,7 +13,7 @@ import {
 } from '../api/cursosProducto.api';
 
 /**
- * Académico › Cursos de Moodle (CRM#957): qué curso de Moodle es cada producto
+ * Moodle › Cursos de Moodle (CRM#957): qué curso de Moodle es cada producto
  * del catálogo, campus a campus. Lo necesita la matrícula automática (#767): sin
  * curso, no sabe dónde matricular a quien compra ese producto.
  *

@@ -31,6 +31,8 @@ const CoursesPendingPage = lazy(() => import('./modules/products/pages/CoursesPe
 const ProductsTreePage = lazy(() => import('./modules/products/pages/ProductsTreePage'));
 const ClientsPage = lazy(() => import('./modules/clients/pages/ClientsPage'));
 const ClientDetailPage = lazy(() => import('./modules/clients/pages/ClientDetailPage'));
+// Clientes › Apostillas de La Haya (gemela de CRM#1130).
+const ApostillasPage = lazy(() => import('./modules/apostillas/pages/ApostillasPage'));
 const AccountingDashboardPage = lazy(() => import('./modules/accounting/pages/AccountingDashboardPage'));
 const IncomePage = lazy(() => import('./modules/accounting/pages/IncomePage'));
 const ReceivablePage = lazy(() => import('./modules/accounting/pages/ReceivablePage'));
@@ -120,6 +122,8 @@ const PreguntarPage = lazy(() => import('./modules/ia-analisis/pages/PreguntarPa
 const FeedbackEncuestaPage = lazy(() => import('./modules/feedback/pages/FeedbackEncuestaPage'));
 // El formulario de datos fiscales de la factura automática (#452): sin sesión, desde el correo.
 const DatosFiscalesPage = lazy(() => import('./modules/factura-automatica/pages/DatosFiscalesPage'));
+// Facturas › Facturación automática (#452, 24/11): formularios, facturas solas y la auditoría.
+const FacturacionAutomaticaPage = lazy(() => import('./modules/factura-automatica/pages/FacturacionAutomaticaPage'));
 // La confirmación de los datos del diploma (gemela de CRM#847): sin sesión, desde el correo.
 const ConfirmarDiplomaPage = lazy(() => import('./modules/diploma-confirmacion/pages/ConfirmarDiplomaPage'));
 const FeedbackPanelPage = lazy(() => import('./modules/feedback/pages/FeedbackPanelPage'));
@@ -145,6 +149,9 @@ const MoodlePage = lazy(() => import('./modules/moodle/pages/MoodlePage'));
 const MoodleCampusPage = lazy(() => import('./modules/moodle/pages/MoodleCampusPage'));
 // Gemela de CRM#976 (CRM#957): qué curso de Moodle es cada producto (lo lee la matrícula automática).
 const CursosDeProductosPage = lazy(() => import('./modules/moodle/pages/CursosDeProductosPage'));
+// Gemela de CRM#1113 (CRM-ISEIE#767): crear y editar una formación con sus módulos.
+const FormacionesPage = lazy(() => import('./modules/products/pages/FormacionesPage'));
+const FormacionEditorPage = lazy(() => import('./modules/products/pages/FormacionEditorPage'));
 const ConnectorsPage = lazy(() => import('./modules/connectors/pages/ConnectorsPage'));
 // Conexión → Webhook de transferencias (Diego, 15/10), como en MultiCRM.
 const WebhookTransferenciasPage = lazy(() => import('./modules/webhooks-salientes/pages/WebhookTransferenciasPage'));
@@ -210,7 +217,7 @@ const ROUTE_TITLES = {
   '/payroll':                         'Nóminas',
   '/matriculas':                      'Solicitud de admisión',
   '/conexion/mcp':                    'MCP',
-  '/conexion/moodle':                 'Moodle',
+  '/conexion/moodle':                 'Cursos y alumnos',
   '/mis-cursos/campus':               'Mi campus',
   '/consultas':                       'Consultas',
   '/consultas/alumnos':               'Alumnos sin mensajes',
@@ -221,6 +228,7 @@ const ROUTE_TITLES = {
   '/ventas/sin-formacion':            'Ventas sin formación',
   '/products/pending':                'Cursos pendientes',
   '/products/cursos-moodle':          'Cursos de Moodle',
+  '/products/formaciones':           'Formaciones',
   '/soporte':                         'Soporte',
   '/incidencias':                     'Incidencias',
   '/conexion/conectores':             'Conectores',
@@ -334,6 +342,8 @@ function App() {
           <Route path="/products/pending" element={<CoursesPendingPage />} />
           <Route path="/products/tree" element={<ProductsTreePage />} />
           <Route path="/products/cursos-moodle" element={<CursosDeProductosPage />} />
+          <Route path="/products/formaciones" element={<FormacionesPage />} />
+          <Route path="/products/formaciones/:id" element={<FormacionEditorPage />} />
           <Route path="/products/:id" element={<ProductDetailPage />} />
           <Route path="/ventas/analisis" element={<SalesAnalysisPage />} />
           {/* Ventas cobradas sin formación asignada. Antes que `:id`. */}
@@ -364,6 +374,7 @@ function App() {
           </Route>
           <Route path="/accounting/facturas" element={<InvoicesPage />} />
           <Route path="/accounting/facturas/nueva" element={<InvoiceCreatePage />} />
+          <Route path="/accounting/facturas/automatica" element={<FacturacionAutomaticaPage />} />
           <Route path="/accounting/facturas/configuracion" element={<InvoicingConfigPage />} />
           <Route path="/accounting/facturas/plantillas" element={<InvoiceTemplateEditorPage />} />
           {/* Facturas de colaboradores (#202): en evaluación, solo en /staging y en local, como en MultiCRM. */}
@@ -374,6 +385,8 @@ function App() {
           <Route path="/equipo/actividad" element={<ConPermiso permiso="monitask.view"><MonitaskActividadPage /></ConPermiso>} />
           <Route path="/revenue" element={<RevenuePage />} />
           <Route path="/clients" element={<ClientsPage />} />
+          {/* Apostillas de La Haya (gemela de CRM#1130): antes que `/clients/:id`. */}
+          <Route path="/clients/apostillas" element={<ConPermiso permiso="apostillas.view" a="/clients"><ApostillasPage /></ConPermiso>} />
           <Route path="/clients/:id" element={<ClientDetailPage />} />
           <Route path="/configuracion/canales" element={<ChannelsConfigPage />} />
           <Route path="/configuracion/atajos" element={<ShortcutsConfigPage />} />
@@ -392,6 +405,8 @@ function App() {
           {/* Conexión → Moodle (#335). Solo super admin y admin: lo corta el servidor. */}
           <Route path="/conexion/moodle" element={<MoodlePage />} />
           <Route path="/conexion/moodle/:campusId" element={<MoodleCampusPage />} />
+          {/* Moodle › Conexión del campus (apartado Moodle, Diego 25/11): la tarjeta Moodle de Integraciones. */}
+          <Route path="/moodle/conexion" element={<Navigate to="/accounting/integrations?seccion=moodle" replace />} />
           <Route path="/conexion/conectores" element={<ConnectorsPage />} />
           {/* Conexión → Webhooks (gemela de CRM#755): el resumen por función y, en
               pestañas, las pantallas que estaban sueltas. Cada una la corta el

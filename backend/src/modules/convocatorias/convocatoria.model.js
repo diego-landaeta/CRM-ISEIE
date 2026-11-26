@@ -146,8 +146,9 @@ export async function pendientesDeRespuesta({ projectIds, asesoraId }) {
   const pProj = Array.isArray(projectIds) && projectIds.length
     ? `AND o.project_id = ANY($${i++}::int[])` : '';
   if (pProj) par.push(projectIds.map(Number));
-  const pAses = asesoraId ? `AND l.responsable_id = $${i++}` : '';
-  if (asesoraId) par.push(asesoraId);
+  // Una gestora o varias (la líder de equipo y su equipo, 25/11/2026), como en el 360.
+  const pAses = asesoraId ? `AND l.responsable_id = ANY($${i++}::int[])` : '';
+  if (asesoraId) par.push((Array.isArray(asesoraId) ? asesoraId : [asesoraId]).map(Number));
 
   const { rows } = await query(
     `SELECT ${COLS_OFR}, c.nombre AS convocatoria, l.nombre AS lead_nombre,
