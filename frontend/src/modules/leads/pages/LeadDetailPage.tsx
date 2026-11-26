@@ -23,6 +23,7 @@ import LeadTimelineCard from '../components/lead-detail/LeadTimelineCard';
 import LeadSidebar from '../components/lead-detail/LeadSidebar';
 import LeadLossDialog from '../components/lead-detail/LeadLossDialog';
 import LeadReassignDialog from '../components/lead-detail/LeadReassignDialog';
+import usePermission from '@/shared/hooks/usePermission';
 import MergeLeadDialog from '../components/MergeLeadDialog';
 import LeadEmailDialog from '../components/LeadEmailDialog';
 import LeadEmailsCard from '../components/LeadEmailsCard';
@@ -119,13 +120,17 @@ export default function LeadDetailPage() {
 
   const isAdmin = user?.role === 'superadmin' || user?.role === 'admin';
 
+  // Las gestoras para «Reasignar»: por permiso y alcance, no por rol (Diego,
+  // 25/11/2026). La líder de equipo tenía el botón (`leads.assign`) y la lista
+  // vacía; el servidor le da ella y su equipo (`equipos.su_equipo`).
+  const { veGestoras } = usePermission();
   useEffect(() => {
-    if (!isAdmin || gestores.length > 0) return;
+    if (!veGestoras || gestores.length > 0) return;
     // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
     client.get('/users?limit=100&alcance=comercial')
       .then((res) => { if (res.success) setGestores(res.data || []); })
       .catch(() => {});
-  }, [isAdmin, gestores.length]);
+  }, [veGestoras, gestores.length]);
 
   useEffect(() => {
     if (lead?.estado && !selectedEstado) {

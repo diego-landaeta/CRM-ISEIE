@@ -264,7 +264,9 @@ export async function findById(id) {
             )) AS pagado_por_stripe,
             i.id  AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
-            i.cliente_cp, i.cliente_pais, i.items AS factura_items
+            i.cliente_cp, i.cliente_pais, i.items AS factura_items,
+            -- La factura salió sola sin mandarse: «la envía la gestora» (#764, 24/11).
+            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a
        FROM conversion_payments cp
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
@@ -277,6 +279,7 @@ export async function findById(id) {
   const { rows: installments } = await query(
     `SELECT ci.id, ci.numero, ci.importe_previsto, ci.fecha_vencimiento,
             ci.fecha_cobro, ci.importe_cobrado, ci.metodo, ci.payment_id,
+            ci.cobro_auto_cancelado_el, ci.cobro_auto_cancelado_motivo,
             (ci.metodo = 'tarjeta_stripe' OR EXISTS (
               SELECT 1 FROM stripe_payments sp
                WHERE sp.conversion_payment_id = ci.payment_id AND sp.status = 'succeeded'

@@ -11,6 +11,7 @@ import { parseInboundEmail } from './mail-parser.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { planificarPasosDeLead } from '../proceso/proceso.model.js';
+import { extraerFbclid, fbclidAFbc, limpiarFbp } from '../leads/canal.js';
 
 // LA AGENDA DEL PROCESO COMERCIAL (#89 · #90), como en los otros dos caminos de
 // entrada (lead.service: el webhook de Make y el alta a mano). Aqui faltaba:
@@ -480,6 +481,11 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
 
     // Con la asignación encendida y alguien trabajando, el lead es para ella; si no, el turno (29/10).
     const porActividad = await decidirFormulario(f.project_id);
+    // De dónde vino, para la IP/navegador/fbclid del prospecto (#474): la IP y
+    // el navegador son del servidor, nunca del formulario externo (que podría
+    // mentir). El fbclid viene pegado a la URL de entrada, si la hay.
+    const landingUrlFinal = final.landing_url || body.landing_url || req.headers?.referer || null;
+    const fbc = fbclidAFbc(extraerFbclid(landingUrlFinal));
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
       forcedResponsableId: porActividad?.elegida?.id || null,
@@ -490,11 +496,15 @@ async function processInboundPayload(req, res, next, body, source, preloadedForm
       notas: final.notas || null,
       duplicadoDe: dup.duplicadoDe,
       reincidente: dup.reincidente,
-      landingUrl: final.landing_url || body.landing_url || req.headers?.referer || null,
+      landingUrl: landingUrlFinal,
       utms: {
         utm_source: final.utm_source || source,
         utm_medium: final.utm_medium || (source === 'mailhook' ? 'email' : 'api'),
         utm_campaign: final.utm_campaign || f.embed_id,
+        fbc,
+        fbp: limpiarFbp(final.fbp || body.fbp || body._fbp),
+        client_ip: req.ip || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields,
     });
@@ -563,6 +573,11 @@ export async function publicSubmit(req, res, next) {
       return res.json({ success: true, data: { lead_id: ya.id, redirect_url: f.config?.redirect_url || null } });
     }
     const porActividad = await decidirFormulario(f.project_id);
+    // El widget es un iframe de otro dominio: no puede leer la cookie _fbp del
+    // sitio que lo incrusta, así que fbp queda sin dato aquí (#474, decisión
+    // 24/11). El fbclid sí se puede sacar, porque el widget manda
+    // `landing_url` con el `document.referrer` del padre.
+    const fbc = fbclidAFbc(extraerFbclid(body.landing_url));
     const lead = await leadModel.createLeadWithRoundRobin({
       projectId: f.project_id,
       forcedResponsableId: porActividad?.elegida?.id || null,
@@ -578,6 +593,10 @@ export async function publicSubmit(req, res, next) {
         utm_source: body.utm_source || 'form',
         utm_medium: body.utm_medium || 'embed',
         utm_campaign: body.utm_campaign || f.embed_id,
+        fbc,
+        fbp: null,
+        client_ip: req.ip || null,
+        user_agent: (req.headers['user-agent'] || '').slice(0, 500) || null,
       },
       customFields: body.custom_fields || {},
     });

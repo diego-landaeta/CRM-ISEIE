@@ -308,14 +308,15 @@ describe('crear un link de pago único (POST /api/links-pago)', () => {
       'metadata[crm_entorno]': 'local',
       'payment_intent_data[metadata][crm_link_id]': String(r.body.data.id),
     });
-    expect(link.cuerpo['metadata[crm_conversion_id]']).toBeUndefined();
+    // CRM#1107: la ficha ya tiene la venta de este curso con lo pendiente: el link va a ella.
+    expect(link.cuerpo['metadata[crm_conversion_id]']).toBe(String(venta.id));
+    expect(r.body.data.venta_del_link).toEqual({ conversion_id: venta.id, creada: false });
     // Cada creación con su clave de idempotencia, distinta para el precio y el link.
     expect(precio.headers['Idempotency-Key']).toMatch(new RegExp(`^crm-local-link-${r.body.data.id}-\\d+-precio$`));
     expect(link.headers['Idempotency-Key']).toMatch(/-link$/);
 
-    const ev = await q('SELECT tipo, datos FROM payment_link_eventos WHERE link_id = $1', [r.body.data.id]);
-    expect(ev).toHaveLength(1);
-    expect(ev[0].tipo).toBe('creado');
+    const ev = await q('SELECT tipo, datos FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [r.body.data.id]);
+    expect(ev.map((e) => e.tipo)).toEqual(['creado', 'venta_del_link']);
     expect((await one('SELECT stripe_price_id FROM payment_links WHERE id = $1', [r.body.data.id])).stripe_price_id).toBe(`price_680_${n}`);
   });
 
@@ -436,7 +437,7 @@ describe('anular (POST /api/links-pago/:id/anular)', () => {
     expect(r.body.data).toMatchObject({ estado: 'anulado', anulado_por: p.gestora1.id, motivo_anulacion: 'Se equivocó de curso' });
     expect(llamadas).toHaveLength(1);
     expect(llamadas[0].cuerpo).toEqual({ active: 'false' });
-    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [id])).map((e) => e.tipo)).toEqual(['creado', 'anulado']);
+    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [id])).map((e) => e.tipo)).toEqual(['creado', 'venta_del_link', 'anulado']);
     // Otra vez: ya no se puede.
     expect((await api.post(`/api/links-pago/${id}/anular`).set(como(p.gestora1)).send({ motivo: 'otra vez' })).status).toBe(409);
   });
@@ -483,7 +484,7 @@ describe('la caducidad (caducarVencidos)', () => {
     expect((await one('SELECT estado FROM payment_links WHERE id = $1', [sigue])).estado).toBe('creado');
     expect((await one('SELECT estado FROM payment_links WHERE id = $1', [vivo])).estado).toBe('caducado');
     expect((await one('SELECT estado FROM payment_links WHERE id = $1', [otro])).estado).toBe('creado');
-    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [vivo])).map((e) => e.tipo)).toEqual(['creado', 'caducado']);
+    expect((await q('SELECT tipo FROM payment_link_eventos WHERE link_id = $1 ORDER BY id', [vivo])).map((e) => e.tipo)).toEqual(['creado', 'venta_del_link', 'caducado']);
 
     // En la siguiente vuelta, Stripe ya contesta.
     preparadas = [['POST', `/v1/payment_links/${l2.stripe_payment_link_id}`, 200, { active: false }]];

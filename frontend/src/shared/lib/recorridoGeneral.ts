@@ -42,10 +42,12 @@ export const PARA_QUE_SIRVE: Record<string, string> = {
   Comercial: 'Lo que se vende y a quién: prospectos, ventas, links de pago, clientes y duplicados.',
   'Proyecto IA': 'Las cifras de los proyectos de IA: suscripciones, pagos y bajas.',
   'Captación y publicidad': 'De dónde llegan los prospectos: formularios, widget de WhatsApp, correos y Meta Ads.',
-  Académico: 'El catálogo de cursos, los tutores, las consultas de los alumnos y los diplomas.',
+  Académico: 'El catálogo de cursos y los tutores: productos, formaciones y quién imparte qué.',
+  // Diego, 25/11: apartado Moodle.
+  Moodle: 'Todo lo de Moodle: Mi campus, las consultas de los alumnos, los cursos y alumnos de cada campus, el curso de cada producto, los cursos pendientes, los diplomas y la conexión del campus.',
   Finanzas: 'El dinero: ventas cobradas, facturas, Stripe, gastos, comisiones y conciliación.',
   Análisis: 'Informes para decidir: reportes, feedback de los alumnos y cifras del equipo.',
-  Configuración: 'Usuarios, roles, integraciones (Stripe, Moodle, MCP, webhooks) y las reglas del CRM.',
+  Configuración: 'Usuarios, roles, integraciones (Stripe, Brevo, MCP, webhooks) y las reglas del CRM.',
   Sistema: 'Lo técnico: registro de lo que pasa, correos enviados, estado del servidor y novedades.',
   'Equipo de Desarrollo': 'El tablero de tareas del equipo, su historial y su configuración.',
 };

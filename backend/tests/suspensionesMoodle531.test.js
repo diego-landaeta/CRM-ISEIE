@@ -24,7 +24,7 @@ import { suspensionesMoodleActivas } from '../src/shared/config/soloEnPruebas.js
  *   · idempotencia: el mismo `cambio_id` dos veces es UNA fila y UNA campana;
  *   · identificación: la ficha con su correo en ese campus (o con una venta en él);
  *   · motivo: cuota vencida, cobro fallido de Stripe, «sin motivo» y, al reactivar, «pagó el …»;
- *   · la ficha (estado e historial) y el filtro «Suspendidos» de Clientes;
+ *   · la ficha (estado e historial) y el filtro «Con suspensión en Moodle» de Clientes;
  *   · la campana a la gestora (y, sin ficha, a administración del campus).
  *
  *   npx vitest run tests/suspensionesMoodle531.test.js

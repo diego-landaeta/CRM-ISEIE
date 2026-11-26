@@ -1,10 +1,11 @@
 // Filtros operativos de Clientes. Mantiene el patrón visual de Prospectos,
 // pero evita importes y estados de venta: solo contacto, programa y cuotas.
-// Y los suspendidos en Moodle (gemela de CRM#531): server-side, solo si el servidor
-// lo tiene encendido.
+// Y «Con suspensión en Moodle» (gemela de CRM#531; sin género, QA del 25/11/2026):
+// server-side, solo si el servidor lo tiene encendido.
 
 import { useEffect, useRef, useState } from 'react';
 import { Funnel, MagnifyingGlass, X, CaretDown } from '@phosphor-icons/react';
+import usePermission from '@/shared/hooks/usePermission';
 
 interface Gestor { id: number; nombre: string }
 interface Producto { id: number; nombre: string }
@@ -44,7 +45,6 @@ const SORT_LABELS: Record<string, string> = {
 
 export default function ClientsFiltersBar(props: Props) {
   const {
-    user,
     search,
     setSearch,
     filterResp,
@@ -61,7 +61,9 @@ export default function ClientsFiltersBar(props: Props) {
     filterMoodle = '',
     setFilterMoodle,
   } = props;
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // El filtro de gestora, por permiso y alcance (Diego, 25/11/2026): también la
+  // líder de equipo, con ella y su equipo. «Sin gestora» no es de su equipo.
+  const { veGestoras, llevaEquipo } = usePermission();
 
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -112,7 +114,7 @@ export default function ClientsFiltersBar(props: Props) {
     });
   }
   if (filterMoodle && setFilterMoodle) {
-    activePills.push({ key: 'moodle', label: 'Suspendidos en Moodle', onClear: () => setFilterMoodle('') });
+    activePills.push({ key: 'moodle', label: 'Con suspensión en Moodle', onClear: () => setFilterMoodle('') });
   }
 
   function clearAll() {
@@ -170,7 +172,7 @@ export default function ClientsFiltersBar(props: Props) {
               </Section>
 
               <Section title="Filtros principales">
-                {isAdmin && (
+                {veGestoras && (
                   <Row label="Gestora">
                     <select
                       value={filterResp}
@@ -178,7 +180,7 @@ export default function ClientsFiltersBar(props: Props) {
                       className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
                     >
                       <option value="">Todas las gestoras</option>
-                      <option value="unassigned">— Sin gestora —</option>
+                      {!llevaEquipo && <option value="unassigned">— Sin gestora —</option>}
                       {gestores.map((manager) => (
                         <option key={manager.id} value={String(manager.id)}>
                           {manager.nombre}
@@ -225,7 +227,7 @@ export default function ClientsFiltersBar(props: Props) {
                       className="w-full h-9 px-3 rounded-md border border-border bg-muted/40 text-sm"
                     >
                       <option value="">Todos</option>
-                      <option value="suspendidos">Suspendidos en Moodle</option>
+                      <option value="suspendidos">Con suspensión en Moodle</option>
                     </select>
                   </Row>
                 )}

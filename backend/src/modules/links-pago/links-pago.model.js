@@ -329,7 +329,9 @@ export async function paraCobro(id) {
     `SELECT id, project_id, lead_id, conversion_id, product_id, created_by, importe, moneda,
             estado, stripe_payment_link_id, installment_id, guarda_tarjeta, modalidad, num_cuotas, importe_cuota,
             importe_inicial, plan_cuotas, precio_original, descuento_tipo, descuento_valor, descuento_importe,
-            codigos_promo, promo_codigo
+            codigos_promo, promo_codigo,
+            -- «Enviar factura automáticamente» y su correo (#764, 24/11): pasan a la venta.
+            factura_envio_auto, factura_envio_email
        FROM payment_links WHERE id = $1`,
     [id]);
   return rows[0] || null;
@@ -463,12 +465,54 @@ export const notasDeLaVenta = (linkId, stripeId) =>
  * aviso de Stripe no crea otra.
  */
 export async function ventaCreadaPorElLink(projectId, linkId) {
+  // También la que nace al crear el link (CRM#1107), si se cortó antes de atarla.
   const { rows } = await query(
     `SELECT id, lead_id FROM conversions
-      WHERE project_id = $1 AND notas_pago LIKE $2
+      WHERE project_id = $1 AND (notas_pago LIKE $2 OR notas_pago LIKE $3)
       ORDER BY id LIMIT 1`,
-    [projectId, `Pagada con el link de pago n.º ${Number(linkId)} (%`]);
+    [projectId, `Pagada con el link de pago n.º ${Number(linkId)} (%`,
+      `Venta creada por el CRM al crear el link de pago n.º ${Number(linkId)}.%`]);
   return rows[0] || null;
+}
+
+/**
+ * CRM#1107: la venta de pago único que nace con el link se espera hasta que el
+ * link caduca (no desde hoy: «Cobros vencidos» la contaría mañana).
+ */
+export async function compromisoHastaLaCaducidad(conversionId, linkId) {
+  await query(
+    `UPDATE conversions c
+        SET fecha_compromiso_pago = (pl.caduca_el AT TIME ZONE 'Europe/Madrid')::date, updated_at = NOW()
+       FROM payment_links pl
+      WHERE c.id = $1 AND pl.id = $2 AND pl.caduca_el IS NOT NULL AND c.importe_pagado < c.importe_total`,
+    [conversionId, linkId]);
+}
+
+/**
+ * CRM#1107: la venta nació con el link por su importe y el alumno pagó con un
+ * código promocional (CRM#986). Si la venta la creó este link y aún no tiene
+ * ningún cobro, su total pasa a lo que pagó (con la base y el IVA rehechos) y el
+ * descuento se vuelve a apuntar entero (el del link y el del código). Si no, no
+ * se toca: lo pagado de menos queda pendiente, a la vista. true si se ajustó.
+ */
+export async function ajustarVentaAlCodigo(conversionId, link) {
+  if (!link?.promo || !(Number(link.importe) > 0) || String(link.moneda || 'EUR').toUpperCase() !== 'EUR') return false;
+  const { rowCount } = await query(
+    `UPDATE conversions c
+        SET importe_total = $2::numeric,
+            base_imponible = CASE WHEN c.iva_exento THEN $2::numeric
+                                  ELSE ROUND($2::numeric / (1 + c.iva_pct / 100), 2) END,
+            iva_importe = CASE WHEN c.iva_exento THEN 0
+                               ELSE $2::numeric - ROUND($2::numeric / (1 + c.iva_pct / 100), 2) END,
+            subtotal_bruto = $2::numeric, descuento_tipo = 'none', descuento_valor = 0, descuento_importe = 0,
+            updated_at = NOW()
+      WHERE c.id = $1 AND (c.iva_incluido OR c.iva_exento)
+        AND ROUND(c.importe_total * 100) <> ROUND($2::numeric * 100)
+        AND NOT EXISTS (SELECT 1 FROM conversion_payments cp WHERE cp.conversion_id = c.id)
+        AND EXISTS (SELECT 1 FROM payment_link_eventos e
+                     WHERE e.link_id = $3 AND e.tipo = 'venta_del_link' AND (e.datos->>'creada')::boolean)`,
+    [conversionId, Number(link.importe), link.id]);
+  return rowCount > 0;
 }
 
 /** La primera cuota por cobrar de una venta (la que salda el pago del link en cuotas). */

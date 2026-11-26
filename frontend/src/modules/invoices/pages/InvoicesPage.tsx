@@ -5,6 +5,7 @@ import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import FacturacionAlDiaCard from '../components/FacturacionAlDiaCard';
+import { colasQueSeVen } from '../lib/colasDeFacturacion';
 import AvisoHuecosFacturas from '../components/AvisoHuecosFacturas';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import client from '@/shared/api/client';
@@ -137,6 +138,8 @@ export default function InvoicesPage() {
   // Solo se ofrecen sociedades a las que el usuario tiene acceso — es decir, las
   // que son sociedad emisora de alguno de SUS proyectos. Nunca se cruza la
   // facturación entre sociedades: para ver otra hay que entrar a un proyecto suyo.
+  // Las colas de facturación que se pintan: una por campus con empresa o con «Todos».
+  const colas = colasQueSeVen({ pid, porSociedad, sociedadProjects, filterProject, projects });
   const misSociedadIds = new Set((projects || []).map((p) => p.sociedad_emisora_id).filter((x) => x != null));
   const sociedadesVisibles = allIssuers.filter((i) => misSociedadIds.has(i.id));
   const proyectosDeSociedad = (issuerId: number) => (projects || []).filter((p) => p.sociedad_emisora_id === issuerId);
@@ -340,6 +343,13 @@ export default function InvoicesPage() {
                 {esAbonos ? 'Nuevo abono' : esProformas ? 'Nueva proforma' : 'Nueva factura'}
               </Link>
             )}
+            {/* Formularios, facturas que salieron solas y la auditoría (#764, 24/11). */}
+            {can('facturas.automatica') && (
+              <Link to="automatica" data-recorrido="facturas-automatica"
+                className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
+                <PaperPlaneTilt size={14} weight="bold" /> Facturación automática
+              </Link>
+            )}
             <Link to="configuracion"
               className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-semibold hover:bg-muted">
               <Gear size={14} weight="bold" /> Configuración
@@ -369,16 +379,17 @@ export default function InvoicesPage() {
       {/* Solo sale en el listado normal: es el estado de la facturacion, no de las proformas. */}
       {/* Con una empresa elegida arriba no hay un proyecto en la cabecera: una cola por campus
           suyo. Antes salía «todo facturado» con 20 cobros esperando en ACADEMIA IA (21/10). */}
-      {!esProformas && !esAbonos && (porSociedad ? (
+      {/* Y con «Todos los proyectos», también una por campus suyo (25/11, Ana): antes no salía ninguna. */}
+      {!esProformas && !esAbonos && (colas ? (
         <>
-          {!filterProject && sociedadProjects.length > 1 && (
+          {colas.varias && (
             <p className="text-[11px] text-muted-foreground">Cola de facturación por campus: solo salen los que tienen cobros por facturar.</p>
           )}
-          {(filterProject ? sociedadProjects.filter((p) => String(p.id) === filterProject) : sociedadProjects).map((p) => (
-            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={!filterProject && sociedadProjects.length > 1} resaltar={cobroBuscado} />
+          {colas.campus.map((p) => (
+            <FacturacionAlDiaCard key={p.id} projectId={p.id} titulo={p.nombre} ocultarSiVacia={colas.varias} resaltar={cobroBuscado} />
           ))}
         </>
-      ) : <FacturacionAlDiaCard projectId={todos ? null : activeProject?.id} resaltar={cobroBuscado} />)}
+      ) : <FacturacionAlDiaCard projectId={activeProject?.id} resaltar={cobroBuscado} />)}
 
       {/* Pestañas: facturas fiscales vs proformas (presupuestos). Gemela de
           CRM#917: a 320 px no caben las tres; la tira se desplaza ella sola en
@@ -741,6 +752,10 @@ export default function InvoicesPage() {
                       >
                         {inv.sent_at ? '✓ entregada' : 'sin entregar'}
                       </button>
+                    )}
+                    {/* La factura salió sola sin mandarse (#764, 24/11). */}
+                    {inv.envio_nota && (
+                      <span className="mt-0.5 block text-[10px] text-warning-soft-foreground max-w-[14rem] whitespace-normal">{inv.envio_nota}</span>
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">

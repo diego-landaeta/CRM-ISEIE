@@ -6,8 +6,9 @@
 // a salir; si no, dice el motivo que manda el servidor.
 
 export type DatosFiscalesEnCola = {
-  estado: 'pendiente' | 'respondido' | 'ficha' | 'revision';
-  caduca_at: string;
+  /** `a_mano` (25/11): la automática está encendida pero este cobro no lo toma. */
+  estado: 'pendiente' | 'respondido' | 'ficha' | 'revision' | 'a_mano';
+  caduca_at: string | null;
   /** La emisión automática lo saca sin que nadie haga nada (ahora o cuando le toque). */
   sale_sola?: boolean;
   /** Por qué no salió sola: POSIBLE_DUPLICADA, FACTURACION_PAUSADA, HAY_ANTERIORES… */
@@ -21,7 +22,10 @@ export function textoDatosFiscales(d: DatosFiscalesEnCola): string | null {
   const de = d.estado === 'ficha' ? 'Con los datos de la ficha' : 'Datos del alumno';
   switch (d.estado) {
     case 'pendiente':
-      return `Esperando datos del alumno (hasta el ${new Date(d.caduca_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})`;
+      return `Esperando datos del alumno (hasta el ${new Date(d.caduca_at || '').toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })})`;
+    case 'a_mano':
+      // La venta ya se facturaba a mano (o tenía proforma): nadie la va a sacar sola.
+      return 'A mano: no sale sola, emítela desde aquí';
     case 'revision':
       return 'Revisar datos: no sale sola';
     case 'respondido':

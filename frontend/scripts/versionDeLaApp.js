@@ -1,56 +1,44 @@
-// La versión que enseña el CRM, sacada de Git al compilar (11/11/2026).
+// La versión que enseña el CRM: la de Novedades (25/11/2026).
 //
-// POR QUÉ. El menú decía «BETA 2.2.0» con producción en la v2.5.24. El número
-// estaba escrito a mano en `betaConfig.ts` (`BETA_VERSION`) y nadie lo cambiaba
-// al sacar una versión: se quedó en la 2.2.0 del 16/10 en `main` y en la 2.6.0
-// en `staging`. Las versiones ya tienen su sitio —la etiqueta `vX.Y.Z` en `main`
-// y el título del pull request de la versión, «v2.5.24 · …»—; de ahí sale.
+// POR QUÉ. Con la 3.0.0 en producción, el menú decía «BETA 1.0.0» y el login
+// «v0.1.0 Beta». Antes el número salía de las etiquetas de Git, pero el build
+// de producción clona con `--depth 1`: sin etiquetas, y con el último commit
+// sin «vX.Y.Z ·» en el título, caía al `package.json`, que decía 1.0.0. Y el
+// login y el manual llevaban el «v0.1.0 Beta» escrito a mano desde abril.
 //
-// QUÉ NÚMERO. El más alto entre:
-//   · las etiquetas `vX.Y.Z` del repositorio, y
-//   · el título del último commit si empieza por «vX.Y.Z ·» (la fusión de la
-//     versión, que se compila antes de poner la etiqueta).
-// Si no hay Git ni etiquetas (una copia sin historia), la `version` del
-// `package.json`. Y si se quiere forzar uno, APP_VERSION en el entorno.
-import { execFileSync } from 'node:child_process';
+// UNA SOLA FUENTE. La versión es la primera de Novedades
+// (`backend/src/modules/novedades/versiones.js`, `ACTUAL.version`): la que
+// Diego publica. Al añadir otra versión arriba, el menú, el login, el manual,
+// `/api/health` y el MCP la enseñan solos. Sin variable de entorno que la pise.
+// Solo si el fichero no está (una copia del frontal suelta), el `package.json`.
 import fs from 'node:fs';
 import path from 'node:path';
 
-const SEMVER = /^v?(\d+)\.(\d+)\.(\d+)$/;
+const SEMVER = /^\d+\.\d+\.\d+$/;
 
-/** a > b → positivo; a < b → negativo. */
-export function compararVersiones(a, b) {
-  const pa = SEMVER.exec(a).slice(1).map(Number);
-  const pb = SEMVER.exec(b).slice(1).map(Number);
-  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return pa[i] - pb[i];
-  return 0;
+/** La ruta de las Novedades desde la carpeta del frontal. */
+export function rutaDeNovedades(cwd) {
+  return path.join(cwd, '..', 'backend', 'src', 'modules', 'novedades', 'versiones.js');
 }
 
-/** La versión más alta de una lista de etiquetas y del título del último commit. */
-export function versionMasAlta({ etiquetas = [], asunto = '' } = {}) {
-  const candidatas = etiquetas.map((t) => String(t).trim()).filter((t) => SEMVER.test(t));
-  const m = /^v(\d+\.\d+\.\d+)\s*·/.exec(String(asunto || '').trim());
-  if (m) candidatas.push(m[1]);
-  if (!candidatas.length) return null;
-  return candidatas.sort(compararVersiones).at(-1).replace(/^v/, '');
+/**
+ * La primera versión de la lista de Novedades, leída del texto del fichero.
+ * La lista va de la más nueva a la más vieja, así que la primera es la actual.
+ */
+export function versionDeNovedades(texto) {
+  const m = /["']?version["']?\s*:\s*["'](\d+\.\d+\.\d+)["']/.exec(String(texto || ''));
+  return m ? m[1] : null;
 }
 
-function gitPorDefecto(cwd) {
-  return (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-}
-
-export function versionDeLaApp({ cwd = process.cwd(), env = process.env, git = gitPorDefecto(cwd) } = {}) {
-  const forzada = String(env.APP_VERSION || '').trim().replace(/^v/, '');
-  if (SEMVER.test(forzada)) return forzada;
+export function versionDeLaApp({ cwd = process.cwd() } = {}) {
   try {
-    const etiquetas = git(['tag', '--list', 'v[0-9]*']).split(/\r?\n/);
-    const asunto = git(['log', '-1', '--format=%s']);
-    const v = versionMasAlta({ etiquetas, asunto });
+    const v = versionDeNovedades(fs.readFileSync(rutaDeNovedades(cwd), 'utf8'));
     if (v) return v;
-  } catch { /* sin Git: al paquete */ }
+  } catch { /* sin backend al lado: al paquete */ }
   try {
     const paquete = JSON.parse(fs.readFileSync(path.join(cwd, 'package.json'), 'utf8'));
-    return String(paquete.version || '').replace(/^v/, '');
+    const v = String(paquete.version || '').replace(/^v/, '');
+    return SEMVER.test(v) ? v : '';
   } catch {
     return '';
   }

@@ -25,15 +25,15 @@ describe('Novedades: cada versión con sus listas', () => {
     expect(Array.isArray(v.arreglos)).toBe(true);
   });
 
-  // El menú ya no lleva la versión escrita a mano (11/11): se quedaba atrás
-  // («Beta 2.6.0» con producción en la 2.6.2). La pone Vite al compilar, de la
-  // etiqueta de Git más alta, que nunca es menor que la de Novedades.
-  it('la actual es la 3.0.0, y el menú la saca de la etiqueta, no escrita a mano', async () => {
+  // El menú ya no lleva la versión escrita a mano (11/11). Desde el 25/11 la
+  // saca de aquí, de Novedades: la etiqueta de Git no llegaba al build de
+  // producción (clona con --depth 1) y salía «Beta 1.0.0».
+  it('la actual es la 3.0.0, y el CRM la saca de Novedades, no escrita a mano', async () => {
     expect(ACTUAL.version).toBe('3.0.0');
-    const beta = fs.readFileSync(path.resolve(AQUI, '../../frontend/src/shared/config/betaConfig.ts'), 'utf8');
-    expect(beta).not.toMatch(/BETA_VERSION\s*=\s*'\d/);
-    expect(beta).toMatch(/__APP_VERSION__/);
-    const { versionMasAlta } = await import('../../frontend/scripts/versionDeLaApp.js');
-    expect(versionMasAlta({ etiquetas: [`v${ACTUAL.version}`] })).toBe(ACTUAL.version);
+    const version = fs.readFileSync(path.resolve(AQUI, '../../frontend/src/shared/config/version.ts'), 'utf8');
+    expect(version).not.toMatch(/VERSION_APP[^=]*=\s*'\d/);
+    expect(version).toMatch(/__APP_VERSION__/);
+    const { versionDeLaApp } = await import('../../frontend/scripts/versionDeLaApp.js');
+    expect(versionDeLaApp({ cwd: path.resolve(AQUI, '../../frontend') })).toBe(ACTUAL.version);
   });
 });

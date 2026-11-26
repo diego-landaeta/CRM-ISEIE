@@ -30,7 +30,9 @@ describe('botones por permiso (#423)', () => {
   beforeEach(() => { auth.user = { id: 3, role: 'admin' }; });
 
   it('el admin, con sus permisos de serie, los ve como siempre', () => {
-    auth.permissions = { 'leads.assign': true, 'leads.edit': true };
+    // De serie el admin también ve la lista del equipo (`users.view`), que es lo que
+    // pide ahora «Reasignar» (también la líder de equipo, 25/11/2026).
+    auth.permissions = { 'leads.assign': true, 'leads.edit': true, 'users.view': true };
     pintar(true);
     expect(screen.getByText('Reasignar')).toBeTruthy();
   });

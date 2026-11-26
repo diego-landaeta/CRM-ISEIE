@@ -249,7 +249,9 @@ export async function getReceivable({ projectId = null, projectIds = null, respo
              l.responsable_id, u.nombre AS gestora_nombre,
              ci.numero AS cuota_numero,
              ci.importe_previsto::numeric AS importe,
-             ci.fecha_vencimiento AS vence
+             ci.fecha_vencimiento AS vence,
+             -- CRM#1103: Stripe ya no la cobrará sola (sigue pendiente).
+             ci.cobro_auto_cancelado_el, ci.cobro_auto_cancelado_motivo
         FROM conversion_installments ci
         JOIN conversions c ON c.id = ci.conversion_id
         LEFT JOIN leads l ON l.id = c.lead_id
@@ -265,7 +267,8 @@ export async function getReceivable({ projectId = null, projectIds = null, respo
              l.responsable_id, u.nombre AS gestora_nombre,
              NULL::int AS cuota_numero,
              (c.importe_total - cob.cobrado)::numeric AS importe,
-             c.fecha_compromiso_pago AS vence
+             c.fecha_compromiso_pago AS vence,
+             NULL::timestamptz AS cobro_auto_cancelado_el, NULL::text AS cobro_auto_cancelado_motivo
         FROM conversions c
         -- Lo cobrado, de sus pagos (#692).
         CROSS JOIN LATERAL (SELECT ${COBRADO_DE('c')} AS cobrado) cob

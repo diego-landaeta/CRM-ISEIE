@@ -47,10 +47,13 @@ export const perfilSchema = z.object({
 export const colaboracionSchema = z.object({
   tutorId: z.number().int(),
   productId: z.number().int(),
-  // El porcentaje es obligatorio a proposito, sin valor por defecto silencioso:
-  // que alguien se deje el campo y acabe cobrando el 10% sin haberlo decidido
-  // es justo el tipo de error que luego cuesta dinero y discusiones.
-  pct: z.number().min(0, 'El porcentaje no puede ser negativo').max(100, 'Como mucho el 100%'),
+  // Sin un valor por defecto que pague: que alguien se deje el campo y acabe
+  // cobrando el 10% sin haberlo decidido es justo el tipo de error que luego
+  // cuesta dinero y discusiones. Por eso, si no viene, es 0 (no cobra), nunca el
+  // por defecto de Ajustes. La ficha de la formación (CRM#1113) ya no lo pide
+  // (Diego, 24/11: «el % de comisión no va»): añade la tutora con su fecha y el %
+  // se pone, si hace falta, en Tutores, que lo sigue pidiendo.
+  pct: z.number().min(0, 'El porcentaje no puede ser negativo').max(100, 'Como mucho el 100%').optional().default(0),
   desde: fecha,
   hasta: fecha.optional().nullable(),
   notas: z.string().optional().nullable(),

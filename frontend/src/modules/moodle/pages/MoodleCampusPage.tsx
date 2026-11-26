@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { ArrowLeft, ArrowsClockwise, GearSix, GraduationCap, MagnifyingGlass, WarningCircle, X } from '@phosphor-icons/react';
+import { ArrowLeft, ArrowsClockwise, GearSix, GraduationCap, MagnifyingGlass, PlugsConnected, WarningCircle, X } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { cn } from '@/shared/lib/utils';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -29,7 +29,8 @@ import ParaRevisar from '../components/ParaRevisar';
  *
  * Lo que se está viendo (estado, búsqueda, categoría, orden, página y filas) vive en la
  * DIRECCIÓN: recargar, volver atrás o pasar el enlace a otra persona deja la pantalla como estaba.
- * Se llega desde la lista de campus (`/conexion/moodle`).
+ * Se llega desde la lista de campus (`/conexion/moodle`) y, con un campus elegido arriba,
+ * sale directamente en «Moodle › Cursos y alumnos» (`CursosDelCampus`, Diego 25/11).
  */
 
 const ESTADOS: FiltroEstado[] = ['activos', 'proximos', 'terminados', 'ocultos', 'todos'];
@@ -44,6 +45,9 @@ const hace = (s: number | undefined) => {
   return `Datos de hace ${min} min`;
 };
 
+/** Integraciones › Moodle de ese campus: donde se conecta el Moodle que usa todo el CRM. */
+export const enlaceIntegraciones = (id: number) => `/accounting/integrations?campus=${id}&seccion=moodle`;
+
 function Volver() {
   return (
     <Link
@@ -57,7 +61,15 @@ function Volver() {
 
 export default function MoodleCampusPage() {
   const { campusId } = useParams();
-  const id = Number(campusId);
+  return <CursosDelCampus id={Number(campusId)} />;
+}
+
+/**
+ * Los cursos de UN campus. `conVolver`: el botón «Todos los campus»; no sale cuando la
+ * pantalla es la de «Moodle › Cursos y alumnos» con un campus elegido arriba (para ver
+ * todos, se elige «Todos» en el selector).
+ */
+export function CursosDelCampus({ id, conVolver = true }: { id: number; conVolver?: boolean }) {
   const { user } = useAuth() as { user: { role?: string } | null };
 
   const [campus, setCampus] = useState<CampusMoodle | null | undefined>(undefined); // undefined = cargando; null = no existe
@@ -118,6 +130,8 @@ export default function MoodleCampusPage() {
   }, [texto, busqueda, cambiar]);
 
   const conectado = !!campus?.configurado;
+  // Conectado en Integraciones › Moodle (la conexión de todo el CRM): se cambia allí, no aquí.
+  const deIntegraciones = campus?.conexion === 'integraciones';
 
   useEffect(() => {
     setCategorias([]); setCurso(null); setLista(null); setErrorMoodle(null);
@@ -170,7 +184,11 @@ export default function MoodleCampusPage() {
   /** Conexión y Actualizar. En el móvil la barra de arriba no tiene sitio para ellos: salen en la pantalla. */
   const acciones = (clase: string) => (
     <>
-      {puedeConectar && (
+      {deIntegraciones ? (
+        <Link to={enlaceIntegraciones(id)} className={cn('h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted', clase)}>
+          <PlugsConnected size={15} weight="bold" /> Conexión
+        </Link>
+      ) : puedeConectar && (
         <button type="button" onClick={() => setAjustes((a) => !a)} aria-expanded={ajustes} className={cn('h-9 items-center gap-1.5 rounded-md border border-border bg-card px-3 text-sm font-medium hover:bg-muted', clase)}>
           <GearSix size={15} weight="bold" /> Conexión
         </button>
@@ -189,32 +207,44 @@ export default function MoodleCampusPage() {
     />
   );
 
-  if (campus === undefined) return <div className="space-y-6">{cabecera}<Volver /><SkeletonTable rows={6} columns={5} /></div>;
+  const volver = conVolver ? <Volver /> : null;
+
+  if (campus === undefined) return <div className="space-y-6">{cabecera}{volver}<SkeletonTable rows={6} columns={5} /></div>;
 
   if (campus === null || !Number.isInteger(id)) {
     return (
       <div className="space-y-6">
         {cabecera}
-        <Volver />
-        <Card><EmptyState icon={GraduationCap} title="Este campus no existe o no tienes acceso" description="Elige uno de la lista de campus." /></Card>
+        {volver}
+        <Card><EmptyState icon={GraduationCap} title="Este campus no existe o no tienes acceso" description={conVolver ? 'Elige uno de la lista de campus.' : 'Elige otro campus arriba, o «Todos» para ver la lista.'} /></Card>
       </div>
     );
   }
 
   if (!campus.configurado) {
+    // Sin Moodle: se dice y se manda a Integraciones › Moodle, donde se conecta el Moodle
+    // que usa todo el CRM (Diego, 25/11). El super admin puede además conectar aquí un
+    // token de solo lectura, solo para este panel y para Claude, como hasta ahora.
     return (
       <div className="space-y-6">
         {cabecera}
-        <Volver />
+        {volver}
         <Card padding="md">
-          {puedeConectar ? (
-            <ConectarMoodle campus={campus} funciones={funciones} onConectado={tras} />
-          ) : (
-            <EmptyState
-              icon={GraduationCap}
-              title={`${campus.nombre} no tiene Moodle conectado`}
-              description="Lo conecta un super admin desde esta misma pantalla, con un token de solo lectura de su Moodle."
-            />
+          <EmptyState
+            icon={GraduationCap}
+            title="Este campus no tiene Moodle conectado"
+            description={`${campus.nombre} no tiene su Moodle conectado. Se conecta en Integraciones › Moodle, con la dirección del campus y su token.`}
+            action={(
+              <Link to={enlaceIntegraciones(id)} className="inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-3.5 text-sm font-semibold text-primary-foreground hover:bg-primary/90">
+                <PlugsConnected size={15} weight="bold" /> Ir a Integraciones › Moodle
+              </Link>
+            )}
+          />
+          {puedeConectar && (
+            <details className="mt-4 border-t border-border pt-4">
+              <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">O conectarlo solo para este panel y para Claude, con un token de solo lectura</summary>
+              <div className="mt-4"><ConectarMoodle campus={campus} funciones={funciones} onConectado={tras} /></div>
+            </details>
           )}
         </Card>
       </div>
@@ -228,7 +258,7 @@ export default function MoodleCampusPage() {
       <p className="truncate text-base font-semibold sm:hidden">{campus.nombre}</p>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Volver />
+        {volver ?? <span />}
         <div className="flex items-center gap-2 sm:hidden">{acciones('inline-flex')}</div>
         {lista && <p className="text-xs text-muted-foreground">{hace(lista.resumen.de_cache ? lista.resumen.actualizado_hace_s : 0)}</p>}
       </div>
@@ -297,7 +327,7 @@ export default function MoodleCampusPage() {
 
       {curso && <DetalleCurso curso={curso} proyectoId={id} onCerrar={() => setCurso(null)} />}
 
-      {ajustes && puedeConectar && (
+      {ajustes && puedeConectar && !deIntegraciones && (
         <AjustesConexion campus={campus} funciones={funciones} onCerrar={() => setAjustes(false)} onCambiado={tras} onDesconectar={pedirBaja} />
       )}
 

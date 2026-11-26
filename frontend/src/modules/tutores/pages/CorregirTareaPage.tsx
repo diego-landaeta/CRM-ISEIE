@@ -10,6 +10,7 @@ import { cn } from '@/shared/lib/utils';
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import { usePluginMoodle } from '@/shared/lib/pluginMoodle';
 import { tutoresApi, TIPOS_EN_LINEA, type EntregaDeTarea, type EstadoEntrega, type TareaParaCorregir } from '../api/tutores.api';
+import { SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
 
 /*
   Corregir una tarea desde el CRM (#408, gemela de CRM#681), como las herramientas de corrección de
@@ -110,6 +111,8 @@ export default function CorregirTareaPage() {
   // nota, ni entregas en grupo.
   const soloEnMoodle = datos && (!pluginMoodle
     ? 'Poner la nota desde el CRM todavía no está disponible aquí. Corrígela en el campus.'
+    // La cuenta de administración del sitio (excepción, 24/11): el plugin no califica como ella.
+    : datos.tarea.soloDesdeMoodle ? SOLO_DESDE_MOODLE
     : datos.tarea.enGrupo
       ? 'Es una tarea en grupo: Moodle guarda la entrega a nombre del grupo. Corrígela en el campus.'
       : !datos.tarea.calificable ? 'Esta tarea se califica con escala o sin nota numérica. Corrígela en el campus.' : null);
