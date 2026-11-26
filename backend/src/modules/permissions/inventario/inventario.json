@@ -11689,6 +11689,188 @@
   "puertas": []
  },
  {
+  "id": "POST /api/meta-ads/portfolios",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "POST",
+  "ruta": "/api/meta-ads/portfolios",
+  "relativa": "POST /portfolios",
+  "controlador": "connect",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/meta-ads/portfolios",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "GET",
+  "ruta": "/api/meta-ads/portfolios",
+  "relativa": "GET /portfolios",
+  "controlador": "list",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "DELETE /api/meta-ads/portfolios/:portfolioId",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "DELETE",
+  "ruta": "/api/meta-ads/portfolios/:portfolioId",
+  "relativa": "DELETE /portfolios/:portfolioId",
+  "controlador": "disconnect",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/meta-ads/portfolios/:portfolioId/sync",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "POST",
+  "ruta": "/api/meta-ads/portfolios/:portfolioId/sync",
+  "relativa": "POST /portfolios/:portfolioId/sync",
+  "controlador": "sync",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/meta-ads/portfolios/:portfolioId/discovered",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "GET",
+  "ruta": "/api/meta-ads/portfolios/:portfolioId/discovered",
+  "relativa": "GET /portfolios/:portfolioId/discovered",
+  "controlador": "listDiscovered",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/meta-ads/portfolios/discovered/:discoveredId/assign",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "POST",
+  "ruta": "/api/meta-ads/portfolios/discovered/:discoveredId/assign",
+  "relativa": "POST /portfolios/discovered/:discoveredId/assign",
+  "controlador": "assign",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "deSusCampus"
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/meta-ads/portfolios/discovered/:discoveredId/ignore",
+  "tipo": "ruta",
+  "modulo": "meta-ads",
+  "metodo": "POST",
+  "ruta": "/api/meta-ads/portfolios/discovered/:discoveredId/ignore",
+  "relativa": "POST /portfolios/discovered/:discoveredId/ignore",
+  "controlador": "ignore",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "meta_ads.conectar_portfolio"
+    ]
+   },
+   {
+    "tipo": "alcance",
+    "nombre": "soloVeTodoElCrm"
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/monitask/estado",
   "tipo": "ruta",
   "modulo": "monitask",

@@ -259,3 +259,37 @@ export async function fetchDailyInsightsRange({ adAccountId, accessToken, since,
   }
   return all;
 }
+
+export async function listOwnedAdAccounts({ businessId, accessToken, limit = 200 }) {
+  const fields = ['account_id', 'name', 'account_status', 'currency', 'timezone_name'].join(',');
+  let next = `/${businessId}/owned_ad_accounts?fields=${fields}&limit=${limit}`;
+  const out = [];
+  while (next) {
+    const data = await metaFetch(next, accessToken);
+    out.push(...(data.data || []));
+    next = data.paging?.next || null;
+    if (!next) break;
+    await sleep(1000);
+  }
+  return out;
+}
+
+/**
+ * El id del usuario (de sistema, normalmente) dueño del token — lo necesita
+ * `grantAnalystAccess` para saber a quién dar acceso.
+ */
+export async function getTokenOwnerId({ accessToken }) {
+  const data = await metaFetch('/me?fields=id,name', accessToken);
+  return { id: data.id, nombre: data.name || null };
+}
+
+/**
+ * Da acceso de solo-ver-rendimiento (ANALYZE) al dueño del token sobre una
+ * cuenta a la que todavía no llega — para cuando una cuenta nueva del
+ * portfolio no es accesible de entrada (#198, gemela de CRM#212, "sin acceso").
+ */
+export async function grantAnalystAccess({ adAccountId, userId, accessToken }) {
+  const tasks = encodeURIComponent(JSON.stringify(['ANALYZE']));
+  const data = await metaFetch(`/${adAccountId}/assigned_users?user=${encodeURIComponent(userId)}&tasks=${tasks}`, accessToken, { method: 'POST' });
+  return data;
+}

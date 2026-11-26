@@ -233,6 +233,7 @@ export const SECCIONES = [
         clave: 'meta_ads', nombre: 'Meta Ads', acciones: [
           a('view', 'Ver Meta Ads', 'Cuentas, campañas, anuncios y su rendimiento.', yPM(ADMIN_SOPORTE)),
           a('edit', 'Conectar y sincronizar Meta Ads', 'Conectar cuentas, sincronizarlas y asociar campañas a productos.', ADMIN_SOPORTE),
+          a('conectar_portfolio', 'Conectar un portfolio de Meta', 'Conectar un Business Manager entero para que sus cuentas nuevas aparezcan solas.', ADMIN),
         ],
       },
     ],
