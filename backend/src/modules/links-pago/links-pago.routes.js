@@ -43,6 +43,10 @@ router.post('/codigos/:id/desactivar', puede('links_pago.configurar'), projectAc
 // no, por qué. Quien crea links; el campus, `projectAccess`.
 router.get('/cuotas-disponibles', puede('links_pago.crear'), projectAccess, ctrl.cuotasDisponibles);
 
+// «Link de pago usado» en la venta (CRM#1107): qué cobro de Stripe encontraría el
+// CRM con lo que pegó la gestora, sin unir nada. Quien crea links; el campus, `projectAccess`.
+router.get('/buscar-cobro', puede('links_pago.crear'), projectAccess, ctrl.buscarCobro);
+
 // El aviso «Conectar Stripe para cobros automáticos» de la pantalla (CRM#992): los
 // campus del ámbito de quien mira a los que les falta la clave o su permiso de
 // suscripciones. El ámbito lo recorta el controlador, como la lista.

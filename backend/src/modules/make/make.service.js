@@ -61,6 +61,8 @@ const KNOWN_LEAD_FIELDS = new Set([
   'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term', 'referrer',
   // La publicidad de Meta del prospecto (puerta 8, #487; gemela de CRM#806).
   'meta_campaign_id', 'meta_adset_id', 'meta_ad_id',
+  // El lead y el formulario de un Lead Ad de Meta (#474).
+  'meta_lead_id', 'meta_form_id',
 ]);
 
 export function applyMapping(payload, fieldMapping) {

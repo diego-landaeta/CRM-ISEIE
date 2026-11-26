@@ -206,9 +206,8 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   });
 
   it('entre ellos, los del día a día, tercera tanda (#619, tanda E; gemela de CRM#941), con todos sus pasos', () => {
-    // Correos no: aquí la pantalla llega con #750, y su recorrido con ella.
     expect(Object.keys(RECORRIDOS_GESTORA_C)).toEqual([
-      'whatsapp-banco', 'whatsapp-actividad',
+      'whatsapp-banco', 'whatsapp-actividad', 'correos',
       'consultas-alumnos', 'consultas-carga', 'consultas-tutores', 'consultas-metricas', 'consultas-respuestas',
     ]);
     for (const r of Object.values(RECORRIDOS_GESTORA_C)) {
@@ -255,7 +254,7 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   });
 
   it('entre ellos, las del menú que no estaban en la lista (#619, tanda J), con todos sus pasos', () => {
-    expect(Object.keys(RECORRIDOS_GESTORA_H)).toEqual(['historial-tareas', 'configurar-tablero', 'reportes', 'cobros-externos', 'novedades', 'correos']);
+    expect(Object.keys(RECORRIDOS_GESTORA_H)).toEqual(['historial-tareas', 'configurar-tablero', 'reportes', 'cobros-externos', 'novedades']);
     for (const r of Object.values(RECORRIDOS_GESTORA_H)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();

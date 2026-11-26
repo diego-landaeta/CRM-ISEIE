@@ -15,6 +15,11 @@ import Field from '@/shared/components/ui/Field';
 import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from '@/modules/conversions/components/VentaYaExisteAviso';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+import EnvioFacturaCampos from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
+import DatosFiscalesVenta, { DATOS_FISCALES_VACIOS, aDatosFiscales, deLaFicha as fiscalesDeLaFicha, faltanDatosFiscales, type DatosFiscalesEnVenta } from '@/modules/factura-automatica/components/DatosFiscalesVenta';
+import { useModoPorEnviar } from '@/modules/factura-automatica/hooks/useFacturaAutomatica';
 
 // Las notas y la dirección: la clase común, con la altura que pidan sus filas.
 const textareaClass = `${inputClass} h-auto py-2 resize-none`;
@@ -88,10 +93,24 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
   const [clientResults, setClientResults] = useState<LeadLite[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedClient, setSelectedClient] = useState<LeadLite | null>(null);
+  // El correo de la ficha (o el escrito para un cliente nuevo), para «Enviar a este correo».
+  const emailDeLaFicha = ((mode === 'existing' || mode === 'otra_gestora') ? selectedClient?.email : email)?.trim() || null;
+  const envioFactura = useEnvioFacturaAlta(emailDeLaFicha, { sinCorreoVale: true });
 
   // Documento fiscal para factura (NIF/CIF/NIE/cédula/RFC) — opcional
-  const [identificacionFiscal, setIdentificacionFiscal] = useState('');
-  const [direccionFiscal, setDireccionFiscal] = useState('');
+  // Los datos de la persona para la factura (25/11): de la ficha si es un
+  // cliente que ya existe, o los carga la gestora.
+  const [fiscales, setFiscales] = useState<DatosFiscalesEnVenta>(DATOS_FISCALES_VACIOS);
+  const porEnviar = useModoPorEnviar();
+  useEffect(() => {
+    const id = (mode === 'existing' || mode === 'otra_gestora') ? selectedClient?.id : null;
+    if (!id) { setFiscales(DATOS_FISCALES_VACIOS); return; }
+    let vivo = true;
+    client.get<Record<string, unknown>>(`/leads/${id}`)
+      .then((r) => { if (vivo) setFiscales(fiscalesDeLaFicha(r?.data)); })
+      .catch(() => { /* se cargan a mano */ });
+    return () => { vivo = false; };
+  }, [mode, selectedClient?.id]);
 
   // Venta
   const [productoId, setProductoId] = useState<number | ''>('');
@@ -132,8 +151,7 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     setMode(modoInicial || 'existing');
     setNombre(''); setEmail(''); setTelefono('');
     setClientSearch(''); setClientResults([]); setSelectedClient(null);
-    setIdentificacionFiscal('');
-    setDireccionFiscal('');
+    setFiscales(DATOS_FISCALES_VACIOS);
     setProductoId(''); setProductSearch('');
     setImporteTotal(''); setImportePagado(''); setMetodo('transferencia');
     setFecha(today); setNotas('');
@@ -274,7 +292,14 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
     setIntentado(true);
     const falta = avisoDeLoQueFalta(faltan);
     if (falta) { toast(falta); return; }
+    const faltaEnvio = envioFactura.falta();
+    if (faltaEnvio) { toast({ ...faltaEnvio, variant: 'destructive' }); return; }
     const pagadoNum = importePagado === '' ? totalNum : parseFloat(importePagado);
+    // «Por enviar» (ISEIE): con cobro, la factura sale con estos datos y administración la verifica.
+    const faltanFiscales = porEnviar === true && pagadoNum > 0 ? faltanDatosFiscales(fiscales) : [];
+    if (faltanFiscales.length) {
+      toast({ title: 'Faltan datos de la persona para la factura', description: `Completa ${faltanFiscales.join(', ')}.`, variant: 'destructive' }); return;
+    }
     if (pagadoNum < 0 || pagadoNum > totalNum) {
       toast({ title: 'El importe pagado no cuadra', description: `Tiene que estar entre 0 y el importe total (${totalNum.toFixed(2)}). Si lo dejas vacío, se toma el total.`, variant: 'destructive' }); return;
     }
@@ -313,6 +338,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
         fecha_pago: fecha,
         fecha_inicio: fechaInicio || null,
         notas: notas.trim() || null,
+        // Sin la factura automática encendida, no va (undefined).
+        envio_factura: envioFactura.cuerpo(),
       };
       if (metodo === 'fraccionado' && installments.length >= 2) {
         body.installments = installments.map(it => ({
@@ -335,12 +362,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
         body.email = email.trim() || null;
         body.telefono = telefono.trim() || null;
       }
-      if (identificacionFiscal.trim()) {
-        body.identificacion_fiscal = identificacionFiscal.trim();
-      }
-      if (direccionFiscal.trim()) {
-        body.direccion_fiscal = direccionFiscal.trim();
-      }
+      if (fiscales.nif.trim()) body.identificacion_fiscal = fiscales.nif.trim();
+      if (fiscales.direccion.trim()) body.direccion_fiscal = fiscales.direccion.trim();
+      const datosFiscales = aDatosFiscales(fiscales);
+      if (datosFiscales) body.datos_fiscales = datosFiscales;
       await registrar(body);
     } catch (err: unknown) {
       // Ya tiene una venta de este programa: se pregunta, no se crea a ciegas.
@@ -616,28 +641,8 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
 
             {/* Datos fiscales (opcionales, común a ambos modos) */}
             <div className="space-y-2">
-              <Field label="Identificación fiscal (opcional)" htmlFor="venta-identificacion">
-                <input autoComplete="off"
-                  id="venta-identificacion"
-                  value={identificacionFiscal}
-                  onChange={(e) => setIdentificacionFiscal(e.target.value)}
-                  placeholder="NIF / CIF / NIE / Cédula / RFC…"
-                  maxLength={50}
-                  className={inputClass}
-                />
-              </Field>
-              <Field label="Dirección fiscal (opcional)" htmlFor="venta-direccion"
-                hint="Los dos datos fiscales son para emitir factura. Si no los tienes, déjalos vacíos.">
-                <textarea autoComplete="off"
-                  id="venta-direccion"
-                  value={direccionFiscal}
-                  onChange={(e) => setDireccionFiscal(e.target.value)}
-                  placeholder="Calle, número, piso · Código postal · Ciudad · Provincia · País"
-                  maxLength={500}
-                  rows={2}
-                  className={textareaClass}
-                />
-              </Field>
+              <DatosFiscalesVenta value={fiscales} onChange={setFiscales} idBase="venta-fiscales"
+                obligatorios={porEnviar === true && (importePagado === '' || parseFloat(importePagado) > 0)} />
             </div>
 
             {/* Producto + importes (común a ambos modos) */}
@@ -777,6 +782,10 @@ export default function RegisterSaleDialog({ open, onClose, project, onSaved, mo
                 </div>
               )}
 
+              {envioFactura.visible && (
+                <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                  emailFicha={emailDeLaFicha} idBase="registrar-envio-factura" sinCorreoVale />
+              )}
               <Field label="Notas (opcional)" htmlFor="venta-notas">
                 <textarea autoComplete="off" id="venta-notas" value={notas} onChange={(e) => setNotas(e.target.value)} rows={2}
                   placeholder="Comentarios sobre la venta…"

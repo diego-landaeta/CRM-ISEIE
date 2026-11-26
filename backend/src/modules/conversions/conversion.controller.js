@@ -23,11 +23,37 @@ export async function create(req, res, next) {
   try {
     const parsed = createConversionSchema.safeParse(req.body);
     if (!parsed.success) throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
+    // «Enviar factura automáticamente»: solo quien tiene `facturas.envio_auto` (25/11).
+    const { quitarSiNoPuede } = await import('../factura-automatica/factura-automatica.envio.js');
+    await quitarSiNoPuede(req, parsed.data);
     // Con curso de Moodle, sin fecha de inicio no se cierra la venta (#455, gemela de CRM#1036).
     await exigirFechaSiTieneCurso(parsed.data);
     const conversion = await conversionService.create(parsed.data, req.user.userId);
-    res.status(201).json({ success: true, data: conversion });
+    const cargo_inicial = await unirLaInicialDeStripe(req, parsed.data, conversion);
+    res.status(201).json({ success: true, data: cargo_inicial ? { ...conversion, cargo_inicial } : conversion });
   } catch (err) { next(err); }
+}
+
+/*
+  «LINK DE PAGO USADO» (CRM-ISEIE#762, gemela de CRM#1107): la inicial ya se pagó con otro link o con
+  Stripe y la gestora pegó el link (buy.stripe.com/…, plink_, cs_, pi_ o ch_). El
+  cargo se busca en Stripe y se une a ESTE pago inicial, sin crear otro cobro. Si
+  no se puede, la referencia queda como estaba y se dice por qué. La venta ya está
+  creada: esto nunca la tumba.
+*/
+async function unirLaInicialDeStripe(req, data, conversion) {
+  if (!conversion?._initial_payment_id || !data.referencia_pago_inicial) return null;
+  const { leerReferencia, unirCargoDeLaReferencia } = await import('../links-pago/links-pago.referencia.js');
+  const ref = leerReferencia(data.referencia_pago_inicial);
+  // Una dirección que no es de Stripe solo se busca si la inicial se pagó con Stripe.
+  if (!ref || (ref.tipo === 'url' && !ref.deStripe && data.metodo_pago_inicial !== 'tarjeta_stripe')) return null;
+  const { tienePermiso } = await import('../../shared/middleware/permissions.js');
+  if (!(await tienePermiso(req, 'links_pago.crear'))) return null;
+  return unirCargoDeLaReferencia({
+    projectId: Number(conversion.project_id), referencia: data.referencia_pago_inicial,
+    importe: Number(conversion._initial_payment_importe), conversionId: Number(conversion.id),
+    conversionPaymentId: Number(conversion._initial_payment_id), userId: Number(req.user.userId),
+  });
 }
 
 // GET /api/conversions/productos-con-curso?projectId=

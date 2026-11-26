@@ -11,7 +11,9 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  *  · Reportes: el informe del periodo y lo que se descarga.
  *  · PayPal y banco: los cobros que entran por PayPal y los extractos del banco.
  *  · Novedades: lo que trae cada versión.
- *  · Correos: lo que llega a los buzones conectados (en MultiCRM ya lo tenía).
+ *
+ * Correos, que esta tanda traía, se pasó a la tanda E (`recorridosGestoraC.ts`,
+ * #782), como en MultiCRM: Diego lo pidió allí.
  *
  * El tablero de Tareas ya tenía el suyo (`recorridoTablero`), y Conciliación ›
  * Facturas y cobros también (`recorridosNovedades301.ts`). Conciliación ›
@@ -37,11 +39,7 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  * PARIDAD: mismos ids y anclajes que en MultiCRM. Cambian las rutas (aquí
  * PayPal y banco cuelga de `/accounting`; allí, de `/finanzas`), el permiso de
  * Reportes (aquí `reports.mis_informes`; allí `reports.view`) y lo que se
- * descarga en Reportes (aquí Excel y PDF; allí CSV y PDF). Aquí se suma
- * Correos, que en MultiCRM ya tenía el suyo (tanda E): es otra pantalla (solo
- * lo recibido, por buzones), así que sus pasos son los suyos; el id y los
- * anclajes que coinciden (`correos-buscar`, `correos-buzon`, `correos-lista`)
- * son los mismos.
+ * descarga en Reportes (aquí Excel y PDF; allí CSV y PDF).
  */
 
 /** Lo único que cambia en los textos entre los dos CRM. */
@@ -55,8 +53,7 @@ export type IdRecorridoGestoraH =
   | 'configurar-tablero'
   | 'reportes'
   | 'cobros-externos'
-  | 'novedades'
-  | 'correos';
+  | 'novedades';
 
 type RecorridoGestoraH = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoGestoraH };
 
@@ -281,45 +278,6 @@ export const RECORRIDOS_GESTORA_H: Record<IdRecorridoGestoraH, RecorridoGestoraH
         donde: anclaje('novedades-lista'),
         titulo: 'Cada novedad',
         texto: 'Qué cambia y para quién. «Ir» te lleva a su pantalla y «Ver recorrido», si lo tiene, te la enseña paso a paso. Solo salen si esa pantalla es tuya.',
-      },
-      {
-        titulo: 'Y listo',
-        texto: FINAL,
-      },
-    ],
-  },
-
-  // ─── Sistema › Correos (solo aquí: en MultiCRM es de la tanda E) ───────────
-  correos: {
-    id: 'correos',
-    rutas: ['/correos'],
-    titulo: 'Correos',
-    permiso: 'correos.view',
-    pantalla: ['modules/correos/pages/CorreosPage.tsx'],
-    pasos: [
-      {
-        titulo: 'Lo que llega a los buzones',
-        texto: 'Los correos que entran en los buzones conectados (facturación, soporte, admisiones…), con su texto. El CRM solo los lee: no marca, no mueve ni borra nada. Son {pasos} pasos.',
-      },
-      {
-        donde: anclaje('correos-buscar'),
-        titulo: 'Buscar',
-        texto: 'Por quién lo manda o el asunto. Y por fechas: hoy, ayer, esta semana o la pasada, este mes o el pasado; pulsar otra vez la quita.',
-      },
-      {
-        donde: anclaje('correos-elegir-buzon'),
-        titulo: 'Un buzón o todos',
-        texto: 'Con más de un buzón conectado, elige uno o déjalos todos juntos: cada correo lleva la etiqueta del suyo.',
-      },
-      {
-        donde: anclaje('correos-buzon'),
-        titulo: 'Buzones y traer del buzón',
-        texto: '«Buzones» conecta o quita los buzones, si tienes permiso. Se leen solos cada media hora; «Traer del buzón» los lee ahora. «Actualizar» vuelve a pedir la lista.',
-      },
-      {
-        donde: anclaje('correos-lista'),
-        titulo: 'La lista',
-        texto: 'Cada correo con la fecha, quién lo manda (con su nombre si es del CRM), el asunto y su buzón. Púlsalo para leerlo entero.',
       },
       {
         titulo: 'Y listo',

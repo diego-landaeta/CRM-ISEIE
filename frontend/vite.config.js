@@ -13,7 +13,7 @@ export default defineConfig(({ command, mode }) => {
   return CONFIG;
 });
 
-// La versión que enseña el menú, de la etiqueta de Git (ver scripts/versionDeLaApp.js).
+// La versión que enseña el CRM: la primera de Novedades (ver scripts/versionDeLaApp.js).
 const APP_VERSION = versionDeLaApp({ cwd: __dirname });
 
 const CONFIG = {

@@ -17,7 +17,8 @@ import { isIP } from 'node:net';
  *   · «Probar conexión» dice si entra o por qué no, sin devolver la contraseña;
  *   · quién puede: el permiso `correos.buzones` y los campus de cada admin;
  *   · el buzón del .env sigue leyéndose si no hay ninguno en la base, y al pasarlo
- *     al panel sus correos se adoptan en vez de duplicarse;
+ *     al panel sus correos se adoptan en vez de duplicarse, y ya no se vuelve a
+ *     leer por el .env aunque se quite del panel (CRM#1058);
  *   · el buzón de facturación de una empresa sin correo se ofrece como su correo.
  *
  * El servidor IMAP es de mentira (no se toca ningún buzón real): cada usuario
@@ -476,5 +477,135 @@ describe('en ISEIE la Bandeja es solo de lo recibido', () => {
   it('un id que no es un número es un 404, no un error de la base', async () => {
     expect((await request.get('/api/correos/abc').set(como(SUPER))).status).toBe(404);
     expect((await request.patch('/api/correos/buzones/abc').set(como(SUPER)).send({ nombre: 'x' })).status).toBe(404);
+  });
+});
+
+// Diego (CRM#1058): «cuando se adopta deja de leerse para que no salga
+// duplicado». El mismo arreglo que el 360 en CRM#1058.
+describe('el buzón del .env ya adoptado (CRM#1058)', () => {
+  it('no se vuelve a leer, ni aunque se quite del panel', async () => {
+    vi.stubEnv('IMAP_USER', ENV); vi.stubEnv('IMAP_PASSWORD', CLAVE_BUENA);
+    const adoptado = await one(`SELECT id FROM correo_buzones WHERE direccion = $1 AND activo`, [ENV]);
+    expect((await request.delete(`/api/correos/buzones/${adoptado.id}`).set(como(SUPER))).status).toBe(200);
+    // Ninguno activo en la base: lo que antes hacía volver a leer el del .env,
+    // con la clave sin buzón, y guardar sus correos otra vez.
+    await q(`UPDATE correo_buzones SET activo = false WHERE activo AND direccion LIKE $1`, [`%@${dom}`]);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.motivo).toBe('SIN_BUZON');
+    expect(conexiones).toHaveLength(0);
+    // Sus dos correos, una vez y con el buzón al que se adoptaron.
+    const filas = await q(`SELECT buzon_id FROM email_envios WHERE clave LIKE $1`, [`%<e_@${dom}>`]);
+    expect(filas).toHaveLength(2);
+    expect(filas.every((f) => f.buzon_id === adoptado.id)).toBe(true);
+  });
+
+  it('un .env que nunca se conectó en el panel sí se lee si no hay ninguno en la base', async () => {
+    const NUEVO = `nuevo@${dom}`;
+    BUZONES_FALSOS[NUEVO] = [crudo('n1', NUEVO, 'Del nuevo')];
+    vi.stubEnv('IMAP_USER', NUEVO); vi.stubEnv('IMAP_PASSWORD', CLAVE_BUENA);
+    conexiones.length = 0;
+    const r = await leerBuzon();
+    expect(r.nuevos).toBe(1);
+    expect(conexiones.map((c) => c.auth.user)).toEqual([NUEVO]);
+  });
+});
+
+/**
+ * Revisión de Diego en CRM#1058 (24/11 y 25/11), gemela de buzonesCorreo1032 del 360: la contraseña guardada de un
+ * buzón no puede salir hacia un servidor que no sea el suyo. Si llega otro
+ * servidor u otro puerto sin contraseña, 400; y «Probar» un buzón guardado pide
+ * poder cambiarlo (`exigirTocable`), como cambiar y quitar.
+ */
+describe('la contraseña guardada no sale a otro servidor (revisión de CRM#1058)', () => {
+  const RRHH = `rrhh@${dom}`;
+  const COMUN = `comun@${dom}`;
+  let buzon; let comun;
+  const cifradoDe = async (id) => (await one('SELECT cifrado FROM correo_buzones WHERE id = $1', [id])).cifrado;
+  const probarGuardado = (id, quien, cuerpo) => request.post(`/api/correos/buzones/${id}/probar`)
+    .set(como(quien)).send(cuerpo);
+  const cambiar = (id, cuerpo) => request.patch(`/api/correos/buzones/${id}`).set(como(SUPER)).send(cuerpo);
+
+  beforeAll(async () => {
+    BUZONES_FALSOS[RRHH] = [crudo('r1', RRHH, 'Una nómina')];
+    BUZONES_FALSOS[COMUN] = [crudo('c1', COMUN, 'Para todos')];
+    buzon = (await conectar(SUPER, { nombre: 'RRHH', direccion: RRHH, clave: CLAVE_BUENA, project_id: MIO })).body.data.id;
+    // Uno sin campus: es de todo el CRM y solo lo toca quien ve el CRM entero.
+    comun = (await conectar(SUPER, { nombre: 'Común', direccion: COMUN, clave: CLAVE_BUENA })).body.data.id;
+    expect(buzon).toBeTruthy();
+    expect(comun).toBeTruthy();
+  });
+
+  it('probar: otro servidor sin contraseña, 400 y sin conectar', async () => {
+    conexiones.length = 0;
+    const r = await probarGuardado(buzon, SUPER, { host: 'imap.mio-del-atacante.com' });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('CLAVE_OBLIGATORIA');
+    expect(conexiones).toHaveLength(0);
+  });
+
+  it('probar: otro puerto sin contraseña, 400 y sin conectar', async () => {
+    conexiones.length = 0;
+    const r = await probarGuardado(buzon, SUPER, { puerto: 143 });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('CLAVE_OBLIGATORIA');
+    expect(conexiones).toHaveLength(0);
+  });
+
+  it('probar: otro servidor CON contraseña escrita, prueba esa y no la guardada', async () => {
+    conexiones.length = 0;
+    const r = await probarGuardado(buzon, SUPER, { host: 'mail.ejemplo.com', clave: 'La-Que-Escribo' });
+    expect(r.status).toBe(200);
+    expect(conexiones).toHaveLength(1);
+    expect(conexiones[0]).toMatchObject({ servername: 'mail.ejemplo.com', auth: { pass: 'La-Que-Escribo' } });
+  });
+
+  it('probar: el mismo servidor y puerto escritos, sin contraseña, usa la guardada', async () => {
+    conexiones.length = 0;
+    const r = await probarGuardado(buzon, SUPER, { host: 'IMAP.Hostinger.com', puerto: 993 });
+    expect(r.status).toBe(200);
+    expect(r.body.data.ok).toBe(true);
+    expect(conexiones[0]).toMatchObject({ servername: 'imap.hostinger.com', port: 993, auth: { pass: CLAVE_BUENA } });
+  });
+
+  it('probar: un buzón sin campus solo lo prueba quien ve el CRM entero (exigirTocable)', async () => {
+    conexiones.length = 0;
+    const r = await probarGuardado(comun, ADMIN, {});
+    expect(r.status).toBe(403);
+    expect(conexiones).toHaveLength(0);
+    // El admin sí prueba uno de su campus, y el superadmin el común.
+    expect((await probarGuardado(buzon, ADMIN, {})).status).toBe(200);
+    expect((await probarGuardado(comun, SUPER, {})).status).toBe(200);
+  });
+
+  it('cambiar: otro servidor sin contraseña, 400 y la conexión guardada no cambia', async () => {
+    const antes = await cifradoDe(buzon);
+    const r = await cambiar(buzon, { host: 'imap.mio-del-atacante.com' });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('CLAVE_OBLIGATORIA');
+    expect(await cifradoDe(buzon)).toBe(antes);
+  });
+
+  it('cambiar: otro puerto sin contraseña, 400 y la conexión guardada no cambia', async () => {
+    const antes = await cifradoDe(buzon);
+    const r = await cambiar(buzon, { puerto: 143 });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('CLAVE_OBLIGATORIA');
+    expect(await cifradoDe(buzon)).toBe(antes);
+  });
+
+  it('cambiar: el mismo servidor y puerto sin contraseña se guarda y se queda la guardada', async () => {
+    const r = await cambiar(buzon, { host: 'imap.hostinger.com', puerto: 993, usuario: RRHH });
+    expect(r.status).toBe(200);
+    const d = descifrarConexion(await one('SELECT * FROM correo_buzones WHERE id = $1', [buzon]));
+    expect(d).toEqual({ host: 'imap.hostinger.com', puerto: 993, usuario: RRHH, clave: CLAVE_BUENA });
+  });
+
+  it('cambiar: otro servidor CON contraseña se guarda con la nueva', async () => {
+    const r = await cambiar(buzon, { host: 'mail.ejemplo.com', puerto: 143, clave: 'Nueva-Para-Otro' });
+    expect(r.status).toBe(200);
+    expect(JSON.stringify(r.body)).not.toContain('Nueva-Para-Otro');
+    const d = descifrarConexion(await one('SELECT * FROM correo_buzones WHERE id = $1', [buzon]));
+    expect(d).toMatchObject({ host: 'mail.ejemplo.com', puerto: 143, clave: 'Nueva-Para-Otro' });
   });
 });

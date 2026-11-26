@@ -10,9 +10,9 @@ import path from 'path';
   #619, tanda E (gemela de CRM#941; Diego, 19/11: «las que son así, dáselas a
   Ángel CEDIA»): «Ver recorrido» en lo que quedaba de WhatsApp (Banco de
   mensajes y Actividad; el chat, Plantillas y Conexión ya tienen el suyo, y Ayuda
-  ya es una guía) y en las pestañas de Consultas: Alumnos sin mensajes, Mi
-  carga, Tutores, Métricas y Respuestas del campus. Correos no: aquí la pantalla
-  llega con #750, y su recorrido con ella.
+  ya es una guía), en Correos (la bandeja de lo que llega a los buzones, #750)
+  y en las pestañas de Consultas: Alumnos sin mensajes, Mi carga, Tutores,
+  Métricas y Respuestas del campus.
 
   Se pinta cada pantalla de verdad, con datos en los que sale todo, y se recorre
   entera: cada paso encuentra su sitio y ninguno se salta. Lo que esa persona no
@@ -48,6 +48,7 @@ const { RECORRIDOS_GESTORA_C } = await import('@/shared/lib/recorridosGestoraC')
 const { recorridosDeLaRuta } = await import('@/shared/lib/recorridosPorRuta');
 const { default: BancoPage } = await import('@/modules/whatsapp/pages/BancoPage');
 const { default: ActividadWhatsappPage } = await import('@/modules/whatsapp/pages/ActividadWhatsappPage');
+const { default: CorreosPage } = await import('@/modules/correos/pages/CorreosPage');
 const { default: AlumnosSinMensajesPage } = await import('@/modules/consultas/pages/AlumnosSinMensajesPage');
 const { default: MiCargaPage } = await import('@/modules/consultas/pages/MiCargaPage');
 const { default: TutoresConsultasPage } = await import('@/modules/consultas/pages/TutoresConsultasPage');
@@ -65,6 +66,10 @@ const hace = (h) => new Date(Date.now() - h * 3600000).toISOString();
 const MM = (n) => ({ media: n, mediana: n });
 const FILA_RANKING = { id: 41, nombre: 'Laura Tutora', consultas: 4, pendientes: 1, primeraRespuestaHoras: MM(3), enPlazoPct: 75 };
 const CARGA = { id: 1, nivel: 'media', texto: 'Corrigiendo el módulo 2', created_at: hace(30), por: null };
+const BUZONES = [
+  { id: 2, nombre: 'Admisiones', direccion: 'admisiones@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: hace(1), ultimo_resultado: 'ok', ultimo_error: null, recibidos: 1 },
+  { id: 3, nombre: 'Facturación', direccion: 'facturacion@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: hace(1), ultimo_resultado: 'ok', ultimo_error: null, recibidos: 0 },
+];
 const RESPUESTAS = {
   '/whatsapp/banco': {
     success: true,
@@ -88,6 +93,18 @@ const RESPUESTAS = {
       }],
     },
   },
+  '/correos': {
+    success: true,
+    data: {
+      total: 1, pagina: 1, limite: 50,
+      filas: [{
+        id: 9, cuando: hace(3), direccion: 'entrada', remitente: 'ana@ejemplo.com', destinatarios: 'admisiones@ejemplo.com',
+        asunto: 'Tu matrícula en el máster', estado: 'recibido', project_id: 1, campus: 'Campus Uno',
+        de_quien: null, tiene_cuerpo: true, buzon_id: 2, buzon_nombre: 'Admisiones', buzon_direccion: 'admisiones@ejemplo.com',
+      }],
+    },
+  },
+  '/correos/buzones': { success: true, data: BUZONES },
   '/consultas/alumnos-sin-mensajes': {
     success: true,
     data: {
@@ -151,6 +168,7 @@ const aDeTodos = async (esperar) => {
 const PANTALLAS = {
   'whatsapp-banco': { pintar: () => <BancoPage />, cargada: 'Hola, quiero información del máster' },
   'whatsapp-actividad': { pintar: () => <ActividadWhatsappPage />, cargada: 'Laura Gestora' },
+  correos: { pintar: () => <CorreosPage />, cargada: /Tu matrícula en el máster/ },
   'consultas-alumnos': {
     pintar: () => <AlumnosSinMensajesPage />,
     cargada: 'Carla Gómez',
@@ -201,7 +219,7 @@ beforeEach(() => {
   localStorage.clear();
   permisos.clear();
   [
-    'whatsapp.usar', 'reports.view',
+    'whatsapp.usar', 'reports.view', 'correos.view', 'correos.sincronizar', 'correos.buzones',
     'consultas.view', 'consultas.atender', 'consultas.gestionar',
   ].forEach((k) => permisos.add(k));
   // Superadmin y tutora a la vez: ve «lo mío / De todos», «Sincronizar ahora» y el ranking.
@@ -214,9 +232,9 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('el día a día, tercera tanda, en el modelo (#619, tanda E)', () => {
-  it('son siete (Correos llega con #750), por menú, y están registrados con los demás (VerRecorrido y la prueba a 375 los ven)', () => {
+  it('son ocho, por menú, y están registrados con los demás (VerRecorrido y la prueba a 375 los ven)', () => {
     expect(Object.keys(RECORRIDOS_GESTORA_C)).toEqual([
-      'whatsapp-banco', 'whatsapp-actividad',
+      'whatsapp-banco', 'whatsapp-actividad', 'correos',
       'consultas-alumnos', 'consultas-carga', 'consultas-tutores', 'consultas-metricas', 'consultas-respuestas',
     ]);
     for (const id of IDS) expect(RECORRIDOS_COBROS[id]).toBe(RECORRIDOS_GESTORA_C[id]);
@@ -226,6 +244,7 @@ describe('el día a día, tercera tanda, en el modelo (#619, tanda E)', () => {
     expect(Object.fromEntries(Object.values(RECORRIDOS_GESTORA_C).map((r) => [r.id, r.permiso]))).toEqual({
       'whatsapp-banco': ['whatsapp.usar', 'whatsapp.supervisar', 'whatsapp.banco'],
       'whatsapp-actividad': 'reports.view',
+      correos: 'correos.view',
       'consultas-alumnos': ['consultas.view', 'consultas.atender'],
       'consultas-carga': 'consultas.atender',
       'consultas-tutores': 'consultas.view',
@@ -261,7 +280,6 @@ describe('el botón «Recorrido» de la cabecera los encuentra por su ruta', () 
   it('cada pantalla, el suyo', () => {
     expect(recorridosDeLaRuta('/whatsapp/banco')).toEqual(['whatsapp-banco']);
     expect(recorridosDeLaRuta('/whatsapp/actividad')).toEqual(['whatsapp-actividad']);
-    // Correos llegó con #750 (solo lo recibido) y su recorrido, con la tanda J.
     expect(recorridosDeLaRuta('/correos')).toEqual(['correos']);
     expect(recorridosDeLaRuta('/consultas/alumnos')).toEqual(['consultas-alumnos']);
     expect(recorridosDeLaRuta('/consultas/carga')).toEqual(['consultas-carga']);
@@ -327,6 +345,23 @@ describe('lo que no está, se salta solo', () => {
     expect(await abrirYRecorrer('consultas-alumnos')).toEqual(titulos('consultas-alumnos', ['Los tuyos o los de todos']));
   });
 
+  it('Correos con un solo buzón: sin elegir buzón', async () => {
+    api.get.mockImplementation(async (url) => (String(url).startsWith('/correos/buzones')
+      ? { success: true, data: [BUZONES[0]] } : responder(url)));
+    pintar('correos');
+    await cargada('correos');
+    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos', ['Un buzón o todos']));
+  });
+
+  it('Correos de quien solo lee: sin «Buzones» ni «Traer del buzón», pero con «Actualizar»', async () => {
+    permisos.delete('correos.buzones');
+    permisos.delete('correos.sincronizar');
+    pintar('correos');
+    await cargada('correos');
+    expect(screen.queryByRole('button', { name: /Buzones/ })).toBeNull();
+    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos'));
+  });
+
   it('Tutores sin campus sin tutor: se salta el aviso', async () => {
     datos.campusSinTutor = false;
     pintar('consultas-tutores');
@@ -352,6 +387,7 @@ describe('lo que no está, se salta solo', () => {
   it.each([
     ['whatsapp-banco', ['whatsapp.usar']],
     ['whatsapp-actividad', ['reports.view']],
+    ['correos', ['correos.view']],
     ['consultas-carga', ['consultas.atender']],
     ['consultas-tutores', ['consultas.view']],
   ])('%s: sin su permiso, no ofrece recorrido', async (id, quitar) => {

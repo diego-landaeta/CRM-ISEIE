@@ -10,7 +10,7 @@ import RangoRapido from '@/shared/components/ui/RangoRapido';
 import usePermission from '@/shared/hooks/usePermission';
 import { correosApi, type CorreoEnLista, type CorreoCompleto, type Buzon } from '../api/correos.api';
 import BuzonesDialog from '../components/BuzonesDialog';
-// El recorrido guiado de la pantalla (#619, tanda J; en MultiCRM, de la tanda E).
+// El recorrido guiado de la pantalla (#619, tanda E; gemela de CRM#941).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
@@ -164,7 +164,7 @@ export default function CorreosPage() {
   }
 
   return (
-    /* El margen de scroll de lo que señala el recorrido (#619, tanda J). */
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda E). */
     <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Correos"

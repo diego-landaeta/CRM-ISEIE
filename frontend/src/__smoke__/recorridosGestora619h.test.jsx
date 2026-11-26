@@ -9,14 +9,14 @@ import path from 'path';
 /*
   #619, tanda J; gemela de CRM#941: las pantallas del menú que se quedaron sin
   «Ver recorrido» porque no estaban en la lista de la issue: Historial de
-  tareas, Configurar tablero, Reportes, PayPal y banco, Novedades y Correos (en
-  MultiCRM, Correos ya lo tenía).
+  tareas, Configurar tablero, Reportes, PayPal y banco y Novedades. Correos,
+  que iba aquí, está en la tanda E (recorridosGestora619c), como en MultiCRM.
 
   Se pinta cada pantalla de verdad, con datos en los que sale todo, y se recorre
   entera: cada paso encuentra su sitio y ninguno se salta (salvo lo que no está
   en ese momento: la otra pestaña de PayPal y banco, el envío de novedades a
   quien no lo dirige). Lo que no está (no hay tareas hechas, la pestaña del
-  banco, la función apagada, quien solo consulta, un solo buzón) se salta solo. En Reportes,
+  banco, la función apagada, quien solo consulta) se salta solo. En Reportes,
   los paneles que piden sus propios datos se sustituyen por un sustituto con su
   nombre: aquí se prueba la pantalla y sus anclajes, no cada panel (tienen sus
   pruebas). Que cada anclaje sigue en el código y que los permisos existen lo
@@ -70,7 +70,6 @@ const { default: TaskBoardConfigPage } = await import('@/modules/tasks/pages/Tas
 const { default: ReportsPage } = await import('@/shared/pages/ReportsPage');
 const { default: CobrosExternosPage } = await import('@/modules/accounting/pages/CobrosExternosPage');
 const { default: NovedadesPage } = await import('@/modules/novedades/pages/NovedadesPage');
-const { default: CorreosPage } = await import('@/modules/correos/pages/CorreosPage');
 
 const SRC = path.resolve(__dirname, '..');
 const CAMPUS = [
@@ -123,16 +122,6 @@ const NOVEDADES = {
   ],
 };
 
-const BUZONES = [
-  { id: 1, nombre: 'Admisiones', direccion: 'admisiones@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: '2026-11-24T08:00:00Z', ultimo_resultado: 'ok', ultimo_error: null, recibidos: 3 },
-  { id: 2, nombre: 'Facturación', direccion: 'facturacion@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: '2026-11-24T08:00:00Z', ultimo_resultado: 'ok', ultimo_error: null, recibidos: 1 },
-];
-const CORREO = {
-  id: 5, cuando: '2026-11-24T09:15:00Z', direccion: 'entrada', remitente: 'marta@ejemplo.com', destinatarios: 'admisiones@ejemplo.com',
-  asunto: 'Duda sobre la matrícula', estado: 'recibido', project_id: 1, campus: 'Campus Uno', de_quien: null, tiene_cuerpo: true,
-  buzon_id: 1, buzon_nombre: 'Admisiones', buzon_direccion: 'admisiones@ejemplo.com',
-};
-
 const RESPUESTAS = {
   '/tasks/historial': {
     success: true, data: [HISTORIAL], pagination: { total: 1, page: 1, limit: 50, totalPages: 1 },
@@ -146,8 +135,6 @@ const RESPUESTAS = {
   '/cobros-externos/banco/movimientos': { success: true, data: [MOVIMIENTO], porEstado: { a_revisar: 1 } },
   '/cobros-externos/banco/extractos': { success: true, data: [EXTRACTO] },
   '/novedades': { success: true, data: NOVEDADES },
-  '/correos': { success: true, data: { total: 1, pagina: 1, limite: 50, filas: [CORREO] } },
-  '/correos/buzones': { success: true, data: BUZONES },
 };
 /** La respuesta por la ruta, sin la parte de los parámetros. */
 const responder = async (url) => RESPUESTAS[String(url).split('?')[0]] ?? { success: true, data: [] };
@@ -160,7 +147,6 @@ const PANTALLAS = {
   'cobros-externos': { pintar: () => <CobrosExternosPage />, cargada: 'Ana Pérez', fuera: ['Subir un extracto', 'Los abonos'] },
   // Quien no dirige el CRM (superadmin o soporte) no manda las novedades.
   novedades: { pintar: () => <NovedadesPage />, cargada: 'Lo nuevo de prueba', fuera: ['Mandarla'] },
-  correos: { pintar: () => <CorreosPage />, cargada: 'marta@ejemplo.com' },
 };
 const IDS = Object.keys(PANTALLAS);
 const boton = (id) => `Ver recorrido: ${RECORRIDOS_GESTORA_H[id].titulo}`;
@@ -192,7 +178,7 @@ beforeEach(() => {
   permisos.clear();
   [
     'tasks.view_own', 'tasks.view_all', 'tasks.assign', 'tasks.manage', 'reports.mis_informes',
-    'cobros_externos.view', 'cobros_externos.edit', 'novedades.view', 'correos.view', 'correos.buzones', 'correos.sincronizar',
+    'cobros_externos.view', 'cobros_externos.edit', 'novedades.view',
   ].forEach((k) => permisos.add(k));
   yo.current = { id: 41, role: 'admin', nombre: 'Laura Admin' };
   ambito.current = UN_CAMPUS;
@@ -202,8 +188,8 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('las del menú sin recorrido, en el modelo (#619, tanda J)', () => {
-  it('son seis (las cinco de MultiCRM y Correos), y están registradas con las demás (VerRecorrido y la prueba a 375 los ven)', () => {
-    expect(Object.keys(RECORRIDOS_GESTORA_H)).toEqual(['historial-tareas', 'configurar-tablero', 'reportes', 'cobros-externos', 'novedades', 'correos']);
+  it('son cinco, las mismas que en MultiCRM, y están registradas con las demás (VerRecorrido y la prueba a 375 los ven)', () => {
+    expect(Object.keys(RECORRIDOS_GESTORA_H)).toEqual(['historial-tareas', 'configurar-tablero', 'reportes', 'cobros-externos', 'novedades']);
     for (const id of IDS) expect(RECORRIDOS_COBROS[id]).toBe(RECORRIDOS_GESTORA_H[id]);
   });
 
@@ -214,7 +200,6 @@ describe('las del menú sin recorrido, en el modelo (#619, tanda J)', () => {
       reportes: 'reports.mis_informes',
       'cobros-externos': 'cobros_externos.view',
       novedades: 'novedades.view',
-      correos: 'correos.view',
     });
   });
 
@@ -233,7 +218,6 @@ describe('las del menú sin recorrido, en el modelo (#619, tanda J)', () => {
     expect(recorridosDeLaRuta('/informes')).toEqual(['reportes']);
     expect(recorridosDeLaRuta('/accounting/cobros-externos')).toEqual(['cobros-externos']);
     expect(recorridosDeLaRuta('/novedades')).toEqual(['novedades']);
-    expect(recorridosDeLaRuta('/correos')).toEqual(['correos']);
     // El tablero apunta el suyo al montarse (no va por ruta); el resto de Reportes no es esto.
     expect(recorridosDeLaRuta('/tareas')).toEqual([]);
     expect(recorridosDeLaRuta('/informes/feedback')).toEqual([]);
@@ -320,23 +304,6 @@ describe('lo que no está, se salta solo', () => {
     pintar('novedades');
     await cargada('novedades');
     expect(await abrirYRecorrer('novedades')).toEqual(titulos('novedades'));
-  });
-
-  it('Correos con un solo buzón: sin elegir buzón', async () => {
-    api.get.mockImplementation(async (url) => (String(url).startsWith('/correos/buzones')
-      ? { success: true, data: [BUZONES[0]] } : responder(url)));
-    pintar('correos');
-    await cargada('correos');
-    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos', ['Un buzón o todos']));
-  });
-
-  it('Correos de quien solo lee: sin «Buzones» ni «Traer del buzón», pero con «Actualizar»', async () => {
-    permisos.delete('correos.buzones');
-    permisos.delete('correos.sincronizar');
-    pintar('correos');
-    await cargada('correos');
-    expect(screen.queryByRole('button', { name: /Buzones/ })).toBeNull();
-    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos'));
   });
 
   it('sin «reports.mis_informes», Reportes no se pinta ni ofrece recorrido', async () => {

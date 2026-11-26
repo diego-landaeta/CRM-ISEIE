@@ -187,3 +187,37 @@ export function planearRecalculo(filas) {
   }
   return { cambios, sinPista, respetadas };
 }
+
+
+/**
+ * El `fbclid` de una dirección, o null. Mismo parámetro que ya mira el canal
+ * (arriba); aquí es para convertirlo a `fbc` (#474).
+ */
+export function extraerFbclid(url) {
+  const v = parametros(url).get('fbclid');
+  return v && v.trim() ? v.trim() : null;
+}
+
+/**
+ * El `fbclid` en el formato que espera Meta para `fbc`: `fb.1.{ms}.{fbclid}`
+ * (#474). El `1` es el índice de subdominio; con un solo dominio (el nuestro)
+ * siempre es 1. `ts` son los milisegundos de cuando se vio el fbclid — por
+ * defecto, ahora mismo.
+ */
+export function fbclidAFbc(fbclid, ts = Date.now()) {
+  if (!fbclid) return null;
+  return `fb.1.${ts}.${fbclid}`;
+}
+
+const FBP_META = /^fb\.\d\.\d+\.[\w-]+$/;
+
+/**
+ * El `fbp` tal como lo manda el formulario externo, validado contra el
+ * formato de Meta y el límite de la columna (VARCHAR(255)); si no cumple,
+ * null — mejor perder el dato que perder el prospecto entero (#474).
+ */
+export function limpiarFbp(fbp) {
+  if (!fbp || typeof fbp !== 'string') return null;
+  const v = fbp.trim();
+  return v && v.length <= 255 && FBP_META.test(v) ? v : null;
+}

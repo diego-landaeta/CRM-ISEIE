@@ -33,6 +33,8 @@ import PaisesDeEntrada from '@/modules/reports/components/PaisesDeEntrada';
 import InformeMensual from '@/modules/reports/components/InformeMensual';
 // El recorrido guiado de la pantalla (#619, tanda J; gemela de CRM#941).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+// Apostillas de La Haya (gemela de CRM#1130): cuántas, cuánto dinero, por estado, campus y mes.
+import CifrasApostillas from '@/modules/apostillas/components/CifrasApostillas';
 
 const REPORT_CATEGORIES = [
   {
@@ -333,6 +335,7 @@ export default function ReportsPage() {
 
 function PantallaDeReportes() {
   const { activeProject, user } = useAuth();
+  const { can, veGestoras } = usePermission();
   // Arranca en el MES en curso, no en los ultimos 30 dias.
   const [rango, setRango] = useState(() => rangoPorDefecto());
   // Lo que trae el panel de seguimiento, para que la descarga se lo lleve.
@@ -358,6 +361,8 @@ function PantallaDeReportes() {
   const [iaModal, setIaModal] = useState(false);
   const [claudeConfigured, setClaudeConfigured] = useState(false);
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // Los números por asesora: también quien ve a más de una persona sin ser admin
+  // (soporte, la líder de equipo con el suyo). El servidor lo recorta (25/11/2026).
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -626,6 +631,8 @@ function PantallaDeReportes() {
         )}
       </div>
 
+      {!isAdmin && veGestoras && <AsesorasPanel from={rango.from} to={rango.to} />}
+
       {/* Reportes descargables (varios, con rango de fechas) */}
       {isAdmin && (
         <>
@@ -645,6 +652,11 @@ function PantallaDeReportes() {
               rango. Como todo el feedback, de momento solo en pruebas. */}
           {PROCESO_EN_PRUEBAS && (
             <FeedbackEnReportes from={rango.from} to={rango.to} issuerId={null} project={activeProject} />
+          )}
+
+          {/* Apostillas de La Haya (gemela de CRM#1130): las del rango. Sin ninguna, no se pinta. */}
+          {can('apostillas.view') && (
+            <CifrasApostillas conTitulo from={rango.from} to={rango.to} ambito={ambitoComoObjeto({ activeProject })} />
           )}
 
           <div data-recorrido="reportes-descargas" className="empty:hidden">

@@ -4,12 +4,13 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
 /**
  * LOS RECORRIDOS DEL DÍA A DÍA, TERCERA TANDA (#619, tanda E; gemela de
  * CRM#941). Diego, 19/11: «las que son así, dáselas a Ángel CEDIA».
- * Lo que queda de WhatsApp y las pestañas de Consultas, después de la
+ * Lo que queda de WhatsApp, Correos y las pestañas de Consultas, después de la
  * tanda D (`recorridosGestoraB.ts`):
  *
  *  · WhatsApp › Banco de mensajes y WhatsApp › Actividad. El chat, Plantillas y
  *    Conexión ya tienen el suyo, y «¿Cómo se hace?» (Ayuda) ya es una guía: no
  *    se repiten;
+ *  · Correos, la bandeja de lo que llega a los buzones conectados (#750);
  *  · las pestañas de Consultas: Alumnos sin mensajes, Mi carga, Tutores,
  *    Métricas y Respuestas del campus (la bandeja y la consulta tienen los de main,
  *    `consultas-chat` y `consulta-responder`, en `recorridosNovedades301.ts`).
@@ -29,13 +30,16 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  * ciclo de módulos entre los dos ficheros.
  *
  * IGUAL EN LOS DOS CRM (paridad): mismos ids, anclajes y textos. Lo único que
- * cambia es Correos: aquí la pantalla aún no está (llega con #750) y su
- * recorrido, 'correos' en MultiCRM, se añade con ella.
+ * cambia Correos: aquí la pantalla solo enseña lo RECIBIDO (el envío sigue por
+ * Brevo, #750), así que no hay pestañas «Enviados / Frenados» y, en su lugar,
+ * está «Un buzón o todos» (`correos-elegir-buzon`). El id y los demás
+ * anclajes (`correos-buscar`, `correos-buzon`, `correos-lista`) son los del 360.
  */
 
 export type IdRecorridoGestoraC =
   | 'whatsapp-banco'
   | 'whatsapp-actividad'
+  | 'correos'
   | 'consultas-alumnos'
   | 'consultas-carga'
   | 'consultas-tutores'
@@ -44,7 +48,7 @@ export type IdRecorridoGestoraC =
 
 type RecorridoGestoraC = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoGestoraC };
 
-/** Por menú: WhatsApp (Banco y Actividad) y las pestañas de Consultas. */
+/** Por menú: WhatsApp (Banco y Actividad), Correos y las pestañas de Consultas. */
 export const RECORRIDOS_GESTORA_C: Record<IdRecorridoGestoraC, RecorridoGestoraC> = {
   // ─── WhatsApp › Banco de mensajes ──────────────────────────────────────────
   'whatsapp-banco': {
@@ -111,6 +115,45 @@ export const RECORRIDOS_GESTORA_C: Record<IdRecorridoGestoraC, RecorridoGestoraC
         donde: anclaje('wa-actividad-nota'),
         titulo: 'De dónde sale cada cifra',
         texto: 'Las del chat, de su número conectado en WhatsApp › Conexión: sin número, salen a cero. «Apuntó» son los contactos que registró en la ficha: WhatsApp · llamadas · correos · notas.',
+      },
+      {
+        titulo: 'Y listo',
+        texto: FINAL,
+      },
+    ],
+  },
+
+  // ─── Sistema › Correos ─────────────────────────────────────────────────────
+  correos: {
+    id: 'correos',
+    rutas: ['/correos'],
+    titulo: 'Correos',
+    permiso: 'correos.view',
+    pantalla: ['modules/correos/pages/CorreosPage.tsx'],
+    pasos: [
+      {
+        titulo: 'Lo que llega a los buzones',
+        texto: 'Los correos que entran en los buzones conectados (facturación, soporte, admisiones…), con su texto. El CRM solo los lee: no marca, no mueve ni borra nada. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('correos-buscar'),
+        titulo: 'Buscar',
+        texto: 'Por quién lo manda o el asunto. Y por fechas: hoy, ayer, esta semana o la pasada, este mes o el pasado; pulsar otra vez la quita.',
+      },
+      {
+        donde: anclaje('correos-elegir-buzon'),
+        titulo: 'Un buzón o todos',
+        texto: 'Con más de un buzón conectado, elige uno o déjalos todos juntos: cada correo lleva la etiqueta del suyo.',
+      },
+      {
+        donde: anclaje('correos-buzon'),
+        titulo: 'Buzones y traer del buzón',
+        texto: '«Buzones» conecta o quita los buzones, si tienes permiso. Se leen solos cada media hora; «Traer del buzón» los lee ahora. «Actualizar» vuelve a pedir la lista.',
+      },
+      {
+        donde: anclaje('correos-lista'),
+        titulo: 'La lista',
+        texto: 'Cada correo con la fecha, quién lo manda (con su nombre si es del CRM), el asunto y su buzón. Púlsalo para leerlo entero.',
       },
       {
         titulo: 'Y listo',
