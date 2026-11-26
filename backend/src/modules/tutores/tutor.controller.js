@@ -16,6 +16,8 @@ import { redaccionEnMoodle } from './tutor.redaccion.js';
 // Corregir desde el CRM (#408, gemela de CRM#681): la tarea, el curso, el archivo y la nota.
 import * as correccion from './tutor.correccion.js';
 import * as administracion from './tutor.campusAdministracion.js';
+// Supervisión de tutores (la dirección, 26/11/2026): ver a los tutores de sus campus, sin tocar nada.
+import * as supervision from './tutor.supervision.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
@@ -975,6 +977,37 @@ export async function miRedaccionMoodle(req, res, next) {
     const data = await redaccionEnMoodle(req.user.userId, { ella: true });
     if (!data) throw new AppError('Tutor no encontrado', 404, 'NOT_FOUND');
     res.json({ success: true, data });
+  } catch (err) { next(err); }
+}
+
+// ─── Supervisión de tutores (la dirección, 26/11/2026) ─────────────────────────────
+// Todo de lectura y recortado a los campus de quien mira (`tutor.supervision.js`).
+
+// GET /api/tutores/supervision
+export async function supervisionLista(req, res, next) {
+  try {
+    res.json({ success: true, data: await supervision.lista(req) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/supervision/:id/mi-campus[?refrescar=1]
+export async function supervisionMiCampus(req, res, next) {
+  try {
+    res.json({ success: true, data: await supervision.miCampusDe(req, req.params.id, { refrescar: req.query.refrescar === '1' }) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/supervision/:id/tareas
+export async function supervisionTareas(req, res, next) {
+  try {
+    res.json({ success: true, data: await supervision.tareasDe(req, req.params.id) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/supervision/:id/redaccion-moodle
+export async function supervisionRedaccion(req, res, next) {
+  try {
+    res.json({ success: true, data: await supervision.redaccionDe(req, req.params.id) });
   } catch (err) { next(err); }
 }
 
