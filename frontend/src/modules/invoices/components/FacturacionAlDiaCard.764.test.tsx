@@ -16,6 +16,7 @@ const post = vi.fn();
 vi.mock('@/shared/api/client', () => ({ default: { get: (...a: unknown[]) => get(...a), post: (...a: unknown[]) => post(...a) } }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true }) }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 
 const { default: FacturacionAlDiaCard } = await import('./FacturacionAlDiaCard');
 

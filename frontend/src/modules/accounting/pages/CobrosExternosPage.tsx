@@ -11,6 +11,7 @@ import { ArrowsClockwise, Bank, CheckCircle, PaypalLogo, UploadSimple, XCircle }
 import {
   cobrosExternosApi, type CobroPaypal, type EstadoCobrosExternos, type ExtractoBanco, type MovimientoBanco,
 } from '../api/cobrosExternos.api';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 /*
   REGISTRO AUTOMÁTICO DE COBROS (#766): PayPal y los extractos del banco.
@@ -232,6 +233,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
   const [extractos, setExtractos] = useState<ExtractoBanco[]>([]);
   const [cargando, setCargando] = useState(true);
   const [subiendo, setSubiendo] = useState(false);
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -277,7 +279,7 @@ function PestanaBanco({ qs, campus, puedeEditar }: { qs: (e?: Record<string, str
   }
 
   async function descartar(id: number) {
-    if (!window.confirm('¿Descartar este abono? No se registrará en ninguna venta.')) return;
+    if (!(await confirm({ title: 'Descartar abono', message: '¿Descartar este abono? No se registrará en ninguna venta.', tone: 'destructive', confirmLabel: 'Descartar' }))) return;
     try {
       await cobrosExternosApi.descartar(id);
       await cargar();

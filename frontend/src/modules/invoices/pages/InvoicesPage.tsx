@@ -23,6 +23,7 @@ import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import VerComoFunciona from '@/shared/components/ui/VerComoFunciona';
 import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 const fmt = (n: number) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
 // Usa el formateador compartido: parsea 'YYYY-MM-DD' como fecha LOCAL. Con
@@ -48,6 +49,7 @@ export default function InvoicesPage() {
   };
   // Sociedad a la que se pide saltar (abre el aviso "entra a este proyecto").
   const [socPrompt, setSocPrompt] = useState<{ id: number; nombre: string } | null>(null);
+  const confirm = useConfirm();
   const { user } = useAuth() as { user: { role?: string } | null };
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   // Por permiso del catálogo (#423), como el servidor: gestionar (editar,
@@ -271,7 +273,7 @@ export default function InvoicesPage() {
   }
 
   async function markPaid(inv: Invoice) {
-    if (!confirm(`¿Marcar como pagada la factura ${inv.codigo}?`)) return;
+    if (!(await confirm({ title: 'Marcar como pagada', message: `¿Marcar como pagada la factura ${inv.codigo}?` }))) return;
     try {
       const res = await invoicesApi.markPaid(inv.id);
       if (res.success) {

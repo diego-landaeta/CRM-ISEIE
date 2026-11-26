@@ -29,6 +29,7 @@ const api = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), moodle: null }));
 vi.mock('@/shared/api/client', () => ({ default: { get: api.get, put: vi.fn(), post: api.post, delete: vi.fn() } }));
 const toast = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/hooks/useToast', () => ({ toast }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => false }) }));
 vi.mock('@/contexts/ProjectContext', () => ({
   useProjectContext: () => ({ activeProject: { id: 3, nombre: 'FONO', type: 'crm' }, isAllProjects: false, activeIssuerId: null }),
