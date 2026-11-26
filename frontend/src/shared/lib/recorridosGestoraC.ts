@@ -30,9 +30,10 @@ import { FINAL_RECORRIDO as FINAL, anclaje } from '@/shared/lib/recorridosComun'
  * ciclo de módulos entre los dos ficheros.
  *
  * IGUAL EN LOS DOS CRM (paridad): mismos ids, anclajes y textos. Lo único que
- * cambia es el texto de Correos: aquí la pantalla solo enseña lo RECIBIDO (el
- * envío sigue por Brevo, #750), así que no hay pestañas «Enviados / Frenados»
- * ni su paso; el id y los demás anclajes son los del 360.
+ * cambia Correos: aquí la pantalla solo enseña lo RECIBIDO (el envío sigue por
+ * Brevo, #750), así que no hay pestañas «Enviados / Frenados» y, en su lugar,
+ * está «Un buzón o todos» (`correos-elegir-buzon`). El id y los demás
+ * anclajes (`correos-buscar`, `correos-buzon`, `correos-lista`) son los del 360.
  */
 
 export type IdRecorridoGestoraC =
@@ -132,22 +133,27 @@ export const RECORRIDOS_GESTORA_C: Record<IdRecorridoGestoraC, RecorridoGestoraC
     pasos: [
       {
         titulo: 'Lo que llega a los buzones',
-        texto: 'Lo que llega a los buzones conectados (facturación, soporte, admisiones…), con su texto. Aquí solo se lee: lo que sale va por Brevo y se mira en Status › Correos. Son {pasos} pasos.',
+        texto: 'Los correos que entran en los buzones conectados (facturación, soporte, admisiones…), con su texto. El CRM solo los lee: no marca, no mueve ni borra nada. Son {pasos} pasos.',
       },
       {
         donde: anclaje('correos-buscar'),
         titulo: 'Buscar',
-        texto: 'Por quién lo manda o el asunto. Y por fechas: hoy, ayer, esta semana o la pasada, este mes o el pasado; pulsar otra vez la quita. Con más de un buzón, eliges uno o todos juntos.',
+        texto: 'Por quién lo manda o el asunto. Y por fechas: hoy, ayer, esta semana o la pasada, este mes o el pasado; pulsar otra vez la quita.',
+      },
+      {
+        donde: anclaje('correos-elegir-buzon'),
+        titulo: 'Un buzón o todos',
+        texto: 'Con más de un buzón conectado, elige uno o déjalos todos juntos: cada correo lleva la etiqueta del suyo.',
       },
       {
         donde: anclaje('correos-buzon'),
-        titulo: 'Traer del buzón',
-        texto: 'Los buzones se leen solos cada media hora; esto los lee ahora. Solo lee: no marca, no mueve ni borra nada. «Buzones» conecta, prueba o quita uno, si tienes ese permiso. «Actualizar» vuelve a pedir la lista.',
+        titulo: 'Buzones y traer del buzón',
+        texto: '«Buzones» conecta o quita los buzones, si tienes permiso. Se leen solos cada media hora; «Traer del buzón» los lee ahora. «Actualizar» vuelve a pedir la lista.',
       },
       {
         donde: anclaje('correos-lista'),
         titulo: 'La lista',
-        texto: 'Cada correo con la fecha, quién lo manda (con su nombre si es del CRM), el asunto y el buzón por el que entró. Púlsalo para leerlo tal como llegó.',
+        texto: 'Cada correo con la fecha, quién lo manda (con su nombre si es del CRM), el asunto y su buzón. Púlsalo para leerlo entero.',
       },
       {
         titulo: 'Y listo',
