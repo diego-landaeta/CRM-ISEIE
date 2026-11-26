@@ -8,6 +8,8 @@ import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { avisoDeLoQueFalta, numerosMalEscritos, type Falta } from '@/shared/lib/loQueFalta';
 import client from '@/shared/api/client';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#619, tanda F).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
@@ -767,7 +769,9 @@ export default function TutoresPage() {
   // el alta pide el campus en el formulario.
 
   return (
-    <div className="space-y-3">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda F): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-3 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Tutores"
         subtitle={cargando
@@ -775,16 +779,19 @@ export default function TutoresPage() {
           : `${tutores.length} ${tutores.length === 1 ? 'tutor' : 'tutores'} · cobran un porcentaje de lo que se cobra de sus formaciones`
             + (puedeAlta ? '' : ' · no tienes ningún campus en el que dar de alta')}
         actions={(
-          <Button onClick={abrirAlta} disabled={!puedeAlta}
-            title={puedeAlta ? undefined : 'No tienes ningún campus en el que dar de alta'}>
-            <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="tutores" listo={!cargando} />
+            <Button data-recorrido="tutores-nuevo" onClick={abrirAlta} disabled={!puedeAlta}
+              title={puedeAlta ? undefined : 'No tienes ningún campus en el que dar de alta'}>
+              <Plus size={15} weight="bold" className="mr-1.5" /> Nuevo tutor
+            </Button>
+          </div>
         )}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)] gap-3 items-start">
         <div className="bg-card border border-border rounded-lg overflow-hidden">
-          <div className="relative border-b border-border">
+          <div data-recorrido="tutores-buscar" className="relative border-b border-border">
             <MagnifyingGlass size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input autoComplete="off"
               value={busca}
@@ -805,7 +812,7 @@ export default function TutoresPage() {
               onChange={(e) => { setVerRetirados(e.target.checked); setElegido(null); }} />
             Ver también los retirados
           </label>
-          <div className="max-h-[calc(100vh-268px)] overflow-y-auto divide-y divide-border">
+          <div data-recorrido="tutores-lista" className="max-h-[calc(100vh-268px)] overflow-y-auto divide-y divide-border">
             {!cargando && tutores.length === 0 && (
               <EmptyState icon={GraduationCap} title="Sin tutores todavía"
                 description="Da de alta el primero para asignarle formaciones." />
@@ -841,7 +848,7 @@ export default function TutoresPage() {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-lg p-4">
+        <div data-recorrido="tutor-ficha" className="bg-card border border-border rounded-lg p-4">
           {!elegido ? (
             <EmptyState icon={GraduationCap} title="Elige un tutor"
               description="Verás sus formaciones, con el porcentaje y desde cuándo cobra cada una." />
@@ -884,6 +891,8 @@ export default function TutoresPage() {
                 </div>
               </div>
 
+              {/* Lo que señala «Sus formaciones» del recorrido: la tabla o, sin ninguna, el aviso. */}
+              <div data-recorrido="tutor-formaciones">
               {colabs.length === 0 ? (
                 <EmptyState icon={Warning} title="Sin formaciones asignadas"
                   description="Mientras no tenga ninguna, no genera comisión."
@@ -964,8 +973,9 @@ export default function TutoresPage() {
                   </table>
                 </div>
               )}
+              </div>
               {/* Consultas de alumnos (#187): campus, empresas y matrícula. */}
-              <ConsultasDelTutor key={elegido.id} tutorId={elegido.id} puedeGestionar />
+              <ConsultasDelTutor key={elegido.id} tutorId={elegido.id} puedeGestionar data-recorrido="tutor-consultas" />
               {/* La redactora en Moodle (CRM#1026): su cuenta y su rol en los cursos que redacta. Aún en pruebas. */}
               {SOLO_EN_PRUEBAS && <RedaccionEnMoodle key={`redaccion-${elegido.id}`} tutorId={elegido.id} />}
             </>

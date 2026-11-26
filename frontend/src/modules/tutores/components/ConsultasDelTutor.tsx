@@ -41,7 +41,10 @@ function Matricula({ c }: { c: CampusDelTutor }) {
   return <span className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold ${e.clase}`}>{e.texto}</span>;
 }
 
-export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId: number; puedeGestionar: boolean }) {
+/** `data-recorrido`: lo señala el recorrido de Tutores (#619, tanda F). */
+export default function ConsultasDelTutor({ tutorId, puedeGestionar, ...resto }: {
+  tutorId: number; puedeGestionar: boolean; 'data-recorrido'?: string;
+}) {
   const { projects } = useProjectContext() as unknown as {
     projects: Array<{ id: number; nombre: string; sociedad_emisora_id?: number | null; sociedad_nombre?: string | null }>;
   };
@@ -144,7 +147,7 @@ export default function ConsultasDelTutor({ tutorId, puedeGestionar }: { tutorId
   const conectados = panel.campus.filter((c) => c.campus_conectado).length;
 
   return (
-    <section className="mt-6 border-t border-border pt-4 space-y-4" aria-labelledby={`consultas-tutor-${tutorId}`}>
+    <section {...resto} className="mt-6 border-t border-border pt-4 space-y-4" aria-labelledby={`consultas-tutor-${tutorId}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
           <h3 id={`consultas-tutor-${tutorId}`} className="font-bold text-sm">Consultas de alumnos</h3>

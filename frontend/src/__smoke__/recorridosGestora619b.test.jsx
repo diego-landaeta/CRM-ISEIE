@@ -264,7 +264,8 @@ describe('el botón «Recorrido» de la cabecera los encuentra por su ruta', () 
       expect(recorridosDeLaRuta(`/consultas/${pestana}`), pestana).toEqual([`consultas-${pestana}`]);
     }
     // Lo mismo con la ficha del prospecto (tanda C): Proceso comercial y Convocatorias no son un prospecto.
-    expect(recorridosDeLaRuta('/leads/proceso')).toEqual([]);
+    // Desde la tanda F, Proceso comercial tiene el suyo (recorridosGestora619d); el de la ficha, no.
+    expect(recorridosDeLaRuta('/leads/proceso')).toEqual(['proceso-comercial']);
     expect(recorridosDeLaRuta('/leads/convocatorias')).toEqual([]);
     expect(recorridosDeLaRuta('/leads/12')).toEqual(['prospecto-ficha']);
   });
