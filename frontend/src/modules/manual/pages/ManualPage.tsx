@@ -12,6 +12,7 @@ import {
   PlugsConnected, CalendarBlank,
 } from '@phosphor-icons/react';
 import { MARCA } from '@/shared/config/marca';
+import { ETIQUETA_VERSION } from '@/shared/config/version';
 
 /* ─── Navigation ──────────────────────────────────────────── */
 const SECTIONS = [
@@ -213,7 +214,7 @@ export default function ManualPage() {
       <aside className="hidden lg:block w-56 flex-shrink-0">
         <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-2">
           <p className="text-[10px] font-mono font-semibold tracking-[0.18em] uppercase text-muted-foreground/70 px-2 mb-4">
-            Manual · v0.1
+            Manual{ETIQUETA_VERSION && <> · <span className="normal-case">{ETIQUETA_VERSION}</span></>}
           </p>
           <nav className="space-y-5">
             {NAV_GROUPS.map(group => (
@@ -259,7 +260,7 @@ export default function ManualPage() {
           <div className="flex items-center gap-2 mb-6">
             <span className="text-[11px] font-mono font-semibold uppercase tracking-[0.2em] text-primary">Documentación</span>
             <span className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums">v0.1 · Beta</span>
+            <span className="text-[11px] font-mono text-muted-foreground/70 tabular-nums">{ETIQUETA_VERSION}</span>
           </div>
           <h1 className="text-[44px] sm:text-[52px] font-bold tracking-tight leading-[1.05] text-foreground">
             Manual de usuario.
@@ -1164,7 +1165,7 @@ export default function ManualPage() {
           </div>
           <div className="mt-8 flex items-center justify-between gap-4 text-[11px] font-mono text-muted-foreground/60">
             <span>MULTICRM · MANUAL DE USUARIO</span>
-            <span>v0.1.0 · BETA</span>
+            <span>{ETIQUETA_VERSION}</span>
           </div>
         </footer>
       </main>

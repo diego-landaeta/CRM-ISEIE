@@ -17,7 +17,7 @@ import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
  * cabecera, «Ver recorrido» de cada pantalla y de Novedades, y las pruebas de
  * siempre los ven. Solo importa TIPOS de `recorridosCobros` (sin ciclo).
  */
-export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas' | 'avance-alumno' | 'consulta-responder';
+export type IdRecorridoNovedades301 = 'consultas-chat' | 'conciliacion-facturas' | 'avance-alumno' | 'consulta-responder' | 'facturacion-automatica';
 
 type RecorridoNovedades301 = Omit<RecorridoCobros, 'id'> & { id: IdRecorridoNovedades301 };
 
@@ -203,6 +203,51 @@ export const RECORRIDOS_NOVEDADES_301: Record<IdRecorridoNovedades301, Recorrido
         donde: anclaje('consulta-ficha'),
         titulo: 'La ficha del alumno',
         texto: 'Quién la atiende, sus entregas sin corregir, sus cursos, sus otras consultas y su actividad, por apartados. Si llevas el equipo, aquí está «Reasignar» a otro tutor.',
+      },
+      { titulo: 'Y listo', texto: FINAL },
+    ],
+  },
+  // ─── Finanzas › Facturas › Facturación automática (3.0.0, #764/#765) ───────
+  'facturacion-automatica': {
+    id: 'facturacion-automatica',
+    rutas: ['/accounting/facturas/automatica'],
+    titulo: 'Facturación automática',
+    permiso: 'facturas.automatica',
+    pantalla: ['modules/factura-automatica/pages/FacturacionAutomaticaPage.tsx'],
+    pasos: [
+      {
+        titulo: 'La factura sale sola',
+        texto: 'Al entrar un cobro, el alumno recibe un formulario para sus datos fiscales. Al contestarlo, la factura sale sola con su número y le llega en PDF. A los 7 días sin respuesta, sale con su ficha si está completa; si no, queda en la cola. Son {pasos} pasos.',
+      },
+      {
+        donde: anclaje('fa-resumen'),
+        titulo: 'De un vistazo',
+        texto: 'Formularios enviados, contestados, vencidos (sin respuesta en el plazo) y esperando; las que necesitan a una persona y las facturas que salieron solas.',
+      },
+      {
+        donde: anclaje('fa-atencion'),
+        titulo: 'Lo que necesita a una persona',
+        texto: 'En revisión (faltan datos válidos), posible duplicada, sin correo… Cada una dice por qué no salió sola y qué hacer, con el botón para ir a la cola o a la venta.',
+      },
+      {
+        donde: anclaje('fa-formularios'),
+        titulo: 'Los formularios',
+        texto: 'A qué correo se mandó cada uno, si lo contestó y hasta cuándo tiene. Filtra por «Esperando», «Contestados», «Vencidos» o «En revisión».',
+      },
+      {
+        donde: anclaje('fa-facturas'),
+        titulo: 'Las facturas que salieron solas',
+        texto: 'Con su número y a qué correo se mandó el PDF. Si la venta dice «Enviar factura automáticamente: No», pone «No se envía automáticamente: la envía la gestora».',
+      },
+      {
+        donde: anclaje('fa-auditoria'),
+        permiso: 'facturas.auditoria',
+        titulo: 'La auditoría',
+        texto: 'Cada 2 horas mira números repetidos, facturas sin datos fiscales y cobros sin factura. Aquí ves la última vuelta y las pausas. La «Pasada en seco» dice qué encontraría hoy sin pausar nada.',
+      },
+      {
+        titulo: 'Sí o No, y el correo',
+        texto: 'Al registrar la venta, en la ficha de la venta o en la cola: «Enviar factura automáticamente: Sí / No» y «Enviar a este correo», con «Confirmar» o «Editar». El formulario y el PDF van a ese correo.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

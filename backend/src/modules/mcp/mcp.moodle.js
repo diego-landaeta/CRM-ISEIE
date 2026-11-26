@@ -201,7 +201,7 @@ function todosFallaron(errores) {
   const sinConfigurar = errores.every((e) => e.codigo === 'sin_configurar');
   return new AppError(
     `No se pudo consultar Moodle. ${errores.map((e) => e.error).join('; ')}.`
-    + (sinConfigurar ? ' (El Moodle de cada campus se conecta en el CRM → Conexión → Moodle.)' : ''),
+    + (sinConfigurar ? ' (El Moodle de cada campus se conecta en el CRM → Integraciones › Moodle o en Moodle › Cursos y alumnos.)' : ''),
     sinConfigurar ? 409 : 502,
     'MOODLE_NO_DISPONIBLE'
   );
@@ -213,7 +213,8 @@ function todosFallaron(errores) {
  */
 async function porCampus(ambito, projectIds, trabajo) {
   const nombres = new Map(ambito.proyectos.map((p) => [Number(p.id), p.nombre]));
-  const creds = await credencialesMoodle(projectIds);
+  // El panel del CRM (`moodle.controller`) pide también la conexión de Integraciones; Claude, no.
+  const creds = await credencialesMoodle(projectIds, { conIntegraciones: ambito?.conIntegraciones === true });
   const salidas = await mapConLimite(projectIds, MAX_CAMPUS_A_LA_VEZ, async (id) => {
     const campus = { id, nombre: nombres.get(id) || `campus ${id}`, cred: creds.get(id) };
     try {

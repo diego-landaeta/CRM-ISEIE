@@ -10,7 +10,7 @@
     · reactivado  ninguna lo está y la última noticia fue una reactivación;
   y si Moodle nunca ha avisado de nada, la ficha dice «Al día».
 
-  El filtro «Suspendidos» de Clientes usa la misma regla (`SUSPENDIDO_EN_MOODLE`).
+  El filtro «Con suspensión en Moodle» de Clientes usa la misma regla (`SUSPENDIDO_EN_MOODLE`).
 
   Va detrás de SUSPENSIONES_MOODLE_EN_PRODUCCION: apagado, `disponible: false`.
 */

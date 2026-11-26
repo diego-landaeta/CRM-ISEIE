@@ -113,7 +113,7 @@ export default function LeadsFiltersBar(props: Props) {
   );
 
   // Lo que dice el servidor (#423): sale si salía antes Y tiene el permiso.
-  const { can } = usePermission();
+  const { can, veGestoras, llevaEquipo } = usePermission();
   const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement>(null); // wrapper del botón (ancla de posición)
@@ -197,7 +197,7 @@ export default function LeadsFiltersBar(props: Props) {
     setFilterReincidente(false);
   }
 
-  const showAssignBtn = isAdmin && can('leads.assign')
+  const showAssignBtn = isAdmin && !llevaEquipo && can('leads.assign')
     && ((stats?.sin_asignar ?? 0) > 0 || filterResponsable === 'unassigned')
     && activeProject?.id && activeProject.id > 0;
 
@@ -316,13 +316,16 @@ export default function LeadsFiltersBar(props: Props) {
                     </select>
                   </Row>
                 )}
-                {isAdmin && (
+                {/* Por permiso y alcance (Diego, 25/11/2026): también la líder de
+                    equipo, con ella y sus gestoras. «Sin asignar» no es de nadie
+                    de su equipo: el servidor no se lo da. */}
+                {veGestoras && (
                   <Row label="Gestor">
                     <SearchableSelect
                       value={filterResponsable}
                       onChange={(v) => setFilterResponsable(v)}
                       options={[
-                        { value: 'unassigned', label: '— Sin asignar —' },
+                        ...(llevaEquipo ? [] : [{ value: 'unassigned', label: '— Sin asignar —' }]),
                         ...gestores.map((g) => ({ value: String(g.id), label: g.nombre })),
                       ]}
                       placeholder="Buscar gestor…"

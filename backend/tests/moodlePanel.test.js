@@ -20,6 +20,8 @@ const { default: modulo } = await import('../src/modules/moodle/index.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const credenciales = await import('../src/modules/credentials/credentials.model.js');
 const moodleMod = await import('../src/modules/mcp/mcp.moodle.js');
+const { encrypt } = await import('../src/shared/utils/crypto.js');
+const { construirAmbito } = await import('../src/modules/mcp/mcp.acceso.js');
 
 const app = express();
 app.use(express.json());
@@ -33,6 +35,10 @@ const TOKEN = `tok${MARCA}0123456789abcdef`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], credenciales: [] };
 let CON; let SIN; let OTRO; let REV; let IA; let ADMIN; let ADMIN_OTRO; let GESTORA; let SUPER;
+// Un campus conectado SOLO en Integraciones › Moodle (Diego, 25/11: «entro y no me sale nada en el Moodle»).
+let INT; let ADMIN_INT;
+const ORIGEN_INT = `https://${MARCA.toLowerCase()}.integraciones.moodle.test`;
+const TOKEN_INT = `int${MARCA}0123456789abcdef`;
 
 // Los permisos salen de la base, no del token (#423): «solo super admin» se prueba con un super admin de verdad (se borra al acabar).
 const comoSuper = () => como(SUPER);
@@ -120,6 +126,13 @@ beforeAll(async () => {
   ADMIN_OTRO = await persona('ADMINOTRO', 'admin', [OTRO]);
   GESTORA = await persona('GESTORA', 'gestor', [CON]);
   SUPER = await persona('SUPER', 'superadmin', []);
+  INT = await proy('int');
+  ADMIN_INT = await persona('ADMININT', 'admin', [INT]);
+  const enc = encrypt(TOKEN_INT);
+  await q(
+    `INSERT INTO project_integrations (project_id, provider, active, encrypted_value, iv, auth_tag, config_public)
+     VALUES ($1, 'moodle', true, $2, $3, $4, $5)`,
+    [INT, enc.encrypted, enc.iv, enc.authTag, JSON.stringify({ url: `${ORIGEN_INT}/` })]);
   const cred = await credenciales.upsert({ project_id: CON, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN, token: TOKEN }) });
   ids.credenciales.push(cred.id);
   const credRev = await credenciales.upsert({ project_id: REV, service: 'moodle', entorno: 'produccion', value: JSON.stringify({ url: ORIGEN_REV, token: TOKEN_REV }) });
@@ -128,6 +141,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await q(`DELETE FROM api_credentials WHERE id = ANY($1::int[]) OR project_id = ANY($2::int[])`, [ids.credenciales, ids.projects]);
+  await q('DELETE FROM project_integrations WHERE project_id = ANY($1::int[])', [ids.projects]);
   await q(`DELETE FROM user_projects WHERE user_id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM users WHERE id = ANY($1::int[])`, [ids.users]);
   await q(`DELETE FROM projects WHERE id = ANY($1::int[])`, [ids.projects]);
@@ -138,7 +152,7 @@ beforeEach(() => {
   moodleMod.vaciarCacheMoodle();
   const original = globalThis.fetch;
   vi.stubGlobal('fetch', vi.fn(async (url, init = {}) => {
-    const mundo = { [ORIGEN]: { token: TOKEN, f: FUNCIONES }, [ORIGEN_LIMITADO]: { token: TOKEN_LIMITADO, f: FUNCIONES_LIMITADAS }, [ORIGEN_REV]: { token: TOKEN_REV, f: FUNCIONES_REV } };
+    const mundo = { [ORIGEN]: { token: TOKEN, f: FUNCIONES }, [ORIGEN_INT]: { token: TOKEN_INT, f: FUNCIONES }, [ORIGEN_LIMITADO]: { token: TOKEN_LIMITADO, f: FUNCIONES_LIMITADAS }, [ORIGEN_REV]: { token: TOKEN_REV, f: FUNCIONES_REV } };
     const m = Object.entries(mundo).find(([o]) => String(url) === `${o}/webservice/rest/server.php`);
     if (!m) return original(url, init);
     const p = new URLSearchParams(init.body);
@@ -208,6 +222,33 @@ describe('el panel de Moodle', () => {
     const r = await request.get(`/api/moodle/cursos?proyecto_id=${SIN}`).set(como(ADMIN));
     expect(r.status).toBeGreaterThanOrEqual(400);
     expect(JSON.stringify(r.body)).toMatch(/sin Moodle configurado|no se pudo consultar/i);
+  });
+});
+
+describe('un campus conectado solo en Integraciones › Moodle (Diego, 25/11)', () => {
+  it('sale conectado, con sus cifras, y dice que su conexión es la de Integraciones', async () => {
+    const r = await request.get('/api/moodle/campus').set(como(ADMIN_INT));
+    expect(r.status).toBe(200);
+    expect(r.body.data.campus).toEqual([expect.objectContaining({ id: INT, configurado: true, conexion: 'integraciones', cursos: expect.objectContaining({ total: 2, activos: 1 }) })]);
+  });
+
+  it('el de la credencial del panel dice «panel», y uno sin nada, null', async () => {
+    const r = await request.get('/api/moodle/campus').set(como(ADMIN));
+    const por = Object.fromEntries(r.body.data.campus.map((c) => [c.id, c]));
+    expect(por[CON].conexion).toBe('panel');
+    expect(por[SIN]).toMatchObject({ configurado: false, conexion: null });
+  });
+
+  it('sus cursos se leen con el token de Integraciones', async () => {
+    const r = await request.get(`/api/moodle/cursos?proyecto_id=${INT}&estado=todos`).set(como(ADMIN_INT));
+    expect(r.status).toBe(200);
+    expect(r.body.data.total).toBe(2);
+    expect(JSON.stringify(r.body)).not.toContain(TOKEN_INT);
+  });
+
+  it('Claude (el MCP) sigue solo con su credencial: ese campus no lo consulta', async () => {
+    const ambito = construirAmbito({ id: ADMIN_INT.id, role: 'admin' }, [{ id: INT, nombre: `${MARCA} int` }]);
+    await expect(moodleMod.moodleCursos(ambito, { proyecto_id: INT, estado: 'todos' })).rejects.toMatchObject({ statusCode: 409 });
   });
 });
 

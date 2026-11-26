@@ -8,6 +8,7 @@ import * as desbloqueo from './mcp.desbloqueo.js';
 import * as alertas from './mcp.alertas.js';
 import { protegerDatos, recortarFilas } from './mcp.privacidad.js';
 import { MENSAJE_APAGADO } from './mcp.interruptor.js';
+import { ACTUAL as VERSION_ACTUAL } from '../novedades/versiones.js';
 
 /**
  * El servidor MCP del CRM.
@@ -44,7 +45,7 @@ const RESPUESTA_APAGADO = {
 
 export function crearServidor({ ambito, tokenId, conexion = null, origen = {}, apagado = false }) {
   const server = new McpServer(
-    { name: 'crm-iseih', version: '1.0.0' },
+    { name: 'crm-iseih', version: VERSION_ACTUAL.version },
     {
       instructions: apagado ? `${MENSAJE_APAGADO}. ${ACLARACION_APAGADO}` :
         'CRM del ecosistema ISEIE/ISEIH. Solo consulta: no se puede crear, cambiar ni borrar nada. '

@@ -20,6 +20,11 @@ import {
   type ConfigLinks, type CuotasDisponibles, type LinkDePago, type ProspectoDelLink, type VentaDelProspecto, type CodigoPromocional,
 } from '../api/linksPago.api';
 import { useWhatsappConectado, enviarPorWhatsapp, copiarMensaje } from './EnviarLink';
+import VentaYaExisteAviso, { ventaYaExistente, type VentaExistente } from '@/modules/conversions/components/VentaYaExisteAviso';
+// «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11):
+// pasa a la venta que nazca al pagarlo (o a la venta elegida).
+import EnvioFacturaCampos, { SIN_CORREO_LINK } from '@/modules/factura-automatica/components/EnvioFacturaCampos';
+import { useEnvioFacturaAlta } from '@/modules/factura-automatica/hooks/useEnvioFacturaAlta';
 
 /*
   «CREAR LINK DE PAGO», EN UNA PANTALLA (Carlos y Diego, 20/11/2026).
@@ -332,6 +337,7 @@ export default function CrearLinkAsistente({
   const [error, setError] = useState<string | null>(null);
   const [hecho, setHecho] = useState<LinkDePago | null>(null);
   const [correoAbierto, setCorreoAbierto] = useState(false);
+  const envioFactura = useEnvioFacturaAlta(prospecto?.lead.email ?? null, { sinCorreoVale: true });
 
   // Buscar prospectos (solo si se abre «para un prospecto» y no viene elegido).
   const idsDeCampus = campusPosibles.map((c) => c.id).join(',');
@@ -512,6 +518,7 @@ export default function CrearLinkAsistente({
 
   // Por qué no se puede crear todavía: siempre escrito, nunca un botón gris mudo.
   const motivos: string[] = [];
+  if (envioFactura.falta()) motivos.push('Confirma el correo de la factura en «Enviar a este correo».');
   if (paraAlguien && consulta && cargandoProspecto) motivos.push('Cargando el prospecto…');
   else if (paraAlguien && !consulta && !campusElegido) motivos.push('Elige el campus, o busca el prospecto.');
   else if (!projectId) motivos.push('Elige el campus.');
@@ -551,14 +558,23 @@ export default function CrearLinkAsistente({
     }
   }
 
-  async function enviar() {
+  /*
+    LA VENTA NACE CON EL LINK (CRM#1107). Desde un prospecto, el servidor crea su
+    venta (o usa la de ese curso que ya tenga la ficha). Si el alumno ya tiene una
+    venta de ese programa, contesta 409 y aquí se pregunta, como al registrar una
+    venta a mano: atar el link a esa venta, o crear otra igualmente (`forzar`).
+  */
+  const [yaTiene, setYaTiene] = useState<VentaExistente | null>(null);
+
+  async function enviar({ forzar = false, aLaVenta = null }: { forzar?: boolean; aLaVenta?: number | null } = {}) {
     if (motivos.length || !curso || !projectId) return;
     setEnviando(true);
     setError(null);
     const leadId = prospecto?.lead.id;
     try {
       const r = await crearLink({
-        ...(venta ? { leadId, conversionId: venta.id } : leadId ? { leadId } : { projectId }),
+        ...(aLaVenta ? { leadId, conversionId: aLaVenta } : venta ? { leadId, conversionId: venta.id } : leadId ? { leadId } : { projectId }),
+        ...(forzar ? { forzar: true } : {}),
         productId: curso.id, importe: total,
         // El precio y el descuento, para que el servidor rehaga la cuenta y los guarde.
         ...(conDescuento ? { precio_original: n, descuento_tipo: descTipo, descuento_valor: dv } : {}),
@@ -568,10 +584,14 @@ export default function CrearLinkAsistente({
         } : { moneda }),
         // CRM#986: solo donde caben (pago único, sin venta y el campus los admite).
         ...(cfg?.codigos_promo && !enCuotas && !venta ? { codigos_promo: codigosPromo } : {}),
+        // Sin la factura automática encendida, no va.
+        ...(envioFactura.cuerpo() ? { envio_factura: envioFactura.cuerpo() } : {}),
       });
-      if (r.data) { setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
+      if (r.data) { setYaTiene(null); setHecho(r.data); onCreado?.(r.data); } else setError('El servidor no ha devuelto el link. Mira la lista de links antes de crear otro.');
     } catch (e) {
-      setError(`No se ha creado el link. ${errorDe(e)}`);
+      const ya = !forzar && !aLaVenta ? ventaYaExistente(e) : null;
+      if (ya) setYaTiene(ya);
+      else { setYaTiene(null); setError(`No se ha creado el link. ${errorDe(e)}`); }
     } finally { setEnviando(false); }
   }
 
@@ -642,10 +662,8 @@ export default function CrearLinkAsistente({
               <p className="text-sm">
                 {resumenHecho} · caduca {cuando(hecho.caduca_el)}
               </p>
-              <p className="text-xs text-muted-foreground">
-                {venta ? `Va a la venta n.º ${venta.id}: al pagarlo, el cobro entra en ella.`
-                  : lead ? `Para ${lead.nombre || `el prospecto ${lead.id}`}: al pagarlo se crea su venta, a tu nombre.`
-                    : 'Sin prospecto: al pagarlo, el CRM busca su ficha por el correo (o la crea), crea la venta a tu nombre y te avisa.'}
+              <p className="text-xs text-muted-foreground" data-testid="link-hecho-venta">
+                {textoDeLaVenta(hecho, venta?.id ?? null, lead ? (lead.nombre || `el prospecto ${lead.id}`) : null)}
               </p>
               <div className="flex gap-2">
                 <input readOnly value={hecho.url || ''} aria-label="Link de pago" className={`${campo} font-mono text-xs`} onFocus={(e) => e.target.select()} />
@@ -1007,6 +1025,11 @@ export default function CrearLinkAsistente({
                 )}
               </section>
 
+              {envioFactura.visible && !sinClave && (
+                <EnvioFacturaCampos value={envioFactura.envio} onChange={envioFactura.setEnvio}
+                  emailFicha={prospecto?.lead.email ?? null} idBase="link-envio-factura" sinCorreoVale
+                  textoSinCorreo={SIN_CORREO_LINK} compacto />
+              )}
               {/* Cómo se cobra (24/11): siempre, con cuotas, justo antes de «Crear link». */}
               {avisoCobro && !sinClave && <AvisoComoSeCobra datos={avisoCobro} />}
               {motivos.length > 0 && !cargandoProspecto && !sinClave && (
@@ -1028,7 +1051,7 @@ export default function CrearLinkAsistente({
               {hecho || sinClave ? 'Cerrar' : 'Cancelar'}
             </button>
             {!hecho && (
-              <button type="button" onClick={enviar} disabled={enviando || motivos.length > 0} data-recorrido="links-asistente-crear"
+              <button type="button" onClick={() => enviar()} disabled={enviando || motivos.length > 0} data-recorrido="links-asistente-crear"
                 title={motivos[0] || undefined}
                 className="inline-flex items-center h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 disabled:opacity-50">
                 {enviando ? 'Creando…' : 'Crear link'}
@@ -1037,6 +1060,15 @@ export default function CrearLinkAsistente({
           </div>
         </div>
       </div>
+      <VentaYaExisteAviso
+        venta={yaTiene}
+        onCancelar={() => setYaTiene(null)}
+        onCrearIgualmente={() => enviar({ forzar: true })}
+        onApuntarCobro={async (v) => {
+          if (enCuotas) throw new Error('En cuotas, ve a esa venta y usa «Generar plan de pago»: una venta ya tiene su plan.');
+          await enviar({ aLaVenta: v.id });
+        }}
+      />
       {correoAbierto && lead && hecho?.url && (
         <Suspense fallback={null}>
         <LeadEmailDialog
@@ -1053,4 +1085,20 @@ export default function CrearLinkAsistente({
       )}
     </Portal>
   );
+}
+
+/**
+ * Lo que se dice de la venta al crear el link (CRM#1107): la que acaba de nacer
+ * con él, la que ya tenía la ficha, o la de un link sin prospecto (al pagarse).
+ */
+export function textoDeLaVenta(hecho: LinkDePago, ventaElegida: number | null, paraQuien: string | null): string {
+  const v = hecho.venta_del_link;
+  if (v?.conversion_id && v.creada) {
+    return `Venta n.º ${v.conversion_id} creada a tu nombre, pendiente de cobro: al pagarlo, el cobro entra en ella. Si caduca sin pagarse, te avisamos.`;
+  }
+  if (v?.conversion_id) return `Va a la venta n.º ${v.conversion_id} que ya tenía de este curso: al pagarlo, el cobro entra en ella.`;
+  if (ventaElegida) return `Va a la venta n.º ${ventaElegida}: al pagarlo, el cobro entra en ella.`;
+  if (v && !v.conversion_id) return `No se ha podido crear la venta ahora${v.error ? ` (${v.error})` : ''}: se creará al pagarlo, a tu nombre.`;
+  if (paraQuien) return `Para ${paraQuien}: al pagarlo se crea su venta, a tu nombre.`;
+  return 'Sin prospecto: al pagarlo, el CRM busca su ficha por el correo (o la crea), crea la venta a tu nombre y te avisa.';
 }

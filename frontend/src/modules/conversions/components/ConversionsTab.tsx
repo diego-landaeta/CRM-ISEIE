@@ -30,6 +30,8 @@ interface ConversionsTabProps {
 export default function ConversionsTab({ lead, projectId, canManage }: ConversionsTabProps) {
   const [conversions, setConversions] = useState<Conversion[]>([]);
   const [loading, setLoading] = useState(true);
+  // De qué prospecto es la lista que hay pintada: al recargar no se vuelve al esqueleto.
+  const [cargadasDe, setCargadasDe] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [paymentDialogConv, setPaymentDialogConv] = useState<Conversion | null>(null);
   const [refundDialogConv, setRefundDialogConv] = useState<Conversion | null>(null);
@@ -65,6 +67,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
 
   async function load(): Promise<void> {
     if (!lead?.id) return;
+    const deQuien = lead.id;
     setLoading(true);
     try {
       const res = await conversionsApi.byLead(lead.id);
@@ -73,6 +76,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
       // silencioso — la tab mostrará estado vacío
     } finally {
       setLoading(false);
+      setCargadasDe(deQuien);
     }
   }
 
@@ -128,7 +132,18 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
     } finally { setPendingConversion(null); }
   }
 
-  if (loading) {
+  /*
+    EL ESQUELETO, SOLO LA PRIMERA VEZ (25/11, Ana y la venta 540).
+
+    Al cobrar una cuota, un abono o registrar la venta, su diálogo llama a
+    `load()` para refrescar la lista. Con `if (loading) return <esqueleto/>` la
+    pestaña entera —y con ella el diálogo abierto, que se pinta más abajo— se
+    desmontaba mientras recargaba, y al volver salía de cero: sin «Emitir ya la
+    factura de este cobro» (CRM#1043). El cobro quedaba en la cola y la gestora
+    no veía dónde emitir su factura. Ahora el esqueleto solo sale mientras no
+    hay nada de ESTE prospecto; al recargar se queda lo que había.
+  */
+  if (loading && cargadasDe !== lead?.id) {
     return (
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 animate-pulse" aria-busy="true">
         {[1, 2, 3].map((i) => (
