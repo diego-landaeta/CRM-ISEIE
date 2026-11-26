@@ -185,11 +185,12 @@ function InstallmentsCell({ client: item }: { client: Client }) {
   );
 }
 
-/** En la fila: sigue suspendido en Moodle (gemela de CRM#531). El motivo está en su ficha. */
+/** En la fila: sigue con una suspensión en Moodle (gemela de CRM#531), sin género (QA del
+ * 25/11/2026: «Suspendido en Moodle» lo decía en masculino a todas). El motivo, en su ficha. */
 function SuspendidoEnMoodle() {
   return (
     <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-destructive-soft px-1.5 py-0.5 text-[10px] font-semibold text-destructive-soft-foreground">
-      <Prohibit size={10} weight="bold" aria-hidden /> Suspendido en Moodle
+      <Prohibit size={10} weight="bold" aria-hidden /> Suspensión en Moodle
     </span>
   );
 }
