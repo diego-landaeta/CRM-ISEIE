@@ -230,15 +230,18 @@ export default function ClientDetailPage() {
         <span className="text-foreground font-medium truncate">{lead.nombre}</span>
       </div>
 
-      {/* Header card */}
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+      {/* Header card. flex-wrap: los datos piden al menos 32rem y, si con los botones
+          no caben en una fila, los botones bajan a la suya en vez de estrujar el nombre
+          (QA del 25/11/2026: a 1280 px el nombre, la etiqueta y «Cliente desde» se
+          partían en varias líneas). En el móvil, avatar, datos y botones, uno debajo de otro. */}
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center gap-4">
         {/* Avatar */}
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${avatarColor}`}>
           {initials}
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-[1_1_32rem] min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl font-bold">{lead.nombre}</h1>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -262,7 +265,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           {waPhone && (
             <button type="button" onClick={abrirChatAqui} aria-label="Abrir el chat en el CRM"
               className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
