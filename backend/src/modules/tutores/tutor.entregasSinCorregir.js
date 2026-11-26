@@ -17,6 +17,12 @@
       correo (se apunta en el registro); la campana sí, como en los plazos de consultas.
     · Solo lee Moodle, pero escribe a las tutoras: apagado en producción mientras Diego
       no lo apruebe (PLUGIN_MOODLE_EN_PRODUCCION, soloEnPruebas.js).
+    · El aviso de la campana SE RETIRA SOLO (26/11, una tutora: «estoy al día;
+      actualizo, pero sigue apareciendo»). En cada vuelta, si ninguna de sus entregas
+      sigue por corregir, se marca resuelto y deja de salir (`avisosYaAtendidos`).
+      Cada aviso guarda en `metadata.claves` qué entregas eran; los de antes de esto no
+      lo guardan y se retiran cuando ya no le queda ninguna de más de 48 h. Igual que en
+      el CRM 360.
 
   GEMELA (CRM-ISEIE#457, porte de la parte 7 de la #681 del CRM 360, PR CRM#736): en
   el 360 el correo y la campana llevan a «Mi campus» (`mis-cursos/campus`), donde la
@@ -33,7 +39,7 @@ import {
 } from '../../shared/services/email-plantilla.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
-import { notifyUsers } from '../notifications/notifications.service.js';
+import { notifyUsers, avisosAbiertos, resolverAvisos } from '../notifications/notifications.service.js';
 import { marcaDelTutor } from '../consultas/consultas.plazos.js';
 import { leerSusCampus } from './tutor.micampus.js';
 
@@ -85,6 +91,50 @@ export function entregasVencidas(campus, ahora, horas = HORAS_SIN_CORREGIR) {
 
 /** Una entrega: campus, tarea, alumno y fecha de entrega (si vuelve a entregar, es otra). */
 export const claveDe = (e) => `${e.projectId}-${e.tareaId}-${e.alumnoId}-${new Date(e.entregadaAt).getTime()}`;
+
+/** El curso de una entrega, como se apunta en el aviso y en los fallos de lectura. */
+const cursoDe = (e) => `${e.projectId}-${e.cursoId}`;
+
+/**
+ * De los avisos abiertos de la campana (`abiertos`: [{ id, metadata }]), los que ya no
+ * piden nada con lo leído en esta vuelta (`campus`, de `leerSusCampus`). Devuelve sus ids.
+ *
+ *   · Con `metadata.claves` (los de ahora): ninguna de sus entregas sigue por corregir
+ *     (cualquier fecha) y sus cursos se han leído sin fallo. Si un curso no se ha podido
+ *     leer, no se sabe: se queda.
+ *   · Sin claves (los de antes de este cambio, que solo dicen cuántas): cuando ya no le
+ *     queda ninguna entrega de más de `horas` por corregir y no ha fallado nada al leer.
+ *
+ * Un curso que ya no imparte no sale en lo leído: lo suyo deja de ser cosa suya y se retira.
+ */
+export function avisosYaAtendidos(abiertos, campus, ahora, horas = HORAS_SIN_CORREGIR) {
+  const pendientes = new Set(entregasPorCorregir(campus).map(claveDe));
+  const fallos = new Set();
+  for (const c of campus) {
+    if (c.error) fallos.add(String(c.projectId));
+    for (const k of c.cursos) if (k.error) fallos.add(`${c.projectId}-${k.id}`);
+  }
+  const vencidas = entregasVencidas(campus, ahora, horas).length;
+  return abiertos.filter(({ metadata: m }) => {
+    const claves = Array.isArray(m?.claves) ? m.claves : [];
+    if (!claves.length) return fallos.size === 0 && vencidas === 0;
+    const cursos = Array.isArray(m.cursos) ? m.cursos.map(String) : [];
+    const sinLeer = cursos.some((k) => fallos.has(k) || fallos.has(k.split('-')[0]));
+    return !sinLeer && !claves.some((k) => pendientes.has(String(k)));
+  }).map((a) => a.id);
+}
+
+/** Retira de la campana de la tutora los avisos que ya no piden nada. No para la vuelta si falla. */
+async function retirarAtendidos(tutora, campus, ahora) {
+  try {
+    const abiertos = await avisosAbiertos(tutora.id, 'entregas_sin_corregir');
+    if (!abiertos.length) return 0;
+    return await resolverAvisos(avisosYaAtendidos(abiertos, campus, ahora), 'corregidas', ahora);
+  } catch (err) {
+    logger.warn({ tutorId: tutora.id, err: err.message }, 'tutores: no se han podido retirar los avisos de entregas ya corregidas');
+    return 0;
+  }
+}
 
 /**
  * Apunta las que aún no se le habían avisado y devuelve SOLO esas (con el id de su fila).
@@ -157,7 +207,11 @@ async function avisarATutora(tutora, entregas, { enviar, freno, ahora }) {
     title: `${plural(nuevas.length, 'entrega lleva', 'entregas llevan')} más de ${HORAS_SIN_CORREGIR} h sin corregir`,
     message: [...new Set(nuevas.map((e) => e.curso || e.campus))].slice(0, 3).join(' · '),
     link_path: `/${MI_CAMPUS}`,
-    metadata: { tutor_id: tutora.id, entregas: nuevas.length },
+    // Qué entregas y cursos son: con eso se retira solo cuando ya están corregidas.
+    metadata: {
+      tutor_id: tutora.id, entregas: nuevas.length,
+      claves: nuevas.map(claveDe), cursos: [...new Set(nuevas.map(cursoDe))],
+    },
   });
   if (freno) {
     logger.info({ tutorId: tutora.id, entregas: nuevas.length }, 'tutores: aviso de entregas sin corregir sin enviar por correo (freno de correos a tutores)');
@@ -192,7 +246,7 @@ export async function avisarEntregasSinCorregir({
   ahora = new Date(), enviar = sendEmail, tutorIds = null,
   freno = NO_ESCRIBIR_A_TUTORES, activo = pluginMoodleActivo(), opciones = {}, recogida = null,
 } = {}) {
-  const r = { apagado: !activo, tutoras: 0, avisadas: 0, correos: 0, frenados: 0, errores: 0 };
+  const r = { apagado: !activo, tutoras: 0, avisadas: 0, correos: 0, frenados: 0, errores: 0, retirados: 0 };
   if (!activo) return r;
   for (const tutora of await tutorasConCampus(tutorIds)) {
     r.tutoras += 1;
@@ -211,6 +265,8 @@ export async function avisarEntregasSinCorregir({
         }
         recogida.entregas.push(...entregasPorCorregir(campus).map((e) => ({ ...e, tutora: tutora.nombre })));
       }
+      // Antes de avisar de lo nuevo, se retira lo que ya está corregido.
+      r.retirados += await retirarAtendidos(tutora, campus, ahora);
       const vencidas = entregasVencidas(campus, ahora);
       const hecho = await avisarATutora(tutora, vencidas, { enviar, freno, ahora });
       r.avisadas += hecho.avisadas;

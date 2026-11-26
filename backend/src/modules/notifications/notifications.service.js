@@ -43,6 +43,39 @@ export async function notifyUsers({ targetUserIds, type, title, message = null, 
   }
 }
 
+// ── Los avisos que se retiran solos (igual que en el CRM 360) ────────────────
+//
+// Una tutora, el 26/11: «estoy al día; actualizo, pero sigue apareciendo». El
+// aviso de 48 h salió con razón (la entrega llevaba 49 h sin nota) y lo corrigió
+// una hora después, pero el aviso se quedó en la campana para siempre: nada lo
+// retiraba. Un aviso que pide hacer algo tiene que irse cuando ya está hecho.
+//
+// Retirar = marcarlo leído para todos sus destinatarios y apuntar en `metadata`
+// cuándo y por qué (`resuelta_at`, `resuelta`). No se borra: queda el rastro. La
+// campana y la lista no enseñan los retirados (`list`). Sin migración: `metadata`
+// es JSONB desde la 067.
+
+/** Los avisos de ese tipo dirigidos a esa persona que siguen sin retirar. */
+export async function avisosAbiertos(userId, type) {
+  const { rows } = await query(
+    `SELECT id, metadata, created_at FROM admin_notifications
+      WHERE type = $2 AND $1 = ANY(target_user_ids) AND NOT (metadata ? 'resuelta_at')
+      ORDER BY id`, [userId, type]);
+  return rows.map((r) => ({ id: Number(r.id), metadata: r.metadata || {}, createdAt: r.created_at }));
+}
+
+/** Retira esos avisos: leídos para todos sus destinatarios y con el motivo. Devuelve cuántos. */
+export async function resolverAvisos(ids, motivo, ahora = new Date()) {
+  if (!Array.isArray(ids) || !ids.length) return 0;
+  const { rowCount } = await query(
+    `UPDATE admin_notifications
+        SET metadata = metadata || jsonb_build_object('resuelta_at', $3::timestamptz, 'resuelta', $2::text),
+            read_by_user_ids = ARRAY(SELECT DISTINCT x FROM unnest(read_by_user_ids || COALESCE(target_user_ids, '{}'::int[])) x)
+      WHERE id = ANY($1::int[]) AND NOT (metadata ? 'resuelta_at')`,
+    [ids, motivo, ahora]);
+  return rowCount;
+}
+
 /**
  * Lista notifs visibles para un usuario. Reglas:
  *   - Si la notif tiene target_user_ids populado → solo la ven esos users
@@ -61,7 +94,8 @@ function visibilityClause(userId, role, paramIdx) {
 
 export async function list({ userId, role = 'gestor', unreadOnly = false, limit = 50 } = {}) {
   const params = [userId, limit];
-  const conditions = [visibilityClause(userId, role, 1)];
+  // Los retirados (ya no piden nada: `resolverAvisos`) no se enseñan.
+  const conditions = [visibilityClause(userId, role, 1), `NOT (n.metadata ? 'resuelta_at')`];
   if (unreadOnly) conditions.push(`NOT ($1 = ANY(n.read_by_user_ids))`);
   const where = `WHERE ${conditions.join(' AND ')}`;
   const { rows } = await query(
@@ -86,7 +120,7 @@ export async function unreadCount(userId, role = 'gestor') {
   const vis = visibilityClause(userId, role, 1);
   const { rows } = await query(
     `SELECT COUNT(*)::int AS count FROM admin_notifications n
-     WHERE ${vis} AND NOT ($1 = ANY(n.read_by_user_ids))`,
+     WHERE ${vis} AND NOT ($1 = ANY(n.read_by_user_ids)) AND NOT (n.metadata ? 'resuelta_at')`,
     [userId]
   );
   return rows[0]?.count || 0;

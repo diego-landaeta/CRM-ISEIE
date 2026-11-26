@@ -40,7 +40,7 @@ import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { notifyUsers } from '../notifications/notifications.service.js';
 import { AVISO_CONSULTA_FUERA_DE_PLAZO } from './consultas.avisosCorreo.js';
 import { PLAZO_HORAS } from './consultas.model.js';
-import { DIAS_CARGA } from './consultas.carga.js';
+import { DIAS_CARGA, retirarAvisosDeCarga } from './consultas.carga.js';
 
 /** Qué parte del plazo tiene que pasar para recordárselo al tutor: la del ámbar del semáforo. */
 export const PARTE_DEL_PLAZO = 0.75;
@@ -302,6 +302,8 @@ export async function recordarCargas({ ahora = new Date(), enviar = sendEmail, t
     const texto = t.ultima
       ? `Hace más de ${DIAS_CARGA} días que no la actualizas.`
       : 'Aún no la has indicado.';
+    // El de la semana pasada, si no lo atendió, lo sustituye este: uno solo en la campana.
+    await retirarAvisosDeCarga(Number(t.id), 'sustituido', ahora);
     await notifyUsers({
       targetUserIds: [Number(t.id)],
       type: 'carga_desactualizada',
