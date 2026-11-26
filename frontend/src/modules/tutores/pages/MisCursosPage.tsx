@@ -10,6 +10,8 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import LoQueFactura from '../components/LoQueFactura';
 import EmptyState from '@/shared/components/ui/EmptyState';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import {
   tutoresApi, type Colaboracion, type ResumenComision, type ComisionReal, type CursoFicha,
 } from '../api/tutores.api';
@@ -202,17 +204,23 @@ function MisCursosContenido() {
   };
 
   return (
-    <div className="space-y-3">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-3 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Mis cursos"
         subtitle="Lo que te corresponde por lo que se ha cobrado de tus formaciones"
         actions={(
-          <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
-            className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="mis-cursos" listo={!cargando} />
+            <input type="month" value={periodo} onChange={(e) => setPeriodo(e.target.value)}
+              data-recorrido="miscursos-mes" aria-label="Mes"
+              className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+          </div>
         )}
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div data-recorrido="miscursos-cifras" className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <KpiCard icon={Coins} iconBg="bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300"
           label="Pendiente de cobro" value={euros(pendiente)} />
         <KpiCard icon={Coins} iconBg="bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300"
@@ -226,9 +234,11 @@ function MisCursosContenido() {
           tutor debe ver ese cuadro de él y sus recaudos». */}
       {/* Con el mes ya pagado dice «Todo pagado» en vez de no enseñar nada,
           que parecia un fallo: le paso a Sara en septiembre (Diego, 13/10). */}
-      <LoQueFactura base={pendiente} titulo="Lo que tienes que facturar" comisiones={comisiones} />
+      <div data-recorrido="miscursos-facturar">
+        <LoQueFactura base={pendiente} titulo="Lo que tienes que facturar" comisiones={comisiones} />
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+      <div data-recorrido="miscursos-graficas" className="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <div className="bg-card border border-border rounded-lg p-4">
           <p className="text-sm font-semibold">Cómo va mes a mes</p>
           <p className="text-xs text-muted-foreground mb-3">Lo que te ha correspondido en cada mes</p>
@@ -296,7 +306,7 @@ function MisCursosContenido() {
 
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,26rem)_minmax(0,1fr)] gap-3 items-start">
         {/* Mis cursos: la lista. Pulsar uno abre su ficha al lado. */}
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div data-recorrido="miscursos-lista" className="bg-card border border-border rounded-lg overflow-hidden">
           <div className="px-4 py-3 border-b border-border">
             <span className="text-sm font-semibold">
               {cargando ? 'cargando…' : `Mis cursos · ${cursos.length}`}
@@ -415,7 +425,7 @@ function MisCursosContenido() {
           Cada cobro de sus cursos, con lo que le correspondio. Va DESPUES de
           las graficas a proposito: primero el resumen, y quien quiera
           comprobarlo tiene aqui el detalle, cobro a cobro. */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="miscursos-historial" className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="px-4 py-3 border-b border-border flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <h2 className="font-bold">Historial de ventas</h2>
           <p className="text-xs text-muted-foreground flex-1">

@@ -7,6 +7,8 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import usePermission from '@/shared/hooks/usePermission';
 import { rutaPermitida } from '@/shared/components/layout/Sidebar';
 import { RUTA_FORMACIONES } from '../lib/rutasFormacion';
@@ -68,7 +70,9 @@ export default function ProductsPage() {
   }, [products, search]);
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div className="min-w-0">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Catálogo</h1>
@@ -76,7 +80,8 @@ export default function ProductsPage() {
             {activeProject?.nombre ? `${activeProject.nombre} · ` : ''}Productos, cursos o servicios que vendes.
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <VerRecorrido id="productos" listo={!loading} />
           {/* Gemela de CRM#1113: la formación entera (datos, módulos y tutoras) en una ficha.
               La entrada sale con su permiso (`rutaPermitida`, SIN_ENTRADA del Sidebar). */}
           {rutaPermitida(RUTA_FORMACIONES, can) && (
@@ -90,6 +95,7 @@ export default function ProductsPage() {
           )}
           <button
             type="button"
+            data-recorrido="productos-nuevo"
             onClick={() => setFormOpen(true)}
             className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
           >
@@ -100,7 +106,7 @@ export default function ProductsPage() {
       </header>
 
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-        <div className="relative flex-1 max-w-md">
+        <div data-recorrido="productos-buscar" className="relative flex-1 max-w-md">
           <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
             type="search"
@@ -110,7 +116,7 @@ export default function ProductsPage() {
             className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-card text-sm placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
           />
         </div>
-        <div className="flex items-center gap-1 p-0.5 rounded-md border border-border bg-card self-start">
+        <div data-recorrido="productos-vista" className="flex items-center gap-1 p-0.5 rounded-md border border-border bg-card self-start">
           <button
             onClick={() => setView('grid')}
             title="Vista de cuadrícula"
@@ -155,7 +161,7 @@ export default function ProductsPage() {
           )}
         </div>
       ) : view === 'grid' ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        <div data-recorrido="productos-lista" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
           {filtered.map((p) => (
             <Link
               key={p.id}
@@ -194,7 +200,7 @@ export default function ProductsPage() {
           ))}
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
+        <div data-recorrido="productos-lista" className="rounded-2xl border border-border bg-card overflow-hidden divide-y divide-border">
           {filtered.map((p) => (
             <Link
               key={p.id}

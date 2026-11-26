@@ -19,6 +19,8 @@ import DialogoBusquedaTutor from '../components/DialogoBusquedaTutor';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const euros = (n: unknown) =>
   new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(Number(n || 0));
@@ -175,7 +177,9 @@ export default function FormacionesSinTutorPage() {
   }), [filas]);
 
   return (
-    <div className="space-y-4">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Formaciones sin tutor"
         subtitle={conLasViejas
@@ -186,7 +190,9 @@ export default function FormacionesSinTutorPage() {
              bien para el día a día —antes del corte no se paga nada— pero deja
              fuera formaciones que SIGUEN sin tutor. Aquí se puede mirar la
              lista entera sin cambiarle el criterio a nadie. */
-          <label className="inline-flex items-center gap-2 text-normal">
+          <div className="flex flex-wrap items-center gap-3">
+          <VerRecorrido id="sin-tutor" listo={!cargando} />
+          <label data-recorrido="sintutor-corte" className="inline-flex items-center gap-2 text-normal">
             <input
               type="checkbox"
               checked={conLasViejas}
@@ -195,12 +201,13 @@ export default function FormacionesSinTutorPage() {
             />
             Incluir ventas anteriores al corte
           </label>
+          </div>
         )}
       />
 
       {/* El titular, antes de la lista: es la cifra que decide si esto urge. */}
       {!cargando && filas.length > 0 && (
-        <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3">
+        <div data-recorrido="sintutor-total" className="bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 rounded-lg p-3">
           <p className="font-semibold text-amber-900 dark:text-amber-200 flex items-center gap-1.5 text-sm">
             <Warning size={16} weight="fill" />
             {euros(total.cobrado)} cobrados en {filas.length}{' '}
@@ -217,7 +224,7 @@ export default function FormacionesSinTutorPage() {
       )}
 
       <div className="bg-card border border-border rounded-lg overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-3">
+        <div data-recorrido="sintutor-buscar" className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-3">
           <span className="text-sm font-semibold">
             {cargando ? 'cargando…' : `${vistas.length} ${vistas.length === 1 ? 'formación' : 'formaciones'}`}
           </span>
@@ -234,7 +241,7 @@ export default function FormacionesSinTutorPage() {
           <EmptyState icon={GraduationCap} title="Todas tienen tutor"
             description="Ninguna formación con ventas se ha quedado sin tutor asignado. Cuando entre un cobro de una que no lo tenga, aparecerá aquí." />
         ) : (
-          <div className="overflow-x-auto">
+          <div data-recorrido="sintutor-lista" className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-xs text-muted-foreground">
                 <tr>
@@ -286,7 +293,7 @@ export default function FormacionesSinTutorPage() {
                       {/* Se pulsaba la celda entera, pero nada decia que fuera
                           pulsable: parecia texto. Ahora es un boton con su
                           borde y su lapiz. */}
-                      <button type="button" onClick={() => abrirBusqueda(f)}
+                      <button type="button" data-recorrido="sintutor-meta" onClick={() => abrirBusqueda(f)}
                         className="inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 hover:bg-muted hover:border-foreground/30 transition-colors"
                         title="Decir si se busca tutor y con qué anuncio">
                         <Meta f={f} />
@@ -296,7 +303,7 @@ export default function FormacionesSinTutorPage() {
                     <td className="px-4 py-2.5 text-right">
                       {/* Lleva a Tutores, que es donde se asigna. La formación va
                           en la dirección para no tener que buscarla otra vez. */}
-                      <button type="button"
+                      <button type="button" data-recorrido="sintutor-asignar"
                         onClick={() => navigate(`/tutores?formacion=${f.id}`)}
                         className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline whitespace-nowrap">
                         Asignar tutor <ArrowRight size={12} weight="bold" />

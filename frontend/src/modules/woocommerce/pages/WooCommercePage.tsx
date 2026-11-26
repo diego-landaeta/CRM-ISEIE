@@ -6,6 +6,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import { ShoppingBag, FloppyDisk, ArrowsClockwise, Eye } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#619, tanda I).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type SourceStrategy = 'wc_only' | 'wc_plus_cpt' | 'wp_pages';
 type ScrapeStrategy = 'plain_text' | 'preserve_html';
@@ -311,10 +313,19 @@ export default function WooCommercePage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
-      <PageHeader title="WooCommerce" subtitle="Importar productos desde tu tienda" />
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda I): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+      <PageHeader
+        title="WooCommerce"
+        subtitle="Importar productos desde tu tienda"
+        actions={<VerRecorrido id="woocommerce" listo={!loading} />}
+      />
 
       <div className="bg-card border border-border rounded-2xl p-5 w-full space-y-3">
+        {/* Los anclajes del recorrido (#619, tanda I): la conexión con la tienda, y
+            WordPress con el scraper, cada uno en su caja. */}
+        <div data-recorrido="woo-credenciales" className="space-y-3">
         <h3 className="font-bold">Credenciales</h3>
         <input value={form.store_url} onChange={e => setForm({ ...form, store_url: e.target.value })} placeholder="https://tu-tienda.com" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm" />
         <input value={form.consumer_key} onChange={e => setForm({ ...form, consumer_key: e.target.value })} placeholder="Consumer key (ck_...)" className="w-full h-10 px-3 rounded-lg border border-border bg-muted/30 text-sm font-mono text-xs" />
@@ -348,6 +359,9 @@ export default function WooCommercePage() {
           <p className="text-xs text-muted-foreground">{form.auto_sync_enabled ? `El servidor revisa cada ${form.sync_interval_minutes} min y solo importa si cambia la cantidad de productos en WC.` : 'Sin auto-sync: deberas pulsar "Importar ahora" manualmente.'}</p>
         </div>
 
+        </div>
+
+        <div data-recorrido="woo-wordpress" className="space-y-3">
         <div className="pt-3 border-t border-border space-y-2">
           <h4 className="text-xs font-bold uppercase text-muted-foreground">WordPress REST API (para ACF / CPTs)</h4>
           <input
@@ -476,15 +490,15 @@ export default function WooCommercePage() {
                 <summary className="cursor-pointer font-semibold">Keywords por seccion (clic para editar)</summary>
                 <div className="mt-2 space-y-2 max-h-80 overflow-auto p-2 bg-muted/30 rounded">
                   {Object.keys(form.section_keywords).map((key) => (
-                    <div key={key} className="grid grid-cols-[140px_1fr] gap-2 items-start">
-                      <label className="text-[11px] font-mono">{key}</label>
+                    <div key={key} className="grid grid-cols-[minmax(0,140px)_minmax(0,1fr)] gap-2 items-start">
+                      <label className="text-[11px] font-mono break-words">{key}</label>
                       <input
                         value={form.section_keywords[key].join(', ')}
                         onChange={(e) => {
                           const arr = e.target.value.split(',').map(s => s.trim()).filter(Boolean);
                           setForm({ ...form, section_keywords: { ...form.section_keywords, [key]: arr } });
                         }}
-                        className="h-8 px-2 rounded border border-border bg-card text-[11px] font-mono"
+                        className="min-w-0 h-8 px-2 rounded border border-border bg-card text-[11px] font-mono"
                       />
                     </div>
                   ))}
@@ -502,7 +516,7 @@ export default function WooCommercePage() {
                     value={testUrl}
                     onChange={(e) => setTestUrl(e.target.value)}
                     placeholder="https://tu-tienda.com/curso/..."
-                    className="flex-1 h-9 px-2 rounded border border-border bg-card text-xs font-mono"
+                    className="flex-1 min-w-0 h-9 px-2 rounded border border-border bg-card text-xs font-mono"
                   />
                   <button
                     onClick={async () => {
@@ -557,16 +571,20 @@ export default function WooCommercePage() {
           )}
         </div>
 
+        </div>
+
         <div className="flex gap-2 justify-end pt-3 border-t border-border">
           <button onClick={saveCreds} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold"><FloppyDisk size={14} weight="bold" /> Guardar</button>
         </div>
       </div>
 
       {creds && (
-        <div className="bg-card border border-border rounded-2xl p-5 space-y-3">
+        <div data-recorrido="woo-importar" className="bg-card border border-border rounded-2xl p-5 space-y-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="font-bold">Importar productos</h3>
-            <div className="flex gap-2">
+            {/* En el móvil, los dos botones se parten en filas: en una sola se
+                salían de la pantalla (#619, tanda I). */}
+            <div className="flex flex-wrap gap-2">
               <button onClick={() => preview()} className="flex items-center gap-1 px-3 py-2 rounded-lg bg-muted text-xs font-bold"><Eye size={14} /> Preview primer producto</button>
               <button onClick={importNow} disabled={importing} className="flex items-center gap-1 px-4 py-2 rounded-lg bg-primary text-white text-xs font-bold disabled:opacity-50"><ArrowsClockwise size={14} weight="bold" /> {importing ? 'Iniciando...' : 'Importar ahora'}</button>
             </div>
@@ -583,8 +601,10 @@ export default function WooCommercePage() {
               currentRun.status === 'error' ? 'bg-red-50 border-red-300 dark:bg-red-950/30 dark:border-red-800' :
               'bg-muted border-border'
             }`}>
+              {/* En el móvil, las cifras se parten en filas: en una sola se salían
+                  de la pantalla (#619, tanda I). */}
               <div className="flex items-center justify-between flex-wrap gap-2">
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   {currentRun.status === 'running' && (
                     <span className="inline-block w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                   )}
@@ -596,7 +616,7 @@ export default function WooCommercePage() {
                     · {currentRun.elapsed_seconds}s
                   </span>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                   <span>Traidos: <strong>{currentRun.total_fetched || 0}</strong></span>
                   <span className="text-green-700 dark:text-green-400">Creados: <strong>{currentRun.total_created || 0}</strong></span>
                   <span className="text-blue-700 dark:text-blue-400">Actualizados: <strong>{currentRun.total_updated || 0}</strong></span>
@@ -615,12 +635,12 @@ export default function WooCommercePage() {
           )}
 
           {/* Input URL para previsualizar un producto especifico */}
-          <div className="flex gap-2 items-center pt-2 border-t border-border">
+          <div className="flex flex-wrap gap-2 items-center pt-2 border-t border-border">
             <input
               value={previewUrl}
               onChange={(e) => setPreviewUrl(e.target.value)}
               placeholder="O pega la URL de un producto/master concreto para previsualizar ese..."
-              className="flex-1 h-9 px-3 rounded-md border border-border bg-muted/30 text-xs"
+              className="flex-1 min-w-[12rem] h-9 px-3 rounded-md border border-border bg-muted/30 text-xs"
             />
             <button
               onClick={() => preview(previewUrl)}
@@ -701,7 +721,7 @@ export default function WooCommercePage() {
                             if (isMulti) { addMappingSource(target.key, v); }
                             else { updateMapping(target.key, v); }
                           }}
-                          className="h-9 px-2 rounded-md border border-border bg-muted/30 text-xs"
+                          className="w-full max-w-full h-9 px-2 rounded-md border border-border bg-muted/30 text-xs"
                         >
                           <option value="">- No mapear -</option>
                           <optgroup label="Producto WC (JSON)">
@@ -815,7 +835,7 @@ export default function WooCommercePage() {
         </div>
       )}
 
-      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div data-recorrido="woo-historial" className="bg-card border border-border rounded-2xl overflow-hidden">
         <div className="px-4 py-3 border-b border-border"><h3 className="font-bold text-sm">Historial de imports</h3></div>
         {loading ? <SkeletonTable rows={4} columns={6} className="border-0" /> : runs.length === 0 ? (
           <EmptyState icon={ShoppingBag} title="Sin imports aun" description="Configura credenciales y dispara el primero" />
