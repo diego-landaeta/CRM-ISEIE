@@ -58,16 +58,26 @@ export async function cargaDe(tutorId) {
 /**
  * Retira de la campana el «Actualiza tu carga de trabajo» de ese tutor (26/11: una tutora
  * la actualizaba y el aviso seguía ahí). Al guardar la carga y antes de mandar el de la
- * semana siguiente (`recordarCargas`). No falla nunca: el aviso es accesorio.
+ * semana siguiente (`recordarCargas`). `menos`: el id de un aviso que se deja (el recién
+ * creado). No falla nunca: el aviso es accesorio.
  */
-export async function retirarAvisosDeCarga(tutorId, motivo = 'actualizada', ahora = new Date()) {
+export async function retirarAvisosDeCarga(tutorId, motivo = 'actualizada', ahora = new Date(), { menos = null } = {}) {
   try {
     const abiertos = await avisosAbiertos(tutorId, 'carga_desactualizada');
-    return await resolverAvisos(abiertos.map((a) => a.id), motivo, ahora);
+    return await resolverAvisos(abiertos.map((a) => a.id).filter((id) => id !== menos), motivo, ahora);
   } catch (err) {
     logger.warn({ tutorId, err: err.message }, 'consultas: no se ha podido retirar el aviso de carga');
     return 0;
   }
+}
+
+/** ¿Ha guardado la carga dentro del plazo? Se mira en el momento, en la base. */
+export async function cargaAlDia(tutorId, ahora = new Date()) {
+  const { rows } = await query(
+    `SELECT 1 FROM tutor_carga WHERE tutor_id = $1
+        AND created_at > $2::timestamptz - make_interval(days => $3::int) LIMIT 1`,
+    [tutorId, ahora, DIAS_CARGA]);
+  return rows.length > 0;
 }
 
 export async function guardarCarga(tutorId, { nivel, texto }, porQuien) {

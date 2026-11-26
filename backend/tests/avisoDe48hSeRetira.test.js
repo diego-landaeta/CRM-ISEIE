@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import {
   describe, it, expect, vi, beforeAll, afterAll, beforeEach,
 } from 'vitest';
@@ -16,6 +17,10 @@ import {
  *     ninguna de más de 48 h, y no si queda alguna.
  *  4. Guardar la carga retira «Actualiza tu carga de trabajo»; el de la semana siguiente
  *     sustituye al anterior.
+ *  5. Revisión de la PR: si el alumno edita lo enviado antes de la nota (cambia la fecha),
+ *     el aviso NO se retira; corregir desde el CRM lo retira al momento; si el aviso nuevo
+ *     de carga no se crea, el anterior se queda; y si la guarda mientras se avisa, no queda
+ *     ninguno.
  *
  * Contra la base LOCAL y un Moodle de mentira. Gemela de la prueba del CRM 360 (mismo
  * nombre); aquí `unreadCount` devuelve un número.
@@ -28,7 +33,7 @@ vi.mock('../src/modules/tutores/tutor.campus.js', async (importOriginal) => ({
 
 const { default: pool } = await import('../src/shared/config/db.js');
 const { encrypt } = await import('../src/shared/utils/crypto.js');
-const { avisarEntregasSinCorregir } = await import('../src/modules/tutores/tutor.entregasSinCorregir.js');
+const { avisarEntregasSinCorregir, corregidaDesdeElCrm } = await import('../src/modules/tutores/tutor.entregasSinCorregir.js');
 const { list, unreadCount } = await import('../src/modules/notifications/notifications.service.js');
 const { guardarCarga } = await import('../src/modules/consultas/consultas.carga.js');
 const { recordarCargas } = await import('../src/modules/consultas/consultas.plazos.js');
@@ -190,15 +195,47 @@ describe('el aviso de 48 h se retira cuando ya está corregido', () => {
     expect(await campana()).toHaveLength(1);
   });
 
-  it('si el alumno vuelve a entregar después de la nota, cuenta como otra entrega: el viejo se retira y sale uno nuevo a las 48 h', async () => {
+  it('si el alumno vuelve a entregar después de la nota, el aviso se queda hasta que se corrija lo nuevo', async () => {
     await vuelta(AHORA);
     corregir(21, 11, new Date(AHORA.getTime() + H));
     corregir(47, 12, new Date(AHORA.getTime() + H));
     ENTREGAS[47] = [{ userid: 12, status: 'submitted', timemodified: seg(new Date(AHORA.getTime() + 1.5 * H)) }];
-    await vuelta(new Date(AHORA.getTime() + 2 * H));
-    expect(await campana()).toEqual([]);
-    await vuelta(new Date(AHORA.getTime() + 52 * H));
+    expect((await vuelta(new Date(AHORA.getTime() + 2 * H))).retirados).toBe(0);
     expect(await campana()).toHaveLength(1);
+    // A las 48 h de la nueva, su propio aviso (es otra entrega).
+    await vuelta(new Date(AHORA.getTime() + 52 * H));
+    expect(await campana()).toHaveLength(2);
+    corregir(47, 12, new Date(AHORA.getTime() + 53 * H));
+    expect((await vuelta(new Date(AHORA.getTime() + 54 * H))).retirados).toBe(2);
+    expect(await campana()).toEqual([]);
+  });
+
+  it('si el alumno edita lo enviado ANTES de la nota (cambia la fecha), el aviso no se retira', async () => {
+    await vuelta(AHORA);
+    corregir(21, 11, new Date(AHORA.getTime() + H));
+    // La 47 sigue sin nota, pero el alumno la edita: Moodle le cambia `timemodified`.
+    ENTREGAS[47] = [{ userid: 12, status: 'submitted', timemodified: seg(new Date(AHORA.getTime() + 1.5 * H)) }];
+    const r = await vuelta(new Date(AHORA.getTime() + 2 * H));
+    expect(r.retirados).toBe(0);
+    const [n] = await campana();
+    expect(n).toBeTruthy();
+    const [f] = await enLaBase();
+    expect(f.metadata.resuelta).toBeUndefined();
+  });
+
+  it('corregir desde el CRM lo retira al momento, cuando ya están todas las del aviso', async () => {
+    await vuelta(AHORA); // un aviso con la 21 y la 47
+    expect(await corregidaDesdeElCrm(TUTORA, { projectId: P, tareaId: 21, alumnoId: 11 })).toBe(0);
+    expect(await campana()).toHaveLength(1);
+    const [f] = await enLaBase();
+    expect(f.metadata.corregidas).toEqual([`${P}-21-11`]);
+    // Una entrega que no es de ningún aviso no toca nada.
+    expect(await corregidaDesdeElCrm(TUTORA, { projectId: P, tareaId: 22, alumnoId: 11 })).toBe(0);
+    expect(await corregidaDesdeElCrm(TUTORA, { projectId: P, tareaId: 47, alumnoId: 12 })).toBe(1);
+    expect(await campana()).toEqual([]);
+    // Y `calificar` la llama tras poner la nota.
+    const fuente = fs.readFileSync(new URL('../src/modules/tutores/tutor.correccion.js', import.meta.url), 'utf8');
+    expect(fuente).toMatch(/olvidarFichas\(\);\s*\/\/[^\n]*\n\s*await corregidaDesdeElCrm\(tutorId,/);
   });
 
   it('si un curso del aviso no se ha podido leer, no se sabe: se queda', async () => {
@@ -240,6 +277,42 @@ describe('«Actualiza tu carga de trabajo» se retira al actualizarla', () => {
     expect(await campana('carga_desactualizada')).toEqual([]);
     const [f] = await enLaBase('carga_desactualizada');
     expect(f.metadata.resuelta).toBe('actualizada');
+  });
+
+  it('si el aviso nuevo de carga no se puede crear, el de la semana pasada se queda', async () => {
+    await recordarCargas({ ahora: AHORA, enviar, tutorIds: [TUTORA] });
+    // Que el INSERT del siguiente falle (`notifyUsers` se traga el error). Solo el INSERT:
+    // retirar el anterior (un UPDATE) tiene que poder hacerse, para que la prueba distinga.
+    await q(`CREATE OR REPLACE FUNCTION prueba_sin_avisos_de_carga() RETURNS trigger AS $f$
+             BEGIN RAISE EXCEPTION 'aviso de carga rechazado (prueba)'; END $f$ LANGUAGE plpgsql`);
+    await q(`CREATE TRIGGER prueba_sin_avisos_de_carga BEFORE INSERT ON admin_notifications FOR EACH ROW
+             WHEN (NEW.type = 'carga_desactualizada') EXECUTE FUNCTION prueba_sin_avisos_de_carga()`);
+    try {
+      await recordarCargas({ ahora: new Date(AHORA.getTime() + 8 * 24 * H), enviar, tutorIds: [TUTORA] });
+    } finally {
+      await q('DROP TRIGGER IF EXISTS prueba_sin_avisos_de_carga ON admin_notifications');
+      await q('DROP FUNCTION IF EXISTS prueba_sin_avisos_de_carga()');
+    }
+    expect(await campana('carga_desactualizada')).toHaveLength(1);
+  });
+
+  it('si la guarda justo mientras se le avisa, no queda ningún aviso', async () => {
+    // Al crearse el aviso, «la tutora» guarda su carga (la carrera, hecha a propósito).
+    await q(`CREATE OR REPLACE FUNCTION prueba_guarda_al_avisar() RETURNS trigger AS $f$
+             BEGIN
+               INSERT INTO tutor_carga (tutor_id, nivel, texto, creado_por) VALUES (NEW.target_user_ids[1], 'media', 'Al día', NEW.target_user_ids[1]);
+               RETURN NEW;
+             END $f$ LANGUAGE plpgsql`);
+    await q(`CREATE TRIGGER prueba_guarda_al_avisar AFTER INSERT ON admin_notifications FOR EACH ROW
+             WHEN (NEW.type = 'carga_desactualizada') EXECUTE FUNCTION prueba_guarda_al_avisar()`);
+    try {
+      await recordarCargas({ ahora: new Date(), enviar, tutorIds: [TUTORA] });
+    } finally {
+      await q('DROP TRIGGER IF EXISTS prueba_guarda_al_avisar ON admin_notifications');
+      await q('DROP FUNCTION IF EXISTS prueba_guarda_al_avisar()');
+    }
+    expect(await enLaBase('carga_desactualizada')).toHaveLength(1);
+    expect(await campana('carga_desactualizada')).toEqual([]);
   });
 
   it('el recordatorio de la semana siguiente sustituye al anterior: uno solo en la campana', async () => {

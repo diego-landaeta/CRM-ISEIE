@@ -39,7 +39,9 @@ import {
 } from '../../shared/services/email-plantilla.service.js';
 import { NO_ESCRIBIR_A_TUTORES } from '../../shared/config/frenoTutores.js';
 import { pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
-import { notifyUsers, avisosAbiertos, resolverAvisos } from '../notifications/notifications.service.js';
+import {
+  notifyUsers, avisosAbiertos, resolverAvisos, anotarAviso,
+} from '../notifications/notifications.service.js';
 import { marcaDelTutor } from '../consultas/consultas.plazos.js';
 import { leerSusCampus } from './tutor.micampus.js';
 
@@ -96,11 +98,22 @@ export const claveDe = (e) => `${e.projectId}-${e.tareaId}-${e.alumnoId}-${new D
 const cursoDe = (e) => `${e.projectId}-${e.cursoId}`;
 
 /**
+ * La entrega SIN su fecha (campus, tarea, alumno): para decidir si sigue pendiente. Con la
+ * fecha, que el alumno edite lo enviado antes de la nota cambiaba la clave y el aviso se
+ * retiraba sin que nadie corrigiera nada (revisión de la PR).
+ */
+export const entregaDe = (e) => `${e.projectId}-${e.tareaId}-${e.alumnoId}`;
+/** De una clave de `claveDe` (con fecha), la entrega sin fecha. */
+const sinFecha = (clave) => String(clave).replace(/-\d+$/, '');
+
+/**
  * De los avisos abiertos de la campana (`abiertos`: [{ id, metadata }]), los que ya no
  * piden nada con lo leído en esta vuelta (`campus`, de `leerSusCampus`). Devuelve sus ids.
  *
- *   · Con `metadata.claves` (los de ahora): ninguna de sus entregas sigue por corregir
- *     (cualquier fecha) y sus cursos se han leído sin fallo. Si un curso no se ha podido
+ *   · Con `metadata.claves` (los de ahora): ninguna de sus entregas (campus, tarea y alumno,
+ *     sin mirar la fecha) sigue por corregir y sus cursos se han leído sin fallo. Así, si el
+ *     alumno edita antes de la nota, o vuelve a entregar después, el aviso se queda hasta
+ *     que se corrija lo último que envió. Si un curso no se ha podido
  *     leer, no se sabe: se queda.
  *   · Sin claves (los de antes de este cambio, que solo dicen cuántas): cuando ya no le
  *     queda ninguna entrega de más de `horas` por corregir y no ha fallado nada al leer.
@@ -108,7 +121,7 @@ const cursoDe = (e) => `${e.projectId}-${e.cursoId}`;
  * Un curso que ya no imparte no sale en lo leído: lo suyo deja de ser cosa suya y se retira.
  */
 export function avisosYaAtendidos(abiertos, campus, ahora, horas = HORAS_SIN_CORREGIR) {
-  const pendientes = new Set(entregasPorCorregir(campus).map(claveDe));
+  const pendientes = new Set(entregasPorCorregir(campus).map(entregaDe));
   const fallos = new Set();
   for (const c of campus) {
     if (c.error) fallos.add(String(c.projectId));
@@ -120,8 +133,31 @@ export function avisosYaAtendidos(abiertos, campus, ahora, horas = HORAS_SIN_COR
     if (!claves.length) return fallos.size === 0 && vencidas === 0;
     const cursos = Array.isArray(m.cursos) ? m.cursos.map(String) : [];
     const sinLeer = cursos.some((k) => fallos.has(k) || fallos.has(k.split('-')[0]));
-    return !sinLeer && !claves.some((k) => pendientes.has(String(k)));
+    return !sinLeer && !claves.some((k) => pendientes.has(sinFecha(k)));
   }).map((a) => a.id);
+}
+
+/**
+ * La tutora acaba de poner la nota desde el CRM (`calificar`): no hace falta esperar a la
+ * vuelta (2 h). Cada aviso abierto que incluye esa entrega la apunta en `metadata.corregidas`;
+ * si ya están todas las suyas, se retira. Los avisos antiguos (sin claves) los retira la
+ * vuelta. No falla nunca: la nota ya está puesta.
+ */
+export async function corregidaDesdeElCrm(tutorId, { projectId, tareaId, alumnoId }, ahora = new Date()) {
+  const entrega = entregaDe({ projectId, tareaId, alumnoId });
+  let retirados = 0;
+  try {
+    for (const a of await avisosAbiertos(tutorId, 'entregas_sin_corregir')) {
+      const claves = (Array.isArray(a.metadata?.claves) ? a.metadata.claves : []).map(sinFecha);
+      if (!claves.includes(entrega)) continue;
+      const corregidas = new Set([...(Array.isArray(a.metadata.corregidas) ? a.metadata.corregidas : []), entrega]);
+      if (claves.every((k) => corregidas.has(k))) retirados += await resolverAvisos([a.id], 'corregidas', ahora);
+      else await anotarAviso(a.id, { corregidas: [...corregidas] });
+    }
+  } catch (err) {
+    logger.warn({ tutorId, err: err.message }, 'tutores: no se ha podido retirar el aviso de la entrega corregida desde el CRM');
+  }
+  return retirados;
 }
 
 /** Retira de la campana de la tutora los avisos que ya no piden nada. No para la vuelta si falla. */
