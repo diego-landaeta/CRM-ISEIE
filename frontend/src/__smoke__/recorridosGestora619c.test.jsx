@@ -66,6 +66,10 @@ const hace = (h) => new Date(Date.now() - h * 3600000).toISOString();
 const MM = (n) => ({ media: n, mediana: n });
 const FILA_RANKING = { id: 41, nombre: 'Laura Tutora', consultas: 4, pendientes: 1, primeraRespuestaHoras: MM(3), enPlazoPct: 75 };
 const CARGA = { id: 1, nivel: 'media', texto: 'Corrigiendo el módulo 2', created_at: hace(30), por: null };
+const BUZONES = [
+  { id: 2, nombre: 'Admisiones', direccion: 'admisiones@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: hace(1), ultimo_resultado: 'ok', ultimo_error: null, recibidos: 1 },
+  { id: 3, nombre: 'Facturación', direccion: 'facturacion@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno', empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true, ultima_lectura_at: hace(1), ultimo_resultado: 'ok', ultimo_error: null, recibidos: 0 },
+];
 const RESPUESTAS = {
   '/whatsapp/banco': {
     success: true,
@@ -100,14 +104,7 @@ const RESPUESTAS = {
       }],
     },
   },
-  '/correos/buzones': {
-    success: true,
-    data: [{
-      id: 2, nombre: 'Admisiones', direccion: 'admisiones@ejemplo.com', project_id: 1, project_nombre: 'Campus Uno',
-      empresa_id: null, empresa_nombre: null, empresa_sin_correo: null, configurada: true,
-      ultima_lectura_at: hace(1), ultimo_resultado: 'ok', ultimo_error: null, recibidos: 1,
-    }],
-  },
+  '/correos/buzones': { success: true, data: BUZONES },
   '/consultas/alumnos-sin-mensajes': {
     success: true,
     data: {
@@ -346,6 +343,23 @@ describe('lo que no está, se salta solo', () => {
     await cargada('consultas-alumnos');
     await screen.findByRole('button', { name: /Sincronizar ahora/ });
     expect(await abrirYRecorrer('consultas-alumnos')).toEqual(titulos('consultas-alumnos', ['Los tuyos o los de todos']));
+  });
+
+  it('Correos con un solo buzón: sin elegir buzón', async () => {
+    api.get.mockImplementation(async (url) => (String(url).startsWith('/correos/buzones')
+      ? { success: true, data: [BUZONES[0]] } : responder(url)));
+    pintar('correos');
+    await cargada('correos');
+    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos', ['Un buzón o todos']));
+  });
+
+  it('Correos de quien solo lee: sin «Buzones» ni «Traer del buzón», pero con «Actualizar»', async () => {
+    permisos.delete('correos.buzones');
+    permisos.delete('correos.sincronizar');
+    pintar('correos');
+    await cargada('correos');
+    expect(screen.queryByRole('button', { name: /Buzones/ })).toBeNull();
+    expect(await abrirYRecorrer('correos')).toEqual(titulos('correos'));
   });
 
   it('Tutores sin campus sin tutor: se salta el aviso', async () => {
