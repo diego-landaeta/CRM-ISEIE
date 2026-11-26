@@ -14,6 +14,8 @@ import { BOARD_COLORS, boardColor } from '../lib/taskUi';
 import type { Assignee, TaskArea, TaskColumn, TaskExternalProject } from '../types';
 import { EquiposConfig } from '../components/EquiposConfig';
 import { GithubConfig } from '../components/GithubConfig';
+// El recorrido guiado de la pantalla (#941, tanda J).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type Pestana = 'columnas' | 'areas' | 'proyectos' | 'equipos' | 'github';
 
@@ -54,14 +56,21 @@ export default function TaskBoardConfigPage() {
   }
 
   return (
-    <div className="space-y-4">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda J). */
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Configurar tablero"
         subtitle="Columnas, áreas y proyectos propios del Equipo de Desarrollo"
         breadcrumbs={VOLVER}
-        actions={<Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')}>Volver al tablero</Button>}
+        actions={(
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="configurar-tablero" />
+            <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')} data-recorrido="configurar-volver">Volver al tablero</Button>
+          </div>
+        )}
       />
-      <div role="tablist" aria-label="Qué configurar" className="inline-flex bg-muted p-0.5 rounded-md text-sm">
+      {/* En el móvil, con las cinco pestañas, la fila se salía de la pantalla: ahora se parte (#941, tanda J). */}
+      <div role="tablist" aria-label="Qué configurar" data-recorrido="configurar-pestanas" className="inline-flex flex-wrap max-w-full bg-muted p-0.5 rounded-md text-sm">
         {([['columnas', 'Columnas'], ['areas', 'Áreas'], ['proyectos', 'Proyectos propios'],
           ...(can('tasks.manage_teams') ? [['equipos', 'Equipos'] as const] : []),
           // CRM-ISEIE#435: el tablero, al día con GitHub. Solo el superadmin (tasks.github).
@@ -209,14 +218,14 @@ function Columnas() {
         Las 4 fijas no se archivan: «En revisión» es donde el programador deja lo suyo para que lo cierre su supervisor y «Hecha» la que cierra.
         Una columna con tareas tampoco: primero hay que moverlas.
       </p>
-      <form onSubmit={crear} className="bg-card border border-border rounded-lg p-3 flex flex-wrap items-center gap-2">
+      <form onSubmit={crear} data-recorrido="configurar-nueva" className="bg-card border border-border rounded-lg p-3 flex flex-wrap items-center gap-2">
         <input value={nombre} onChange={(e) => setNombre(e.target.value)} maxLength={100} placeholder="Nueva columna, p. ej. «Bloqueada»"
           aria-label="Nombre de la columna" className={`${inputClass} flex-1 min-w-[12rem]`} />
         <Select<string> value={color} onChange={setColor} options={COLORES} ariaLabel="Color" size="sm" className="w-32" />
         <Button type="submit" size="sm" className="h-9" disabled={!claveDe(nombre)}><Plus size={14} className="mr-1" /> Añadir</Button>
       </form>
       <Estado cargando={cargando} error={error} vacio={items.length === 0} onRetry={recargar}>
-        <ul className="bg-card border border-border rounded-lg divide-y divide-border">
+        <ul data-recorrido="configurar-lista" className="bg-card border border-border rounded-lg divide-y divide-border">
           {activas.map((c, i) => (
             <li key={c.id} className="flex flex-wrap items-center gap-2 px-3 py-2">
               {editando === c.id ? (

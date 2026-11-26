@@ -31,6 +31,8 @@ import TasaDeCierre from '@/modules/reports/components/TasaDeCierre';
 import DondePonerElDinero from '@/modules/reports/components/DondePonerElDinero';
 import PaisesDeEntrada from '@/modules/reports/components/PaisesDeEntrada';
 import InformeMensual from '@/modules/reports/components/InformeMensual';
+// El recorrido guiado de la pantalla (#619, tanda J; gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Apostillas de La Haya (gemela de CRM#1130): cuántas, cuánto dinero, por estado, campus y mes.
 import CifrasApostillas from '@/modules/apostillas/components/CifrasApostillas';
 
@@ -473,7 +475,9 @@ function PantallaDeReportes() {
   }
 
   return (
-    <div className="space-y-6">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda J): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-6 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <header className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Reportes</h1>
@@ -483,6 +487,8 @@ function PantallaDeReportes() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
+          <VerRecorrido id="reportes" />
+          <div className="flex items-center gap-2 flex-wrap" data-recorrido="reportes-periodo">
           <div className="inline-flex items-center gap-1 flex-wrap" role="group" aria-label="Periodos rápidos">
             {ATAJOS.map((a) => (
               <button
@@ -518,6 +524,8 @@ function PantallaDeReportes() {
             className="h-9 px-2 rounded-md bg-card border border-border text-sm"
             aria-label="Hasta"
           />
+          </div>
+          <span className="flex items-center gap-2 flex-wrap" data-recorrido="reportes-exportar">
           <button
             type="button"
             onClick={descargarPanel}
@@ -538,6 +546,7 @@ function PantallaDeReportes() {
             <Download size={14} weight="bold" />
             {bajandoPdf ? 'Generando…' : 'Descargar PDF'}
           </button>
+          </span>
         </div>
       </header>
 
@@ -558,17 +567,22 @@ function PantallaDeReportes() {
       {/* Actividad por comercial (#203, parte B): arriba del todo, «es lo
           primero que se mira por la mañana». Con sus propios atajos (Ayer por
           defecto), aparte del periodo del resto del informe. */}
-      <ActividadPorComercial ambito={ambitoComoObjeto({ activeProject })} />
+      {/* Las envolturas con `data-recorrido` (#619, tanda J) se esconden si su panel no pinta nada. */}
+      <div data-recorrido="reportes-actividad" className="empty:hidden">
+        <ActividadPorComercial ambito={ambitoComoObjeto({ activeProject })} />
+      </div>
 
       {/* La tasa de cierre (#39), con su «¿de dónde sale?» y su baremo. */}
-      <TasaDeCierre activeProject={activeProject} from={rango.from} to={rango.to} />
+      <div data-recorrido="reportes-cierre" className="empty:hidden">
+        <TasaDeCierre activeProject={activeProject} from={rango.from} to={rango.to} />
+      </div>
 
       {/* Seguimiento y tiempos: el mismo bloque que el CRM hermano. */}
       <PanelSeguimiento projectId={activeProject?.id} from={rango.from} to={rango.to}
         onDatos={setPanelSeguimiento} />
 
       {/* Hero — Resumen del periodo cableado a /leads/dashboard-summary */}
-      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+      <div className="rounded-2xl border border-border bg-card p-5 sm:p-6" data-recorrido="reportes-cifras">
         <div className="flex items-start justify-between mb-4">
           <div>
             <h2 className="font-semibold tracking-tight">Resumen del periodo</h2>
@@ -645,7 +659,9 @@ function PantallaDeReportes() {
             <CifrasApostillas conTitulo from={rango.from} to={rango.to} ambito={ambitoComoObjeto({ activeProject })} />
           )}
 
-          <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
+          <div data-recorrido="reportes-descargas" className="empty:hidden">
+            <ReportsDownloadSection projectId={activeProject?.id} projectName={activeProject?.nombre} from={rango.from} to={rango.to} />
+          </div>
 
           {/* El informe del mes por equipo y comercial, y el ZIP de facturas para la gestoría (#772). */}
           <InformeMensual issuerId={null} />

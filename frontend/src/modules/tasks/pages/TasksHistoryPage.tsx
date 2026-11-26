@@ -17,6 +17,8 @@ import {
 import { alternarPersona, ordenarFichas } from '../lib/porIntegrante';
 import type { Assignee, FichaDeIntegrante, HistorialTarea, Team, TipoEquipo } from '../types';
 import { opcionesDeTipo } from '../lib/tiposDeEquipo';
+// El recorrido guiado de la pantalla (#941, tanda J).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
  * «HISTORIAL DE TAREAS» (CRM-ISEIE#419, Diego y Carlos, 10/11/2026). Sustituye a «Por
@@ -158,24 +160,29 @@ export default function TasksHistoryPage() {
   const totalPaginas = paginacion?.totalPages ?? 1;
 
   return (
-    <div className="space-y-4">
+    /* El margen de scroll de lo que señala el recorrido (#941, tanda J): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Historial de tareas"
         subtitle="Lo hecho: quién lo hizo, quién lo cerró y cuándo"
         actions={(
           <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="historial-tareas" listo={!cargando} />
+            <div className="flex items-center gap-2" data-recorrido="historial-volver">
             <Button variant="outline" size="sm" className="h-9" onClick={() => navigate('/tareas')} aria-label="Volver al tablero">
               <ArrowLeft size={15} className="sm:mr-1.5" /> <span className="hidden sm:inline">Volver al tablero</span>
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9" onClick={cargar} aria-label="Recargar">
               <ArrowClockwise size={16} />
             </Button>
+            </div>
           </div>
         )}
       />
 
       <div className="bg-card border border-border rounded-lg p-3 space-y-2.5">
-        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros del historial">
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtros del historial" data-recorrido="historial-filtros">
           <div className="relative flex-1 min-w-[11rem]">
             <MagnifyingGlass size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar en título o descripción…"
@@ -204,7 +211,7 @@ export default function TasksHistoryPage() {
               ariaLabel="Equipo" size="sm" className="w-44"
             />
           )}
-          <div className="flex flex-wrap items-center gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5" data-recorrido="historial-periodo">
             <div role="tablist" aria-label="Periodo" className="inline-flex bg-muted p-0.5 rounded-md text-xs">
               {PERIODOS.map((p) => (
                 <button key={p.value} type="button" role="tab" aria-selected={tipoPeriodo === p.value}
@@ -234,7 +241,7 @@ export default function TasksHistoryPage() {
       </div>
 
       {!error && porPersona.length > 0 && (
-        <section aria-label="Por integrante" className="space-y-1.5">
+        <section aria-label="Por integrante" className="space-y-1.5" data-recorrido="historial-integrantes">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Por integrante</h2>
           <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1" data-testid="fichas-por-integrante">
             {fichas.map((f) => {
@@ -278,7 +285,7 @@ export default function TasksHistoryPage() {
           <p className="text-sm text-muted-foreground">Cuando alguien pase una tarea a «Hecha», saldrá aquí.</p>
         </div>
       ) : (
-        <div className="bg-card border border-border rounded-lg overflow-hidden">
+        <div className="bg-card border border-border rounded-lg overflow-hidden" data-recorrido="historial-lista">
           <ul className="divide-y divide-border" data-testid="historial-tareas">
             {filas.map((f) => (
               <li key={f.id} className="p-4 flex flex-col lg:flex-row lg:items-center gap-2 lg:gap-4">
