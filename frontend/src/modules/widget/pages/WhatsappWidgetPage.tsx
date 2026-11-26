@@ -9,6 +9,8 @@ import { toast } from '@/shared/hooks/useToast';
 import { construirSnippet, IDIOMAS_WIDGET, type IdiomaWidget } from '../lib/snippet';
 import { POR_DEFECTO_WIDGET } from '../lib/porDefecto';
 import PulsacionesDelBoton from '../components/PulsacionesDelBoton';
+// El recorrido guiado de la pantalla (#619, tanda H).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 type OtroIdioma = Exclude<IdiomaWidget, 'es'>;
 
@@ -78,15 +80,20 @@ export default function WhatsappWidgetPage() {
 
   if (!pid) {
     return (
-      <div className="space-y-5 pb-8 max-w-4xl">
+      /* El margen de scroll de lo que señala el recorrido (#619, tanda H): que la
+         barra fija de arriba no tape el principio de lo señalado. */
+      <div className="space-y-5 pb-8 max-w-4xl [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
         <PageHeader
           title={(<span className="flex items-center gap-2"><WhatsappLogo size={22} weight="fill" className="text-green-600" /> Widget WhatsApp</span>) as unknown as string}
           subtitle={activeIssuerId ? `Los campus de ${activeIssuer?.nombre || 'la empresa'}, sumados.` : 'Todos los campus, sumados.'}
+          actions={<VerRecorrido id="widget-web" />}
         />
-        <PulsacionesDelBoton
-          ambito={{ issuerId: activeIssuerId ? Number(activeIssuerId) : null }}
-          titulo={activeIssuerId ? activeIssuer?.nombre || 'la empresa' : 'todos los campus'}
-        />
+        <div data-recorrido="widget-pulsaciones">
+          <PulsacionesDelBoton
+            ambito={{ issuerId: activeIssuerId ? Number(activeIssuerId) : null }}
+            titulo={activeIssuerId ? activeIssuer?.nombre || 'la empresa' : 'todos los campus'}
+          />
+        </div>
         <p className="text-xs text-muted-foreground">
           El botón (gestoras, textos y el código para la web) se configura en cada campus: elígelo en la cabecera.
         </p>
@@ -107,10 +114,12 @@ export default function WhatsappWidgetPage() {
   }
 
   return (
-    <div className="space-y-5 pb-8 max-w-4xl">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda H). */
+    <div className="space-y-5 pb-8 max-w-4xl [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title={(<span className="flex items-center gap-2"><WhatsappLogo size={22} weight="fill" className="text-green-600" /> Widget WhatsApp</span>) as unknown as string}
         subtitle={`Botón flotante rotativo para ${activeProject?.nombre}. Pegá el snippet en tu sitio web.`}
+        actions={<VerRecorrido id="widget-web" listo={!loading} />}
       />
 
       <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900 rounded-md p-3 flex items-start gap-2 text-xs">
@@ -124,10 +133,12 @@ export default function WhatsappWidgetPage() {
       </div>
 
       {/* Cuántos pulsan y cuántos pasan a la conversación (29/10). */}
-      <PulsacionesDelBoton ambito={{ projectId: pid }} />
+      <div data-recorrido="widget-pulsaciones">
+        <PulsacionesDelBoton ambito={{ projectId: pid }} />
+      </div>
 
       {/* Embed snippet */}
-      <div className="bg-card border border-border rounded-lg p-5 space-y-3">
+      <div data-recorrido="widget-codigo" className="bg-card border border-border rounded-lg p-5 space-y-3">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold text-sm">Código para tu sitio web</h3>
           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
@@ -169,7 +180,7 @@ export default function WhatsappWidgetPage() {
       </div>
 
       {/* Config */}
-      <div className="bg-card border border-border rounded-lg p-5 space-y-4">
+      <div data-recorrido="widget-configuracion" className="bg-card border border-border rounded-lg p-5 space-y-4">
         <h3 className="font-semibold text-sm">Configuración del widget</h3>
 
         <label className="flex items-center gap-2 text-sm">
@@ -277,7 +288,7 @@ export default function WhatsappWidgetPage() {
       </div>
 
       {/* Gestoras */}
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div data-recorrido="widget-gestoras" className="bg-card border border-border rounded-lg overflow-hidden">
         <div className="p-4 border-b border-border">
           <h3 className="font-semibold text-sm">Gestoras de {config.project_nombre}</h3>
           <p className="text-xs text-muted-foreground mt-0.5">
@@ -289,61 +300,64 @@ export default function WhatsappWidgetPage() {
             Este proyecto no tiene usuarios asignados todavía.
           </div>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-muted/50 border-b">
-              <tr>
-                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora (interno)</th>
-                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">WhatsApp (sin +)</th>
-                <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre visible en el botón ⭐</th>
-                <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En widget (todos proyectos)</th>
-                <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">Excluir solo aquí</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map(u => {
-                const excluded = config.excluded_user_ids.includes(u.id);
-                const inRotation = u.whatsapp_widget_active && !excluded && !!u.whatsapp_phone;
-                return (
-                  <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/30 ${inRotation ? 'bg-emerald-50/50 dark:bg-emerald-950/10' : ''}`}>
-                    <td className="px-3 py-2">
-                      <div className="font-medium flex items-center gap-1.5">
-                        {u.nombre}
-                        {inRotation && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">EN WIDGET</span>}
-                      </div>
-                      <div className="text-[11px] text-muted-foreground">{u.role}</div>
-                    </td>
-                    <td className="px-3 py-2">
-                      <input value={u.whatsapp_phone || ''}
-                        onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_phone: e.target.value } : x))}
-                        onBlur={e => updateUser(u, { whatsapp_phone: e.target.value || null })}
-                        placeholder="34612345678"
-                        className="h-8 px-2 rounded border border-border bg-background text-xs font-mono w-36" />
-                    </td>
-                    <td className="px-3 py-2">
-                      <input value={u.whatsapp_display_name || ''}
-                        onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_display_name: e.target.value } : x))}
-                        onBlur={e => updateUser(u, { whatsapp_display_name: e.target.value || null })}
-                        placeholder="Ej: Diana"
-                        className="h-8 px-2 rounded border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-xs w-32 font-medium" />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <input type="checkbox" checked={u.whatsapp_widget_active}
-                        onChange={e => updateUser(u, { whatsapp_widget_active: e.target.checked })} />
-                    </td>
-                    <td className="px-3 py-2 text-center">
-                      <input type="checkbox" checked={excluded}
-                        onChange={e => {
-                          const next = e.target.checked
-                            ? [...config.excluded_user_ids, u.id]
-                            : config.excluded_user_ids.filter(id => id !== u.id);
-                          setConfig({ ...config, excluded_user_ids: next });
-                        }} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          /* En el móvil la tabla es más ancha que la tarjeta: se desliza, no se corta (#619, tanda H). */
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/50 border-b">
+                <tr>
+                  <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Gestora (interno)</th>
+                  <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">WhatsApp (sin +)</th>
+                  <th className="px-3 py-2 text-left text-[11px] text-muted-foreground">Nombre visible en el botón ⭐</th>
+                  <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">En widget (todos proyectos)</th>
+                  <th className="px-3 py-2 text-center text-[11px] text-muted-foreground">Excluir solo aquí</th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map(u => {
+                  const excluded = config.excluded_user_ids.includes(u.id);
+                  const inRotation = u.whatsapp_widget_active && !excluded && !!u.whatsapp_phone;
+                  return (
+                    <tr key={u.id} className={`border-b last:border-0 hover:bg-muted/30 ${inRotation ? 'bg-emerald-50/50 dark:bg-emerald-950/10' : ''}`}>
+                      <td className="px-3 py-2">
+                        <div className="font-medium flex items-center gap-1.5">
+                          {u.nombre}
+                          {inRotation && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700">EN WIDGET</span>}
+                        </div>
+                        <div className="text-[11px] text-muted-foreground">{u.role}</div>
+                      </td>
+                      <td className="px-3 py-2">
+                        <input value={u.whatsapp_phone || ''}
+                          onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_phone: e.target.value } : x))}
+                          onBlur={e => updateUser(u, { whatsapp_phone: e.target.value || null })}
+                          placeholder="34612345678"
+                          className="h-8 px-2 rounded border border-border bg-background text-xs font-mono w-36" />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input value={u.whatsapp_display_name || ''}
+                          onChange={e => setUsers(users.map(x => x.id === u.id ? { ...x, whatsapp_display_name: e.target.value } : x))}
+                          onBlur={e => updateUser(u, { whatsapp_display_name: e.target.value || null })}
+                          placeholder="Ej: Diana"
+                          className="h-8 px-2 rounded border border-amber-300 bg-amber-50/50 dark:bg-amber-950/10 text-xs w-32 font-medium" />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" checked={u.whatsapp_widget_active}
+                          onChange={e => updateUser(u, { whatsapp_widget_active: e.target.checked })} />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <input type="checkbox" checked={excluded}
+                          onChange={e => {
+                            const next = e.target.checked
+                              ? [...config.excluded_user_ids, u.id]
+                              : config.excluded_user_ids.filter(id => id !== u.id);
+                            setConfig({ ...config, excluded_user_ids: next });
+                          }} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 

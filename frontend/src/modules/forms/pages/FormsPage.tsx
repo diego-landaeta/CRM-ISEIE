@@ -10,6 +10,8 @@ import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import Select from '@/shared/components/ui/Select';
 import { Globe, Plus, Trash, Copy, X, FloppyDisk, Code, Power } from '@phosphor-icons/react';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#619, tanda H).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const ConfirmDialog = lazy(() => import('@/shared/components/ui/ConfirmDialog'));
 
@@ -107,18 +109,24 @@ export default function FormsPage() {
   }
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda H): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Forms"
         subtitle={`${forms.length} en ${activeProject?.nombre || 'este proyecto'}`}
         actions={
-          <button
-            onClick={() => setEditing({ nombre: '', kind: 'form', template_kind: 'contacto_basico', config: { color: '#4361ee', button_label: 'Enviar', success_msg: 'Gracias!' }, schema: {}, field_mapping: {}, active: true })}
-            aria-label="Nuevo form"
-            className="inline-flex items-center gap-1.5 h-9 px-3 sm:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
-          >
-            <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nuevo form</span>
-          </button>
+          <div className="flex flex-wrap items-center gap-2">
+            <VerRecorrido id="formularios" listo={!loading} />
+            <button
+              data-recorrido="forms-nuevo"
+              onClick={() => setEditing({ nombre: '', kind: 'form', template_kind: 'contacto_basico', config: { color: '#4361ee', button_label: 'Enviar', success_msg: 'Gracias!' }, schema: {}, field_mapping: {}, active: true })}
+              aria-label="Nuevo form"
+              className="inline-flex items-center gap-1.5 h-9 px-3 sm:px-4 rounded-lg bg-primary text-primary-foreground text-sm font-semibold hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
+              <Plus size={14} weight="bold" /> <span className="hidden sm:inline">Nuevo form</span>
+            </button>
+          </div>
         }
       />
 
@@ -126,7 +134,7 @@ export default function FormsPage() {
         forms.length === 0 ? (
           <EmptyState icon={Globe} title="Sin forms" description="Crea uno y embebelo en tu landing." />
         ) : (
-          <div className="grid gap-3">
+          <div data-recorrido="forms-lista" className="grid gap-3">
             {forms.map(f => (
               <div key={f.id} className={`bg-card border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 ${!f.active ? 'opacity-60 border-border' : 'border-border'}`}>
                 <div className="flex-1 min-w-0">
@@ -138,7 +146,7 @@ export default function FormsPage() {
                     {KINDS.find(k => k.v === f.template_kind)?.label || f.template_kind} · {f.submissions_count || 0} submissions · <code>{f.embed_id}</code>
                   </p>
                 </div>
-                <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                <div data-recorrido="forms-acciones" className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                   <button
                     onClick={() => toggleActive(f)}
                     className={`flex items-center gap-1 px-3 py-1.5 rounded text-xs font-bold ${f.active ? 'bg-success-soft text-success-soft-foreground' : 'bg-muted text-muted-foreground'}`}
