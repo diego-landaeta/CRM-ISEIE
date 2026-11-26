@@ -18,6 +18,8 @@ import { useCampusDeLaPantalla } from '@/shared/hooks/useCampusDeLaPantalla';
 import ElegirCampus from '@/shared/components/ui/ElegirCampus';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+// El recorrido guiado de la pantalla (#619, tanda G).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 const RUTA_FICHA = '/leads';
 
@@ -146,11 +148,25 @@ export default function DuplicatesPage() {
     } finally { setFusionando(null); }
   }
 
+  // El título con «Ver recorrido», y el campus con su anclaje solo cuando se
+  // pinta (con un campus arriba no sale, y el recorrido se salta ese paso).
+  const cabecera = (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
+      <VerRecorrido id="buscar-duplicados" listo={!loading || !projectId} />
+    </div>
+  );
+  const elegirCampus = !campus.fijo && campus.opciones.length > 0 && (
+    <div data-recorrido="duplicados-campus">
+      <ElegirCampus campus={campus} que="sus duplicados" />
+    </div>
+  );
+
   if (!projectId) {
     return (
-      <div className="space-y-4 pb-8">
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
-        <ElegirCampus campus={campus} que="sus duplicados" />
+      <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
+        {cabecera}
+        {elegirCampus}
         <div className="bg-warning-soft border border-warning/30 rounded-lg p-6 text-center text-sm text-warning-soft-foreground">
           Elige el campus para repasar sus duplicados.
         </div>
@@ -162,9 +178,11 @@ export default function DuplicatesPage() {
   const deTresOMas = grupos.filter((g) => g.total > 2).length;
 
   return (
-    <div className="space-y-5 pb-8">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda G): que la
+       barra fija de arriba no tape el principio de lo señalado. */
+    <div className="space-y-5 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Duplicados</h1>
+        {cabecera}
         <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
           Fichas de <strong>{campus.nombre}</strong> que comparten correo, teléfono o usuario de
           WhatsApp con otra. Elige cuál se queda y fusiona: el historial completo —interacciones,
@@ -173,9 +191,9 @@ export default function DuplicatesPage() {
         </p>
       </div>
 
-      <ElegirCampus campus={campus} que="sus duplicados" />
+      {elegirCampus}
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div data-recorrido="duplicados-cifras" className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { n: grupos.length, t: 'grupos', d: 'personas con más de una ficha' },
           { n: grupos.reduce((s, g) => s + g.total, 0), t: 'fichas', d: 'implicadas en total' },
@@ -190,7 +208,7 @@ export default function DuplicatesPage() {
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
+      <div data-recorrido="duplicados-filtros" className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 min-w-[220px]">
           <MagnifyingGlass size={15} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
           <input
@@ -230,7 +248,7 @@ export default function DuplicatesPage() {
             const ventasQueSeCierran = g.leads.filter((l) => cierran.includes(l.id) && Number(l.n_conversiones) > 0);
 
             return (
-              <div key={g.key} className="bg-card border border-border rounded-lg overflow-hidden">
+              <div key={g.key} data-recorrido="duplicados-grupo" className="bg-card border border-border rounded-lg overflow-hidden">
                 <div className="px-4 py-2.5 border-b border-border bg-muted/30 flex items-center gap-2 flex-wrap">
                   <span className="text-sm font-bold">{g.total} fichas</span>
                   {g.motivos.map((m) => {
@@ -335,7 +353,7 @@ export default function DuplicatesPage() {
                   </div>
                 )}
 
-                <div className="px-4 py-3 border-t border-border bg-muted/20 flex items-center gap-2 flex-wrap">
+                <div data-recorrido="duplicados-fusionar" className="px-4 py-3 border-t border-border bg-muted/20 flex items-center gap-2 flex-wrap">
                   <input
                     value={comentario[g.key] || ''}
                     onChange={(e) => setComentario((p) => ({ ...p, [g.key]: e.target.value }))}
