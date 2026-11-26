@@ -292,10 +292,12 @@ export default function ComisionesTutoresPage() {
               const desplegado = abierto === r.tutor_id;
               return (
                 <div key={`${r.periodo}-${r.tutor_id}`}>
-                  {/* La primera fila: el paso «Marcar pagado» del recorrido (#619). */}
+                  {/* La primera fila: el paso «Pagar y avisar» del recorrido (#619, #188). */}
                   <div data-recorrido={i === 0 ? 'comtutores-fila' : undefined} className="px-4 py-3 flex flex-wrap items-center gap-3">
+                    {/* Con un ancho minimo, como en el 360: con `min-w-0` el nombre se
+                        encogia a «L…» en cuanto la fila llevaba el boton de avisar. */}
                     <button type="button" onClick={() => setAbierto(desplegado ? null : r.tutor_id)}
-                      className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      className="flex items-center gap-2 min-w-[13rem] flex-1 text-left">
                       <CaretRight size={14} weight="bold"
                         className={`shrink-0 text-muted-foreground transition-transform ${desplegado ? 'rotate-90' : ''}`} />
                       <span className="min-w-0">
