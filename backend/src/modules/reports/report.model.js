@@ -1,4 +1,5 @@
 import { query } from '../../shared/config/db.js';
+import { yCompartidas } from '../conversions/compartidas.js';
 // El país de entrada de un prospecto (#221).
 import { sqlPaisDelLead, sqlPaisDeLaVenta } from '../leads/pais.js';
 // Lo cobrado de una venta es la suma de sus pagos (#692), no `importe_pagado`.
@@ -1565,7 +1566,7 @@ const PAIS_TEL = `CASE
     ELSE '— sin prefijo — revisar'
   END`;
 
-export async function paisesMasVendidos({ projectId, projectIds, from, to, asesoraId, paisEntrada }) {
+export async function paisesMasVendidos({ projectId, projectIds, from, to, asesoraId, paisEntrada, compartidas = null }) {
   // Dos fechas distintas otra vez: las ventas por fecha de venta y los leads por
   // fecha de entrada. Se juntan por pais con FULL OUTER JOIN porque hay paises
   // que mandan leads y no compran, y al reves (clientes cargados sin lead).
@@ -1582,6 +1583,8 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
          LEFT JOIN leads l ON l.id = c.lead_id
          ${fv.where}
           AND NOT c.es_mensualidad
+          -- Solo compartidas o solo enteras (#186): las ventas; los leads, todos.
+          ${yCompartidas(compartidas, 'c')}
      ),
 
      ventas AS (

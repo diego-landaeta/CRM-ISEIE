@@ -26,6 +26,8 @@ interface Props {
   responsableId?: number | null;
   /** País de entrada del prospecto de cada venta (#221): código ISO o sin_pais. */
   paisEntrada?: string | null;
+  // Todas · Solo compartidas · Solo enteras (#186): 'solo', 'enteras' o nada.
+  compartidas?: 'solo' | 'enteras' | null;
   className?: string;
   title?: string;
   /** Rango que manda desde la pantalla. Si viene, la tarjeta no pinta su
@@ -90,7 +92,7 @@ function fmtNum(n: number) {
 /** Cuántos productos se ven antes de «Ver todos» (gemela de CRM#884). */
 const TOP = 10;
 
-export default function CursosVendidosCard({ projectId, issuerId = null, responsableId = null, paisEntrada = null, className = '', title, from: fromProp = null, to: toProp = null, medida = 'ventas' }: Props) {
+export default function CursosVendidosCard({ projectId, issuerId = null, responsableId = null, paisEntrada = null, compartidas = null, className = '', title, from: fromProp = null, to: toProp = null, medida = 'ventas' }: Props) {
   const mandaFuera = !!(fromProp && toProp);
   // Arranca en el mes: al entrar interesa como va el mes, no si se ha vendido
   // algo en las ultimas horas. Con 'hoy' la tarjeta salia en blanco casi
@@ -128,6 +130,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
     if (issuerId) params.issuerId = issuerId;
     if (responsableId) params.responsableId = responsableId;
     if (paisEntrada) params.paisEntrada = paisEntrada;
+    if (compartidas) params.compartidas = compartidas;
     const peticion = esFacturado
       // LO FACTURADO (#224): la misma consulta que el bloque del equipo.
       ? client.get('/ventas/facturado', { params }).then((r: any) => {
@@ -155,7 +158,7 @@ export default function CursosVendidosCard({ projectId, issuerId = null, respons
       .catch(() => { if (!cancelled) limpiar(); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, issuerId, responsableId, paisEntrada, from, to, customIncompleto, esFacturado]);
+  }, [projectId, issuerId, responsableId, paisEntrada, compartidas, from, to, customIncompleto, esFacturado]);
 
   // En ISEIE todo lo que se vende son formaciones: se llaman cursos.
   const etiqueta = { singular: 'Curso', plural: 'Cursos' };
