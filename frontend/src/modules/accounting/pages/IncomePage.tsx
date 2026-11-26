@@ -3,7 +3,7 @@ import RangoRapido, { rangoDe } from '@/shared/components/ui/RangoRapido';
 import { useNavigate } from 'react-router-dom';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
-import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
@@ -80,8 +80,10 @@ function Tipo({ tipo, compartida }: { tipo: string; compartida?: boolean }) {
 export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas las ventas registradas' }) {
   const navigate = useNavigate();
   const { activeProject, activeIssuer = null, switchProject = (_id: number) => {} } = useProjectContext() as any;
-  const { user } = useAuth();
-  const isAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+  // La lista y el filtro de gestoras y el «Equipo de ventas»: por permiso y alcance
+  // (25/11/2026), no por rol: soporte tiene Ingresos y no le salían.
+  const { can: puedeEquipo, veGestoras } = usePermission();
+  const isAdmin = veGestoras && puedeEquipo('ventas.view_equipo');
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);

@@ -14,12 +14,18 @@ import RepartoVentaCard from '../components/RepartoVentaCard';
 import FechaInicioEditable from '@/modules/conversions/components/FechaInicioEditable';
 import usePermission from '@/shared/hooks/usePermission';
 import EnlazarStripeCard from '../components/EnlazarStripeCard';
+import BajaAlumnoCard from '../components/BajaAlumnoCard';
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 // Links de pago (#407, gemela de CRM#680): solo en pruebas; en producción la tarjeta se esconde sola.
 import LinksDePagoCard from '@/modules/links-pago/components/LinksDePagoCard';
 import BotonCrearLink from '@/modules/links-pago/components/BotonCrearLink';
 import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
 import CobroAutomaticoVenta from '@/modules/links-pago/components/CobroAutomaticoCuotas';
+// «Mandar link de pago» de una cuota que Stripe ya no cobrará (CRM#1103).
+import LinkDeCuotaCancelada from '@/modules/links-pago/components/LinkDeCuotaCancelada';
+// «Enviar factura automáticamente: Sí / No» y el correo (#764, 24/11).
+import FacturaAutomaticaVentaCard from '@/modules/factura-automatica/components/FacturaAutomaticaVentaCard';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, ArrowLeft, User, Calendar,
   WarningCircle, CreditCard, ClockCounterClockwise,
@@ -43,11 +49,15 @@ type Cuota = {
   fecha_vencimiento: string; fecha_cobro: string | null; importe_cobrado: string | number | null;
   metodo: string | null; pagado_por_stripe?: boolean; notas?: string | null;
   factura_id?: number | null; factura_codigo?: string | null; factura_estado?: string | null;
+  /** CRM#1103: Stripe canceló (o dio por perdido) su cobro automático. Sigue pendiente. */
+  cobro_auto_cancelado_el?: string | null; cobro_auto_cancelado_motivo?: string | null;
 };
 type Pago = {
   id: number; importe: string | number; fecha: string; notas: string | null; metodo: string | null;
   cuota_numero: number | string | null; pagado_por_stripe?: boolean;
   factura_id?: number | null; factura_codigo?: string | null; factura_estado?: string | null;
+  /** «No se envía automáticamente: la envía la gestora» (#764, 24/11). */
+  factura_envio_nota?: string | null;
 };
 type Venta = {
   id: number; lead_id: number; producto_contratado: string;
@@ -115,6 +125,8 @@ export default function SaleDetailPage() {
   const pendiente = Number(venta.importe_pendiente || 0);
   const cuotasPend = cuotas.filter((c) => !c.fecha_cobro);
   const cuotasVenc = cuotasPend.filter((c) => new Date(c.fecha_vencimiento) < new Date());
+  // CRM#1103: las que Stripe ya no cobrará solas (siguen pendientes).
+  const cuotasCanceladas = cuotasPend.filter((c) => c.cobro_auto_cancelado_el);
   const deAnteriores = cuotas.filter((c) => (c.notas || '').toLowerCase().includes('facturacion anterior'));
   const cobradoDeMas = Number(venta.cobrado_de_mas || 0);
   const guardado = venta.importe_pagado_guardado;
@@ -226,6 +238,11 @@ export default function SaleDetailPage() {
 
         {/* Quien vendio, y si la venta esta repartida entre dos gestoras. */}
         <RepartoVentaCard conversionId={venta.id} />
+        <FacturaAutomaticaVentaCard conversionId={venta.id} />
+        {/* La baja o el desistimiento del alumno (25/11): no toca facturas, cobros ni Moodle. */}
+        <BajaAlumnoCard conversionId={venta.id} />
+        {/* La Apostilla de La Haya de la venta (gemela de CRM#1130): solo si la lleva. */}
+        <ApostillasBloque conversionId={venta.id} />
         {venta.project_id != null && (
           <LinksDePagoCard projectId={venta.project_id} leadId={venta.lead_id} conversionId={venta.id} conRecorrido />
         )}
@@ -233,6 +250,16 @@ export default function SaleDetailPage() {
 
         <div className="bg-card border border-border rounded-lg p-4 lg:col-span-2" data-recorrido="venta-cuotas">
           <h3 className="font-semibold mb-3">Plan de cuotas</h3>
+          {cuotasCanceladas.length > 0 && (
+            <p role="alert" className="mb-3 rounded-md bg-destructive-soft px-3 py-2 text-xs text-destructive-soft-foreground flex items-start gap-1.5">
+              <WarningCircle size={14} weight="fill" className="mt-0.5 flex-shrink-0" aria-hidden="true" />
+              <span>
+                Stripe ya no cobrará sola{cuotasCanceladas.length === 1 ? ' la cuota' : 's las cuotas'}{' '}
+                {cuotasCanceladas.map((c) => c.numero).join(', ')}: su cobro automático se canceló. Siguen pendientes
+                (si vencen sin cobrarse, son impago). Mándale un link de pago de cada una o habla con el alumno.
+              </span>
+            </p>
+          )}
           {cuotas.length === 0 ? (
             <EmptyState icon={Calendar} title="Sin plan de cuotas" description="Esta venta no está fraccionada." />
           ) : (
@@ -266,7 +293,21 @@ export default function SaleDetailPage() {
                               : vencida ? <Chip tone="bad">Vencida</Chip> : <Chip tone="warn">Pendiente</Chip>}
                             {c.pagado_por_stripe && <Chip tone="mute">Stripe</Chip>}
                             {anterior && <Chip tone="mute">Facturación anterior</Chip>}
+                            {!cobrada && c.cobro_auto_cancelado_el && (
+                              <span title={c.cobro_auto_cancelado_motivo || undefined}>
+                                <Chip tone="bad">Cobro automático cancelado</Chip>
+                              </span>
+                            )}
                           </div>
+                          {!cobrada && c.cobro_auto_cancelado_el && (
+                            <div className="mt-1 space-y-1">
+                              <p className="text-[11px] text-muted-foreground">
+                                Stripe, el {fecha(c.cobro_auto_cancelado_el)}
+                                {c.cobro_auto_cancelado_motivo ? `: ${c.cobro_auto_cancelado_motivo}` : ''}
+                              </p>
+                              <LinkDeCuotaCancelada conversionId={venta.id} cuotaId={c.id} nombre={venta.lead_nombre} />
+                            </div>
+                          )}
                         </td>
                         <td className="py-2">
                           {c.factura_codigo
@@ -318,6 +359,9 @@ export default function SaleDetailPage() {
                       {pg.factura_codigo
                         ? <span className="font-mono text-[11px]">{pg.factura_codigo}</span>
                         : <Chip tone="warn">Sin factura</Chip>}
+                      {pg.factura_envio_nota && (
+                        <span className="block text-[10px] text-warning-soft-foreground">{pg.factura_envio_nota}</span>
+                      )}
                     </td>
                     <td className="py-2 text-[11px] text-muted-foreground max-w-[240px] truncate" title={pg.notas || ''}>{pg.notas || '—'}</td>
                   </tr>

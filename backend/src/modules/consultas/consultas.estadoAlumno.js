@@ -215,6 +215,19 @@ export async function procesarEstadoAlumno(projectId, aviso) {
 }
 
 /**
+ * El título de la campana, sin género (QA del 25/11/2026: «María Alumna: suspendido»
+ * decía en masculino a todas). Lo que se suspende o se reactiva es la cuenta del campus
+ * o la matrícula de un curso: se dice eso, que concuerda siempre.
+ *   «María Alumna: cuenta suspendida en Moodle» · «…: matrícula reactivada en Moodle»
+ * Sin nombre, la frase sola: «Cuenta suspendida en Moodle».
+ */
+export function tituloDelCambio({ quien, suspendido, enCurso }) {
+  const que = `${enCurso ? 'matrícula' : 'cuenta'} ${suspendido ? 'suspendida' : 'reactivada'} en Moodle`;
+  const nombre = String(quien || '').trim();
+  return nombre ? `${nombre}: ${que}` : que.charAt(0).toUpperCase() + que.slice(1);
+}
+
+/**
  * La campana: a la gestora del alumno; sin ficha o sin gestora, a administración del
  * campus (sus admins y los super admin), que es quien puede mirar qué ha pasado.
  */
@@ -228,12 +241,12 @@ async function avisarDelCambio({ projectId, id, lead, alumno, curso, suspendido,
     if (!para.length) para = await administracionDelCampus(projectId);
     if (!para.length) return;
     const { rows: [campus] } = await query('SELECT nombre FROM projects WHERE id = $1', [projectId]);
-    const quien = lead?.nombre || alumno.nombre || 'Un alumno';
+    const quien = lead?.nombre || alumno.nombre || null;
     const donde = curso ? `${curso.nombre || `curso ${curso.id}`} · ${campus?.nombre || ''}` : (campus?.nombre || '');
     await notifyUsers({
       targetUserIds: para,
       type: suspendido ? TIPO_SUSPENDIDO : TIPO_REACTIVADO,
-      title: suspendido ? `${quien}: suspendido en Moodle` : `${quien}: reactivado en Moodle`,
+      title: tituloDelCambio({ quien, suspendido, enCurso: !!curso }),
       message: `${donde}${donde ? ' · ' : ''}${texto}${lead ? '' : ' · sin ficha en el CRM con su correo'}`,
       link_path: lead ? `/clients/${lead.id}` : null,
       metadata: { project_id: projectId, lead_id: lead?.id ?? null, estado_id: id, moodle_user_id: alumno.id },

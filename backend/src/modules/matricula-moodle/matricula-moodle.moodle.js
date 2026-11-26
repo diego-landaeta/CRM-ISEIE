@@ -18,9 +18,10 @@ import { conexionDelCampus } from '../tutores/tutor.campus.js';
  *        hecha parcial, con aviso de cuáles).
  *   { hecha: false, sinConexion: true }
  *        el campus no tiene el plugin conectado: como en la fase 1, «lista» y a mano.
- *   { hecha: false, definitivo: true, tipo: 'suspendido'|'rechazada', motivo }
+ *   { hecha: false, definitivo: true, tipo: 'suspendido'|'rechazada', ambito?, motivo }
  *        no se arregla reintentando (cuenta o matrícula suspendida, correo repetido,
  *        administrador, rol, correo o nombre malos, ningún curso se pudo): aviso ya.
+ *        En una suspensión, `ambito` dice qué: 'cuenta' o 'curso' (la matrícula).
  *   { hecha: false, lento: true, motivo }
  *        el campus no está preparado (sin la 1.12.0, token sin permiso o caducado):
  *        aviso una vez y se reintenta despacio, sin quemar los intentos en horas.
@@ -145,7 +146,7 @@ export async function matricularEnMoodle(fila, cursos, { llamarImpl = llamar, co
 
   if (r.estado === 'suspendido') {
     return {
-      hecha: false, definitivo: true, tipo: 'suspendido', moodleUserId,
+      hecha: false, definitivo: true, tipo: 'suspendido', ambito: 'cuenta', moodleUserId,
       motivo: `La cuenta del alumno está suspendida en Moodle${moodleUserId ? ` (id ${moodleUserId})` : ''}: no se reactiva sola. Revísala (¿impago?) y, si procede, reactívala y matricúlale a mano`,
     };
   }
@@ -155,7 +156,7 @@ export async function matricularEnMoodle(fila, cursos, { llamarImpl = llamar, co
   if (!bien.length) {
     const suspendida = fallidos.some((c) => esSuspension(c.mensaje));
     return {
-      hecha: false, definitivo: true, tipo: suspendida ? 'suspendido' : 'rechazada', moodleUserId,
+      hecha: false, definitivo: true, tipo: suspendida ? 'suspendido' : 'rechazada', ...(suspendida ? { ambito: 'curso' } : {}), moodleUserId,
       motivo: `No se ha podido matricular en ningún curso: ${fallidos.map((c) => `${nombreDelCurso(c)} (${c.mensaje || 'error'})`).join('; ')}`,
     };
   }

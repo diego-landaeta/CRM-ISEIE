@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envioFacturaSchema, datosFiscalesSchema } from '../factura-automatica/factura-automatica.validation.js';
 import { fechaInicioCurso } from '../conversions/conversion.validation.js';
 
 const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'fraccionado'];
@@ -42,6 +43,10 @@ export const createSaleSchema = z.object({
   // CREAR OTRA IGUALMENTE (CRM#898): el alumno ya tiene una venta de este
   // programa y quien registra dice que es otra compra. Queda apuntado quién.
   forzar: z.boolean().optional(),
+  // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764, 24/11).
+  envio_factura: envioFacturaSchema.optional(),
+  // Los datos fiscales de la persona (25/11): ver conversion.validation.js.
+  datos_fiscales: datosFiscalesSchema.partial().optional(),
   // Cuotas para pago fraccionado. Validado además en el service que sumen el total.
   installments: z.array(z.object({
     importe_previsto: z.number().positive('Importe de cuota debe ser > 0'),

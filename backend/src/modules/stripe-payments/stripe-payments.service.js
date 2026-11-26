@@ -69,7 +69,7 @@ export async function stripeGet(apiKey, path, params = {}) {
   return r.json();
 }
 
-function chargeToPayment(charge, projectId) {
+export function chargeToPayment(charge, projectId) {
   // Importe SIEMPRE en EUR: si el cargo entra en moneda extranjera, usamos el
   // importe liquidado por Stripe en EUR (balance_transaction.amount), no el
   // importe en la moneda del cargo. Así el CRM registra euros reales y no vuelve
@@ -1037,6 +1037,20 @@ export async function handleWebhookEvent(duenoId, event) {
         } catch (e) { logger.warn({ err: e.message, projectId, factura: obj.id }, 'cobro automático: no se pudo traer el cargo de la factura; lo traerá el sondeo'); }
       }
       return { processed: event.type, stripeId: obj.id };
+    }
+    case 'customer.subscription.deleted':
+    case 'customer.subscription.updated':
+    case 'subscription_schedule.canceled':
+    case 'subscription_schedule.aborted':
+    case 'invoice.voided':
+    case 'invoice.marked_uncollectible': {
+      // CRM#1103: Stripe canceló (o dio por perdido) el cobro de unas cuotas: el del
+      // cobro automático (309) o el de una venta a plazos (#747). Las cuotas siguen
+      // pendientes, marcadas, y se avisa una vez. Un aviso repetido no hace nada.
+      const { desdeElAviso } = await import('./cobro-cancelado.service.js');
+      const r = await desdeElAviso(projectId, event);
+      if (r?.skipped) return { skipped: r.skipped, stripeId: obj.id };
+      return { processed: event.type, stripeId: obj.id, ...(r?.repetido ? { repetido: true } : {}) };
     }
     default:
       return { skipped: event.type };

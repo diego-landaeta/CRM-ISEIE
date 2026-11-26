@@ -25,6 +25,8 @@ import {
 import ChannelBadge from '@/shared/components/ui/ChannelBadge';
 import { useAvanceMoodle } from '../hooks/useAvanceMoodle';
 import AvanceMoodleBloque from '../components/AvanceMoodle';
+// Apostilla de La Haya (gemela de CRM#1130): el bloque sale solo si el cliente tiene alguna.
+import ApostillasBloque from '@/modules/apostillas/components/ApostillasBloque';
 import { esRolDeGestora } from '@/shared/lib/roles';
 import { useSuspensionesMoodle } from '../hooks/useSuspensionesMoodle';
 import SuspensionesMoodleBloque, { EtiquetaSuspendido } from '../components/SuspensionesMoodle';
@@ -213,8 +215,10 @@ export default function ClientDetailPage() {
   const totalPendiente = totalFacturado - totalPagado;
   const interacciones = lead.interactions || [];
 
+  // pb-24: el botón flotante de atajos (el rayo, abajo a la derecha) no tapa lo último
+  // de la ficha, sobre todo en el móvil (QA del 25/11/2026). Como en Diplomas y Emisiones.
   return (
-    <div className="space-y-5 pb-8 max-w-[1100px]">
+    <div className="space-y-5 pb-24 max-w-[1100px]">
 
       {/* Breadcrumb + back */}
       <div className="flex items-center gap-2 text-sm">
@@ -230,15 +234,18 @@ export default function ClientDetailPage() {
         <span className="text-foreground font-medium truncate">{lead.nombre}</span>
       </div>
 
-      {/* Header card */}
-      <div className="bg-card border border-border rounded-xl p-4 flex flex-col sm:flex-row sm:items-center gap-4">
+      {/* Header card. flex-wrap: los datos piden al menos 32rem y, si con los botones
+          no caben en una fila, los botones bajan a la suya en vez de estrujar el nombre
+          (QA del 25/11/2026: a 1280 px el nombre, la etiqueta y «Cliente desde» se
+          partían en varias líneas). En el móvil, avatar, datos y botones, uno debajo de otro. */}
+      <div className="bg-card border border-border rounded-xl p-4 flex flex-wrap items-center gap-4">
         {/* Avatar */}
         <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-lg font-bold flex-shrink-0 ${avatarColor}`}>
           {initials}
         </div>
 
         {/* Info */}
-        <div className="flex-1 min-w-0">
+        <div className="flex-[1_1_32rem] min-w-0">
           <div className="flex items-center gap-2.5 flex-wrap">
             <h1 className="text-xl font-bold">{lead.nombre}</h1>
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300">
@@ -263,7 +270,7 @@ export default function ClientDetailPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
           {waPhone && (
             <button type="button" onClick={abrirChatAqui} aria-label="Abrir el chat en el CRM"
               className="h-9 px-3 rounded-lg border border-border bg-card hover:bg-green-50 dark:hover:bg-green-950/30 text-muted-foreground hover:text-green-700 dark:hover:text-green-400 transition-colors flex items-center gap-2 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/40">
@@ -355,7 +362,7 @@ export default function ClientDetailPage() {
                 // prospecto.
                 { id: 'compras', label: `Compras y cobros${conversions.length > 0 ? ` (${conversions.length})` : ''}`, icon: ShoppingCart },
                 { id: 'interacciones', label: `Interacciones${interacciones.length > 0 ? ` (${interacciones.length})` : ''}`, icon: ChatCircleDots },
-                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspendido' : 'Campus', icon: GraduationCap }] : []),
+                ...(avance.datos?.disponible || suspensiones.datos?.disponible ? [{ id: 'campus', label: suspensiones.datos?.suspendido ? 'Campus · suspensión' : 'Campus', icon: GraduationCap }] : []),
               ].map(t => {
                 const Icon = t.icon;
                 return (
@@ -488,6 +495,9 @@ export default function ClientDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Su Apostilla de La Haya (gemela de CRM#1130): paso, si está pagada y cuánto lleva. */}
+          <ApostillasBloque leadId={lead.id} />
 
           {/* Datos fiscales del cliente (se rellenan al completar una factura y
               quedan globales; sirven para futuras facturas). */}

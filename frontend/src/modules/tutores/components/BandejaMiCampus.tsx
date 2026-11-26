@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ChatCircleText, CheckCircle, ClipboardText, PaperPlaneRight } from '@phosphor-icons/react';
+import { ArrowSquareOut, ChatCircleText, CheckCircle, ClipboardText, PaperPlaneRight } from '@phosphor-icons/react';
 import { Button } from '@/shared/components/ui/button';
 import { toast } from '@/shared/hooks/useToast';
 import { cn } from '@/shared/lib/utils';
 import { consultasApi, type ConsultaFila } from '@/modules/consultas/api/consultas.api';
 import type { MiCampus } from '../api/tutores.api';
+import { SOLO_DESDE_MOODLE } from '../lib/adminDelSitio';
 
 /*
   LO QUE HAY QUE HACER, EN UN SOLO SITIO (Diego, 24/11: «que ahí también, no solo sean
@@ -86,7 +87,20 @@ export function SelectorCampus({ todos, elegidos, cambiar, cargando }: {
 export interface EntregaPorCorregir {
   projectId: number; campus: string; cursoId: number; curso: string | null;
   tareaId: number; tarea: string | null; alumnoId: number; alumno: string | null; entregadaAt: string | null;
+  /** Con la cuenta de administración del sitio (excepción): se corrige en Moodle, en `moodleUrl`. */
+  soloDesdeMoodle?: boolean; moodleUrl?: string | null;
 }
+
+/**
+ * Los campus donde su cuenta es la de administración del sitio (excepción, 24/11), con la
+ * dirección de su mensajería: ahí responde y corrige en Moodle, no desde el CRM.
+ */
+export function campusSoloDesdeMoodle(datos: MiCampus | null): Map<number, string | null> {
+  return new Map((datos?.campus || []).filter((c) => c.soloDesdeMoodle)
+    .map((c) => [c.projectId, c.url ? `${c.url}/message/index.php` : null]));
+}
+
+const enlaceMoodle = 'inline-flex h-8 shrink-0 items-center gap-1 rounded-md border border-border bg-card px-3 text-secundario font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /** Todas las entregas sin nota de lo leído, la más antigua primero (sin fecha, al final). */
 export function entregasPorCorregir(datos: MiCampus | null): EntregaPorCorregir[] {
@@ -98,6 +112,7 @@ export function entregasPorCorregir(datos: MiCampus | null): EntregaPorCorregir[
           lista.push({
             projectId: c.projectId, campus: c.campus, cursoId: k.id, curso: k.nombre,
             tareaId: t.id, tarea: t.nombre, alumnoId: e.alumnoId, alumno: e.alumno, entregadaAt: e.entregadaAt,
+            ...(c.soloDesdeMoodle ? { soloDesdeMoodle: true, moodleUrl: e.corregirUrl || t.corregirUrl || null } : {}),
           });
         }
       }
@@ -162,10 +177,18 @@ export function PorCorregir({ entregas }: { entregas: EntregaPorCorregir[] }) {
                   {e.campus} · {e.curso || `Curso ${e.cursoId}`}{e.entregadaAt ? ` · entregada ${haceCuanto(e.entregadaAt)}` : ''}
                 </p>
               </div>
-              <Link to={corregirEn(e)} aria-label={`Corregir la entrega de ${e.alumno || 'el alumno'} en ${e.tarea || 'la tarea'}`}
-                className="inline-flex h-8 shrink-0 items-center rounded-md border border-border bg-card px-3 text-secundario font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                Corregir
-              </Link>
+              {e.soloDesdeMoodle ? (
+                // La cuenta de administración del sitio: el plugin no califica como ella.
+                <a href={e.moodleUrl || '#'} target="_blank" rel="noopener noreferrer" title={SOLO_DESDE_MOODLE}
+                  aria-label={`Corregir en Moodle la entrega de ${e.alumno || 'el alumno'} en ${e.tarea || 'la tarea'}`} className={enlaceMoodle}>
+                  Corregir en Moodle <ArrowSquareOut size={12} aria-hidden />
+                </a>
+              ) : (
+                <Link to={corregirEn(e)} aria-label={`Corregir la entrega de ${e.alumno || 'el alumno'} en ${e.tarea || 'la tarea'}`}
+                  className="inline-flex h-8 shrink-0 items-center rounded-md border border-border bg-card px-3 text-secundario font-medium text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  Corregir
+                </Link>
+              )}
             </li>
           ))}
         </ul>
@@ -177,7 +200,11 @@ export function PorCorregir({ entregas }: { entregas: EntregaPorCorregir[] }) {
 
 // ─── Por responder ──────────────────────────────────────────────────────────
 
-function ConsultaPorResponder({ c, plazoHoras, respondida }: { c: ConsultaFila; plazoHoras: number; respondida: (id: number) => void }) {
+function ConsultaPorResponder({ c, plazoHoras, respondida, enMoodle }: {
+  c: ConsultaFila; plazoHoras: number; respondida: (id: number) => void;
+  /** Con la cuenta de administración del sitio: dónde se responde en Moodle (undefined = aquí). */
+  enMoodle?: string | null;
+}) {
   const [abierta, setAbierta] = useState(false);
   const [texto, setTexto] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -220,13 +247,18 @@ function ConsultaPorResponder({ c, plazoHoras, respondida }: { c: ConsultaFila; 
           <Link to={`/consultas/${c.id}`} className="inline-flex h-8 items-center rounded-md px-2 text-secundario font-medium text-muted-foreground hover:bg-muted hover:text-foreground">
             Abrir
           </Link>
-          {!abierta && (
+          {enMoodle !== undefined ? (
+            <a href={enMoodle || '#'} target="_blank" rel="noopener noreferrer" title={SOLO_DESDE_MOODLE} className={enlaceMoodle}>
+              Responder en Moodle <ArrowSquareOut size={12} aria-hidden />
+            </a>
+          ) : !abierta && (
             <Button size="sm" variant="outline" className="h-8 text-secundario" onClick={() => setAbierta(true)} aria-controls={campo}>
               Responder
             </Button>
           )}
         </div>
       </div>
+      {enMoodle !== undefined && <p className="mt-1 text-secundario text-muted-foreground">{SOLO_DESDE_MOODLE}</p>}
       {abierta && (
         <div className="mt-2 space-y-2">
           <label htmlFor={campo} className="sr-only">Tu respuesta a {c.alumno_nombre || 'el alumno'}</label>
@@ -248,8 +280,10 @@ function ConsultaPorResponder({ c, plazoHoras, respondida }: { c: ConsultaFila; 
   );
 }
 
-export function PorResponder({ consultas, plazoHoras, error, respondida }: {
+export function PorResponder({ consultas, plazoHoras, error, respondida, soloMoodle }: {
   consultas: ConsultaFila[] | null; plazoHoras: number; error: string | null; respondida: (id: number) => void;
+  /** Los campus donde responde en Moodle (`campusSoloDesdeMoodle`). */
+  soloMoodle?: Map<number, string | null>;
 }) {
   const [todas, setTodas] = useState(false);
   const lista = consultas || [];
@@ -267,7 +301,10 @@ export function PorResponder({ consultas, plazoHoras, error, respondida }: {
         </p>
       ) : (
         <ul className="divide-y divide-border">
-          {vistas.map((c) => <ConsultaPorResponder key={c.id} c={c} plazoHoras={plazoHoras} respondida={respondida} />)}
+          {vistas.map((c) => (
+            <ConsultaPorResponder key={c.id} c={c} plazoHoras={plazoHoras} respondida={respondida}
+              enMoodle={soloMoodle?.has(Number(c.project_id)) ? soloMoodle.get(Number(c.project_id)) ?? null : undefined} />
+          ))}
         </ul>
       )}
       <VerMas total={lista.length} todas={todas} alternar={() => setTodas((x) => !x)} />

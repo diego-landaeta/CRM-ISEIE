@@ -2,7 +2,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { SOLO_EN_PRUEBAS } from './enPruebas';
 
 /**
- * Las suspensiones de Moodle en el CRM (gemela de MultiCRM #531): el filtro «Suspendidos en Moodle» de
+ * Las suspensiones de Moodle en el CRM (gemela de MultiCRM #531): el filtro «Con suspensión en Moodle» de
  * Clientes. Es el espejo de SUSPENSIONES_MOODLE_EN_PRODUCCION del servidor, como
  * `pluginMoodle.ts`: `/auth/me` manda `user.funciones.suspensiones_moodle`. Sin sesión
  * todavía (o con un servidor anterior), lo que se sabe al compilar: en /staging y en local,

@@ -36,7 +36,8 @@ vi.mock('@/shared/hooks/useAmbito', () => ({
   useIdsDelAmbito: () => ambito.current.projects.map((p) => p.id),
   useProyectosDelAmbito: () => ambito.current.projects,
 }));
-vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.has(k) }) }));
+// `veGestoras` (25/11/2026): el admin ve la lista del equipo y la gestora sin equipo, no.
+vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.has(k), veGestoras: ['admin', 'superadmin'].includes(yo.current?.role) }) }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 // En ISEIE la tarjeta del proceso de la ficha sale con VITE_PROCESO_EN_PRUEBAS
 // (en /staging sí; en producción, aún no): se prueban las dos.

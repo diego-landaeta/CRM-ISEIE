@@ -15,6 +15,7 @@ import * as campusDeLaTutora from './tutor.micampus.js';
 import { redaccionEnMoodle } from './tutor.redaccion.js';
 // Corregir desde el CRM (#408, gemela de CRM#681): la tarea, el curso, el archivo y la nota.
 import * as correccion from './tutor.correccion.js';
+import * as administracion from './tutor.campusAdministracion.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { avisarDisponibilidad } from '../consultas/consultas.plugin.js';
@@ -605,6 +606,18 @@ export async function miCampus(req, res, next) {
   } catch (err) { next(err); }
 }
 
+// GET /api/tutores/mi-campus/administracion?campus=ID — «Mi campus» de administración (25/11):
+// todo el campus elegido, leído con el token del campus. Solo lee.
+export async function campusAdministracion(req, res, next) {
+  try {
+    const campus = parseInt(req.query.campus, 10);
+    res.json({ success: true, data: await administracion.campusAdministracion(req, {
+      campus: Number.isInteger(campus) && campus > 0 ? campus : null,
+      refrescar: req.query.refrescar === '1',
+    }) });
+  } catch (err) { next(err); }
+}
+
 const entero = (v) => { const n = parseInt(v); if (!Number.isInteger(n) || n <= 0) throw new AppError('Dato no válido', 400, 'VALIDATION_ERROR'); return n; };
 
 // GET /api/tutores/mi-campus/tareas/:projectId/:cursoId/:tareaId — la tarea con sus entregas (#681)
@@ -620,6 +633,17 @@ export async function verCurso(req, res, next) {
   try {
     const { projectId, cursoId } = req.params;
     res.json({ success: true, data: await correccion.verCurso(req.user.userId, entero(projectId), entero(cursoId)) });
+  } catch (err) { next(err); }
+}
+
+// GET /api/tutores/mi-campus/administracion/cursos/:projectId/:cursoId — un curso del campus
+// al abrirlo: profesoras, alumnos con su % hecho y sus tareas. Solo lee.
+export async function cursoAdministracion(req, res, next) {
+  try {
+    const { projectId, cursoId } = req.params;
+    res.json({ success: true, data: await administracion.cursoDeAdministracion(req, entero(projectId), entero(cursoId), {
+      refrescar: req.query.refrescar === '1',
+    }) });
   } catch (err) { next(err); }
 }
 
@@ -913,7 +937,10 @@ export async function buscarCuentaMoodle(req, res, next) {
   } catch (err) { next(err); }
 }
 
-// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId } — vincular a mano esa cuenta
+// POST /api/tutores/:id/campus/:projectId/vincular  { moodleUserId, excepcionAdminDelSitio? } — vincular a mano esa cuenta
+// `excepcionAdminDelSitio: true` (Diego, 24/11): enlazar igual la cuenta de administración del
+// sitio porque ella da clase con ella. Solo `true` de verdad cuenta como confirmación; la ruta ya
+// pide `tutores.gestionar`, y queda anotado quién lo confirmó.
 export async function vincularCuentaMoodle(req, res, next) {
   try {
     const id = await exigirTutorGestionable(req);
@@ -921,8 +948,11 @@ export async function vincularCuentaMoodle(req, res, next) {
     const moodleUserId = parseInt(req.body?.moodleUserId);
     if (!Number.isInteger(moodleUserId) || moodleUserId <= 0) throw new AppError('Cuenta de Moodle no válida', 400, 'VALIDATION_ERROR');
     await exigirCampusMio(req, projectId);
-    await campusTutor.vincularAMano(id, projectId, moodleUserId);
-    res.json({ success: true, data: await panelDelTutor(req, id, []) });
+    const cuenta = await campusTutor.vincularAMano(id, projectId, moodleUserId, {
+      excepcionAdminDelSitio: req.body?.excepcionAdminDelSitio === true,
+      porQuien: Number.isInteger(req.user?.userId) && req.user.userId > 0 ? req.user.userId : null,
+    });
+    res.json({ success: true, data: { ...(await panelDelTutor(req, id, [])), admin_del_sitio: Boolean(cuenta?.adminDelSitio) } });
   } catch (err) { next(err); }
 }
 

@@ -86,7 +86,7 @@ describe('avisos del Moodle de los campus', () => {
     const [a, ...resto] = await avisos();
     expect(resto).toHaveLength(0);
     expect(a.title).toBe(`El Moodle de ${MARCA} Campus no responde`);
-    expect(a.message).toMatch(/inválido o ha caducado.*Conexión → Moodle/);
+    expect(a.message).toMatch(/inválido o ha caducado.*Moodle › Cursos y alumnos/);
     expect(a.link_path).toBe(`/conexion/moodle/${CAMPUS}`);
     expect(a.target_user_ids).toEqual([PERSONA]);
     expect(a.metadata).toMatchObject({ campus_id: CAMPUS, motivo: 'token_no_valido' });

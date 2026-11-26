@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { envioFacturaSchema, datosFiscalesSchema } from '../factura-automatica/factura-automatica.validation.js';
 
 // 'deposito' (depósito bancario) desde el 15/10: con 'transferencia', las dos
 // formas de cobro que disparan el webhook de transferencias (migración 206).
@@ -68,6 +69,12 @@ export const createConversionSchema = z.object({
   subtotal_bruto: z.number().min(0).optional(),
   // Crear la venta aunque el alumno ya tenga una de este programa (CRM#898).
   forzar: z.boolean().optional(),
+  // «Enviar factura automáticamente: Sí / No» y «Enviar a este correo» (#764,
+  // 24/11). Sin él, lo de serie: sí, al correo de la ficha.
+  envio_factura: envioFacturaSchema.optional(),
+  // Los datos fiscales de la persona que carga la gestora (25/11): van a la
+  // ficha ANTES de que el primer cobro llegue a la factura automática.
+  datos_fiscales: datosFiscalesSchema.partial().optional(),
 }).refine((d) => d.importe_pagado <= d.importe_total + 0.01, {
   message: 'importe_pagado no puede ser mayor que importe_total',
   path: ['importe_pagado'],
