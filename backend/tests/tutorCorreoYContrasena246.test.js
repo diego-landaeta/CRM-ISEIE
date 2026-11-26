@@ -19,6 +19,11 @@ vi.mock('../src/shared/config/db.js', () => ({
   query: vi.fn(async (sql, params) => {
     consultas.push({ sql, params });
     if (/SELECT nombre, email FROM users WHERE id/.test(sql)) return { rows: [usuarios.get(params[0])].filter(Boolean) };
+    // #197: quién confirma su correo, y si tiene ficha de tutor.
+    if (/AS es_tutor/.test(sql)) {
+      const u = usuarios.get(params[0]);
+      return { rows: u ? [{ ...u, es_tutor: u.role === 'tutor' }] : [] };
+    }
     if (/FROM users u\s+WHERE u.active AND u.email IS NOT NULL/.test(sql)) return { rows: [{ id: 1, email: 'sa@x.com', nombre: 'Super' }, { id: 7, email: 'ad@x.com', nombre: 'Admin' }] };
     if (/FROM user_projects up JOIN projects p/.test(sql)) return { rows: [{ id: 3, nombre: 'ISEIE', slug: 'iseie', logo_url: null, emoji: null }] };
     // La marca del tutor, por `marca.service` (11/11): sus campus y, con uno, el suyo.
@@ -40,6 +45,21 @@ vi.mock('../src/modules/notifications/notifications.service.js', () => ({ notify
 vi.mock('../src/modules/mcp/mcp.model.js', () => ({}));
 vi.mock('../src/shared/utils/ambito.js', () => ({ campusDeLaPersona: vi.fn(async () => campusDelAdmin) }));
 vi.mock('../src/modules/tutores/tutor.model.js', () => ({ tieneAlgunCampus: vi.fn(async () => tutorTieneCampus) }));
+// #197 (gemela de CRM#211): el correo propio va con un código a la dirección
+// nueva. El mecanismo tiene su prueba contra la base (cambioDeCorreo197); aquí,
+// con el código bueno («123456») el cambio de verdad pasa por `cambiarCorreo`,
+// como en producción.
+vi.mock('../src/modules/users/cambio-de-correo.js', () => ({
+  MINUTOS: 15,
+  MENSAJE_FRENADO: 'frenado',
+  codigoFrenadoPara: () => false,
+  pedirCodigo: vi.fn(async () => ({ enviado: true })),
+  confirmarCodigo: vi.fn(async ({ userId, codigo, porUserId, ip }) => {
+    if (codigo !== '123456') throw Object.assign(new Error('Código incorrecto'), { statusCode: 400, code: 'CODIGO_INCORRECTO' });
+    const { cambiarCorreo } = await import('../src/modules/users/user.service.js');
+    return cambiarCorreo(userId, 'juan@nuevo.com', { porUserId, ip });
+  }),
+}));
 
 const userService = await import('../src/modules/users/user.service.js');
 const userController = await import('../src/modules/users/user.controller.js');
@@ -103,7 +123,7 @@ describe('1 · la contraseña de un tutor', () => {
 
 describe('3 · el tutor cambia su correo y se avisa a administración', () => {
   it('lo cambia y avisa en la campanita y por correo a superadmin y admin', async () => {
-    const { error, cuerpo } = await llamar(authController.updateMyEmail, { body: { email: 'Juan@Nuevo.com' }, user: registrar({ userId: 21, role: 'tutor' }) });
+    const { error, cuerpo } = await llamar(authController.updateMyEmail, { body: { codigo: '123456' }, user: registrar({ userId: 21, role: 'tutor' }) });
     expect(error?.message).toBeUndefined();
     expect(cuerpo.data).toMatchObject({ email: 'juan@nuevo.com', cambiado: true, hayQueVolverAEntrar: true });
     expect(notifyUsers).toHaveBeenCalledWith(expect.objectContaining({ type: 'tutor_correo_cambiado', targetUserIds: [1, 7] }));
@@ -111,7 +131,7 @@ describe('3 · el tutor cambia su correo y se avisa a administración', () => {
     expect(sendEmail.mock.calls[0][0].htmlContent).toMatch(/juan@viejo\.com/);
   });
   it('el correo va con la plantilla común y la marca del campus del tutor (Diego, 10/10)', async () => {
-    await llamar(authController.updateMyEmail, { body: { email: 'juan@nuevo.com' }, user: registrar({ userId: 21, role: 'tutor' }) });
+    await llamar(authController.updateMyEmail, { body: { codigo: '123456' }, user: registrar({ userId: 21, role: 'tutor' }) });
     const { htmlContent, textContent, projectId } = sendEmail.mock.calls[0][0];
     expect(htmlContent).toMatch(/<!DOCTYPE html>/);
     expect(htmlContent).toMatch(/Te lo manda el <strong[^>]*>CRM de ISEIE<\/strong>/);
@@ -121,17 +141,34 @@ describe('3 · el tutor cambia su correo y se avisa a administración', () => {
     expect(projectId).toBe(3); // sale por la cuenta y el remitente de esa marca
   });
   it('a administración solo le llegan los admin de algún campus del tutor (y los superadmin)', async () => {
-    await llamar(authController.updateMyEmail, { body: { email: 'juan@nuevo.com' }, user: registrar({ userId: 21, role: 'tutor' }) });
+    await llamar(authController.updateMyEmail, { body: { codigo: '123456' }, user: registrar({ userId: 21, role: 'tutor' }) });
     const sql = consultas.find((c) => /u.role = 'superadmin'/.test(c.sql))?.sql || '';
     expect(sql).toMatch(/u.role = 'admin' AND EXISTS/);
     expect(sql).toMatch(/suyo.user_id = \$1/);
   });
-  it('quien no es tutor no puede usar esta ruta (lo pide a administración)', async () => {
-    // El superadmin sí, desde #423: lo tiene todo (cambio aprobado
-    // «superadmin-su-correo»).
-    for (const role of ['gestor', 'admin', 'soporte']) {
-      const { error } = await llamar(conGuardia('cuenta.cambiar_correo', authController.updateMyEmail), { body: { email: 'x@nuevo.com' }, user: registrar({ userId: 9, role }) });
-      expect(error?.statusCode, role).toBe(403);
+  it('sin el código bueno no cambia nada', async () => {
+    const { error } = await llamar(authController.updateMyEmail, { body: { codigo: '000000' }, user: registrar({ userId: 21, role: 'tutor' }) });
+    expect(error?.code).toBe('CODIGO_INCORRECTO');
+    expect(notifyUsers).not.toHaveBeenCalled();
+  });
+  it('quien no es tutor también puede, con su código (#197), pero no se avisa a administración', async () => {
+    usuarios.set(9, { id: 9, nombre: 'Gestora', email: 'ges@viejo.com', role: 'gestor' });
+    const { error, cuerpo } = await llamar(authController.updateMyEmail, { body: { codigo: '123456' }, user: registrar({ userId: 9, role: 'gestor' }) });
+    expect(error?.message).toBeUndefined();
+    expect(cuerpo.data.cambiado).toBe(true);
+    expect(notifyUsers).not.toHaveBeenCalled();
+  });
+  it('todos los roles pasan el guardia (Diego, 06/11, en CRM#688: todos los roles)', async () => {
+    for (const role of ['gestor', 'admin', 'soporte', 'project_manager', 'colaborador', 'lider_equipo', 'tutor_redactor']) {
+      usuarios.set(9, { id: 9, nombre: 'Otra', email: 'ges@viejo.com', role });
+      // `conGuardia` no espera al permiso (es asíncrono): se espera a la respuesta.
+      let error = null; let cuerpo = null;
+      conGuardia('cuenta.cambiar_correo', authController.updateMyEmail)(
+        { ip: '1.1.1.1', headers: {}, socket: {}, body: { codigo: '123456' }, user: registrar({ userId: 9, role }) },
+        { json: (b) => { cuerpo = b; }, status() { return this; } }, (e) => { error = e; });
+      await vi.waitFor(() => expect(cuerpo || error, role).toBeTruthy());
+      expect(error?.message, role).toBeUndefined();
+      expect(cuerpo.data.cambiado, role).toBe(true);
     }
   });
 });

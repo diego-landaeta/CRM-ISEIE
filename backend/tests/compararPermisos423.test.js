@@ -156,7 +156,9 @@ describe('antes y después de #423, persona por persona (#423)', () => {
         // Y el MCP del colaborador (Diego, 12/11, gemela de CRM#752): bloqueado siempre, aunque tuviera la casilla.
         'colaborador-sin-mcp',
         // Y las gestoras que corrigen facturas (Diego, 19/11): por su rol.
-        'gestoras-corrigen-facturas'].includes(d.cambio?.id));
+        'gestoras-corrigen-facturas',
+        // Y el correo propio con código (#197, gemela de CRM#211): por el rol.
+        'correo-propio-con-codigo'].includes(d.cambio?.id));
     expect(conCasilla.map((d) => `${d.persona.role} · ${d.fila.id}`)).toEqual([]);
   });
 });

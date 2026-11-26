@@ -49,9 +49,15 @@ export const updateMyProfileSchema = z.object({
   nombre: z.string().min(2, 'Nombre muy corto').max(200),
 });
 
-// El propio correo, solo para tutores (#246, Diego 09/10).
-export const updateMyEmailSchema = z.object({
+// El propio correo (#246; con código desde el #197, gemela de CRM#211) va en
+// dos pasos. Primero se pide el código, con la contraseña actual; luego se
+// confirma con el código que llegó a la dirección nueva.
+export const pedirCodigoCorreoSchema = z.object({
   email: z.string().trim().toLowerCase().email('Correo no válido').max(255),
+  password: z.string().min(1, 'Falta tu contraseña actual').max(200),
+});
+export const updateMyEmailSchema = z.object({
+  codigo: z.string().trim().regex(/^\d{6}$/, 'El código son 6 cifras'),
 });
 /**
  * Lo unico que se pide para recuperar: el correo (#37).

@@ -726,7 +726,11 @@ export const SECCIONES = [
       },
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra (el de su factura).', ['tutor'], { propia: true }),
+          // Hasta el #197, solo el tutor y sin código (#246). Diego, 06/11 (en
+          // CRM#688, gemela CRM#211): TODOS los roles, también project manager y
+          // colaborador. La líder de equipo lo hereda de la gestora. A un tutor no
+          // le sale el código mientras siga el freno (cambio-de-correo.js).
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor', 'project_manager', 'colaborador', 'tutor_redactor'], { propia: true }),
         ],
       },
     ],
