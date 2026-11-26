@@ -2,13 +2,16 @@ import { useEffect, useMemo, useState, lazy, Suspense } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus, MagnifyingGlass, Package, SquaresFour, List as ListIcon,
-  Tag, CurrencyEur,
+  Tag, CurrencyEur, BookOpen,
 } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 // El recorrido guiado de la pantalla (#619, tanda I).
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
+import usePermission from '@/shared/hooks/usePermission';
+import { rutaPermitida } from '@/shared/components/layout/Sidebar';
+import { RUTA_FORMACIONES } from '../lib/rutasFormacion';
 
 const ProductFormDialog = lazy(() => import('../components/ProductFormDialog'));
 
@@ -22,6 +25,7 @@ function formatMoney(n: any, currency = 'EUR') {
 
 export default function ProductsPage() {
   const { activeProject } = useAuth();
+  const { can } = usePermission();
   const projectId = activeProject?.id;
 
   const [view, setView] = useState<'grid' | 'list'>('grid');
@@ -76,17 +80,28 @@ export default function ProductsPage() {
             {activeProject?.nombre ? `${activeProject.nombre} · ` : ''}Productos, cursos o servicios que vendes.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-        <VerRecorrido id="productos" listo={!loading} />
-        <button
-          type="button"
-          data-recorrido="productos-nuevo"
-          onClick={() => setFormOpen(true)}
-          className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
-        >
-          <Plus size={14} weight="bold" />
-          Nuevo producto
-        </button>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          <VerRecorrido id="productos" listo={!loading} />
+          {/* Gemela de CRM#1113: la formación entera (datos, módulos y tutoras) en una ficha.
+              La entrada sale con su permiso (`rutaPermitida`, SIN_ENTRADA del Sidebar). */}
+          {rutaPermitida(RUTA_FORMACIONES, can) && (
+            <Link
+              to={RUTA_FORMACIONES}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-card text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <BookOpen size={14} weight="bold" />
+              Formaciones
+            </Link>
+          )}
+          <button
+            type="button"
+            data-recorrido="productos-nuevo"
+            onClick={() => setFormOpen(true)}
+            className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors shadow-sm"
+          >
+            <Plus size={14} weight="bold" />
+            Nuevo producto
+          </button>
         </div>
       </header>
 

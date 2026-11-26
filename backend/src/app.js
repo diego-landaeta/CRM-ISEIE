@@ -62,6 +62,7 @@ import { startCopiaDiariaScheduler } from './jobs/copiaDiariaJob.js';
 import { startFacturacionAuditoriaScheduler } from './jobs/facturacionAuditoriaJob.js';
 import { startInformeMensualScheduler } from './jobs/informeMensualJob.js';
 import { startBrevoBloqueadosScheduler } from './jobs/brevoBloqueadosScheduler.js';
+import { startApostillasScheduler } from './jobs/apostillasScheduler.js';
 import { startAsignacionScheduler } from './jobs/asignacionScheduler.js';
 import projectChannelsModule from './modules/project-channels/index.js';
 import installationModule from './modules/installation/index.js';
@@ -96,6 +97,8 @@ import moodleModule from './modules/moodle/index.js';
 import soporteModule from './modules/soporte/index.js';
 // Incidencias (gemela de CRM#612): al lado de Soporte, sobre todo las de capa 8.
 import incidenciasModule from './modules/incidencias/index.js';
+// Apostilla de La Haya (gemela de CRM#1130): el trámite de cada apostilla vendida.
+import apostillasModule from './modules/apostillas/index.js';
 import actividadModule from './modules/actividad/index.js';
 import cursosPendientesModule from './modules/cursos-pendientes/index.js';
 import iaAnalisisModule from './modules/ia-analisis/index.js';
@@ -155,6 +158,8 @@ import { tareasActivas, facturasColaboradorActivas, linksPagoActivos, pluginMood
 import linksPagoModule from './modules/links-pago/index.js';
 import { porteroDelWebhook, topeDelEnvio, traducirTope } from './modules/webhook-tokens/portero.js';
 import { MAX_ENVIO_BYTES } from './modules/matriculas/admision.archivos.js';
+// La versión del CRM: la primera de Novedades, la misma que enseña el frontal (25/11).
+import { ACTUAL as VERSION_ACTUAL } from './modules/novedades/versiones.js';
 
 const app = express();
 const PORT = process.env.PORT || 3005;
@@ -226,7 +231,7 @@ app.get('/api', (_req, res) => {
     success: true,
     data: {
       name: 'CRM-ISEIE API',
-      version: '1.0.0',
+      version: VERSION_ACTUAL.version,
       status: 'online',
       endpoints: {
         health: '/api/health',
@@ -267,7 +272,7 @@ app.get('/api', (_req, res) => {
 
 // Health check (público, ligero).
 app.get('/api/health', (_req, res) => {
-  res.json({ success: true, data: { status: 'ok', timestamp: new Date().toISOString() } });
+  res.json({ success: true, data: { status: 'ok', version: VERSION_ACTUAL.version, timestamp: new Date().toISOString() } });
 });
 
 // Health detallado: DB ping + estado de credenciales externas + uptime +
@@ -369,6 +374,8 @@ const MODULES = [
   permissionsModule,
   fieldDefinitionsModule,
   matriculasModule,
+  // Clientes › Apostillas (gemela de CRM#1130). Migración 344.
+  apostillasModule,
   formsModule,
   webhookTokensModule,
   emailSequencesModule,
@@ -727,6 +734,13 @@ if (process.env.NODE_ENV !== 'test') {
       startBrevoBloqueadosScheduler();
     } catch (err) {
       logger.error({ err }, 'Correos bloqueados en Brevo: la vigilancia falló al arrancar');
+    }
+    // Apostillas (gemela de CRM#1130): fichas nuevas cada 10 minutos y el aviso de
+    // atascadas, solo en la campana. Se apaga con APOSTILLAS_DESACTIVADAS=1.
+    try {
+      startApostillasScheduler();
+    } catch (err) {
+      logger.error({ err }, 'Apostillas: la tarea falló al arrancar');
     }
     // Los reintentos del webhook de transferencias (se apaga con WEBHOOKS_SALIENTES_DISABLED=1).
     try {

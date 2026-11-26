@@ -12,6 +12,8 @@ import {
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { useAuth } from '@/contexts/AuthContext';
+import usePermission from '@/shared/hooks/usePermission';
+import { ROLES_DE_GESTORA } from '@/shared/lib/roles';
 import useUrlFilters from '@/shared/hooks/useUrlFilters';
 import PageHeader from '@/shared/components/ui/PageHeader';
 // El recorrido guiado de la pantalla (#619, gemela de CRM#941).
@@ -183,11 +185,12 @@ function InstallmentsCell({ client: item }: { client: Client }) {
   );
 }
 
-/** En la fila: sigue suspendido en Moodle (gemela de CRM#531). El motivo está en su ficha. */
+/** En la fila: sigue con una suspensión en Moodle (gemela de CRM#531), sin género (QA del
+ * 25/11/2026: «Suspendido en Moodle» lo decía en masculino a todas). El motivo, en su ficha. */
 function SuspendidoEnMoodle() {
   return (
     <span className="mt-0.5 inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-destructive-soft px-1.5 py-0.5 text-[10px] font-semibold text-destructive-soft-foreground">
-      <Prohibit size={10} weight="bold" aria-hidden /> Suspendido en Moodle
+      <Prohibit size={10} weight="bold" aria-hidden /> Suspensión en Moodle
     </span>
   );
 }
@@ -278,25 +281,26 @@ export default function ClientsPage() {
     };
   }, [search]);
 
+  // Por permiso y alcance, no por rol (Diego, 25/11/2026): a la líder de equipo
+  // no le salía el filtro. Las gestoras y las líderes de equipo (que también venden).
+  const { veGestoras } = usePermission();
   useEffect(() => {
-    if (user?.role !== 'superadmin' && user?.role !== 'admin') return;
+    if (!veGestoras) return;
     if (!activeProject?.id) {
       setGestores([]);
       return;
     }
     // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
-    client
-      .get(`/users?active=true&role=gestor&projectId=${activeProject.id}&limit=100&alcance=comercial`)
-      .then((response) => {
-        if (response.success) {
-          setGestores((response.data as Array<{ id: number; nombre: string }>) || []);
-        }
-      })
-      .catch(() => setGestores([]));
-  }, [user?.role, activeProject?.id]);
+    Promise.all(ROLES_DE_GESTORA.map((rol) => client
+      .get(`/users?active=true&role=${rol}&projectId=${activeProject.id}&limit=100&alcance=comercial`)
+      .then((response) => (response.success ? (response.data as Array<{ id: number; nombre: string }>) || [] : []))
+      .catch(() => [] as Array<{ id: number; nombre: string }>)))
+      .then((listas) => setGestores(listas.flat().sort((a, b) => a.nombre.localeCompare(b.nombre, 'es'))));
+  }, [veGestoras, activeProject?.id]);
 
   useEffect(() => {
-    if (!activeProject?.id) {
+    // Con «Todos» (-1) no hay un catálogo que pedir: era un 400 en cada visita (25/11).
+    if (!(Number(activeProject?.id) > 0)) {
       setProductos([]);
       return;
     }

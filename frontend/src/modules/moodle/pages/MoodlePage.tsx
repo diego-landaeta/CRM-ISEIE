@@ -1,25 +1,58 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowsClockwise, Books, GraduationCap, PlugsConnected } from '@phosphor-icons/react';
+import { ArrowsClockwise, Books, GraduationCap, Info, PlugsConnected } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable from '@/shared/components/ui/SkeletonTable';
 import KpiCard from '@/shared/components/ui/KpiCard';
 import Card from '@/shared/components/ui/Card';
 import { useAuth } from '@/contexts/AuthContext';
+import { useProjectContext } from '@/contexts/ProjectContext';
+import { TODOS_LOS_PROYECTOS } from '@/shared/lib/ambitoInforme';
 import { toast } from '@/shared/hooks/useToast';
 import { moodleApi, type CampusMoodle, type RespuestaCampus } from '../api/moodle.api';
 import ListaDeCampus from '../components/ListaDeCampus';
 import CampusPendientes from '../components/CampusPendientes';
+import { CursosDelCampus } from './MoodleCampusPage';
 
 /**
- * Conexión → Moodle (#335): los campus.
+ * Moodle › Cursos y alumnos (#335; antes «Conexión › Moodle»).
  *
- * Dos bloques, lo que funciona y lo que falta:
+ * Sigue al selector de campus de arriba (Diego, 25/11: «entro y no me sale nada en el
+ * Moodle»; la pantalla no lo miraba):
+ *   · con UN campus elegido, sus cursos directamente (o «Este campus no tiene Moodle
+ *     conectado», con el enlace a Integraciones › Moodle);
+ *   · con «Todos» o una empresa, la lista de campus, con un aviso de que se elija uno.
+ */
+export default function MoodlePage() {
+  const { activeProject, isAllProjects, activeIssuerId } = useProjectContext() as {
+    activeProject?: { id?: number | null; nombre?: string; type?: string } | null;
+    isAllProjects?: boolean;
+    activeIssuerId?: number | null;
+  };
+  const id = Number(activeProject?.id);
+  const unCampus = !isAllProjects && !activeIssuerId && Number.isInteger(id) && id > 0 && id !== TODOS_LOS_PROYECTOS;
+  if (unCampus && activeProject?.type === 'ia') {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Cursos y alumnos" subtitle="El Moodle de cada campus · solo lectura" />
+        <Card>
+          <EmptyState icon={GraduationCap} title={`${activeProject?.nombre ?? 'Este proyecto'} no es un campus`} description="Las plataformas de IA no tienen Moodle. Elige un campus arriba, o «Todos» para ver la lista." />
+        </Card>
+      </div>
+    );
+  }
+  // `key`: al cambiar de campus arriba, la pantalla empieza de cero.
+  if (unCampus) return <CursosDelCampus key={id} id={id} conVolver={false} />;
+  return <TodosLosCampus />;
+}
+
+/**
+ * Con «Todos» (o una empresa): los campus. Dos bloques, lo que funciona y lo que falta:
  *   · Campus conectados: su estado y sus cursos; cada fila entra al campus.
  *   · Pendientes de conectar: una lista corta, cada uno con su botón «Conectar», que lleva
  *     a la pantalla del campus, donde está el formulario.
  */
-export default function MoodlePage() {
+function TodosLosCampus() {
   const { user } = useAuth() as { user: { role?: string } | null };
   const [campus, setCampus] = useState<CampusMoodle[] | null>(null);
   const [actualizando, setActualizando] = useState(false);
@@ -53,7 +86,7 @@ export default function MoodlePage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Moodle"
+        title="Cursos y alumnos"
         subtitle="El Moodle de cada campus · solo lectura"
         actions={(
           <button
@@ -66,6 +99,11 @@ export default function MoodlePage() {
           </button>
         )}
       />
+
+      <p role="note" className="flex items-start gap-2 rounded-lg border border-info/30 bg-info-soft px-4 py-3 text-sm text-info-soft-foreground" data-testid="moodle-elige-campus">
+        <Info size={18} weight="fill" className="mt-0.5 shrink-0" aria-hidden="true" />
+        <span>Estás viendo todos los campus. Elige uno arriba (o pulsa uno de la lista) para ver sus cursos y sus alumnos.</span>
+      </p>
 
       {campus === null ? (
         <SkeletonTable rows={5} columns={4} />
@@ -101,9 +139,7 @@ export default function MoodlePage() {
                 <EmptyState
                   icon={PlugsConnected}
                   title="Ningún campus tiene Moodle conectado todavía"
-                  description={pendientes.length
-                    ? `Elige un campus de la lista de abajo y pulsa «Conectar»: hace falta un token de solo lectura de su Moodle y se hace en pocos minutos.`
-                    : 'Cuando haya un campus, podrás conectar su Moodle aquí.'}
+                  description="El Moodle de cada campus se conecta en Integraciones › Moodle (elige el campus arriba) con la dirección del campus y su token."
                 />
               )}
             </Card>

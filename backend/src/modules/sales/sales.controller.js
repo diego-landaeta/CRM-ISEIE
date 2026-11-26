@@ -15,6 +15,9 @@ export async function create(req, res, next) {
     if (!parsed.success) {
       throw new AppError(parsed.error.errors[0].message, 400, 'VALIDATION_ERROR');
     }
+    // «Enviar factura automáticamente»: solo quien tiene `facturas.envio_auto` (25/11).
+    const { quitarSiNoPuede } = await import('../factura-automatica/factura-automatica.envio.js');
+    await quitarSiNoPuede(req, parsed.data);
     // LA FECHA DE INICIO DEL CURSO, OBLIGATORIA AL CERRAR LA VENTA DE UN
     // PRODUCTO CON CURSO DE MOODLE (#767, CRM#1036). Esta ruta es la del
     // formulario «Registrar venta». Conciliación, la compra directa y los links

@@ -47,4 +47,12 @@ const entero = (v, def, min, max) => {
 
 export const diasDePlazo = () => entero(process.env.FACTURA_AUTOMATICA_DIAS, 7, 1, 60);
 export const intentosMaximos = () => entero(process.env.FACTURA_AUTOMATICA_INTENTOS, 5, 1, 50);
+/**
+ * FACTURA_ENVIO_REVISION_ADMIN=1 (Diego, 25/11, ISEIE): la factura automática
+ * NO se le manda al alumno ni se le pide el formulario. Sale con los datos que
+ * cargó la gestora en la ficha y queda «Por enviar» en Facturación, para que
+ * administración la verifique y la envíe. Apagado (de serie), como hasta hoy.
+ */
+export const revisionAdmin = () => si(process.env.FACTURA_ENVIO_REVISION_ADMIN);
+
 export const enviarPdf = () => String(process.env.FACTURA_AUTOMATICA_ENVIAR_PDF ?? '1').trim() !== '0';

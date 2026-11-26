@@ -78,7 +78,13 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
       {
         donde: anclaje('menu-academico'),
         titulo: 'Académico',
-        texto: 'El catálogo y los tutores: productos, cursos, Mi campus, consultas y diplomas.',
+        texto: 'El catálogo y los tutores: productos, formaciones y quién imparte qué.',
+      },
+      {
+        // Diego, 25/11: apartado Moodle.
+        donde: anclaje('menu-moodle'),
+        titulo: 'Moodle',
+        texto: 'Todo lo de Moodle, junto: Mi campus, Consultas, los cursos y alumnos de cada campus, el curso de cada producto, los cursos pendientes, los diplomas y la conexión del campus.',
       },
       {
         donde: anclaje('menu-finanzas'),
@@ -88,7 +94,7 @@ export const RECORRIDOS_NOVEDADES: Record<IdRecorridoNovedades, RecorridoNovedad
       {
         donde: anclaje('menu-configuracion'),
         titulo: 'Configuración',
-        texto: 'Integraciones, Moodle, conectores, webhooks y lo de administrar. La ayuda (Novedades, Soporte, Incidencias, Manual) está en Sistema.',
+        texto: 'Integraciones, conectores, webhooks y lo de administrar. La ayuda (Novedades, Soporte, Incidencias, Manual) está en Sistema.',
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

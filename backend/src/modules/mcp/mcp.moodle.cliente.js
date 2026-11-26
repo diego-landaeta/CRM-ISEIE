@@ -135,6 +135,50 @@ export async function campusConMoodle(projectIds) {
 }
 
 /**
+ * La conexión del campus que usa el resto del CRM: Integraciones › Moodle
+ * (`project_integrations`, provider «moodle»). Es la de Consultas, Mi campus,
+ * Cursos de Moodle y la matrícula, y es la que de verdad tienen conectada los
+ * campus. El panel «Moodle › Cursos y alumnos» solo miraba la credencial de
+ * Claude (arriba), y con ella sola un campus conectado en Integraciones salía
+ * «sin conectar» y sin un curso. Diego, 25/11: «entro y no me sale nada en el
+ * Moodle». Solo la piden el panel (`conIntegraciones`); Claude (el MCP) sigue
+ * con su credencial de solo lectura, como hasta ahora.
+ *
+ * Devuelve Map(project_id → {url, token} | ErrorMoodle).
+ */
+export async function conexionesDeIntegraciones(projectIds) {
+  const resultado = new Map();
+  if (!projectIds?.length) return resultado;
+  let rows;
+  try {
+    ({ rows } = await query(
+      `SELECT project_id, encrypted_value, iv, auth_tag, config_public
+         FROM project_integrations
+        WHERE provider = 'moodle' AND active = true AND encrypted_value IS NOT NULL
+          AND project_id = ANY($1::int[])`,
+      [projectIds]
+    ));
+  } catch (err) {
+    // 42P01: una base sin la tabla de integraciones. Entonces no hay ninguna.
+    if (err?.code === '42P01') return resultado;
+    throw err;
+  }
+  for (const r of rows) {
+    const id = Number(r.project_id);
+    const url = normalizarUrlMoodle(r.config_public?.url ?? '');
+    if (!url) continue;
+    try {
+      const token = String(decrypt(r.encrypted_value, r.iv, r.auth_tag) ?? '').trim();
+      if (token) resultado.set(id, { url, token });
+    } catch {
+      logger.warn({ projectId: id }, 'Moodle: no se pudo descifrar el token de Integraciones');
+      resultado.set(id, new ErrorMoodle('credencial_ilegible', 'no se pudo leer el token guardado en Integraciones › Moodle'));
+    }
+  }
+  return resultado;
+}
+
+/**
  * Las credenciales `moodle` de varios campus de una vez, en UNA consulta de
  * lectura, solo las de produccion. Devuelve Map(project_id → {url, token} |
  * ErrorMoodle). Un campus sin credencial no esta en el mapa.
@@ -142,8 +186,15 @@ export async function campusConMoodle(projectIds) {
  * La lectura del valor cifrado pasa por aqui y no por `getDecryptedValue`
  * porque pide varios campus a la vez; marca el uso igual que aquella.
  */
-export async function credencialesMoodle(projectIds) {
+export async function credencialesMoodle(projectIds, { conIntegraciones = false } = {}) {
   const resultado = new Map();
+  // El panel del CRM: lo que no tenga credencial propia, con la de Integraciones.
+  if (conIntegraciones) {
+    const delPanel = await credencialesMoodle(projectIds);
+    const faltan = (projectIds || []).map(Number).filter((id) => !delPanel.has(id));
+    for (const [id, c] of await conexionesDeIntegraciones(faltan)) delPanel.set(id, c);
+    return delPanel;
+  }
   let rows;
   try {
     ({ rows } = await query(

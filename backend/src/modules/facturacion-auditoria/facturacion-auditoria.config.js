@@ -13,6 +13,14 @@
  *                                   ella, desde el día de la primera vuelta.
  *   FACTURACION_AUDITORIA_CORREOS   a quién más avisar, además de los
  *                                   administradores, separados por comas.
+ *   FACTURACION_AUDITORIA_PAUSAR    0 = MODO AVISO: audita y lo apunta (se ve
+ *                                   en Facturas › Facturación automática y
+ *                                   avisa en la campana cuando deja de salir
+ *                                   limpia), pero NO pausa la facturación ni
+ *                                   manda el correo de la pausa. De serie, 1.
+ *                                   Para encenderla las primeras semanas sin
+ *                                   parar a nadie por una costumbre (24/11:
+ *                                   en el 360 salen facturas a mano sin NIF).
  *
  * Nada de esto va en el código: el repositorio es público.
  */
@@ -43,6 +51,8 @@ export function leerConfig(env = process.env) {
     activa: encendido(env.FACTURACION_AUDITORIA_ACTIVA),
     dias: entero(env.FACTURACION_AUDITORIA_DIAS, DIAS_DE_SERIE, 1, 365),
     desde: fechaValida(env.FACTURACION_AUDITORIA_DESDE),
+    // Pausa salvo que se diga que no: lo de serie es lo que se aprobó en #765.
+    pausar: !['0', 'false', 'no', 'off'].includes(String(env.FACTURACION_AUDITORIA_PAUSAR ?? '').trim().toLowerCase()),
     correos: String(env.FACTURACION_AUDITORIA_CORREOS || '')
       .split(',').map((s) => s.trim()).filter((s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s)),
   };
