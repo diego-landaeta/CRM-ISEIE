@@ -42,8 +42,9 @@ const ES_TUTOR = `(u.role::text IN ('tutor', 'tutor_redactor')
   OR COALESCE(u.roles_extra, '{}')::text[] && ARRAY['tutor', 'tutor_redactor'])`;
 
 /**
- * Que sea tutor (o redactora) y de uno de esos campus: por `user_projects` o por su
- * empresa entera (`tutor_empresas`), como `panelDeTutores`. Si no, 404.
+ * Que sea tutor (o redactora), esté de alta y sea de uno de esos campus: por
+ * `user_projects` o por su empresa entera (`tutor_empresas`), como `panelDeTutores`.
+ * Si no, 404: de quien ya no trabaja aquí no se abre nada, aunque se sepa su id.
  */
 export async function exigirTutorSupervisable(req, tutorId) {
   const id = Number(tutorId);
@@ -51,7 +52,7 @@ export async function exigirTutorSupervisable(req, tutorId) {
   const campus = await campusQueMira(req);
   const { rows } = await query(
     `SELECT u.id FROM users u
-      WHERE u.id = $1 AND ${ES_TUTOR}
+      WHERE u.id = $1 AND u.active AND ${ES_TUTOR}
         AND ($2::int[] IS NULL
              OR EXISTS (SELECT 1 FROM user_projects up
                          WHERE up.user_id = u.id AND up.active AND up.project_id = ANY($2::int[]))
@@ -65,12 +66,14 @@ export async function exigirTutorSupervisable(req, tutorId) {
 
 /**
  * SQL: la tarea `t` es del trabajo de tutora. Fuera, las de un equipo de colaboradores
- * (desarrollo, SEO…): no son de esto. Sin equipo, las suyas sueltas (de su campus, si
- * tiene). Con equipo, solo los de las empresas de esos campus. `n` es el parámetro
- * con los campus (o NULL = todos).
+ * (desarrollo, SEO…): no son de esto. Sin equipo, solo las sueltas de uno de esos campus:
+ * una sin equipo ni campus puede ser de otra empresa (una tutora que trabaja para dos) y
+ * no se sabe de quién es, así que no se enseña (la ve el superadmin, que lo ve todo). Con
+ * equipo, solo los de las empresas de esos campus. `n` es el parámetro con los campus
+ * (o NULL = todos).
  */
 function sqlTareaDeTutora(t, n, { equipos, tipos }) {
-  const sueltas = `(${t}.project_id IS NULL OR ${n}::int[] IS NULL OR ${t}.project_id = ANY(${n}::int[]))`;
+  const sueltas = `(${n}::int[] IS NULL OR ${t}.project_id = ANY(${n}::int[]))`;
   if (!equipos) return sueltas;
   const deEquipo = `EXISTS (SELECT 1 FROM task_teams tt_s WHERE tt_s.id = ${t}.team_id
       ${tipos ? "AND tt_s.tipo <> 'colaboradores'" : 'AND FALSE'}

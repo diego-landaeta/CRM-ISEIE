@@ -9,6 +9,7 @@ import {
   cobraDesdeSchema,
   busquedaDeTutorSchema, buscarTutoresSchema,
   empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
+  supervisionTutorSchema, supervisionMiCampusSchema,
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
 import * as campusDeLaTutora from './tutor.micampus.js';
@@ -993,21 +994,24 @@ export async function supervisionLista(req, res, next) {
 // GET /api/tutores/supervision/:id/mi-campus[?refrescar=1]
 export async function supervisionMiCampus(req, res, next) {
   try {
-    res.json({ success: true, data: await supervision.miCampusDe(req, req.params.id, { refrescar: req.query.refrescar === '1' }) });
+    const { id, refrescar } = valida(supervisionMiCampusSchema, { ...req.params, ...req.query });
+    res.json({ success: true, data: await supervision.miCampusDe(req, id, { refrescar }) });
   } catch (err) { next(err); }
 }
 
 // GET /api/tutores/supervision/:id/tareas
 export async function supervisionTareas(req, res, next) {
   try {
-    res.json({ success: true, data: await supervision.tareasDe(req, req.params.id) });
+    const { id } = valida(supervisionTutorSchema, req.params);
+    res.json({ success: true, data: await supervision.tareasDe(req, id) });
   } catch (err) { next(err); }
 }
 
 // GET /api/tutores/supervision/:id/redaccion-moodle
 export async function supervisionRedaccion(req, res, next) {
   try {
-    res.json({ success: true, data: await supervision.redaccionDe(req, req.params.id) });
+    const { id } = valida(supervisionTutorSchema, req.params);
+    res.json({ success: true, data: await supervision.redaccionDe(req, id) });
   } catch (err) { next(err); }
 }
 

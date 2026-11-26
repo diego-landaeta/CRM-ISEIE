@@ -32,15 +32,15 @@ const request = supertest(app);
 const MARCA = `SUP${Date.now().toString(36)}`;
 const q = (sql, p) => pool.query(sql, p).then((r) => r.rows);
 const ids = { users: [], projects: [], issuers: [], teams: [] };
-let P; let OTRO; let SUPER; let ADMIN; let SUPERVISOR; let REDACTORA; let TUTOR; let AJENA;
+let P; let OTRO; let SUPER; let ADMIN; let ADMIN_B; let SUPERVISOR; let REDACTORA; let TUTOR; let AJENA; let DE_BAJA;
 
 const como = (u) => ({ Authorization: `Bearer ${jwt.sign({ userId: u.id, role: u.role }, process.env.JWT_SECRET, { expiresIn: '10m' })}` });
 const get = (u, ruta) => request.get(`/api/tutores${ruta}`).set(como(u));
 
 async function persona(n, role, campus = [], extra = {}) {
   const [u] = await q(
-    `INSERT INTO users (nombre, email, password_hash, role, roles_extra) VALUES ($1, $2, 'x', $3, $4) RETURNING id, role`,
-    [`${MARCA} ${n}`, `${n.toLowerCase().replace(/[^a-z]/g, '')}@${MARCA.toLowerCase()}.test`, role, extra.roles_extra || '{}']);
+    `INSERT INTO users (nombre, email, password_hash, role, roles_extra, active) VALUES ($1, $2, 'x', $3, $4, $5) RETURNING id, role`,
+    [`${MARCA} ${n}`, `${n.toLowerCase().replace(/[^a-z]/g, '')}@${MARCA.toLowerCase()}.test`, role, extra.roles_extra || '{}', extra.active !== false]);
   ids.users.push(u.id);
   for (const c of campus) await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [u.id, c]);
   return u;
@@ -52,11 +52,11 @@ async function equipo(issuer, tipo, nombre) {
   return t.id;
 }
 
-async function tarea(titulo, persona_, { team = null, project = null, status = 'por_hacer', completada = null } = {}) {
+async function tarea(titulo, persona_, { team = null, project = null, status = 'por_hacer', completada = null, creador = null } = {}) {
   const [t] = await q(
     `INSERT INTO tasks (title, status, assigned_to, created_by, team_id, project_id, completed_at)
-     VALUES ($1, $2, $3, $3, $4, $5, $6) RETURNING id`,
-    [`${MARCA} ${titulo}`, status, persona_.id, team, project, completada]);
+     VALUES ($1, $2, $3, $7, $4, $5, $6) RETURNING id`,
+    [`${MARCA} ${titulo}`, status, persona_.id, team, project, completada, (creador || persona_).id]);
   return t.id;
 }
 
@@ -81,7 +81,11 @@ beforeAll(async () => {
   // El supervisor es un tutor más, con el permiso dado como excepción (lo que hará Diego).
   SUPERVISOR = await persona('Supervisor', 'tutor', [P]);
   await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'tutores', 'supervisar', true)`, [SUPERVISOR.id]);
-  REDACTORA = await persona('Redactora', 'tutor_redactor', [P]);
+  // La redactora trabaja para las dos empresas (como pasa de verdad): lo de la otra no lo ve el supervisor.
+  REDACTORA = await persona('Redactora', 'tutor_redactor', [P, OTRO]);
+  ADMIN_B = await persona('Admin B', 'admin', [OTRO]);
+  // Una tutora que ya no trabaja aquí: de ella no se abre nada, aunque se sepa su id.
+  DE_BAJA = await persona('De baja', 'tutor_redactor', [P], { active: false });
   TUTOR = await persona('Tutor', 'tutor', [P]);
   AJENA = await persona('Ajena', 'tutor_redactor', [OTRO]);
 
@@ -103,6 +107,10 @@ beforeAll(async () => {
   await tarea('de desarrollo', REDACTORA, { team: desarrolloA });
   await tarea('de la otra empresa', REDACTORA, { team: redactorasB });
   await tarea('hecha hace meses', REDACTORA, { team: redactorasA, status: 'hecha', completada: '2026-06-01T10:00:00Z' });
+  // Sin equipo ni campus, y se la pone un admin de la OTRA empresa: no se sabe de quién es.
+  await tarea('sin equipo ni campus, de la otra empresa', REDACTORA, { creador: ADMIN_B });
+  await tarea('suelta de la otra empresa', REDACTORA, { project: OTRO, creador: ADMIN_B });
+  await tarea('de la que se fue', DE_BAJA, { team: redactorasA });
   const [t1] = await q('SELECT id FROM tasks WHERE title = $1', [`${MARCA} redactar módulo 1`]);
   await q('INSERT INTO task_comments (task_id, user_id, content) VALUES ($1, $2, $3)', [t1.id, REDACTORA.id, 'Subido el tema 2 al curso']);
 }, 60000);
@@ -169,7 +177,25 @@ describe('quién ve a quién', () => {
     expect((await get(SUPERVISOR, `/supervision/${AJENA.id}/tareas`)).status).toBe(404);
     // Ni alguien que no es tutor, aunque sea de su campus.
     expect((await get(SUPERVISOR, `/supervision/${ADMIN.id}/tareas`)).status).toBe(404);
-    expect((await get(SUPERVISOR, '/supervision/abc/tareas')).status).toBe(404);
+  });
+
+  it('de una tutora de baja no se abre nada (404) ni sale en la lista', async () => {
+    for (const ruta of ['mi-campus', 'tareas', 'redaccion-moodle']) {
+      expect((await get(SUPERVISOR, `/supervision/${DE_BAJA.id}/${ruta}`)).status, ruta).toBe(404);
+    }
+    expect(idsDe(await get(SUPERVISOR, '/supervision'))).not.toContain(DE_BAJA.id);
+  });
+
+  it('un id o un «refrescar» que no valen: 400 con el formato de siempre', async () => {
+    for (const ruta of ['/supervision/abc/tareas', '/supervision/0/mi-campus', '/supervision/-3/redaccion-moodle', '/supervision/1.5/tareas']) {
+      const r = await get(SUPERVISOR, ruta);
+      expect(r.status, ruta).toBe(400);
+      expect(r.body, ruta).toMatchObject({ success: false, code: 'VALIDATION_ERROR' });
+    }
+    const r = await get(SUPERVISOR, `/supervision/${REDACTORA.id}/mi-campus?refrescar=si`);
+    expect(r.status).toBe(400);
+    expect(r.body).toMatchObject({ success: false, code: 'VALIDATION_ERROR', error: 'refrescar es 0 o 1' });
+    expect((await get(SUPERVISOR, `/supervision/${REDACTORA.id}/mi-campus?refrescar=1`)).status).toBe(200);
   });
 });
 
@@ -192,6 +218,9 @@ describe('lo que ve de cada una', () => {
     expect(titulos).not.toContain(`${MARCA} de desarrollo`);
     expect(titulos).not.toContain(`${MARCA} de la otra empresa`);
     expect(titulos).not.toContain(`${MARCA} hecha hace meses`);
+    // Ni la suelta sin equipo ni campus que le puso la otra empresa, ni la suelta de su campus de allí.
+    expect(titulos).not.toContain(`${MARCA} sin equipo ni campus, de la otra empresa`);
+    expect(titulos).not.toContain(`${MARCA} suelta de la otra empresa`);
     const conComentario = r.body.data.find((t) => t.titulo === `${MARCA} redactar módulo 1`);
     expect(conComentario).toMatchObject({ equipo: `${MARCA} Redactoras`, comentarios: 1 });
     expect(conComentario.ultimoComentario.texto).toBe('Subido el tema 2 al curso');
@@ -207,7 +236,8 @@ describe('lo que ve de cada una', () => {
 
   it('el superadmin ve también la tarea de la otra empresa', async () => {
     const r = await get(SUPER, `/supervision/${REDACTORA.id}/tareas`);
-    expect(r.body.data.map((t) => t.titulo)).toContain(`${MARCA} de la otra empresa`);
+    expect(r.body.data.map((t) => t.titulo)).toEqual(expect.arrayContaining([
+      `${MARCA} de la otra empresa`, `${MARCA} sin equipo ni campus, de la otra empresa`, `${MARCA} suelta de la otra empresa`]));
   });
 });
 
