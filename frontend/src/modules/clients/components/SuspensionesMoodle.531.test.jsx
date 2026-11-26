@@ -9,7 +9,7 @@ import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/re
  *   · la etiqueta de la cabecera, solo si sigue suspendido;
  *   · todo sin género (QA del 25/11/2026): «Cuenta / Matrícula suspendida», «Reactivada»;
  *   · el hook pide `/leads/:id/suspensiones-moodle`;
- *   · el filtro «Suspendidos en Moodle» de Clientes: sale solo encendido y se puede quitar.
+ *   · el filtro «Con suspensión en Moodle» de Clientes: sale solo encendido y se puede quitar.
  *
  *   npx vitest run src/modules/clients/components/SuspensionesMoodle.531.test.jsx
  */
@@ -113,7 +113,7 @@ describe('#531 · el estado en Moodle de la ficha', () => {
   });
 });
 
-describe('#531 · el filtro «Suspendidos en Moodle» de Clientes', () => {
+describe('#531 · el filtro «Con suspensión en Moodle» de Clientes', () => {
   const base = {
     user: { role: 'admin' }, search: '', setSearch: () => {}, filterResp: '', setFilterResp: () => {},
     filterProducto: '', setFilterProducto: () => {}, filterInstallments: '', setFilterInstallments: () => {},
@@ -128,14 +128,16 @@ describe('#531 · el filtro «Suspendidos en Moodle» de Clientes', () => {
     fireEvent.change(screen.getByLabelText('Estado en Moodle'), { target: { value: 'suspendidos' } });
     expect(setFilterMoodle).toHaveBeenCalledWith('suspendidos');
     rerender(<ClientsFiltersBar {...base} filterMoodle="suspendidos" setFilterMoodle={setFilterMoodle} />);
-    expect(screen.getAllByText('Suspendidos en Moodle').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Con suspensión en Moodle').length).toBeGreaterThan(0);
+    // Sin género (QA del 25/11/2026): ni en la píldora ni en la opción del filtro.
+    expect(screen.queryByText(/Suspendid[oa]s? en Moodle/)).toBeNull();
   });
 
   it('apagado en el servidor: ni el filtro ni la píldora', () => {
     render(<ClientsFiltersBar {...base} filterMoodle="suspendidos" />);
     fireEvent.click(screen.getByRole('button', { name: /Filtros/ }));
     expect(screen.queryByLabelText('Estado en Moodle')).toBeNull();
-    expect(screen.queryByText('Suspendidos en Moodle')).toBeNull();
+    expect(screen.queryByText('Con suspensión en Moodle')).toBeNull();
   });
 
   it('el interruptor: lo que diga el servidor manda; sin saberlo, lo de compilar', () => {

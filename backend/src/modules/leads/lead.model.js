@@ -880,7 +880,7 @@ export async function findAll({ projectId, projectIds, status, pasoProceso, resp
       conditions.push(`NOT ${hasInstallments}`);
     }
   }
-  // Suspendidos en Moodle (gemela de CRM#531): siguen suspendidos (la cuenta o un curso)
+  // Con suspensión en Moodle (gemela de CRM#531): siguen suspendidos (la cuenta o un curso)
   // según el último aviso del plugin. Solo con SUSPENSIONES_MOODLE_EN_PRODUCCION y la
   // migración 333 aplicada (`suspensionesListas`): si no, no sale nadie (nunca «todos»).
   // SQL fijo, sin parámetros: no toca `paramIdx`.
