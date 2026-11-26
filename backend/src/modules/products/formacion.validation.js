@@ -30,9 +30,10 @@ const moduloSchema = z.object({
   horas: z.preprocess(vacioEsNulo, z.coerce.number().int('Las horas de un módulo van sin decimales')
     .min(0, 'Las horas no pueden ser negativas').max(MAX_HORAS_MODULO, `Un módulo no puede pasar de ${MAX_HORAS_MODULO} horas`).nullable().optional()),
   // «Se desbloquea a los … días» (CRM#1124): vacío o 0 = desde el principio. Sin la clave, se
-  // queda lo guardado (la pantalla solo la manda con la fase 2 de Moodle encendida).
+  // queda lo guardado (la pantalla solo la manda con la fase 2 de Moodle encendida). Un texto que
+  // no es número («abc») se dice en castellano, no con el «Expected number, received nan» de Zod.
   dias_desbloqueo: z.preprocess((v) => { const x = vacioEsNulo(v); return x === 0 || x === '0' ? null : x; },
-    z.coerce.number().int('Los días para desbloquear un módulo van sin decimales')
+    z.coerce.number({ invalid_type_error: 'Los días para desbloquear un módulo tienen que ser un número' }).int('Los días para desbloquear un módulo van sin decimales')
       .min(1, 'Los días para desbloquear no pueden ser negativos')
       .max(MAX_DIAS_DESBLOQUEO, `Un módulo no puede desbloquearse a más de ${MAX_DIAS_DESBLOQUEO} días`).nullable().optional()),
 });

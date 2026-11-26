@@ -115,6 +115,8 @@ describe('el campo (sin base)', () => {
     expect(dias('15').data.modulos[0].dias_desbloqueo).toBe(15);
     expect(formacionSchema.safeParse({ nombre: 'X', modulos: [{ titulo: 'M' }] }).data.modulos[0]).not.toHaveProperty('dias_desbloqueo');
     for (const malo of [-1, 3651, 2.5, 'tres']) expect(dias(malo).success).toBe(false);
+    // QA del 26/11: un texto que no es número se dice en castellano, no «Expected number, received nan».
+    expect(dias('abc').error.issues.map((i) => i.message)).toEqual(['Los días para desbloquear un módulo tienen que ser un número']);
   });
 
   it('a Moodle solo van los días de los módulos que los tienen', () => {
@@ -160,6 +162,15 @@ describe('guardar y llevar a Moodle (CRM#1124)', () => {
     // Se deja como estaba para lo siguiente.
     const ahora = (await ficha()).body.data.modulos;
     await guardar(ahora.slice(0, 4).map((m) => ({ id: m.id, titulo: m.titulo })));
+  });
+
+  it('días que no son número: 400 en castellano y no se toca nada (QA del 26/11)', async () => {
+    const antes = (await ficha()).body.data.modulos;
+    const r = await guardar(antes.map((m, i) => ({ id: m.id, titulo: m.titulo, ...(i === 1 ? { dias_desbloqueo: 'abc' } : {}) })));
+    expect(r.status).toBe(400);
+    expect(JSON.stringify(r.body)).toMatch(/Los días para desbloquear un módulo tienen que ser un número/);
+    expect(JSON.stringify(r.body)).not.toMatch(/Expected|received/);
+    expect((await modulosGuardados()).map((m) => m.dias_desbloqueo)).toEqual([null, 7, 30, 45]);
   });
 
   it('la vista previa dice a los cuántos días se abre cada sección', async () => {
