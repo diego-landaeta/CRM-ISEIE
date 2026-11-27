@@ -15,7 +15,7 @@ async function alcance(req) {
   return {
     campus: await listaDelAmbito(req),
     sistema: await tienePermiso(req, 'registro.sistema'),
-    // Si la dirección de un cambio de correo ya era de otra persona (#833, gemela de CRM#1199): solo superadmin y soporte.
+    // Si la dirección de un cambio de correo ya era de otra persona (#197, como CRM#1199): solo superadmin y soporte.
     verTodo: veTodoElCrm(req.user),
   };
 }

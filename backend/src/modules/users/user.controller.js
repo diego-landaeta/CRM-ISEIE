@@ -97,7 +97,7 @@ export async function activityLog(req, res, next) {
       offset,
       ambito,
     });
-    // Lo mismo que el registro (#833): que la dirección de un cambio de correo
+    // Lo mismo que el registro (#197): que la dirección de un cambio de correo
     // ya era de otra persona, solo lo ven superadmin y soporte.
     const { detalleQueSePuedeVer } = await import('../registro/registro.model.js');
     const items = result.items.map((a) => ({ ...a, details: detalleQueSePuedeVer(a.action, a.details, !ambito) }));

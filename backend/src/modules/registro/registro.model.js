@@ -273,7 +273,7 @@ async function deUsuarios(filtros, limite) {
 }
 
 /**
- * Lo que no sale del detalle de una fila (#833, gemela de CRM#1199).
+ * Lo que no sale del detalle de una fila (#197; el mismo filtro que CRM#1199).
  *
  * Al pedir un código de cambio de correo para una dirección que ya es de otra
  * persona, `pedirCodigo` responde igual que si fuera libre y anota por qué no lo
