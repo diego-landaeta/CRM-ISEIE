@@ -9,7 +9,7 @@ import { saveLocal, getLocal, deleteLocal } from '../../shared/services/localSto
 import { mimeToExt, extToMime } from '../../shared/utils/mime.js';
 import crypto from 'crypto';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
-import { alcanceDeLider } from '../../shared/utils/roles.js';
+import { alcanceDeLider, tieneRol } from '../../shared/utils/roles.js';
 
 /**
  * GET /api/users/buscar?q=&projectIds= — el buscador (Ctrl K, gemela de CRM#591).
@@ -516,11 +516,18 @@ export async function desbloquearBrevo(req, res, next) {
  * se abre a quien tenga «Editar usuarios»: el permiso es de soporte y un admin
  * que lo reciba como excepción actúa en lo suyo (`exigirCampusSuyo`). Fuera de
  * sus campus, o si no existe, 404: no se confirma que haya alguien con ese id.
+ * La de un superadmin, solo otro superadmin (o él mismo).
  */
 async function exigirPersonaSuyaParaCorreo(req, id) {
   const user = await userModel.findById(id);
   if (!user) throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
   if (Number(id) === Number(req.user?.userId)) return;
+  // La cuenta de un superadmin (también como rol añadido) solo la mira otro
+  // superadmin: ni soporte, que ve el CRM entero, ni un admin con la
+  // excepción. Para los demás, no existe.
+  if (tieneRol(user, 'superadmin') && !tieneRol(req.user, 'superadmin')) {
+    throw new AppError('Usuario no encontrado', 404, 'USER_NOT_FOUND');
+  }
   const campus = await campusParaRecortar(req);
   if (!campus) return;
   const suyos = await campusDeLaPersona(id);

@@ -292,12 +292,14 @@ export async function cambiosDeLaPersona(userId) {
 /**
  * «Anular»: la petición pendiente deja de valer y su código ya no abre nada
  * (`confirmarCodigo` solo mira las que no tienen `anulado_at`). Queda en el
- * registro quién la anuló.
+ * registro quién la anuló. Una que ya caducó no está pendiente: no se toca
+ * (sigue saliendo como «caducado») y responde igual que si no hubiera nada.
  */
 export async function anularPendiente({ userId, porUserId, ip = null }) {
   const { rows: [p] } = await query(
     `UPDATE cambios_de_correo SET anulado_at = NOW()
       WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL
+        AND expira_at > NOW()
       RETURNING id, email_nuevo`, [userId]);
   if (!p) throw new AppError('No tiene ningún cambio de correo pendiente', 404, 'SIN_PENDIENTE');
   const user = await userModel.findById(userId);

@@ -18,8 +18,8 @@ import jwt from 'jsonwebtoken';
  *     una de verdad: la ficha no lo delata;
  *   - anular deja el código sin valor, y queda en el registro;
  *   - el historial dice de qué correo a cuál y cuándo;
- *   - y el registro tampoco: a un admin de campus no le dice por qué no se
- *     mandó un código (que la dirección ya tenía cuenta); a soporte, sí.
+ *   - (que el registro y «Actividad» tampoco lo delaten lo defiende
+ *     registroSinSenueloCorreo197, que viene con #825).
  *
  * Contra la base local, con las rutas y los permisos de verdad. Brevo,
  * simulado: no sale ningún correo.
@@ -37,12 +37,10 @@ const { default: pool } = await import('../src/shared/config/db.js');
 const { errorHandler } = await import('../src/shared/middleware/errorHandler.js');
 const { pedirCodigo, confirmarCodigo } = await import('../src/modules/users/cambio-de-correo.js');
 const { default: usersModule } = await import('../src/modules/users/index.js');
-const { default: registroModule } = await import('../src/modules/registro/index.js');
 
 const app = express();
 app.use(express.json());
 app.use(usersModule.prefix, usersModule.router);
-app.use(registroModule.prefix, registroModule.router);
 app.use(errorHandler);
 const request = supertest(app);
 
@@ -128,6 +126,31 @@ describe('quién lo ve', () => {
   it('soporte ve a cualquiera, de cualquier campus', async () => {
     expect((await ver(SOPORTE, OTRA_DE_C)).status).toBe(200);
   });
+
+  it('la cuenta de un superadmin: ni soporte ni un admin con la excepción la ven ni la anulan (404)', async () => {
+    // Inactivas a propósito: otras pruebas cuentan los superadmin activos
+    // mientras corren a la vez (certifexDiplomas), y estas no deben sumar.
+    // Por eso tampoco se prueba aquí que un superadmin la vea: con la cuenta
+    // inactiva no pasa de la guardia de permisos. Esa rama es la de siempre.
+    const jefe = async (n, role, extra) => {
+      const u = await one(`INSERT INTO users (nombre, email, password_hash, role, roles_extra, active)
+                           VALUES ($1, $2, 'x', $3, $4::user_role[], false) RETURNING id, role, email`,
+      [`${MARCA} ${n}`, `${n}@${MARCA}.test`, role, extra]);
+      ids.users.push(u.id); return u;
+    };
+    const JEFA = await jefe('jefa', 'superadmin', []);
+    // Superadmin como rol añadido: cuenta igual.
+    const JEFE_EXTRA = await jefe('jefeextra', 'gestor', ['superadmin']);
+    await q('INSERT INTO user_projects (user_id, project_id) VALUES ($1, $2)', [JEFE_EXTRA.id, A]);
+    for (const [quien, persona] of [[SOPORTE, JEFA], [SOPORTE, JEFE_EXTRA], [ADMIN_CON, JEFE_EXTRA]]) {
+      const visto = await ver(quien, persona);
+      expect(visto.status).toBe(404);
+      expect(visto.body.code).toBe('USER_NOT_FOUND');
+      const anulado = await anular(quien, persona);
+      expect(anulado.status).toBe(404);
+      expect(anulado.body.code).toBe('USER_NOT_FOUND');
+    }
+  });
 });
 
 describe('lo que enseña', () => {
@@ -209,6 +232,16 @@ describe('«Anular»', () => {
     expect(r.details).toMatchObject({ usuario_id: ANA.id, a: `ana.reg@${MARCA}.test` });
   });
 
+  it('una que ya caducó no se anula: 404 SIN_PENDIENTE y sigue como «caducado»', async () => {
+    await pedir({ userId: ANA.id, emailNuevo: `ana.caducada@${MARCA}.test` });
+    await q(`UPDATE cambios_de_correo SET expira_at = NOW() - INTERVAL '1 minute' WHERE user_id = $1`, [ANA.id]);
+    const res = await anular(SOPORTE, ANA);
+    expect(res.status).toBe(404);
+    expect(res.body.code).toBe('SIN_PENDIENTE');
+    expect((await one('SELECT anulado_at FROM cambios_de_correo WHERE user_id = $1', [ANA.id])).anulado_at).toBeNull();
+    expect((await ver(SOPORTE, ANA)).body.data.historial[0].estado).toBe('caducado');
+  });
+
   it('sin nada pendiente, 404 y no anota nada', async () => {
     const antes = Number((await one(`SELECT COUNT(*) n FROM user_activity_log WHERE action = 'usuario.anular_cambio_correo' AND user_id = $1`, [SOPORTE.id])).n);
     const res = await anular(SOPORTE, ANA);
@@ -216,44 +249,5 @@ describe('«Anular»', () => {
     expect(res.body.code).toBe('SIN_PENDIENTE');
     const despues = Number((await one(`SELECT COUNT(*) n FROM user_activity_log WHERE action = 'usuario.anular_cambio_correo' AND user_id = $1`, [SOPORTE.id])).n);
     expect(despues).toBe(antes);
-  });
-});
-
-describe('el registro tampoco lo delata', () => {
-  const filaDelPedido = async (quien) => {
-    const res = await request.get(`/api/registro?usuarioId=${ANA.id}&fuentes=usuario`).set(como(quien));
-    expect(res.status).toBe(200);
-    return res.body.data.filas.find((f) => f.accion === 'usuario.pedir_cambio_correo');
-  };
-
-  it('a un admin de su campus no le dice que la dirección ya era de otra persona; a soporte, sí', async () => {
-    await pedir({ userId: ANA.id, emailNuevo: OTRA_DE_C.email });
-    const delAdmin = await filaDelPedido(ADMIN_SIN);
-    expect(delAdmin).toBeTruthy();
-    expect(delAdmin.detalle).toMatchObject({ usuario_id: ANA.id, a: OTRA_DE_C.email });
-    expect(JSON.stringify(delAdmin)).not.toMatch(/no_mandado|otro usuario/);
-    const deSoporte = await filaDelPedido(SOPORTE);
-    expect(deSoporte.detalle.no_mandado).toMatch(/otro usuario/);
-  });
-
-  it('y una petición normal se ve igual para los dos', async () => {
-    await pedir({ userId: ANA.id, emailNuevo: `ana.normal@${MARCA}.test` });
-    const delAdmin = await filaDelPedido(ADMIN_SIN);
-    const deSoporte = await filaDelPedido(SOPORTE);
-    expect(delAdmin.detalle).toEqual(deSoporte.detalle);
-  });
-
-  // ISEIE tiene además la pantalla «Actividad» (GET /api/users/activity-log), con el mismo detalle.
-  it('ni la pantalla «Actividad»: al admin, sin el porqué; a soporte, con él', async () => {
-    await pedir({ userId: ANA.id, emailNuevo: OTRA_DE_C.email });
-    const actividad = async (quien) => {
-      const res = await request.get(`/api/users/activity-log?userId=${ANA.id}&action=usuario.pedir_cambio_correo`).set(como(quien));
-      expect(res.status).toBe(200);
-      return res.body.data[0];
-    };
-    const delAdmin = await actividad(ADMIN_SIN);
-    expect(delAdmin.details).toMatchObject({ usuario_id: ANA.id, a: OTRA_DE_C.email });
-    expect(JSON.stringify(delAdmin)).not.toMatch(/no_mandado|otro usuario/);
-    expect((await actividad(SOPORTE)).details.no_mandado).toMatch(/otro usuario/);
   });
 });
