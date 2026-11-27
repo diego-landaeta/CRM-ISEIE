@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { CalendarBlank } from '@phosphor-icons/react';
 
 // El periodo de la pantalla de Ventas, elegido una sola vez.
@@ -16,6 +16,9 @@ const OPCIONES = [
   { k: 'ytd', label: 'Año en curso' },
   { k: 'all', label: 'Todo 2026' },
 ];
+
+/** Los periodos que se entienden: lo demás que llegue por la dirección se ignora (#1194). */
+export const CLAVES_PERIODO = OPCIONES.map((o) => o.k);
 
 const iso = (d) => {
   const z = new Date(d.getTime() - d.getTimezoneOffset() * 60000);
@@ -95,11 +98,5 @@ export function useRango(clave, desde, hasta) {
   );
 }
 
-export function useEstadoPeriodo(inicial = 'mes') {
-  const [periodo, setPeriodo] = useState(inicial);
-  const [desde, setDesde] = useState('');
-  const [hasta, setHasta] = useState('');
-  const rango = useRango(periodo, desde, hasta);
-  const onFechas = (d, h) => { setDesde(d); setHasta(h); };
-  return { periodo, setPeriodo, desde, hasta, onFechas, rango, mes: mesDe(rango.from, rango.to) };
-}
+// El periodo ya no se guarda aquí: vive en la dirección de Ventas, con los
+// demás filtros (#1194). Ver `SalesPage`.
