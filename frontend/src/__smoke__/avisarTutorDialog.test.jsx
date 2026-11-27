@@ -22,7 +22,9 @@ vi.mock('@/modules/tutores/api/tutores.api', () => ({
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 
-const { default: AvisarTutorDialog, textoYaMandado, cuandoFue, escalaDelCorreo, ANCHO_DEL_CORREO } = await import('@/modules/tutores/components/AvisarTutorDialog');
+const {
+  default: AvisarTutorDialog, textoYaMandado, cuandoFue, diaDelAviso, avisadoEnLaFila, escalaDelCorreo, ANCHO_DEL_CORREO,
+} = await import('@/modules/tutores/components/AvisarTutorDialog');
 const { toast } = await import('@/shared/hooks/useToast');
 
 const AVISO = {
@@ -58,6 +60,36 @@ describe('la frase de «ya se le mandó»', () => {
 
   it('con varios, cuántos van', () => {
     expect(textoYaMandado('octubre de 2026', [...YA, { ...YA[0], id: 3 }])).toMatch(/Ya van 2 avisos de ese mes\./);
+  });
+
+  it('un nombre que acaba en punto no deja «..»', () => {
+    const conPunto = [{ ...YA[0], enviadoPor: 'Ana R.' }];
+    expect(textoYaMandado('octubre de 2026', conPunto))
+      .toBe('Ya se le mandó el aviso de octubre de 2026 el 12/11/2026 a las 10:20 por Ana R.');
+    expect(textoYaMandado('octubre de 2026', [...conPunto, { ...conPunto[0], id: 3 }]))
+      .toBe('Ya se le mandó el aviso de octubre de 2026 el 12/11/2026 a las 10:20 por Ana R. Ya van 2 avisos de ese mes.');
+  });
+});
+
+describe('la fila de la tabla dice el mismo día que el diálogo', () => {
+  it('con el cero delante («05/03/2026», no «5/3/2026»)', () => {
+    const r = { avisado_at: '2026-03-05T10:00:00.000Z', avisado_por_nombre: 'Ana R.', avisos_enviados: 2 };
+    expect(avisadoEnLaFila(r)).toBe('avisado el 05/03/2026 por Ana R. (2 veces)');
+    expect(cuandoFue(r.avisado_at)).toMatch(/^05\/03\/2026 /);
+    expect(diaDelAviso(r.avisado_at)).toBe('05/03/2026');
+  });
+  it('en hora de Madrid, aunque el equipo esté en Caracas', () => {
+    const antes = process.env.TZ;
+    process.env.TZ = 'America/Caracas';
+    try {
+      // 23:30 UTC del 4 son las 00:30 del 5 en Madrid y las 19:30 del 4 en Caracas.
+      const f = '2026-03-04T23:30:00.000Z';
+      expect(avisadoEnLaFila({ avisado_at: f })).toBe('avisado el 05/03/2026');
+      expect(cuandoFue(f)).toBe('05/03/2026 a las 00:30');
+    } finally { process.env.TZ = antes; }
+  });
+  it('sin aviso, nada', () => {
+    expect(avisadoEnLaFila({ avisado_at: null })).toBe('');
   });
 });
 

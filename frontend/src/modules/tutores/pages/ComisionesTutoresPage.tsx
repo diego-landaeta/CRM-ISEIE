@@ -9,8 +9,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
-import AvisarTutorDialog, { cuandoFue } from '../components/AvisarTutorDialog';
-import { formatDateNumeric } from '@/shared/lib/format';
+import AvisarTutorDialog, { avisadoEnLaFila, cuandoFue } from '../components/AvisarTutorDialog';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import usePermission from '@/shared/hooks/usePermission';
 // El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
@@ -358,11 +357,10 @@ export default function ComisionesTutoresPage() {
                     {/* Que ya se le avisó, quién y cuántas veces, al lado: no en el
                         estado del dinero, que sigue debiéndosele hasta que se pague. */}
                     {r.avisado_at && (
-                      // «20/11/2026», como en el diálogo; antes salía «2026-11-20».
+                      // «05/03/2026» en hora de Madrid, igual que el diálogo (con
+                      // formatDateNumeric salía «5/3/2026»).
                       <span className="text-xs text-muted-foreground shrink-0" title={`Avisado el ${cuandoFue(r.avisado_at)}`}>
-                        avisado el {formatDateNumeric(r.avisado_at)}
-                        {r.avisado_por_nombre ? ` por ${r.avisado_por_nombre}` : ''}
-                        {(r.avisos_enviados || 0) > 1 ? ` (${r.avisos_enviados} veces)` : ''}
+                        {avisadoEnLaFila(r)}
                       </span>
                     )}
                     {Number(r.pendiente) === 0 && r.ultima_liquidacion && (

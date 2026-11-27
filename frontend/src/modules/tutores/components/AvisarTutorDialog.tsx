@@ -27,13 +27,20 @@ import { tutoresApi, type AvisoAlTutor, type AmbitoDelAviso, type AvisoEnviado }
 const euros = (n: number | string) =>
   Number(n || 0).toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
 
+const MADRID = { timeZone: 'Europe/Madrid' } as const;
+
+/** «05/03/2026», en hora de Madrid. La fila de la tabla y el diálogo dicen el mismo día. */
+export function diaDelAviso(f: string | null | undefined) {
+  const d = f ? new Date(f) : null;
+  if (!d || Number.isNaN(d.getTime())) return '';
+  return d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', ...MADRID });
+}
+
 /** «12/11/2026 a las 10:20», en hora de Madrid, como lo dice el servidor. */
 export function cuandoFue(f: string) {
-  const d = new Date(f);
-  if (Number.isNaN(d.getTime())) return '';
-  const zona = { timeZone: 'Europe/Madrid' } as const;
-  const dia = d.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: 'numeric', ...zona });
-  const hora = d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...zona });
+  const dia = diaDelAviso(f);
+  if (!dia) return '';
+  const hora = new Date(f).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit', ...MADRID });
   return `${dia} a las ${hora}`;
 }
 
@@ -41,9 +48,19 @@ export function cuandoFue(f: string) {
 export function textoYaMandado(mes: string, avisos: AvisoEnviado[]) {
   const [ultimo] = avisos;
   if (!ultimo) return null;
-  const quien = ultimo.enviadoPor ? ` por ${ultimo.enviadoPor}` : '';
+  const quien = ultimo.enviadoPor?.trim() ? ` por ${ultimo.enviadoPor.trim()}` : '';
+  const frase = `Ya se le mandó el aviso de ${mes} el ${cuandoFue(ultimo.enviadoAt)}${quien}`;
   const veces = avisos.length > 1 ? ` Ya van ${avisos.length} avisos de ese mes.` : '';
-  return `Ya se le mandó el aviso de ${mes} el ${cuandoFue(ultimo.enviadoAt)}${quien}.${veces}`;
+  // Un nombre que acaba en punto («Ana R.») ya cierra la frase: sin esto salía «R..».
+  return `${frase}${frase.endsWith('.') ? '' : '.'}${veces}`;
+}
+
+/** «avisado el 05/03/2026 por Ana R. (2 veces)», la nota de la fila de la tabla. */
+export function avisadoEnLaFila(r: { avisado_at?: string | null; avisado_por_nombre?: string | null; avisos_enviados?: number | null }) {
+  if (!r.avisado_at) return '';
+  const por = r.avisado_por_nombre?.trim() ? ` por ${r.avisado_por_nombre.trim()}` : '';
+  const veces = (r.avisos_enviados || 0) > 1 ? ` (${r.avisos_enviados} veces)` : '';
+  return `avisado el ${diaDelAviso(r.avisado_at)}${por}${veces}`;
 }
 
 /** Lo que mide de ancho el correo de la plantilla común: 600 px de hoja y 12 de margen a cada lado. */
