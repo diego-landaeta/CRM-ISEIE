@@ -16,6 +16,21 @@ import { formatDate } from '@/shared/lib/format';
 import { decodificarEntidades } from '@/shared/lib/entidadesHtml';
 // Las metas son mensuales: el mes que toque segun el filtro de fechas.
 import { mesDe } from '@/modules/sales/components/FiltroPeriodo';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { enteroDeUrl, fechaDeUrl, repartoDeUrl } from '@/modules/sales/lib/filtrosEnUrl';
+
+// Los filtros de la pantalla, en la dirección (#830, gemela de CRM#1194):
+// recargar, volver atrás desde la ficha de una venta o pasar el enlace los
+// conserva. Lo que vale lo de siempre no se escribe. Fuera del componente:
+// `useUrlFilters` pide un objeto estable.
+// Las fechas: sin `desde`/`hasta` en la dirección, este mes. Borrar una a mano
+// es «sin fecha» y se escribe `SIN_FECHA`: si se quitara de la dirección
+// volvería la de siempre.
+const FILTROS = { desde: '', hasta: '', gestora: '', curso: '', reparto: 'todas' };
+const SIN_FECHA = 'no';
+const fechaDeLaDireccion = (valor: string, porDefecto: string) => (
+  valor === SIN_FECHA ? '' : (fechaDeUrl(valor) || porDefecto)
+);
 
 const RegisterSaleDialog = lazy(() => import('@/modules/sales/components/RegisterSaleDialog'));
 import AccionesCobroVenta from '@/modules/links-pago/components/AccionesCobroVenta';
@@ -88,13 +103,27 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [loading, setLoading] = useState(true);
   const [registerOpen, setRegisterOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
-  const [viewUserId, setViewUserId] = useState('all');
+  // Un valor de la dirección que no se entiende se ignora (`filtrosEnUrl`).
+  const [filtros, setFiltros] = useUrlFilters(FILTROS);
   const [gestores, setGestores] = useState([]);
-  const [filterCurso, setFilterCurso] = useState('all');
+  const [gestoresCargadas, setGestoresCargadas] = useState(false);
+  const [cursos, setCursos] = useState([]);
+  const [cursosCargados, setCursosCargados] = useState(false);
+  // La gestora de la dirección: solo para quien ve las del equipo, y solo si
+  // está en su lista (cuando ya ha llegado). Aun así el servidor la recorta a
+  // su alcance: una gestora nunca ve lo de otra aunque el enlace la nombre.
+  const gestoraUrl = enteroDeUrl(filtros.gestora);
+  const viewUserId = isAdmin && gestoraUrl
+    && (!gestoresCargadas || gestores.some((g: { user_id: number }) => Number(g.user_id) === gestoraUrl))
+    ? String(gestoraUrl) : 'all';
+  const setViewUserId = (v: string) => setFiltros({ gestora: v === 'all' ? '' : v });
+  // El curso, igual: si ya está la lista y no aparece, no se filtra por él.
+  const filterCurso = filtros.curso && (!cursosCargados || (cursos as string[]).includes(filtros.curso))
+    ? filtros.curso : 'all';
+  const setFilterCurso = (v: string) => setFiltros({ curso: v === 'all' ? '' : v });
   // Todas · Solo compartidas · Solo enteras (#186, gemela de CRM#163): las ventas
   // atendidas entre dos gestoras, aparte. El servidor filtra; la parte de cada una no cambia.
-  const [filterCompartidas, setFilterCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
-  const [cursos, setCursos] = useState([]);
+  const filterCompartidas = repartoDeUrl(filtros.reparto);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totales, setTotales] = useState({
@@ -107,7 +136,16 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   // lista era el historico entero, y la etiqueta venta/cuota solo tiene sentido
   // con un periodo: asi la pantalla abre ya con la lista mezclada y etiquetada.
   const esteMes = rangoDe('mes');
-  const [rango, setRango] = useState({ from: esteMes.from, to: esteMes.to });
+  const rango = {
+    from: fechaDeLaDireccion(filtros.desde, esteMes.from),
+    to: fechaDeLaDireccion(filtros.hasta, esteMes.to),
+  };
+  // Lo que es igual al periodo de siempre no se escribe; una fecha borrada, sí.
+  const enDireccion = (valor: string, porDefecto: string) => (valor === porDefecto ? '' : (valor || SIN_FECHA));
+  const setRango = (r: { from: string; to: string }) => setFiltros({
+    desde: enDireccion(r.from, esteMes.from),
+    hasta: enDireccion(r.to, esteMes.to),
+  });
   // La lista de abajo con fechas puestas: ventas + cuotas facturadas, cada una
   // con su etiqueta. Sin fechas, la lista sigue siendo la de ventas.
   const [filas, setFilas] = useState<any[]>([]);
@@ -123,7 +161,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     if (!activeProject?.id || !isAdmin) return;
     client.get('/ventas/gestores-stats', { params: { projectId: activeProject.id, periodo: 'all' } })
       .then((r) => setGestores(r?.data?.gestores || []))
-      .catch(() => setGestores([]));
+      .catch(() => setGestores([]))
+      .finally(() => setGestoresCargadas(true));
   }, [activeProject?.id, isAdmin, reloadKey]);
 
   useEffect(() => {
@@ -132,7 +171,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
     if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
     client.get('/conversions/productos', { params })
       .then((r) => setCursos(r?.data || []))
-      .catch(() => setCursos([]));
+      .catch(() => setCursos([]))
+      .finally(() => setCursosCargados(true));
   }, [activeProject?.id, effectiveResponsableId, reloadKey]);
 
   // Al cambiar de fechas, el desglose de cuotas de antes ya no vale.
@@ -317,7 +357,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
           <select
             id="filtro-compartidas"
             value={filterCompartidas}
-            onChange={(e) => setFilterCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+            onChange={(e) => setFiltros({ reparto: e.target.value })}
             className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
           >
             <option value="todas">Todas</option>
@@ -325,13 +365,14 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
             <option value="enteras">Solo enteras</option>
           </select>
           <label className="text-xs font-semibold text-muted-foreground">Desde:</label>
-          <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+          <input type="date" value={rango.from} onChange={(e) => setRango({ ...rango, from: e.target.value })}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
           <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
-          <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+          <input type="date" value={rango.to} onChange={(e) => setRango({ ...rango, to: e.target.value })}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
           {(viewUserId !== 'all' || filterCurso !== 'all' || filterCompartidas !== 'todas' || rango.from !== esteMes.from || rango.to !== esteMes.to) && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setFilterCompartidas('todas'); setRango({ from: esteMes.from, to: esteMes.to }); }} className="text-[11px] text-primary hover:underline">
+            // Limpia también la dirección.
+            <button type="button" onClick={() => setFiltros.reset()} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}

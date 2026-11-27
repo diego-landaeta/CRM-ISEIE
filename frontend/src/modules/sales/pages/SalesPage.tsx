@@ -17,7 +17,17 @@ const EvolucionVentas = lazy(() => import('../components/EvolucionVentas'));
 const VentasPorPais = lazy(() => import('../components/VentasPorPais'));
 const ClientesVentas = lazy(() => import('../components/ClientesVentas'));
 const PosiblesRepetidasCard = lazy(() => import('../components/PosiblesRepetidasCard'));
-import FiltroPeriodo, { useEstadoPeriodo } from '../components/FiltroPeriodo';
+import FiltroPeriodo, { CLAVES_PERIODO, mesDe, useRango } from '../components/FiltroPeriodo';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { enteroDeUrl, fechaDeUrl, repartoDeUrl } from '../lib/filtrosEnUrl';
+
+// Los filtros de la pantalla, en la dirección (#830, gemela de CRM#1194):
+// recargar, volver atrás desde una venta o pasar el enlace los conserva. Lo que
+// vale lo de siempre no se escribe. Fuera del componente: `useUrlFilters` pide
+// un objeto estable.
+// Arranca en el año en curso: un mes recién empezado sale en blanco —ISEIE
+// no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
+const FILTROS = { periodo: 'ytd', desde: '', hasta: '', gestora: '', pais: '', reparto: 'todas' };
 
 export default function SalesPage() {
   const { activeProject, projects } = useProjectContext() as {
@@ -53,33 +63,53 @@ export default function SalesPage() {
   // El periodo de la pantalla, elegido UNA vez: antes cada tarjeta traía el
   // suyo y en la misma vista convivían cuatro criterios distintos, así que los
   // números no se podían comparar entre sí.
-  // Arranca en el año en curso: un mes recién empezado sale en blanco —ISEIE
-  // no tiene ventas en agosto— y la pantalla parecía rota. «Mes» está a un clic.
-  const { periodo, setPeriodo, desde, hasta, onFechas, rango, mes } = useEstadoPeriodo('ytd');
+  // Un valor de la dirección que no se entiende se ignora (`filtrosEnUrl`).
+  const [filtros, setFiltros] = useUrlFilters(FILTROS);
+  const periodo = CLAVES_PERIODO.includes(filtros.periodo) ? filtros.periodo : FILTROS.periodo;
+  const desde = fechaDeUrl(filtros.desde);
+  const hasta = fechaDeUrl(filtros.hasta);
+  const rango = useRango(periodo, desde, hasta);
+  const mes = mesDe(rango.from, rango.to);
+  // Un botón de periodo quita las fechas a mano EN LA MISMA escritura: dos
+  // cambios seguidos de la dirección se pisan y el segundo se lleva al primero.
+  const setPeriodo = (k: string) => setFiltros({ periodo: k, desde: '', hasta: '' });
+  const onFechas = (d: string, h: string) => setFiltros({ desde: d, hasta: h });
 
   // Filtro por gestora/vendedora (solo admin/superadmin). Las tarjetas ya
   // soportan responsableId; aquí solo lo elegimos.
   const [gestores, setGestores] = useState<Array<{ id: number; nombre: string }>>([]);
-  const [responsableId, setResponsableId] = useState<number | null>(null);
+  const [gestoresCargadas, setGestoresCargadas] = useState(false);
   useEffect(() => {
     // Por permiso y alcance (Diego, 25/11/2026): también la líder de equipo, con su equipo.
     if (!veGestoras) return;
     const pid = projectIdParam ? `&projectId=${projectIdParam}` : '';
     // alcance=comercial: a quien lleva un equipo, solo su equipo (QA 09/11/2026).
-    client.get(`/users?limit=100&alcance=comercial${pid}`).then((r) => setGestores(r.success ? (r.data || []) : [])).catch(() => {});
+    client.get(`/users?limit=100&alcance=comercial${pid}`)
+      .then((r) => setGestores(r.success ? (r.data || []) : []))
+      .catch(() => {})
+      .finally(() => setGestoresCargadas(true));
   }, [veGestoras, projectIdParam]);
+  // La gestora de la dirección: solo para quien puede elegirla, y solo si está
+  // en su lista (cuando ya ha llegado). Aun así el servidor la recorta a su
+  // alcance: una gestora nunca ve lo de otra aunque el enlace la nombre.
+  const gestoraUrl = enteroDeUrl(filtros.gestora);
+  const responsableId = veGestoras && gestoraUrl
+    && (!gestoresCargadas || gestores.some((g) => g.id === gestoraUrl)) ? gestoraUrl : null;
 
   // País de entrada (#221): el del prospecto de cada venta. Solo sale si algún
   // campus de lo que se mira tiene tabla de países.
-  const [paisEntrada, setPaisEntrada] = useState('');
-  // Todas · Solo compartidas · Solo enteras (CRM-ISEIE#186 y CRM#1176): las
-  // ventas atendidas entre dos gestoras, aparte. Lo filtra el servidor en cada
-  // tarjeta; con una gestora elegida, la compartida le sigue contando la mitad.
-  const [repartoVentas, setRepartoVentas] = useState<'todas' | 'solo' | 'enteras'>('todas');
-  const compartidas = repartoVentas === 'todas' ? null : repartoVentas;
   const opcionesPais = opcionesDePais(
     projectIdParam ? (projects || []).filter((p) => p.id === projectIdParam) : projects,
   );
+  const paisEntrada = opcionesPais.some((o) => o.valor === filtros.pais) ? filtros.pais : '';
+  // Todas · Solo compartidas · Solo enteras (CRM-ISEIE#186 y CRM#1176): las
+  // ventas atendidas entre dos gestoras, aparte. Lo filtra el servidor en cada
+  // tarjeta; con una gestora elegida, la compartida le sigue contando la mitad.
+  const repartoVentas = repartoDeUrl(filtros.reparto);
+  const compartidas = repartoVentas === 'todas' ? null : repartoVentas;
+  // «Quitar filtros» deja la pantalla como se abre, también en la dirección.
+  const hayFiltros = !!responsableId || !!paisEntrada || repartoVentas !== 'todas'
+    || periodo !== FILTROS.periodo || !!desde || !!hasta;
 
   return (
     // El margen de scroll, como en Ventas (#619): la barra fija de arriba no
@@ -104,7 +134,7 @@ export default function SalesPage() {
               <UsersThree size={14} className="text-muted-foreground" />
               <select
                 value={responsableId ?? ''}
-                onChange={(e) => setResponsableId(e.target.value ? Number(e.target.value) : null)}
+                onChange={(e) => setFiltros({ gestora: e.target.value })}
                 className="bg-transparent focus:outline-none max-w-[160px]"
                 title="Filtrar por gestora"
               >
@@ -118,7 +148,7 @@ export default function SalesPage() {
               <GlobeHemisphereWest size={14} className="text-muted-foreground" />
               <select
                 value={paisEntrada}
-                onChange={(e) => setPaisEntrada(e.target.value)}
+                onChange={(e) => setFiltros({ pais: e.target.value })}
                 className="bg-transparent focus:outline-none max-w-[160px]"
                 title="País de entrada del prospecto de cada venta"
                 aria-label="País de entrada"
@@ -132,7 +162,7 @@ export default function SalesPage() {
             <Handshake size={14} className="text-muted-foreground" />
             <select
               value={repartoVentas}
-              onChange={(e) => setRepartoVentas(e.target.value as 'todas' | 'solo' | 'enteras')}
+              onChange={(e) => setFiltros({ reparto: e.target.value })}
               className="bg-transparent focus:outline-none max-w-[160px]"
               title="Ventas atendidas entre dos gestoras"
               aria-label="Reparto"
@@ -142,6 +172,15 @@ export default function SalesPage() {
               <option value="enteras">Solo enteras</option>
             </select>
           </div>
+          {hayFiltros && (
+            <button
+              type="button"
+              onClick={() => setFiltros.reset()}
+              className="h-9 px-2 text-xs text-primary hover:underline whitespace-nowrap"
+            >
+              Quitar filtros
+            </button>
+          )}
           {/* NUEVA VENTA, con sus tipos dentro.
               Quien no tiene mas que uno ve el boton de siempre: un desplegable
               de una sola opcion es un clic de mas por nada. */}

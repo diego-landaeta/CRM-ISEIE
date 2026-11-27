@@ -12,6 +12,8 @@ import KpiCard from '@/shared/components/ui/KpiCard';
 import EmptyState from '@/shared/components/ui/EmptyState';
 import SkeletonTable, { SkeletonCard } from '@/shared/components/ui/SkeletonTable';
 import { toast } from '@/shared/hooks/useToast';
+import useUrlFilters from '@/shared/hooks/useUrlFilters';
+import { enteroDeUrl, fechaDeUrl, repartoDeUrl } from '../lib/filtrosEnUrl';
 import {
   CurrencyEur, CheckCircle, Wallet, Receipt, UsersThree, User,
   MagnifyingGlass, WarningCircle, Calendar,
@@ -57,23 +59,37 @@ const TABS = [
   { k: 'asesora', label: 'Por asesora', icon: UsersThree },
   { k: 'cliente', label: 'Por cliente', icon: User },
 ] as const;
+type Vista = typeof TABS[number]['k'];
+
+// Los filtros, la vista y la página, en la dirección (#830, gemela de CRM#1194):
+// recargar, volver atrás desde un cliente o pasar el enlace los conserva. Lo que
+// vale lo de siempre no se escribe. Fuera del componente: `useUrlFilters` pide un objeto estable.
+const FILTROS = { desde: '', hasta: '', q: '', reparto: 'todas', vista: 'resumen', pagina: '' };
 
 export default function SalesAnalysisPage() {
   const navigate = useNavigate();
   const { activeProject } = useProjectContext() as { activeProject?: { id?: number; nombre?: string } };
-  const [tab, setTab] = useState<'resumen' | 'asesora' | 'cliente'>('resumen');
-  const [rango, setRango] = useState({ from: '', to: '' });
-  const [search, setSearch] = useState('');
-  const [buscado, setBuscado] = useState('');
+  // Un valor de la dirección que no se entiende se ignora (`filtrosEnUrl`).
+  const [filtros, setFiltros] = useUrlFilters(FILTROS);
+  const tab: Vista = TABS.some((t) => t.k === filtros.vista) ? (filtros.vista as Vista) : 'resumen';
+  const rango = { from: fechaDeUrl(filtros.desde), to: fechaDeUrl(filtros.hasta) };
+  const buscado = filtros.q.trim();
   // Todas · Solo compartidas · Solo enteras (#186, gemela de CRM#163), junto a
   // los filtros que ya había. Con una gestora, la compartida le sigue contando la mitad.
-  const [compartidas, setCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
+  const compartidas = repartoDeUrl(filtros.reparto);
+  const page = enteroDeUrl(filtros.pagina) ?? 1;
+  // Lo que se escribe en la caja; se busca al pulsar «Buscar».
+  const [search, setSearch] = useState(buscado);
+  // Atrás/adelante cambia la búsqueda de la dirección: la caja la sigue.
+  useEffect(() => { setSearch(buscado); }, [buscado]);
   const [loading, setLoading] = useState(true);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [page, setPage] = useState(1);
   const [totalClientes, setTotalClientes] = useState(0);
+  // Cambiar un filtro o la vista vuelve a la primera página, en la misma escritura.
+  const filtrar = (cambios: Partial<typeof FILTROS>) => setFiltros({ ...cambios, pagina: '' });
+  const setPage = (n: number) => setFiltros({ pagina: n > 1 ? String(n) : '' });
 
   const params: Record<string, string | number> = {};
   if (activeProject?.id) params.projectId = activeProject.id;
@@ -82,8 +98,6 @@ export default function SalesAnalysisPage() {
   if (buscado) params.search = buscado;
   if (compartidas !== 'todas') params.compartidas = compartidas;
   const key = JSON.stringify(params);
-
-  useEffect(() => { setPage(1); }, [key, tab]);
 
   useEffect(() => {
     let vivo = true;
@@ -131,18 +145,18 @@ export default function SalesAnalysisPage() {
       <div data-recorrido="analisis-filtros" className="bg-card border border-border rounded-lg p-3 flex items-center gap-2 flex-wrap">
         {/* Los mismos atajos que en Facturacion: un solo componente para que no
             acaben comportandose distinto en cada pantalla. */}
-        <RangoRapido valor={rango} alElegir={(r) => setRango(r)} />
+        <RangoRapido valor={rango} alElegir={(r) => filtrar({ desde: r.from, hasta: r.to })} />
         <label className="text-xs font-semibold text-muted-foreground">Desde</label>
-        <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
+        <input type="date" value={rango.from} onChange={(e) => filtrar({ desde: e.target.value })}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         <label className="text-xs font-semibold text-muted-foreground">Hasta</label>
-        <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
+        <input type="date" value={rango.to} onChange={(e) => filtrar({ hasta: e.target.value })}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
         <label className="text-xs font-semibold text-muted-foreground" htmlFor="analisis-compartidas">Reparto</label>
         <select
           id="analisis-compartidas"
           value={compartidas}
-          onChange={(e) => setCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+          onChange={(e) => filtrar({ reparto: e.target.value })}
           className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
         >
           <option value="todas">Todas</option>
@@ -150,7 +164,7 @@ export default function SalesAnalysisPage() {
           <option value="enteras">Solo enteras</option>
         </select>
         <form
-          onSubmit={(e) => { e.preventDefault(); setBuscado(search.trim()); }}
+          onSubmit={(e) => { e.preventDefault(); filtrar({ q: search.trim() }); }}
           className="flex items-center gap-2 flex-1 min-w-[220px]"
         >
           <div className="relative flex-1">
@@ -169,7 +183,8 @@ export default function SalesAnalysisPage() {
         {(rango.from || rango.to || buscado || compartidas !== 'todas') && (
           <button
             type="button"
-            onClick={() => { setRango({ from: '', to: '' }); setSearch(''); setBuscado(''); setCompartidas('todas'); }}
+            // Limpia también la dirección. La vista se queda: no es un filtro.
+            onClick={() => { setSearch(''); setFiltros({ desde: '', hasta: '', q: '', reparto: 'todas', pagina: '' }); }}
             className="text-[11px] text-primary hover:underline whitespace-nowrap"
           >
             Quitar filtros
@@ -182,7 +197,7 @@ export default function SalesAnalysisPage() {
           <button
             key={t.k}
             type="button"
-            onClick={() => setTab(t.k)}
+            onClick={() => filtrar({ vista: t.k })}
             className={`inline-flex items-center gap-1.5 h-9 px-3 rounded-md text-sm font-semibold whitespace-nowrap transition-colors ${
               tab === t.k ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'
             }`}
@@ -346,10 +361,10 @@ export default function SalesAnalysisPage() {
                   {(page - 1) * PER_PAGE + 1}–{Math.min(page * PER_PAGE, totalClientes)} de {totalClientes}
                 </span>
                 <div className="flex items-center gap-2">
-                  <button type="button" disabled={page <= 1} onClick={() => setPage((v) => Math.max(1, v - 1))}
+                  <button type="button" disabled={page <= 1} onClick={() => setPage(Math.max(1, page - 1))}
                     className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Anterior</button>
                   <span className="text-muted-foreground tabular-nums">{page} / {totalPages}</span>
-                  <button type="button" disabled={page >= totalPages} onClick={() => setPage((v) => Math.min(totalPages, v + 1))}
+                  <button type="button" disabled={page >= totalPages} onClick={() => setPage(Math.min(totalPages, page + 1))}
                     className="h-8 px-3 rounded-md border border-border disabled:opacity-40 hover:bg-muted">Siguiente</button>
                 </div>
               </div>
