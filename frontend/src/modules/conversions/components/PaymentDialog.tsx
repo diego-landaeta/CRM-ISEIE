@@ -61,6 +61,7 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
   });
 
   const confirm = useConfirm();
+  
   useEffect(() => {
     if (open) {
       setCobrado(null);

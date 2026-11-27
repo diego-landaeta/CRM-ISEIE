@@ -308,7 +308,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           // Posible duplicado (un cargo de Stripe sin enlazar, o la venta ya
           // cobrada): se pregunta antes de apuntarlo.
           if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
-                  if (!(await confirm({
+          if (!(await confirm({
             title: 'Posible cobro duplicado',
             message: (
               <>

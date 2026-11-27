@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act } from '@testing-library/react';
 import { emitirPreguntandoSiPasa, pasaDeLoCobrado } from '@/modules/invoices/lib/masQueLoCobrado';
 
 /*
@@ -60,5 +61,20 @@ describe('emitirPreguntandoSiPasa', () => {
     await expect(emitirPreguntandoSiPasa(enviar, { preguntar })).rejects.toMatchObject({ data: { code: 'NUMBER_TAKEN' } });
     expect(enviar).toHaveBeenCalledTimes(1);
     expect(preguntar).not.toHaveBeenCalled();
+  });
+});
+
+describe('el diálogo real (sin inyectar "preguntar")', () => {
+  it('"Emitir" reenvía con permiso', async () => {
+    const enviar = vi.fn()
+      .mockRejectedValueOnce(rechazo('MAS_QUE_LO_COBRADO', 'queda 111'))
+      .mockResolvedValueOnce({ success: true, data: { id: 3 } });
+    let respuesta!: Promise<unknown>;
+    await act(async () => { respuesta = emitirPreguntandoSiPasa(enviar); });
+    expect(document.body.textContent).toContain('queda 111');
+    const boton = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Emitir')!;
+    await act(async () => { boton.click(); });
+    await expect(respuesta).resolves.toEqual({ success: true, data: { id: 3 } });
+    expect(enviar.mock.calls).toEqual([[false, false], [true, false]]);
   });
 });
