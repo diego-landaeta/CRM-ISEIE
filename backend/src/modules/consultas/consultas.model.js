@@ -11,6 +11,7 @@
   Es lo que pide la #188 y lo que medirá la fase 3.
 */
 import { query, getClient } from '../../shared/config/db.js';
+import { retirarAvisosDeConsulta } from './consultas.avisosDePlazo.js';
 
 /** Lo que se pide al campus: el plazo de primera respuesta, en horas (decisión 1). */
 export const PLAZO_HORAS = Number(process.env.CONSULTAS_PLAZO_HORAS || 24);
@@ -230,7 +231,7 @@ export async function guardarRespuestaDesdeElCampus({
   // cuenta como respuesta (en un grupo del curso con varias esperando, solo es contexto).
   cursoMoodleId = null, grupo = false, cuentaComoRespuesta = true,
 }) {
-  return enTransaccion(async (db) => {
+  const r = await enTransaccion(async (db) => {
     const ya = await db.query(
       'SELECT 1 FROM consulta_mensajes WHERE project_id = $1 AND externo_id = $2', [projectId, externoId]);
     if (ya.rows.length) return { duplicado: true };
@@ -288,6 +289,12 @@ export async function guardarRespuestaDesdeElCampus({
     await marcarRespondida(db, c, tutorId, escritoAt, { desde: 'campus' });
     return { consulta: c };
   });
+  // Ya en la base: los avisos de plazo de esa consulta sobran (#1197). Fuera de la
+  // transacción y sin poder romperla.
+  if (r.consulta && !r.soloContexto && !r.yaEstaba && r.consulta.estado === 'abierta') {
+    await retirarAvisosDeConsulta(r.consulta.id, 'respondida');
+  }
+  return r;
 }
 
 /**
@@ -319,7 +326,7 @@ async function marcarRespondida(db, c, tutorId, cuando, detalle) {
 
 /** Una respuesta escrita en el CRM. Se guarda ya; el envío al campus va aparte. */
 export async function guardarRespuestaDelCrm(consultaId, tutorId, texto) {
-  return enTransaccion(async (db) => {
+  const r = await enTransaccion(async (db) => {
     const { rows } = await db.query('SELECT * FROM consultas WHERE id = $1 FOR UPDATE', [consultaId]);
     const c = rows[0];
     if (!c) return null;
@@ -331,6 +338,9 @@ export async function guardarRespuestaDelCrm(consultaId, tutorId, texto) {
     await marcarRespondida(db, c, tutorId, new Date(), { desde: 'crm' });
     return { consulta: c, mensaje: m.rows[0] };
   });
+  // Ya en la base: los avisos de plazo de esa consulta sobran (#1197).
+  if (r?.consulta?.estado === 'abierta') await retirarAvisosDeConsulta(r.consulta.id, 'respondida');
+  return r;
 }
 
 export async function apuntarEnvio(mensajeId, { externoId = null, error = null, conversacionId = null }, db = null) {
@@ -404,7 +414,10 @@ export async function cerrar(consultaId, userId) {
   const { rows } = await query(
     `UPDATE consultas SET estado = 'cerrada', cerrada_at = NOW(), espera_desde = NULL, updated_at = NOW()
       WHERE id = $1 AND estado <> 'cerrada' RETURNING id`, [consultaId]);
-  if (rows.length) await evento({ query }, consultaId, 'cerrada', { userId });
+  if (rows.length) {
+    await evento({ query }, consultaId, 'cerrada', { userId });
+    await retirarAvisosDeConsulta(consultaId, 'cerrada');
+  }
   return rows.length > 0;
 }
 

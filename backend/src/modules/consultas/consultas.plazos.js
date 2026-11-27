@@ -23,6 +23,9 @@
       tocar «Mi carga de trabajo». Correo y campana, y no se repite hasta que
       pase otra semana.
 
+  Y se retiran solos (#1197, consultas.avisosDePlazo.js): al responder o cerrar la
+  consulta, y en cada vuelta los que ya no aplican.
+
   «Una vez por espera»: si el alumno vuelve a escribir, la espera empieza de
   nuevo (`espera_desde`) y se vuelve a avisar.
 
@@ -41,6 +44,7 @@ import { notifyUsers } from '../notifications/notifications.service.js';
 import { AVISO_CONSULTA_FUERA_DE_PLAZO } from './consultas.avisosCorreo.js';
 import { PLAZO_HORAS } from './consultas.model.js';
 import { DIAS_CARGA, retirarAvisosDeCarga, cargaAlDia } from './consultas.carga.js';
+import { retirarAvisosQueSobran } from './consultas.avisosDePlazo.js';
 
 /** Qué parte del plazo tiene que pasar para recordárselo al tutor: la del ámbar del semáforo. */
 export const PARTE_DEL_PLAZO = 0.75;
@@ -225,6 +229,8 @@ export async function revisarPlazos({
 } = {}) {
   const r = { recordatorios: 0, fueraDePlazo: 0, errores: 0 };
   const umbral = umbralesDeAviso(env);
+  // Primero, lo que ya no pide nada (#1197): respondidas, cerradas, otra espera, reasignadas.
+  r.retirados = await retirarAvisosQueSobran({ ahora, projectIds, umbral });
   for (const c of await cercaDelPlazo(ahora, projectIds, umbral.recordatorio)) {
     try { await recordarAlTutor(c, enviar); r.recordatorios += 1; } catch (err) {
       r.errores += 1;
