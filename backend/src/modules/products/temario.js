@@ -2,6 +2,7 @@ import { getClient, query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { logger } from '../../shared/utils/logger.js';
 import { fetchHtmlWithRetry } from '../woocommerce/html-scraper.js';
+import { ordenDeLaPosicion } from './formacion.validation.js';
 
 /**
  * El temario de un producto, módulo a módulo, sacado de la página del curso.
@@ -123,7 +124,7 @@ export async function sincronizarTemario(productId, { leer = fetchHtmlWithRetry 
     await c.query('BEGIN');
     await c.query('DELETE FROM product_modules WHERE product_id = $1', [productId]);
     for (const [i, mod] of modulos.entries()) {
-      await c.query('INSERT INTO product_modules (product_id, titulo, orden) VALUES ($1, $2, $3)', [productId, mod.titulo, i + 1]);
+      await c.query('INSERT INTO product_modules (product_id, titulo, orden) VALUES ($1, $2, $3)', [productId, mod.titulo, ordenDeLaPosicion(i)]);
     }
     await c.query('UPDATE products SET num_modulos = $2, updated_at = NOW() WHERE id = $1', [productId, modulos.length]);
     await c.query('COMMIT');

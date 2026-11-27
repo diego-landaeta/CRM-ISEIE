@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { PRIMER_ORDEN, ordenDeLaPosicion } from './formacion.validation.js';
 
 const moduleSchema = z.object({
   titulo:      z.string().min(1).max(300),
@@ -45,8 +46,8 @@ export async function createModule(req, res, next) {
     let orden = parsed.data.orden;
     if (orden === undefined) {
       const { rows } = await query(
-        `SELECT COALESCE(MAX(orden) + 1, 0) AS next FROM product_modules WHERE product_id = $1`,
-        [productId]
+        `SELECT COALESCE(MAX(orden) + 1, $2) AS next FROM product_modules WHERE product_id = $1`,
+        [productId, PRIMER_ORDEN]
       );
       orden = rows[0].next;
     }
@@ -118,7 +119,7 @@ export async function reorderModules(req, res, next) {
     for (let i = 0; i < parsed.data.ids.length; i++) {
       await query(
         `UPDATE product_modules SET orden = $1, updated_at = NOW() WHERE id = $2 AND product_id = $3`,
-        [i, parsed.data.ids[i], productId]
+        [ordenDeLaPosicion(i), parsed.data.ids[i], productId]
       );
     }
     res.json({ success: true });

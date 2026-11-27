@@ -5,6 +5,7 @@ import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { decodificarEntidades } from '../../shared/utils/entidadesHtml.js';
+import { ordenDeLaPosicion } from '../products/formacion.validation.js';
 
 // Aplica field_mapping a un item. Cada entry del mapping puede ser:
 //   - string ("path.dentro.del.json")
@@ -137,7 +138,7 @@ async function upsertModules(productId, mappedModules) {
     await query(
       `INSERT INTO product_modules (product_id, titulo, descripcion, horas, orden)
        VALUES ($1, $2, $3, $4, $5)`,
-      [productId, titulo, descripcion, horas ? parseInt(horas) : null, i]
+      [productId, titulo, descripcion, horas ? parseInt(horas) : null, ordenDeLaPosicion(i)]
     );
   }
   return mappedModules.length;
