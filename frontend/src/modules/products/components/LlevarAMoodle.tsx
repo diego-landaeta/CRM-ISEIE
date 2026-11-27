@@ -4,7 +4,7 @@ import ConfirmDialog from '@/shared/components/ui/ConfirmDialog';
 import { toast } from '@/shared/hooks/useToast';
 import { inputClass } from '@/shared/lib/ui';
 import { formacionesApi, type Formacion, type VistaPreviaMoodle } from '../api/formaciones.api';
-import { nombreDeCategoria, opcionesDeCategoria, problemaDelNombreCorto, textoDelOrigen } from '../lib/moodleFormacion';
+import { nombreDeCategoria, opcionesDeCategoria, problemaDelNombreCorto, textoDelDesbloqueoDistinto, textoDelOrigen } from '../lib/moodleFormacion';
 
 /**
  * Fase 2 (CRM#1113 / CRM-ISEIE#767): «Crear en Moodle» / «Actualizar en Moodle».
@@ -58,6 +58,8 @@ export default function LlevarAMoodle({ formacion, campusId, pendiente, alGuarda
       : vista?.accion === 'varios' ? 'Está unida a varios cursos: deja uno en «Cursos de Moodle».'
         : problemaCorto;
   const categorias = vista?.categorias ?? [];
+  // Los módulos con otros días en Moodle (alguien los cambió allí a mano, CRM#1198), por posición.
+  const distintos = new Map((vista?.desbloqueo_distinto ?? []).map((d) => [d.posicion, d]));
 
   async function llevar() {
     setEnviando(true);
@@ -161,15 +163,29 @@ export default function LlevarAMoodle({ formacion, campusId, pendiente, alGuarda
             )}
             <dt className="text-xs font-semibold text-muted-foreground">Secciones</dt>
             <dd>
+              {distintos.size > 0 && (
+                <p className="mb-1 flex items-start gap-1 text-xs font-medium text-warning" role="status" data-testid="moodle-desbloqueo-distinto">
+                  <Warning size={14} className="mt-px shrink-0" aria-hidden="true" />
+                  {distintos.size === 1
+                    ? 'En Moodle, un módulo tiene otros días de «se desbloquea» que aquí: los cambiaron allí a mano.'
+                    : `En Moodle, ${distintos.size} módulos tienen otros días de «se desbloquea» que aquí: los cambiaron allí a mano.`}
+                </p>
+              )}
               {vista.secciones.length === 0 ? 'Ninguna: añade módulos.' : (
                 <ol className="list-decimal pl-5">
-                  {vista.secciones.map((s, i) => (
-                    <li key={`${i}-${s}`}>
-                      {s}
-                      {vista.desbloqueo?.[i] ? <span className="text-xs text-muted-foreground"> · se desbloquea a los {vista.desbloqueo[i]} días</span> : null}
-                      {vista.quitar_desbloqueo?.[i] ? <span className="text-xs font-medium text-warning"> · se quita la restricción de {vista.quitar_desbloqueo[i]} días</span> : null}
-                    </li>
-                  ))}
+                  {vista.secciones.map((s, i) => {
+                    const distinto = distintos.get(i);
+                    return (
+                      <li key={`${i}-${s}`}>
+                        {s}
+                        {vista.desbloqueo?.[i] ? <span className="text-xs text-muted-foreground"> · se desbloquea a los {vista.desbloqueo[i]} días</span> : null}
+                        {/* El aviso de lo que hay en Moodle ya dice que se quitará: no se repite. */}
+                        {distinto
+                          ? <span className="block text-xs font-medium text-warning">{textoDelDesbloqueoDistinto(distinto)}</span>
+                          : vista.quitar_desbloqueo?.[i] ? <span className="text-xs font-medium text-warning"> · se quita la restricción de {vista.quitar_desbloqueo[i]} días</span> : null}
+                      </li>
+                    );
+                  })}
                 </ol>
               )}
               {vista.secciones.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Una por módulo, con su temario. Las secciones de más que ya tenga el curso no se borran.</p>}

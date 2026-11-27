@@ -894,6 +894,39 @@ export async function guardarCursoEnMoodle(conexion, {
 }
 
 /**
+ * Los días de «se desbloquea» que tiene AHORA cada sección de un curso del CRM, por si alguien
+ * los cambió a mano en Moodle (CRM-ISEIE#832, gemela de CRM#1198; plugin local_crm 1.16.0:
+ * `local_crm_curso_desbloqueo`). SOLO LEE.
+ *
+ * Devuelve { delcrm, relativedate, secciones: Map(número de sección → { dias, desde }), avisos },
+ * con `dias` = 0 si la sección no tiene la «Fecha relativa» del CRM. Con un plugin anterior
+ * (no tiene la función) devuelve null y quien llama sigue sin saberlo. Cualquier otro fallo
+ * sube como siempre.
+ */
+export async function desbloqueoDelCurso(conexion, cursoId, opciones) {
+  let r;
+  try {
+    r = await llamar(conexion, 'local_crm_curso_desbloqueo', { cursoid: cursoId }, opciones);
+  } catch (err) {
+    if (err instanceof MoodleError && (err.codigo === 'SIN_FUNCION' || err.codigo === 'PERMISO')) return null;
+    throw err;
+  }
+  const secciones = new Map();
+  for (const s of Array.isArray(r?.secciones) ? r.secciones : []) {
+    const numero = Number(s?.numero);
+    if (!(numero > 0)) continue;
+    const dias = Number(s.dias);
+    secciones.set(numero, { dias: Number.isInteger(dias) && dias > 0 ? dias : 0, desde: Number(s.desde) || 0 });
+  }
+  return {
+    delcrm: Boolean(r?.delcrm),
+    relativedate: Boolean(r?.relativedate),
+    secciones,
+    avisos: Array.isArray(r?.avisos) ? r.avisos.map(String) : [],
+  };
+}
+
+/**
  * Lo que hace falta saber del campus para crear en él el curso de una formación
  * (CRM#1113, fase 2): sus categorías y los nombres cortos que ya están cogidos. SOLO LEE.
  *
