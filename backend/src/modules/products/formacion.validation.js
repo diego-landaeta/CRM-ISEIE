@@ -11,6 +11,15 @@ import { z } from 'zod';
 
 export const TIPOS_FORMACION = ['curso', 'diplomado', 'master'];
 
+/**
+ * El `orden` de un módulo según su posición en la lista (0, 1, 2…): 1, 2, 3…, como las
+ * secciones de Moodle, donde la 0 es «General» y el módulo N va en la sección N. Todos
+ * los que escriben `product_modules.orden` lo sacan de aquí: la ficha de la formación
+ * los guardaba 0…n-1 y el temario de la web 1…n, y cada «Guardar» los movía (CRM#1215).
+ */
+export const PRIMER_ORDEN = 1;
+export const ordenDeLaPosicion = (i) => i + PRIMER_ORDEN;
+
 // Mismos topes que valida Certifex al imprimir el diploma (certifex.programa.js):
 // pasarse aquí sería guardar algo que luego no se puede emitir.
 export const MAX_HORAS = 5000;

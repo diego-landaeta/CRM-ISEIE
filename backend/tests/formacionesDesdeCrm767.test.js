@@ -112,7 +112,7 @@ describe('Productos › Formaciones (CRM#1113)', () => {
       tipo_formacion: 'master', horas_totales: 1200, horas_texto: '1200 horas', precio: 2400, moneda: 'EUR',
       fecha_inicio: '2027-01-15', fecha_fin: '2027-12-15', horas_de_los_modulos: 1200, de_la_web: false,
     });
-    expect(r.body.data.modulos.map((m) => [m.orden, m.titulo])).toEqual([[0, 'Fundamentos'], [1, 'Evaluación'], [2, 'Intervención']]);
+    expect(r.body.data.modulos.map((m) => [m.orden, m.titulo])).toEqual([[1, 'Fundamentos'], [2, 'Evaluación'], [3, 'Intervención']]);
     const [p] = await q('SELECT num_modulos, project_id FROM products WHERE id = $1', [id]);
     expect(p).toMatchObject({ num_modulos: 3, project_id: CAMPUS });
   });

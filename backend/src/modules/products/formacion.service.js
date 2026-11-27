@@ -2,7 +2,7 @@ import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { horasDeTexto } from '../certifex/certifex.programa.js';
 import { tipoPorNombre } from '../cursos-pendientes/cursos-pendientes.venta.js';
-import { formacionSchema } from './formacion.validation.js';
+import { formacionSchema, ordenDeLaPosicion } from './formacion.validation.js';
 import { formacionesMoodleActivas } from '../../shared/config/soloEnPruebas.js';
 
 /**
@@ -128,7 +128,7 @@ export async function verFormacion(productId, projectId, { conPorcentajes = fals
 /**
  * Deja los módulos de la formación como la lista: los que traen `id` se
  * actualizan, los nuevos se crean y los que no vienen se quitan. El orden es el
- * de la lista. Dentro de la transacción de quien llama.
+ * de la lista, 1…n (`ordenDeLaPosicion`, CRM#1215). Dentro de la transacción de quien llama.
  *
  * «Se desbloquea a los … días» (CRM#1124) va con la fase 2 de Moodle: solo se escribe con
  * el interruptor encendido y si el módulo trae la clave; si no, se queda lo guardado.
@@ -146,7 +146,7 @@ async function guardarModulos(db, productId, modulos, { conDesbloqueo = formacio
   );
   for (let i = 0; i < modulos.length; i++) {
     const m = modulos[i];
-    const valores = [m.titulo, m.descripcion ?? null, m.horas ?? null, i];
+    const valores = [m.titulo, m.descripcion ?? null, m.horas ?? null, ordenDeLaPosicion(i)];
     const dias = conDesbloqueo && m.dias_desbloqueo !== undefined;
     if (m.id) {
       await db.query(
