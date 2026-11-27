@@ -169,6 +169,16 @@ export const CAMBIOS = [
     sentido: 'gana',
     aprobadoPor: 'Diego, 19/11',
   },
+  {
+    // #197, gemela de CRM#211: decisión de Diego del 06/11 (en CRM#688), todos los roles.
+    id: 'correo-propio-con-codigo',
+    que: 'Cambiar su propio correo desde «Mi cuenta», con un código a la dirección nueva y su contraseña actual: todos los roles (admin, gestora, líder de equipo, soporte, project manager, colaborador y tutor redactor). Hasta ahora solo el tutor, y sin código. Al tutor y al tutor redactor no les sale el código mientras siga el freno de correos a tutores.',
+    motivo: '#197 (CRM#211): el correo es la credencial y se cambiaba sin comprobar nada (así quedaron 39 de 45 tutores de ISEIE sin poder entrar). Con el código, nadie se queda con una dirección que no existe.',
+    filas: ['PATCH /api/auth/me/email', 'POST /api/auth/me/email/codigo'],
+    roles: ['admin', 'gestor', 'lider_equipo', 'soporte', 'project_manager', 'colaborador', 'tutor_redactor'],
+    sentido: 'gana',
+    aprobadoPor: 'Diego, 06/11',
+  },
 ];
 
 /** ¿Está aprobado (o pendiente de aprobar en esta lista) que esta fila cambie para este rol? */

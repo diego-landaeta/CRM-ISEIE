@@ -862,6 +862,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/me/email/codigo",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/me/email/codigo",
+  "relativa": "POST /me/email/codigo",
+  "controlador": "pedirCodigoMiCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cuenta.cambiar_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PATCH /api/auth/me/email",
   "tipo": "ruta",
   "modulo": "auth",

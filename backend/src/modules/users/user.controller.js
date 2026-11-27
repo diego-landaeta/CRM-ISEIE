@@ -97,7 +97,11 @@ export async function activityLog(req, res, next) {
       offset,
       ambito,
     });
-    res.json({ success: true, data: result.items, pagination: { total: result.total, limit, offset } });
+    // Lo mismo que el registro (#197): que la dirección de un cambio de correo
+    // ya era de otra persona, solo lo ven superadmin y soporte.
+    const { detalleQueSePuedeVer } = await import('../registro/registro.model.js');
+    const items = result.items.map((a) => ({ ...a, details: detalleQueSePuedeVer(a.action, a.details, !ambito) }));
+    res.json({ success: true, data: items, pagination: { total: result.total, limit, offset } });
   } catch (err) { next(err); }
 }
 

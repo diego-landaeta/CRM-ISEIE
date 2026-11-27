@@ -5,10 +5,15 @@ import {
 } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
+import usePermission from '@/shared/hooks/usePermission';
 
 function initials(name) {
   return (name || '?').split(' ').map((s) => s[0]).slice(0, 2).join('').toUpperCase();
 }
+
+// Los del cambio de correo, iguales que los del resto de la pantalla.
+const CAMPO = 'w-full h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all';
+const BOTON = 'inline-flex items-center gap-1.5 h-9 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50';
 
 const ROLE_LABELS = {
   superadmin: 'Super-admin',
@@ -20,18 +25,46 @@ const ROLE_LABELS = {
 export default function ProfilePage() {
   const { user, refreshUser } = useAuth();
   const { logout } = useAuth();
-  // El propio correo, solo un tutor (#246, Diego 09/10). El resto lo pide a administración.
-  const esTutor = user?.role === 'tutor';
+  // El propio correo (#197, gemela de CRM#211), en dos pasos: con su contraseña,
+  // un código a la dirección NUEVA; con el código, el cambio. Quien tenga
+  // «Cambiar su correo»: todos los roles (Diego, 06/11).
+  const { can } = usePermission();
+  const puedeCambiarCorreo = can('cuenta.cambiar_correo');
   const [correoNuevo, setCorreoNuevo] = useState('');
+  const [claveActual, setClaveActual] = useState('');
+  const [codigo, setCodigo] = useState('');
+  // null hasta que se manda el código; luego, a qué dirección fue.
+  const [codigoEnviadoA, setCodigoEnviadoA] = useState(null);
+  // A un tutor, mientras siga el freno de correos a tutores, no le sale el código
+  // (Diego, 06/11): se le explica en vez del formulario. Lo dice /auth/me de
+  // entrada, y por si acaso también la respuesta al pedirlo.
+  const [frenadoAlPedir, setFrenado] = useState(null);
+  const frenado = frenadoAlPedir || user?.correo_propio_frenado || null;
   const [cambiandoCorreo, setCambiandoCorreo] = useState(false);
-  async function cambiarCorreo() {
+  const mismoCorreo = correoNuevo.trim().toLowerCase() === String(user?.email || '').toLowerCase();
+  async function onPedirCodigo(e) {
+    e.preventDefault();
     const nuevo = correoNuevo.trim().toLowerCase();
-    if (!nuevo || nuevo === String(user?.email || '').toLowerCase()) return;
+    if (!nuevo || mismoCorreo || !claveActual) return;
     setCambiandoCorreo(true);
     try {
-      await client.patch('/auth/me/email', { email: nuevo });
-      // Es con lo que se entra: el servidor cierra las sesiones, hay que volver a entrar.
-      toast({ title: 'Correo cambiado', description: `Vuelve a entrar con ${nuevo}. Hemos avisado a administración.` });
+      const r = await client.post('/auth/me/email/codigo', { email: nuevo, password: claveActual });
+      setClaveActual('');
+      if (r?.data?.frenado) { setFrenado(r.data.motivo); return; }
+      setCodigoEnviadoA(nuevo);
+      toast({ title: 'Te hemos mandado un código', description: `Míralo en ${nuevo}. Caduca en ${r?.data?.minutos || 15} minutos.` });
+    } catch (err) {
+      toast({ title: 'No se pudo mandar el código', description: err?.data?.error || err?.message, variant: 'destructive' });
+    } finally { setCambiandoCorreo(false); }
+  }
+  async function onConfirmarCodigo(e) {
+    e.preventDefault();
+    if (!/^\d{6}$/.test(codigo.trim())) return;
+    setCambiandoCorreo(true);
+    try {
+      await client.patch('/auth/me/email', { codigo: codigo.trim() });
+      // Es con lo que se entra: el servidor revoca las sesiones, hay que volver a entrar.
+      toast({ title: 'Correo cambiado', description: `Vuelve a entrar con ${codigoEnviadoA}.` });
       setTimeout(() => { logout?.(); }, 2500);
     } catch (err) {
       toast({ title: 'No se pudo cambiar', description: err?.data?.error || err?.message, variant: 'destructive' });
@@ -188,23 +221,9 @@ export default function ProfilePage() {
                     className="w-full h-10 pl-9 pr-3 rounded-lg border border-border bg-muted text-muted-foreground text-sm cursor-not-allowed"
                   />
                 </div>
-                <p className="text-[11px] text-muted-foreground mt-1">{esTutor ? 'Es con lo que entras. Puedes cambiarlo abajo.' : 'El email no puede modificarse desde aquí.'}</p>
-                {esTutor && (
-                  <div className="mt-3 space-y-1.5">
-                    <label className="block text-[13px] font-medium">Cambiar mi correo</label>
-                    <div className="flex gap-2">
-                      <input type="email" value={correoNuevo} onChange={(e) => setCorreoNuevo(e.target.value)} maxLength={255}
-                        placeholder="tu.correo.nuevo@ejemplo.com"
-                        className="flex-1 h-10 px-3 rounded-lg border border-border bg-card text-foreground text-sm focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all" />
-                      <button type="button" onClick={cambiarCorreo}
-                        disabled={cambiandoCorreo || !correoNuevo.trim() || correoNuevo.trim().toLowerCase() === String(user?.email || '').toLowerCase()}
-                        className="inline-flex items-center h-10 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 disabled:opacity-50">
-                        {cambiandoCorreo ? 'Cambiando…' : 'Cambiar correo'}
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">Es con lo que entras y a donde va la factura de tu comisión. Al cambiarlo se cierra tu sesión y entras con el nuevo; avisamos a administración.</p>
-                  </div>
-                )}
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  {puedeCambiarCorreo && !frenado ? 'Es con lo que entras. Puedes cambiarlo abajo.' : 'Es con lo que entras. Para cambiarlo, pídeselo a administración.'}
+                </p>
               </div>
             </div>
 
@@ -218,6 +237,63 @@ export default function ProfilePage() {
                 {savingProfile ? 'Guardando…' : 'Guardar cambios'}
               </button>
             </div>
+
+            {puedeCambiarCorreo && frenado && (
+              <p role="status" className="pt-4 border-t border-border text-sm text-muted-foreground">
+                {frenado}
+              </p>
+            )}
+            {puedeCambiarCorreo && !frenado && !codigoEnviadoA && (
+              <form onSubmit={onPedirCodigo} aria-label="Cambiar mi correo" className="pt-4 border-t border-border space-y-3">
+                <h4 className="text-sm font-semibold">Cambiar mi correo</h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label htmlFor="correo-nuevo" className="block text-[13px] font-medium mb-1.5">Mi correo nuevo</label>
+                    <input id="correo-nuevo" type="email" value={correoNuevo} onChange={(e) => setCorreoNuevo(e.target.value)} maxLength={255}
+                      placeholder="tu.correo.nuevo@ejemplo.com" autoComplete="email" className={CAMPO} />
+                  </div>
+                  <div>
+                    <label htmlFor="correo-clave" className="block text-[13px] font-medium mb-1.5">Mi contraseña actual</label>
+                    <input id="correo-clave" type="password" value={claveActual} onChange={(e) => setClaveActual(e.target.value)}
+                      autoComplete="current-password" className={CAMPO} />
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Te mandamos un código de 6 cifras a la dirección nueva. Hasta que lo metas, sigues entrando con la de siempre.
+                </p>
+                <div className="flex justify-end">
+                  <button type="submit" className={BOTON}
+                    disabled={cambiandoCorreo || !correoNuevo.trim() || mismoCorreo || !claveActual}>
+                    {cambiandoCorreo ? 'Mandando…' : 'Mandarme el código'}
+                  </button>
+                </div>
+              </form>
+            )}
+            {puedeCambiarCorreo && !frenado && codigoEnviadoA && (
+              <form onSubmit={onConfirmarCodigo} aria-label="Confirmar mi correo nuevo" className="pt-4 border-t border-border space-y-3">
+                <h4 className="text-sm font-semibold">Cambiar mi correo</h4>
+                <div className="max-w-xs">
+                  <label htmlFor="correo-codigo" className="block text-[13px] font-medium mb-1.5 break-words">
+                    El código que te ha llegado a {codigoEnviadoA}
+                  </label>
+                  <input id="correo-codigo" value={codigo} onChange={(e) => setCodigo(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    inputMode="numeric" autoComplete="one-time-code" placeholder="000000" maxLength={6}
+                    className={`${CAMPO} tracking-[0.3em] font-mono`} />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Caduca a los 15 minutos y admite 5 intentos. Al confirmarlo se cierra tu sesión y entras con el correo nuevo.
+                </p>
+                <div className="flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => { setCodigoEnviadoA(null); setCodigo(''); }} disabled={cambiandoCorreo}
+                    className="inline-flex items-center h-9 px-3 rounded-md border border-border text-sm hover:bg-muted disabled:opacity-50">
+                    Pedir otro
+                  </button>
+                  <button type="submit" className={BOTON} disabled={cambiandoCorreo || !/^\d{6}$/.test(codigo)}>
+                    {cambiandoCorreo ? 'Cambiando…' : 'Cambiar mi correo'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
