@@ -46,6 +46,51 @@ export function textoYaMandado(mes: string, avisos: AvisoEnviado[]) {
   return `Ya se le mandó el aviso de ${mes} el ${cuandoFue(ultimo.enviadoAt)}${quien}.${veces}`;
 }
 
+/** Lo que mide de ancho el correo de la plantilla común: 600 px de hoja y 12 de margen a cada lado. */
+export const ANCHO_DEL_CORREO = 624;
+
+/** La escala a la que cabe el correo entero en ese ancho (nunca lo agranda). */
+export const escalaDelCorreo = (ancho: number) =>
+  ancho > 0 && ancho < ANCHO_DEL_CORREO ? ancho / ANCHO_DEL_CORREO : 1;
+
+/**
+ * El correo tal cual sale, con la plantilla común y la marca del campus. En un
+ * iframe sin permisos: es un documento entero, con su <head> y sus estilos, y
+ * metido en la página los pisaría. Fondo blanco aunque el CRM esté en oscuro:
+ * así llega.
+ *
+ * En un móvil el hueco mide unos 340 px y el correo 624: se veía la mitad y
+ * había que desplazarlo de lado (QA del 26/11). Ahí el iframe se pinta al ancho
+ * del correo y se reduce entero, como lo enseña el cliente de correo del móvil;
+ * en escritorio cabe y va a tamaño real.
+ */
+function VistaPrevia({ html }: { html: string }) {
+  const caja = useRef<HTMLDivElement | null>(null);
+  const [medida, setMedida] = useState({ ancho: 0, alto: 0 });
+  useEffect(() => {
+    const el = caja.current;
+    if (!el) return undefined;
+    const medir = () => setMedida({ ancho: el.clientWidth, alto: el.clientHeight });
+    medir();
+    if (typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(medir);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const escala = escalaDelCorreo(medida.ancho);
+  const reducido = escala < 1;
+  return (
+    <div ref={caja} data-escala={escala.toFixed(3)}
+      className="relative w-full h-[26rem] sm:h-[30rem] overflow-hidden rounded-md border border-border bg-white">
+      <iframe title="Vista previa del correo al tutor" sandbox="" srcDoc={html}
+        className="absolute left-0 top-0 border-0 bg-white"
+        style={reducido
+          ? { width: medida.ancho / escala, height: medida.alto / escala, transform: `scale(${escala})`, transformOrigin: '0 0' }
+          : { width: '100%', height: '100%' }} />
+    </div>
+  );
+}
+
 interface Props {
   tutorId: number;
   periodo: string;
@@ -67,6 +112,9 @@ export default function AvisarTutorDialog({ tutorId, periodo, ambito, onClose, o
   const [enviando, setEnviando] = useState(false);
   // Si el servidor dice que ya se mandó (otra persona a la vez), se enseña aquí.
   const [yaMandadoServidor, setYaMandadoServidor] = useState<string | null>(null);
+  // Por qué no salió, dentro del diálogo: el aviso emergente tapaba el botón de
+  // enviar a 1280 (QA del 26/11).
+  const [errorEnvio, setErrorEnvio] = useState<string | null>(null);
   useModalAccesible(ref, { open: true, onClose, bloqueado: enviando });
 
   const { projectId = null, issuerId = null } = ambito;
@@ -89,6 +137,7 @@ export default function AvisarTutorDialog({ tutorId, periodo, ambito, onClose, o
   async function enviar() {
     if (!aviso || falta) return;
     setEnviando(true);
+    setErrorEnvio(null);
     try {
       const r = await tutoresApi.avisarTutor({
         tutorId, periodo, projectId, issuerId,
@@ -107,7 +156,8 @@ export default function AvisarTutorDialog({ tutorId, periodo, ambito, onClose, o
       } else {
         // El motivo entero: «no se pudo enviar» a secas manda a mirar el sitio
         // equivocado (el freno de tutores, la lista blanca de pruebas, Brevo).
-        toast({ title: 'No se ha enviado', description: err?.message || '', variant: 'destructive' });
+        // En el diálogo y no en un aviso emergente, que tapaba el botón.
+        setErrorEnvio(err?.message || '');
       }
     } finally { setEnviando(false); }
   }
@@ -193,22 +243,23 @@ export default function AvisarTutorDialog({ tutorId, periodo, ambito, onClose, o
                   </p>
                 )}
 
-                {/* El correo tal cual sale, con la plantilla común y la marca del
-                    campus. En un iframe sin permisos: es un documento entero, con
-                    su <head> y sus estilos, y metido en la página los pisaría.
-                    Fondo blanco aunque el CRM esté en oscuro: así llega. */}
+                {/* El correo tal cual sale (ver «VistaPrevia»). */}
                 <div>
                   <p className="text-xs text-muted-foreground mb-1">
                     Vista previa{nota.trim() ? ' (la nota se añade al enviar)' : ''}
                   </p>
-                  <iframe title="Vista previa del correo al tutor" sandbox="" srcDoc={aviso.html}
-                    className="w-full h-[26rem] sm:h-[30rem] rounded-md border border-border bg-white" />
+                  <VistaPrevia html={aviso.html} />
                 </div>
               </>
             )}
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2 p-4 border-t border-border shrink-0">
+            {errorEnvio !== null && (
+              <p role="alert" className="basis-full sm:basis-auto sm:flex-1 min-w-0 text-sm rounded-md bg-destructive-soft text-destructive-soft-foreground px-3 py-2">
+                <strong>No se ha enviado.</strong>{errorEnvio ? ` ${errorEnvio}` : ''}
+              </p>
+            )}
             <Button variant="outline" size="sm" onClick={onClose} disabled={enviando}>Cancelar</Button>
             <Button size="sm" onClick={enviar} disabled={!aviso || enviando || falta}
               title={falta ? 'Marca «Mandárselo otra vez» para repetirlo' : undefined}>

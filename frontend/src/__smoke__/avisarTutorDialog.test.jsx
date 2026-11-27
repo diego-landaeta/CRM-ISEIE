@@ -22,7 +22,8 @@ vi.mock('@/modules/tutores/api/tutores.api', () => ({
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
 
-const { default: AvisarTutorDialog, textoYaMandado, cuandoFue } = await import('@/modules/tutores/components/AvisarTutorDialog');
+const { default: AvisarTutorDialog, textoYaMandado, cuandoFue, escalaDelCorreo, ANCHO_DEL_CORREO } = await import('@/modules/tutores/components/AvisarTutorDialog');
+const { toast } = await import('@/shared/hooks/useToast');
 
 const AVISO = {
   tutorId: 3, nombre: 'Lola Hernández', email: 'lola@prueba.local', tieneIban: false,
@@ -109,5 +110,31 @@ describe('el diálogo', () => {
     fireEvent.click(screen.getByRole('button', { name: /Enviar a/ }));
     expect(await screen.findByText(/el 25\/11\/2026 a las 10:00 \(Ana\)/)).toBeTruthy();
     expect(screen.getByRole('button', { name: /Mandar otra vez/ }).disabled).toBe(true);
+  });
+
+  // QA del 26/11: el aviso emergente «No se ha enviado» tapaba el botón de
+  // enviar a 1280. El motivo va dentro del diálogo, encima de los botones.
+  it('si no sale, el motivo se dice dentro del diálogo y no en un aviso emergente', async () => {
+    toast.mockClear();
+    h.avisar = vi.fn(async () => { throw Object.assign(new Error('No hay clave de Brevo configurada en este entorno.'), { status: 502 }); });
+    pintar();
+    await screen.findByTitle('Vista previa del correo al tutor');
+    fireEvent.click(screen.getByRole('button', { name: /Enviar a/ }));
+    const alerta = await screen.findByText(/No hay clave de Brevo/);
+    expect(alerta.closest('[role="alert"]').textContent).toMatch(/^No se ha enviado. No hay clave de Brevo/);
+    expect(toast).not.toHaveBeenCalled();
+    // Y el botón sigue ahí para reintentarlo.
+    expect(screen.getByRole('button', { name: /Enviar a/ }).disabled).toBe(false);
+  });
+});
+
+// QA del 26/11: a 375 px el correo (624 px) no cabía en el iframe (339 px).
+describe('la vista previa en un móvil', () => {
+  it('se reduce entera para caber, y en escritorio va a tamaño real', () => {
+    expect(ANCHO_DEL_CORREO).toBe(624);
+    expect(escalaDelCorreo(339)).toBeCloseTo(339 / 624, 5);
+    expect(escalaDelCorreo(624)).toBe(1);
+    expect(escalaDelCorreo(736)).toBe(1);   // nunca lo agranda
+    expect(escalaDelCorreo(0)).toBe(1);     // sin medir todavía
   });
 });

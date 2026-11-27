@@ -61,16 +61,38 @@ CREATE INDEX IF NOT EXISTS idx_tutor_avisos_mes
 -- En MultiCRM ya se mandaban avisos y solo quedaba `avisado_at` en las líneas.
 -- Se pasan aquí, uno por tutor y mes, para que el «ya se le mandó» los vea. En
 -- CRM-ISEIE no hay ninguno y no copia nada.
-INSERT INTO tutor_avisos_comisiones (tutor_id, periodo, enviado_por, enviado_at, email)
+--
+-- Con sus campus y sus líneas: el «ya se le mandó» solo cuenta los avisos que
+-- llevaban alguno de los campus de lo que se va a mandar (un tutor que cobra de
+-- dos empresas recibe un aviso de cada una).
+INSERT INTO tutor_avisos_comisiones (tutor_id, periodo, enviado_por, enviado_at, email, project_ids, comisiones)
 SELECT tc.tutor_id, tc.periodo,
        (ARRAY_AGG(tc.avisado_por ORDER BY tc.avisado_at DESC))[1],
        MAX(tc.avisado_at),
-       u.email
+       u.email,
+       ARRAY_AGG(DISTINCT p.project_id) FILTER (WHERE p.project_id IS NOT NULL),
+       ARRAY_AGG(tc.id ORDER BY tc.id)
   FROM tutor_commissions tc
   JOIN users u ON u.id = tc.tutor_id
+  LEFT JOIN products p ON p.id = tc.product_id
  WHERE tc.avisado_at IS NOT NULL
    AND NOT EXISTS (SELECT 1 FROM tutor_avisos_comisiones a
                     WHERE a.tutor_id = tc.tutor_id AND a.periodo = tc.periodo)
  GROUP BY tc.tutor_id, tc.periodo, u.email;
+
+-- Si se aplicó una versión anterior de esta migración, los copiados quedaron
+-- sin campus: se rellenan igual. Solo los copiados (sin `comisiones`); los que
+-- manda el CRM ya los llevan.
+UPDATE tutor_avisos_comisiones a
+   SET project_ids = x.campus, comisiones = x.lineas
+  FROM (SELECT tc.tutor_id, tc.periodo,
+               ARRAY_AGG(DISTINCT p.project_id) FILTER (WHERE p.project_id IS NOT NULL) AS campus,
+               ARRAY_AGG(tc.id ORDER BY tc.id) AS lineas
+          FROM tutor_commissions tc
+          LEFT JOIN products p ON p.id = tc.product_id
+         WHERE tc.avisado_at IS NOT NULL
+         GROUP BY tc.tutor_id, tc.periodo) x
+ WHERE a.project_ids IS NULL AND a.comisiones IS NULL
+   AND x.tutor_id = a.tutor_id AND x.periodo = a.periodo;
 
 COMMIT;

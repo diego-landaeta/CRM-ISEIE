@@ -167,15 +167,32 @@ export async function empresasDeLosCampus(projectIds = []) {
   return rows;
 }
 
-/** Los avisos que ya se le mandaron de ese mes, el último primero. */
-export async function avisosDelMes({ tutorId, periodo }) {
+/**
+ * Los avisos que ya se le mandaron de ese mes, el último primero.
+ *
+ * `campus`: los de lo que se va a mandar. Solo cuentan los avisos que llevaban
+ * alguno de esos campus: un tutor que cobra de dos empresas recibe un aviso de
+ * cada una, y el de CEDIA no decía nada de lo de Fono. Antes bastaba con el
+ * tutor y el mes, y quien abría el de Fono tenía que «mandarlo otra vez» algo
+ * que nunca se había mandado (QA del 26/11).
+ *
+ * Un aviso sin campus anotados cuenta siempre: no se sabe qué llevaba, y es
+ * mejor preguntar que pedirle dos facturas.
+ */
+export async function avisosDelMes({ tutorId, periodo, campus = null }) {
+  const ids = Array.isArray(campus)
+    ? [...new Set(campus.map(Number).filter((n) => Number.isInteger(n) && n > 0))]
+    : [];
   const { rows } = await query(
     `SELECT a.id, a.enviado_at, a.email, a.total, u.nombre AS enviado_por
        FROM tutor_avisos_comisiones a
        LEFT JOIN users u ON u.id = a.enviado_por
       WHERE a.tutor_id = $1 AND a.periodo = $2
+        AND ($3::int[] IS NULL
+             OR COALESCE(cardinality(a.project_ids), 0) = 0
+             OR a.project_ids && $3::int[])
       ORDER BY a.enviado_at DESC`,
-    [tutorId, periodo],
+    [tutorId, periodo, ids.length ? ids : null],
   );
   return rows.map((r) => ({
     id: Number(r.id),
@@ -205,7 +222,9 @@ export async function datosDelAviso({ tutorId, periodo, projectId = null, projec
   const [empresas, marca, avisos] = await Promise.all([
     empresasDeLosCampus(campusIds),
     marcaDeLosCampus(campusIds),
-    avisosDelMes({ tutorId, periodo }),
+    // Solo los que llevaban alguno de ESTOS campus: el aviso de otra empresa no
+    // es «ya se le mandó» de esto.
+    avisosDelMes({ tutorId, periodo, campus: campusIds }),
   ]);
   const grupos = agruparPorEmpresa(lineas, empresas);
 

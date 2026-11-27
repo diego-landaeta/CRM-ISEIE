@@ -169,6 +169,13 @@ export const disponibleSchema = z.object({
 const idOpcional = z.coerce.number().int().positive().optional().nullable();
 const periodoMes = z.string({ required_error: 'Falta el mes (AAAA-MM).' })
   .regex(/^\d{4}-(0[1-9]|1[0-2])$/, 'El mes, en formato AAAA-MM');
+// Sí o no, como booleano o en texto (lo mismo que `booleanoDeQuery` en tareas).
+// Sin esto, `repetir: "true"` contestaba en inglés «Expected boolean, received
+// string» (QA del 26/11).
+const siONo = z.union([
+  z.boolean(),
+  z.enum(['true', 'false', '1', '0']).transform((v) => v === 'true' || v === '1'),
+], { errorMap: () => ({ message: '«repetir» tiene que ser sí o no (true o false)' }) });
 
 export const avisoTutorQuerySchema = z.object({
   tutorId: z.coerce.number({ invalid_type_error: 'Falta el tutor' }).int().positive('Falta el tutor'),
@@ -181,5 +188,6 @@ export const avisarTutorSchema = avisoTutorQuerySchema.extend({
   asunto: z.string().trim().max(200, 'El asunto, en 200 caracteres como mucho').optional().nullable(),
   nota: z.string().trim().max(2000, 'La nota, en 2000 caracteres como mucho').optional().nullable(),
   // Ya se le mandó el de ese mes: hace falta decirlo a propósito para repetirlo.
-  repetir: z.boolean().optional().default(false),
+  // También en texto («true», «1»…), como llega de un formulario o de un script.
+  repetir: siONo.optional().default(false),
 });

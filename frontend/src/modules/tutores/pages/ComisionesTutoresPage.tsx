@@ -9,7 +9,8 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
-import AvisarTutorDialog from '../components/AvisarTutorDialog';
+import AvisarTutorDialog, { cuandoFue } from '../components/AvisarTutorDialog';
+import { formatDateNumeric } from '@/shared/lib/format';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import usePermission from '@/shared/hooks/usePermission';
 // El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
@@ -357,8 +358,9 @@ export default function ComisionesTutoresPage() {
                     {/* Que ya se le avisó, quién y cuántas veces, al lado: no en el
                         estado del dinero, que sigue debiéndosele hasta que se pague. */}
                     {r.avisado_at && (
-                      <span className="text-xs text-muted-foreground shrink-0" title={r.avisado_at}>
-                        avisado el {soloFecha(r.avisado_at)}
+                      // «20/11/2026», como en el diálogo; antes salía «2026-11-20».
+                      <span className="text-xs text-muted-foreground shrink-0" title={`Avisado el ${cuandoFue(r.avisado_at)}`}>
+                        avisado el {formatDateNumeric(r.avisado_at)}
                         {r.avisado_por_nombre ? ` por ${r.avisado_por_nombre}` : ''}
                         {(r.avisos_enviados || 0) > 1 ? ` (${r.avisos_enviados} veces)` : ''}
                       </span>

@@ -307,6 +307,41 @@ describe('el envío: a quién, desde dónde y sin repetir sin querer', () => {
     expect(consultasDelCliente.some((c) => c.sql.includes('INSERT INTO tutor_avisos_comisiones'))).toBe(true);
   });
 
+  // QA del 26/11: `repetir: "true"` contestaba en inglés «Expected boolean,
+  // received string». En texto vale igual; lo que no es sí o no, en español.
+  it('`repetir` también en texto («true», «1»), y «false» es que no', async () => {
+    h.avisos = [{ id: 4, enviado_at: '2026-11-12T09:20:00.000Z', enviado_por: 'Vanessa' }];
+    const si = await llamar(ctrl.avisarTutor, {
+      user: registrar(ADMIN), body: { tutorId: 3, periodo: '2026-10', repetir: 'true' },
+    });
+    expect(si.error).toBeNull();
+    expect(si.cuerpo.data.repetido).toBe(true);
+
+    const no = await llamar(ctrl.avisarTutor, {
+      user: registrar(ADMIN), body: { tutorId: 3, periodo: '2026-10', repetir: 'false' },
+    });
+    expect(no.error?.code).toBe('YA_AVISADO');
+    expect(sendEmail).toHaveBeenCalledTimes(1);
+  });
+
+  it('`repetir` que no es sí o no: 400 en español, sin mandar nada', async () => {
+    const { error } = await llamar(ctrl.avisarTutor, {
+      user: registrar(ADMIN), body: { tutorId: 3, periodo: '2026-10', repetir: 'quizá' },
+    });
+    expect(error?.statusCode).toBe(400);
+    expect(error?.code).toBe('VALIDATION_ERROR');
+    expect(error.message).toBe('«repetir» tiene que ser sí o no (true o false)');
+    expect(error.message).not.toMatch(/Expected|received/);
+    expect(sendEmail).not.toHaveBeenCalled();
+  });
+
+  it('el «ya se le mandó» se pide con los campus de lo que se va a mandar', async () => {
+    await llamar(ctrl.previoDelAviso, { user: registrar(ADMIN), query: { tutorId: '3', periodo: '2026-10' } });
+    const llamada = query.mock.calls.find(([sql]) => String(sql).includes('FROM tutor_avisos_comisiones'));
+    expect(String(llamada[0])).toMatch(/a\.project_ids && \$3::int\[\]/);
+    expect(llamada[1]).toEqual([3, '2026-10', [5]]);
+  });
+
   it('con el freno de tutores puesto, 423: se ve la vista previa pero no sale nada', async () => {
     h.freno = true;
     const { error } = await llamar(ctrl.avisarTutor, { user: registrar(ADMIN), body: { tutorId: 3, periodo: '2026-10' } });
