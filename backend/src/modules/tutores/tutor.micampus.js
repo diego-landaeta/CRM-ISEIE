@@ -39,6 +39,7 @@ import {
   esRolExtraDeTutora, modosDeGrupoDelCurso, modoDeLaTarea, SIN_GRUPOS, GRUPOS_VISIBLES,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from './tutor.campus.js';
+import { peticionCerrada } from '../../shared/services/moodle.limitador.js';
 
 const CACHE_MS = 2 * 60 * 1000;
 /** Lo leído con algún fallo se guarda menos: al volver a entrar se intenta otra vez. */
@@ -499,7 +500,9 @@ export async function miCampus(tutorId, { refrescar = false, campus: pedidos = n
     const dura = guardado && conFallos(guardado.datos) ? CACHE_CON_FALLOS_MS : CACHE_MS;
     if (refrescar || !guardado || Date.now() - guardado.at >= dura) {
       entrada = { at: Date.now(), datos: await leerUnCampus(tutorId, c, opciones) };
-      cache.set(clave, entrada);
+      // Si la tutora cerró la página a media lectura, lo leído lleva cursos «cancelados»: no
+      // se guarda, o al volver vería esos fallos en la copia.
+      if (!peticionCerrada()) cache.set(clave, entrada);
     }
     campus.push(entrada.datos);
     // «Leído a las…»: la hora de lo más antiguo que se enseña, no la de ahora.

@@ -120,3 +120,25 @@ describe('avisos del Moodle de los campus', () => {
     expect(texto).not.toContain(ORIGEN);
   });
 });
+
+describe('«campus ocupado» no dice nada del Moodle (QA del freno de Moodle, 27/11)', () => {
+  it('una vuelta en la que el freno no dejó llamar no borra la racha ni cuenta como «responde bien»', async () => {
+    const { conTurno } = await import('../src/shared/services/moodle.limitador.js');
+    modo = 'apagado';
+    await girar(1); // primer fallo de verdad
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    vi.stubEnv('MOODLE_ESPERA_TURNO_MS', '50');
+    try {
+      modo = 'bien';
+      const ocupa = conTurno(() => new Promise((r) => { setTimeout(r, 300); }));
+      await girar(1); // el freno no deja llamar: sin dato
+      await ocupa;
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    modo = 'apagado';
+    await girar(1); // segundo fallo seguido de los que cuentan: avisa
+    expect(await avisos()).toHaveLength(1);
+  });
+});

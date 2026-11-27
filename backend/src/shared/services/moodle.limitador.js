@@ -50,6 +50,19 @@ export const enSegundoPlano = (fn) => contexto.run({ fondo: true, signal: null }
 /** La señal de la petición HTTP en curso, si la hay. */
 export const senalActual = () => contexto.getStore()?.signal || undefined;
 
+/** ¿Se cerró ya la petición HTTP de la que cuelga esto? (Lo leído entonces no se guarda.) */
+export const peticionCerrada = () => senalActual()?.aborted === true;
+
+/**
+ * Corre `fn` SIN la señal de la petición en curso (y delante, como lo de una persona).
+ *
+ * Para lo que se comparte entre peticiones: una lectura que esperan varias pestañas (la
+ * salud de las conexiones, Mi campus de administración) no puede cancelarse porque cierre
+ * la pestaña que la lanzó. Si no, las demás reciben «CANCELADA» y se guarda como fallo del
+ * campus algo que no ha pasado (QA, 27/11).
+ */
+export const sinPeticion = (fn) => contexto.run({ fondo: false, signal: null }, fn);
+
 /** Un turno que no llegó: el campus, ocupado; o la petición, cerrada. */
 export class ErrorDeTurno extends Error {
   constructor(codigo, mensaje) {

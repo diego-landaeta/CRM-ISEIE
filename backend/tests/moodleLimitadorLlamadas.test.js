@@ -462,3 +462,83 @@ describe('tras el QA: qué se repite es una lista, no un patrón', () => {
     expect(veces).toEqual({ local_crm_cuenta: 4, local_crm_mensajes_desde: 4, local_crm_disponibilidad: 1 });
   });
 });
+
+/*
+  Tras el repaso del QA (27/11): la señal de la petición no puede llegar a lo que se comparte
+  ni convertirse en un fallo que no existe.
+    A. «Probar conexión» no guarda nada si la llamada no llegó al campus (CANCELADA, OCUPADO);
+    B. (moodleAvisos.test.js) ocupado/cancelada no cuentan como «responde bien»;
+    C. una matrícula que no llegó al campus no gasta un intento.
+  Las lecturas compartidas (salud de las conexiones, Mi campus de administración) se prueban
+  en sus ficheros: saludConexiones533.test.js y miCampusAdministracion.test.js.
+*/
+describe('tras el repaso del QA: lo que no llegó al campus no es un fallo del campus', () => {
+  const peticion = async (fn) => {
+    const { senalDeLaPeticion } = await import('../src/shared/services/moodle.limitador.js');
+    const { EventEmitter } = await import('node:events');
+    const res = Object.assign(new EventEmitter(), { writableFinished: false });
+    let p;
+    senalDeLaPeticion({}, res, () => { p = fn(); });
+    return { res, p };
+  };
+
+  it('sinPeticion: lo de dentro no hereda la señal de la petición, y va delante', async () => {
+    const { sinPeticion, senalActual } = await import('../src/shared/services/moodle.limitador.js');
+    let dentro = 'sin mirar';
+    const { p } = await peticion(() => sinPeticion(async () => { dentro = senalActual(); }));
+    await p;
+    expect(dentro).toBeUndefined();
+  });
+
+  it('«Probar conexión» con la pestaña cerrada: sin dato, no «error»', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    vi.resetModules();
+    const { conTurno } = await import('../src/shared/services/moodle.limitador.js');
+    const { testMoodle } = await import('../src/modules/integrations/integrations.controller.js');
+    const m = moodleSimulado();
+    vi.stubGlobal('fetch', vi.fn(m.responder));
+    let soltar;
+    const ocupa = conTurno(() => new Promise((r) => { soltar = r; }));
+    const { res, p } = await peticion(() => testMoodle('token', CAMPUS[0]));
+    await vi.advanceTimersByTimeAsync(10);
+    res.emit('close');
+    await vi.advanceTimersByTimeAsync(10);
+    const r = await p;
+    expect(r).toMatchObject({ ok: false, sinDato: true });
+    expect(m.salidas).toHaveLength(0);
+    soltar();
+    await ocupa;
+  });
+
+  it('«Probar conexión» con el campus ocupado: sin dato, no «error»', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    vi.stubEnv('MOODLE_ESPERA_TURNO_MS', '1000');
+    vi.resetModules();
+    const { conTurno } = await import('../src/shared/services/moodle.limitador.js');
+    const { testMoodle } = await import('../src/modules/integrations/integrations.controller.js');
+    vi.stubGlobal('fetch', vi.fn(moodleSimulado().responder));
+    let soltar;
+    const ocupa = conTurno(() => new Promise((r) => { soltar = r; }));
+    const p = testMoodle('token', CAMPUS[0]);
+    await vi.advanceTimersByTimeAsync(1_100);
+    expect(await p).toMatchObject({ ok: false, sinDato: true });
+    soltar();
+    await ocupa;
+  });
+
+  it('una matrícula que no llegó al campus (OCUPADO, CANCELADA) no gasta un intento: «lento»', async () => {
+    const { matricularEnMoodle } = await import('../src/modules/matricula-moodle/matricula-moodle.moodle.js');
+    const { MoodleError } = await import('../src/shared/services/moodle.client.js');
+    const fila = { project_id: 7, alumno_email: 'a@b.test', alumno_nombre: 'Ana Pérez' };
+    const cursos = [{ project_id: 7, curso_moodle_id: 501, nombre: 'Curso' }];
+    for (const codigo of ['OCUPADO', 'CANCELADA']) {
+      const r = await matricularEnMoodle(fila, cursos, {
+        conexionImpl: async () => ({ url: CAMPUS[0], token: 't' }),
+        llamarImpl: async () => { throw new MoodleError('El campus está ocupado ahora mismo.', codigo); },
+      });
+      expect(r, codigo).toMatchObject({ hecha: false, lento: true });
+    }
+  });
+});

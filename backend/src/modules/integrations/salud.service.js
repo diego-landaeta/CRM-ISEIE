@@ -4,6 +4,7 @@ import { PROBAR } from './integrations.controller.js';
 import { faltasDeFunciones, textoDeFaltas } from '../../shared/services/moodle.client.js';
 import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
+import { sinPeticion } from '../../shared/services/moodle.limitador.js';
 
 /**
  * LA SALUD DE LAS CONEXIONES DE CADA CAMPUS (CRM#533).
@@ -610,6 +611,8 @@ async function comprobarCampus(projectId, { ahora, probar, fetchImpl }) {
       try { clave = decrypt(i.encrypted_value, i.iv, i.auth_tag); } catch { clave = null; }
       if (!clave) resultado = { ok: false, message: 'La clave guardada no se puede descifrar.' };
       else resultado = await probarUna(() => probar[i.provider](clave, i.config_public || {}));
+      // La llamada no llegó al campus (el freno, ocupado): no se sabe nada, no se apunta nada.
+      if (resultado.sinDato) return;
       await apuntar(projectId, i.provider, resultado, { conTarjeta: true });
       // Moodle (CRM#925): lo que tiene el servicio, como lo guarda «Probar conexión».
       if (i.provider === 'moodle') {
@@ -639,6 +642,7 @@ async function comprobarCampus(projectId, { ahora, probar, fetchImpl }) {
     tareas.push((async () => {
       const fn = d.probarCon(fila);
       const resultado = fn ? await probarUna(fn) : { ok: false, message: 'La clave guardada no se puede leer.' };
+      if (resultado.sinDato) return;
       await apuntar(projectId, d.conexion, resultado, { conTarjeta: false });
       hechas.push(d.conexion);
     })());
@@ -687,7 +691,9 @@ export async function comprobarAhora(ids, { ahora = Date.now(), probar = PROBAR,
     while (cola.length) {
       const pid = cola.shift();
       if (!enMarcha.has(pid)) {
-        enMarcha.set(pid, comprobarCampus(pid, { ahora, probar, fetchImpl }).finally(() => enMarcha.delete(pid)));
+        // La esperan todas las pestañas que pidan este campus: sin la señal de la primera,
+        // que si se cierra no puede cancelar la prueba de las demás.
+        enMarcha.set(pid, sinPeticion(() => comprobarCampus(pid, { ahora, probar, fetchImpl })).finally(() => enMarcha.delete(pid)));
       }
       try { resultado[pid] = await enMarcha.get(pid); } catch (err) {
         logger.warn({ projectId: pid, err: err.message }, 'salud de las conexiones: no se pudo comprobar el campus');
