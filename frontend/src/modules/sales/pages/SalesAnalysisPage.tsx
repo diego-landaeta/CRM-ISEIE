@@ -274,7 +274,7 @@ export default function SalesAnalysisPage() {
                         {a.nombre}
                         {a.role && <span className="ml-2 text-[10px] text-muted-foreground font-normal">{a.role}</span>}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{a.ventas}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{a.ventas.toLocaleString('es-ES')}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{a.clientes}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(a.importe)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{fmt(a.cobrado)}</td>

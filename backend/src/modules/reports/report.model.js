@@ -1574,10 +1574,21 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
   const fl = buildFilter({ projectId, projectIds, from, to, asesoraId, paisEntrada }, ENTRY, 'l.project_id');
   const off = fv.params.length;
   const wl = fl.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
+  // Con una gestora, su PARTE de cada venta (`conversion_reparto`), como el
+  // resto de Ventas y `overview`: la compartida le cuenta la mitad. Antes salía
+  // entera a las dos (QA de CRM#1182 y CRM-ISEIE#820). Su parámetro va el
+  // último, detrás de los de los dos filtros.
+  const params = [...fv.params, ...fl.params];
+  let peso = '1';
+  if (asesoraId) {
+    params.push(idsDe(asesoraId));
+    peso = `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                      WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${params.length}::int[])), 1)`;
+  }
 
   const { rows } = await query(
     `WITH v AS (
-       SELECT c.id, c.importe_total, c.lead_id,
+       SELECT c.id, c.importe_total, c.lead_id, ${peso} AS peso,
               (CASE WHEN LENGTH(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '')) > 15 THEN LEFT(regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', ''), 11) ELSE regexp_replace(regexp_replace(COALESCE(l.telefono, ''), '[^0-9]', '', 'g'), '^00', '') END) AS tel
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
@@ -1591,10 +1602,10 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
        SELECT ${PAIS_TEL} AS pais,
               COUNT(*)::int AS ventas,
               COUNT(DISTINCT v.lead_id)::int AS clientes,
-              ROUND(COALESCE(SUM(v.importe_total), 0), 2) AS vendido,
+              ROUND(COALESCE(SUM(v.importe_total * v.peso), 0), 2) AS vendido,
               ROUND(COALESCE(SUM(
                 (SELECT COALESCE(SUM(cp.importe), 0)
-                   FROM conversion_payments cp WHERE cp.conversion_id = v.id)), 0), 2) AS cobrado
+                   FROM conversion_payments cp WHERE cp.conversion_id = v.id) * v.peso), 0), 2) AS cobrado
          FROM v GROUP BY 1
      ),
      le AS (
@@ -1623,7 +1634,7 @@ export async function paisesMasVendidos({ projectId, projectIds, from, to, aseso
        FROM ventas
        FULL OUTER JOIN lds ON lds.pais = ventas.pais
       ORDER BY vendido DESC, leads DESC`,
-    [...fv.params, ...fl.params]
+    params
   );
   return rows;
 }
