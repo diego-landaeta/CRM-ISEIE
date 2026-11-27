@@ -1739,16 +1739,26 @@ export async function paisesDeEntrada({ projectId, projectIds, from, to, asesora
   const fl = buildFilter({ projectId, projectIds, from, to, asesoraId, paisEntrada }, ENTRY, 'l.project_id');
   const off = fv.params.length;
   const wl = fl.where.replace(/\$(\d+)/g, (_, n) => '$' + (Number(n) + off));
+  // Con una gestora, su PARTE de cada venta (`conversion_reparto`), igual que
+  // `paisesMasVendidos`: la compartida le cuenta la mitad, no entera (QA de
+  // CRM#1182 y CRM-ISEIE#820). Su parámetro va el último.
+  const params = [...fv.params, ...fl.params];
+  let peso = '1';
+  if (asesoraId) {
+    params.push(idsDe(asesoraId));
+    peso = `COALESCE((SELECT SUM(r.peso) FROM conversion_reparto r
+                      WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${params.length}::int[])), 1)`;
+  }
 
   const { rows } = await query(
     `WITH ventas AS (
        SELECT c.project_id, lv.pais_origen AS pais,
               COUNT(*)::int AS ventas,
               COUNT(DISTINCT c.lead_id)::int AS clientes,
-              ROUND(COALESCE(SUM(c.importe_total), 0), 2) AS vendido,
+              ROUND(COALESCE(SUM(c.importe_total * ${peso}), 0), 2) AS vendido,
               ROUND(COALESCE(SUM(
                 (SELECT COALESCE(SUM(cp.importe), 0)
-                   FROM conversion_payments cp WHERE cp.conversion_id = c.id)), 0), 2) AS cobrado
+                   FROM conversion_payments cp WHERE cp.conversion_id = c.id) * ${peso}), 0), 2) AS cobrado
          FROM conversions c
          LEFT JOIN leads lv ON lv.id = c.lead_id
          ${fv.where}
@@ -1782,7 +1792,7 @@ export async function paisesDeEntrada({ projectId, projectIds, from, to, asesora
                           AND lds.pais IS NOT DISTINCT FROM ventas.pais
        LEFT JOIN projects p ON p.id = COALESCE(ventas.project_id, lds.project_id)
       ORDER BY p.nombre, (COALESCE(ventas.pais, lds.pais) IS NULL), vendido DESC, leads DESC`,
-    [...fv.params, ...fl.params]
+    params
   );
   return rows.map((r) => ({
     ...r,

@@ -3,7 +3,7 @@ import pool from '../src/shared/config/db.js';
 import {
   getResumenVentas, getTopProducts, getDesglose, getSerieVentas, getVentasPorAsesora,
 } from '../src/modules/sales/sales.service.js';
-import { paisesMasVendidos } from '../src/modules/reports/report.model.js';
+import { paisesMasVendidos, paisesDeEntrada } from '../src/modules/reports/report.model.js';
 
 /**
  * «Solo compartidas» con una gestora (QA de CRM#1182 y CRM-ISEIE#820).
@@ -122,5 +122,22 @@ describe('el resumen cuenta a las asesoras por el reparto', () => {
     expect((await getResumenVentas(base({ compartidas: 'solo' }))).asesoras).toBe(2);
     expect((await getResumenVentas(base())).asesoras).toBe(2);
     expect((await getResumenVentas(base({ responsableId: BERTA }))).asesoras).toBe(1);
+  });
+});
+
+describe('Reportes › Campus y país de entrada, con una gestora', () => {
+  // Iba aparte de `paisesMasVendidos` y sumaba la compartida entera a las dos.
+  const suma = async (asesoraId, campo) => (await paisesDeEntrada({ ...base(), asesoraId }))
+    .reduce((t, p) => t + Number(p[campo] || 0), 0);
+
+  it('a cada una, su entera y la mitad de las compartidas', async () => {
+    expect(await suma(BERTA, 'vendido')).toBeCloseTo(1217.17, 2);
+    expect(await suma(BERTA, 'cobrado')).toBeCloseTo(1217.17, 2);
+    expect(await suma(ANA, 'vendido')).toBeCloseTo(1766.67, 2);
+    expect(await suma(ANA, 'cobrado')).toBeCloseTo(1766.67, 2);
+  });
+  it('sin gestora, cada venta entera una vez', async () => {
+    expect(await suma(undefined, 'vendido')).toBeCloseTo(2983.83, 2);
+    expect(await suma(undefined, 'ventas')).toBe(4);
   });
 });
