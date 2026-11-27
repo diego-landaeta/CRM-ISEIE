@@ -3,6 +3,7 @@ import { COBRADO_DE, recalcularCobrado } from './cobrado.js';
 import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { AppError } from '../../shared/utils/AppError.js';
+import { condicionDeCompartidas } from './compartidas.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 
@@ -334,7 +335,7 @@ export async function findByLead(leadId) {
   return rows;
 }
 
-export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, from, to, page, limit }) {
+export async function findAll({ projectId, projectIds = null, leadId, responsableId, pendiente, vencido, pendingBilling, producto, compartidas = null, from, to, page, limit }) {
   const conditions = [];
   const params = [];
   let idx = 1;
@@ -356,6 +357,10 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     conditions.push(`(c.importe_total = 0 OR c.notas_pago LIKE 'Backfill 2026-06-16%')`);
   }
   if (producto) { conditions.push(`TRIM(c.producto_contratado) = $${idx++}`); params.push(String(producto).trim()); }
+  // Solo compartidas o solo enteras (#163). Cambia qué ventas salen, no cuánto
+  // le cuenta cada una a la gestora: eso lo sigue diciendo `conversion_reparto`.
+  const deCompartidas = condicionDeCompartidas(compartidas, 'c');
+  if (deCompartidas) conditions.push(deCompartidas);
   if (from) { conditions.push(`c.fecha_conversion >= $${idx++}`); params.push(from); }
   if (to) { conditions.push(`c.fecha_conversion <= $${idx++}`); params.push(to); }
 
@@ -463,6 +468,11 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     let porGestora = '', porProducto = '';
     if (responsableId) { args.push([].concat(responsableId).map(Number)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = cv.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(cv.producto_contratado) = $${args.length}`; }
+    // Y el «Reparto» (#163, revisión de Diego 05/11). Con `cv` en LEFT JOIN, una
+    // factura suelta (sin venta) no es compartida: no sale con «Solo
+    // compartidas» y sí con «Solo enteras», que es lo que da la condición.
+    const repartoCv = condicionDeCompartidas(compartidas, 'cv');
+    const porReparto = repartoCv ? `AND ${repartoCv}` : '';
     const { rows: [fa] } = await query(
       `WITH f AS (
          SELECT i.total, cv.id AS venta_id, cv.fecha_conversion, ${CLASE_FACTURA} AS clase
@@ -471,7 +481,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
            LEFT JOIN leads l ON l.id = cv.lead_id
           WHERE ${FACTURA_REAL}
             AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-            AND ${alcance} ${porGestora} ${porProducto}
+            AND ${alcance} ${porGestora} ${porProducto} ${porReparto}
        )
        SELECT COUNT(*)::int AS n_todas,
               COALESCE(SUM(total), 0) AS importe_todas,
@@ -520,19 +530,22 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
     let porGestora = '', porProducto = '';
     if (responsableId) { args.push([].concat(responsableId).map(Number)); porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`; }
     if (producto) { args.push(String(producto).trim()); porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`; }
+    // Y el «Reparto» (#163): la columna tiene que sumar la tarjeta con el filtro puesto.
+    const repartoC = condicionDeCompartidas(compartidas, 'c');
+    const porReparto = repartoC ? `AND ${repartoC}` : '';
     const { rows } = await query(
       `WITH v AS (
          SELECT c.project_id, COUNT(*)::int AS ventas, COALESCE(SUM(c.importe_total), 0) AS importe_ventas
            FROM conversions c
            LEFT JOIN leads l ON l.id = c.lead_id
-          WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2 AND ${alcanceC} ${porGestora} ${porProducto}
+          WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2 AND ${alcanceC} ${porGestora} ${porProducto} ${porReparto}
           GROUP BY c.project_id),
        q AS (
          SELECT i.project_id, COUNT(*)::int AS cuotas, COALESCE(SUM(i.total), 0) AS importe_cuotas
            FROM invoices i
            JOIN conversions c ON c.id = i.conversion_id
            LEFT JOIN leads l ON l.id = c.lead_id
-          WHERE ${FACTURA_REAL} AND i.fecha_emision >= $1 AND i.fecha_emision <= $2 AND ${alcanceI} ${porGestora} ${porProducto}
+          WHERE ${FACTURA_REAL} AND i.fecha_emision >= $1 AND i.fecha_emision <= $2 AND ${alcanceI} ${porGestora} ${porProducto} ${porReparto}
             AND ${CLASE_FACTURA} = 'cuota'
           GROUP BY i.project_id)
        SELECT pr.id AS project_id, pr.nombre,
@@ -653,7 +666,7 @@ export async function findAll({ projectId, projectIds = null, leadId, responsabl
  * dato que explica el desfase cuando alguien lo mira desde el otro lado.
  */
 export async function cuotasDelPeriodo({
-  projectId = null, projectIds = null, from, to, responsableId = null, limit = 300,
+  projectId = null, projectIds = null, from, to, responsableId = null, compartidas = null, limit = 300,
 } = {}) {
   if (!from || !to) return [];
   const args = [from, to];
@@ -667,6 +680,9 @@ export async function cuotasDelPeriodo({
     args.push([].concat(responsableId).map(Number));
     porGestora = `AND EXISTS (SELECT 1 FROM conversion_reparto r WHERE r.conversion_id = c.id AND r.vendedora_id = ANY($${args.length}::int[]))`;
   }
+  // El «Reparto» (#163): la lista de cuotas, igual que la tarjeta.
+  const repartoC = condicionDeCompartidas(compartidas, 'c');
+  const porReparto = repartoC ? `AND ${repartoC}` : '';
   args.push(limit);
 
   const { rows } = await query(
@@ -683,7 +699,7 @@ export async function cuotasDelPeriodo({
        LEFT JOIN conversion_payments cp ON cp.id = i.payment_id
       WHERE ${FACTURA_REAL}
         AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-        AND ${alcance} ${porGestora}
+        AND ${alcance} ${porGestora} ${porReparto}
         AND ${CLASE_FACTURA} = 'cuota'
       ORDER BY i.fecha_emision DESC, i.numero DESC
       LIMIT $${args.length}`,
@@ -709,7 +725,7 @@ export async function cuotasDelPeriodo({
  * que ya se ve, y esconderlas volveria a descuadrar el recuento de facturas.
  */
 export async function filasDelPeriodo({
-  projectId = null, projectIds = null, from, to, responsableId = null, producto = null, page = 1, limit = 50,
+  projectId = null, projectIds = null, from, to, responsableId = null, producto = null, compartidas = null, page = 1, limit = 50,
 } = {}) {
   if (!from || !to) return { filas: [], total: 0 };
   const args = [from, to];
@@ -729,6 +745,9 @@ export async function filasDelPeriodo({
     args.push(String(producto).trim());
     porProducto = `AND TRIM(c.producto_contratado) = $${args.length}`;
   }
+  // Solo compartidas o solo enteras (#163): de la venta, también para sus cuotas.
+  const deCompartidas = condicionDeCompartidas(compartidas, 'c');
+  const porCompartidas = deCompartidas ? `AND ${deCompartidas}` : '';
   args.push(limit, (Math.max(1, page) - 1) * limit);
 
   const { rows } = await query(
@@ -747,7 +766,7 @@ export async function filasDelPeriodo({
          FROM conversions c
          LEFT JOIN leads l ON l.id = c.lead_id
         WHERE c.fecha_conversion >= $1 AND c.fecha_conversion <= $2
-          AND ${alcanceC} ${porGestora} ${porProducto}
+          AND ${alcanceC} ${porGestora} ${porProducto} ${porCompartidas}
      ),
      facturas AS (
        SELECT (${CLASE_FACTURA})::text AS tipo, c.id AS venta_id, i.id AS clave_id, i.id AS factura_id,
@@ -765,7 +784,7 @@ export async function filasDelPeriodo({
          LEFT JOIN products p ON p.id = c.producto_contratado_id
         WHERE ${FACTURA_REAL}
           AND i.fecha_emision >= $1 AND i.fecha_emision <= $2
-          AND ${alcanceI} ${porGestora} ${porProducto}
+          AND ${alcanceI} ${porGestora} ${porProducto} ${porCompartidas}
      ),
      filas AS (
        SELECT * FROM ventas

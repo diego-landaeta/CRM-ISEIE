@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { envioFacturaSchema, datosFiscalesSchema } from '../factura-automatica/factura-automatica.validation.js';
 import { fechaInicioCurso } from '../conversions/conversion.validation.js';
+import { compartidasSchema } from '../conversions/compartidas.js';
 
 const PAYMENT_METHODS = ['transferencia', 'tarjeta', 'efectivo', 'paypal', 'fraccionado'];
 
@@ -80,4 +81,6 @@ export const facturadoQuerySchema = z.object({
   from: FECHA.optional(),
   to: FECHA.optional(),
   responsableId: z.coerce.number().int().positive().optional(),
+  // Todas · Solo compartidas · Solo enteras (#186).
+  compartidas: compartidasSchema.optional(),
 }).passthrough();

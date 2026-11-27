@@ -57,7 +57,7 @@ const accion = (estado: EstadoCursoRedaccion) => (estado === 'sin_matricula' ? '
 /** «Profesor» de verdad, o lista con otro rol que el campus da a sus tutoras (MOODLE_ROLES_TUTORA, ISEIE: «Gestor»). */
 const conRolDeTutora = (c: CursoRedaccion) => c.estado === 'profesora' && !c.roles.includes('editingteacher') && c.roles.length > 0;
 
-function Curso({ c, propia }: { c: CursoRedaccion; propia: boolean }) {
+function Curso({ c, propia, soloVer = false }: { c: CursoRedaccion; propia: boolean; soloVer?: boolean }) {
   // Con un rol de MOODLE_ROLES_TUTORA cuenta como lista, pero no se llama «Profesor».
   const e = conRolDeTutora(c) ? { ...ESTADO.profesora, texto: 'Rol de tutora' } : ESTADO[c.estado];
   const falta = c.estado !== 'profesora' && c.estado !== 'sin_comprobar';
@@ -82,7 +82,7 @@ function Curso({ c, propia }: { c: CursoRedaccion; propia: boolean }) {
         </span>
         <span>
           {/* Ella no se matricula: se lo pide a coordinación (lo dice la cabecera). */}
-          {!propia && c.enlace && falta && (
+          {!propia && !soloVer && c.enlace && falta && (
             <a href={c.enlace} target="_blank" rel="noopener noreferrer"
               className="inline-flex items-center gap-1 rounded text-xs font-medium text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
               {accion(c.estado)} <ArrowSquareOut size={12} weight="bold" aria-hidden />
@@ -95,7 +95,7 @@ function Curso({ c, propia }: { c: CursoRedaccion; propia: boolean }) {
   );
 }
 
-function Campus({ c, propia }: { c: CampusRedaccion; propia: boolean }) {
+function Campus({ c, propia, soloVer = false }: { c: CampusRedaccion; propia: boolean; soloVer?: boolean }) {
   const bien = c.problemas.length === 0 && c.cursos.every((k) => k.estado === 'profesora');
   return (
     <div className="rounded-md border border-border p-3 space-y-2">
@@ -125,17 +125,20 @@ function Campus({ c, propia }: { c: CampusRedaccion; propia: boolean }) {
         </ul>
       )}
       <ul className="divide-y divide-border" aria-label={`Cursos que ${propia ? 'redactas' : 'redacta'} en ${c.campus}`}>
-        {c.cursos.map((k) => <Curso key={`${k.product_id}-${k.curso_moodle_id}`} c={k} propia={propia} />)}
+        {c.cursos.map((k) => <Curso key={`${k.product_id}-${k.curso_moodle_id}`} c={k} propia={propia} soloVer={soloVer} />)}
       </ul>
     </div>
   );
 }
 
-type Props = { tutorId: number; propia?: false } | { tutorId?: undefined; propia: true };
+// `supervision` (26/11/2026): la mira el supervisor de tutores, sin tocar nada: sin los
+// enlaces para matricularla ni para unir el curso, que son de coordinación.
+type Props = { tutorId: number; propia?: false; supervision?: boolean } | { tutorId?: undefined; propia: true; supervision?: undefined };
 
 export default function RedaccionEnMoodle(props: Props) {
   const propia = props.propia === true;
   const tutorId = props.propia ? null : props.tutorId;
+  const supervision = props.supervision === true;
   const [datos, setDatos] = useState<Datos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,7 +147,8 @@ export default function RedaccionEnMoodle(props: Props) {
     setCargando(true);
     setError(null);
     try {
-      const r = tutorId == null ? await redaccionMoodleApi.mia() : await redaccionMoodleApi.ver(tutorId);
+      const r = tutorId == null ? await redaccionMoodleApi.mia()
+        : supervision ? await redaccionMoodleApi.supervisada(tutorId) : await redaccionMoodleApi.ver(tutorId);
       // Solo con la forma que se espera: otra cosa (un servidor sin la ruta, una prueba
       // que contesta [] a todo) rompía la ficha entera con «reading 'length'».
       const d = r.success ? r.data : null;
@@ -156,7 +160,7 @@ export default function RedaccionEnMoodle(props: Props) {
     } finally {
       setCargando(false);
     }
-  }, [tutorId]);
+  }, [tutorId, supervision]);
 
   useEffect(() => { cargar(); }, [cargar]);
 
@@ -201,13 +205,13 @@ export default function RedaccionEnMoodle(props: Props) {
             </p>
           )}
 
-          {datos.campus.map((c) => <Campus key={c.project_id} c={c} propia={propia} />)}
+          {datos.campus.map((c) => <Campus key={c.project_id} c={c} propia={propia} soloVer={supervision} />)}
 
           {datos.sin_curso.length > 0 && (
             <div className="rounded-md border border-border p-3 text-xs space-y-1">
               <p className="font-semibold text-sm">Sin curso de Moodle unido</p>
               <p className="text-muted-foreground">
-                {propia ? (
+                {propia || supervision ? (
                   'Coordinación aún no ha unido estos productos a su curso de Moodle: hasta entonces no se puede comprobar.'
                 ) : (
                   <>
@@ -263,12 +267,19 @@ export default function RedaccionEnMoodle(props: Props) {
           <h3 id={titulo} className="flex flex-wrap items-center gap-2 font-bold text-sm">
             Sus cursos en Moodle <EtiquetaEnPruebas />
           </h3>
+          {supervision ? (
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Los cursos que redacta en los campus que llevas y si está como «Profesor» en cada uno. Las matrículas las hace
+            coordinación en Moodle.
+          </p>
+          ) : (
           <p className="text-xs text-muted-foreground mt-0.5">
             Para ver sus cursos en «Mi campus» y recibir las dudas del chat, en cada campus necesita su cuenta (con su correo
             del CRM) y estar matriculada en cada curso que redacta con el rol <strong className="font-semibold">«Profesor»</strong>{' '}
             (<code>editingteacher</code>) por matrícula manual, igual que las demás tutoras. «Profesor sin permiso de edición»
             no le deja redactar. El CRM solo lo comprueba: la matrícula se hace en Moodle, con el enlace de cada curso.
           </p>
+          )}
         </div>
         {volver}
       </div>

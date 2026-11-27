@@ -15,6 +15,8 @@ interface Row {
 interface Props {
   projectId?: number | null;
   responsableId?: number | null;
+  // Todas · Solo compartidas · Solo enteras (#186): 'solo', 'enteras' o nada.
+  compartidas?: 'solo' | 'enteras' | null;
   /** null = all-time, número = últimos N días */
   days?: number | null;
   /** Rango que manda desde la pantalla; tiene prioridad sobre days. */
@@ -41,7 +43,7 @@ function isoLocal(d: Date) {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-export default function TopProductsCard({ projectId, responsableId = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '', medida = 'ventas' }: Props) {
+export default function TopProductsCard({ projectId, responsableId = null, compartidas = null, days = null, from = null, to = null, limit = 5, title = 'Programas más vendidos', className = '', medida = 'ventas' }: Props) {
   const [rows, setRows] = useState<Row[]>([]);
   // Las ventas que no dicen qué se vendió. Ya no compiten en el ranking, pero
   // tampoco se esconden: se enseñan debajo como lo que son, un agujero de
@@ -62,6 +64,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
     if (projectId) params.projectId = projectId;
     if (from && to) { params.from = from; params.to = to; } else if (days) params.days = days;
     if (responsableId) params.responsableId = responsableId;
+    if (compartidas) params.compartidas = compartidas;
     const peticion = esFacturado
       // LO FACTURADO (#224): el mismo endpoint que el bloque del equipo y que
       // «Productos vendidos». Los «últimos N días» se pasan a fechas.
@@ -70,6 +73,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
         if (projectId) fp.projectId = projectId;
         if (params.issuerId) fp.issuerId = params.issuerId;
         if (responsableId) fp.responsableId = responsableId;
+        if (compartidas) fp.compartidas = compartidas;
         if (from && to) { fp.from = from; fp.to = to; } else if (days) {
           const d = new Date(); d.setDate(d.getDate() - days);
           fp.from = isoLocal(d);
@@ -96,7 +100,7 @@ export default function TopProductsCard({ projectId, responsableId = null, days 
       .catch(() => { if (!cancelled) { setRows([]); setSinAsignar(null); setSinCobro(null); } })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [projectId, responsableId, days, limit, from, to, esFacturado]);
+  }, [projectId, compartidas, responsableId, days, limit, from, to, esFacturado]);
 
   return (
     // `data-recorrido`: el paso «Programas más vendidos» del recorrido de Ventas (#619, gemela de CRM#941).

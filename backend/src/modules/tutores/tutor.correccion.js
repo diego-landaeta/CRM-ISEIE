@@ -20,6 +20,7 @@ import {
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus, SOLO_DESDE_MOODLE, soloDesdeMoodle as esSoloDesdeMoodle } from './tutor.campus.js';
 import { olvidarMiCampus, vistaDeLaProfesora } from './tutor.micampus.js';
+import { corregidaDesdeElCrm } from './tutor.entregasSinCorregir.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
 
@@ -177,6 +178,8 @@ export async function calificar(tutorId, projectId, cursoId, tareaId, { alumnoId
   } catch (err) { throw comoAppError(err, 'No se ha podido guardar la nota en el campus.'); }
   olvidarMiCampus(tutorId);
   olvidarFichas();
+  // Corregida: su aviso de 48 h se retira ya, sin esperar a la vuelta.
+  await corregidaDesdeElCrm(tutorId, { projectId: Number(projectId), tareaId: Number(tareaId), alumnoId: Number(alumnoId) });
   return r;
 }
 
