@@ -37,6 +37,8 @@ const LO_SUYO = [
   'tutores.mis_cursos', 'consultas.atender',
   // CRM#820 (17/11): pedir acceso o permiso a soporte, como todos los roles.
   'accesos.pedir',
+  // #197 (gemela de CRM#211, Diego 06/11): su propio correo, con código, como todos los roles.
+  'cuenta.cambiar_correo',
 ];
 
 describe('#708 · el rol en el catálogo', () => {

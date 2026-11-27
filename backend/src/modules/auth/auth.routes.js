@@ -85,9 +85,13 @@ router.post('/change-password', changePasswordLimiter, verifyToken, authControll
 // PATCH /api/auth/me — usuario edita su propio perfil (nombre)
 router.patch('/me', verifyToken, authController.updateMyProfile);
 
-// PATCH /api/auth/me/email — el propio correo, solo un tutor (#246). Con el mismo
-// límite de intentos que el cambio de contraseña: también toca la credencial.
-// La sesión ANTES que el permiso: sin `req.user`, `puede` siempre da 401.
+// El propio correo, en dos pasos y con un código a la dirección nueva (#197,
+// gemela de CRM#211). Con el mismo límite de intentos que el cambio de
+// contraseña: también toca la credencial. La sesión ANTES que el permiso: sin
+// `req.user`, `puede` siempre da 401.
+// POST /api/auth/me/email/codigo — con la contraseña actual, manda el código.
+router.post('/me/email/codigo', changePasswordLimiter, verifyToken, puede('cuenta.cambiar_correo'), authController.pedirCodigoMiCorreo);
+// PATCH /api/auth/me/email — con el código, cambia el correo.
 router.patch('/me/email', changePasswordLimiter, verifyToken, puede('cuenta.cambiar_correo'), authController.updateMyEmail);
 
 export default router;

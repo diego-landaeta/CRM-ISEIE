@@ -76,6 +76,19 @@ export async function cambiarCorreo(id, email, { reenviarEnlace = false, porUser
     );
   }
 
+  // Un código pendiente para otra dirección ya no vale (#197, revisión de Diego
+  // en CRM#688): si no, al meterlo después desharía este cambio (el superadmin le
+  // pone Y y luego su código de X le devuelve a X). Si el cambio viene de un
+  // código, su petición ya está confirmada y esto no la toca.
+  // Sin la tabla (backend desplegado antes que la migración 348) no hay nada que
+  // anular: el cambio del superadmin no se puede romper por eso.
+  await query(`UPDATE cambios_de_correo SET anulado_at = NOW()
+                WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL`, [id])
+    .catch((err) => {
+      if (err?.code !== '42P01') throw err;
+      logger.warn({ userId: id }, 'cambios_de_correo no existe: falta la migración 348');
+    });
+
   // La credencial ha cambiado: se revocan sus refresh tokens. OJO, no cierra
   // nada al momento (#262): el JWT de acceso vale hasta que caduca (8 h) y sus
   // URL del MCP siguen vivas. Los textos de las pantallas dicen eso, no más.

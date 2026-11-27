@@ -22,6 +22,7 @@ vi.mock('../src/modules/permissions/permissions.service.js', () => import('./hel
 vi.mock('../src/modules/auth/auth.controller.js', async (original) => ({
   ...(await original()),
   updateMyEmail: (_req, res) => res.json({ success: true, data: { cambiado: true } }),
+  pedirCodigoMiCorreo: (_req, res) => res.json({ success: true, data: { enviado: true } }),
 }));
 const { registrar } = await import('./helpers/permisosSinBase.js');
 const { default: authRouter } = await import('../src/modules/auth/auth.routes.js');
@@ -42,11 +43,30 @@ describe('PATCH /api/auth/me/email (#246, punto 2 del QA de #423)', () => {
     expect(r.status).toBe(200);
   });
 
-  it('una gestora no: 403, no 401', async () => {
-    registrar({ userId: 9102, role: 'gestor' });
+  // Desde el #197 (gemela de CRM#211, Diego 06/11) todos los roles cambian el
+  // suyo, con código; quien no tiene el permiso es alguien a quien se lo han
+  // quitado con una excepción.
+  it('a quien le han quitado el permiso: 403, no 401', async () => {
+    registrar({ userId: 9102, role: 'gestor', excepciones: { 'cuenta.cambiar_correo': false } });
     const r = await supertest(app).patch('/api/auth/me/email')
       .set('Authorization', `Bearer ${token(9102, 'gestor')}`).send({ email: 'nuevo@prueba.test' });
     expect(r.status).toBe(403);
+  });
+
+  it('el colaborador, ya sí (todos los roles)', async () => {
+    registrar({ userId: 9103, role: 'colaborador' });
+    const r = await supertest(app).patch('/api/auth/me/email')
+      .set('Authorization', `Bearer ${token(9103, 'colaborador')}`).send({ email: 'nuevo@prueba.test' });
+    expect(r.status).toBe(200);
+  });
+
+  it('y lo mismo para pedir el código: con sesión y permiso pasa; sin sesión, 401', async () => {
+    registrar({ userId: 9104, role: 'gestor' });
+    const r = await supertest(app).post('/api/auth/me/email/codigo')
+      .set('Authorization', `Bearer ${token(9104, 'gestor')}`).send({ email: 'nuevo@prueba.test', password: 'x' });
+    expect(r.status).toBe(200);
+    const sin = await supertest(app).post('/api/auth/me/email/codigo').send({ email: 'nuevo@prueba.test', password: 'x' });
+    expect(sin.status).toBe(401);
   });
 
   it('sin sesión, 401', async () => {

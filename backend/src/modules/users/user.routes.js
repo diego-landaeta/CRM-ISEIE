@@ -51,6 +51,9 @@ router.patch('/:id/reactivate', puede('users.edit'), userController.reactivate);
 router.patch('/:id/password', puede('users.contrasena'), userController.setPassword);
 // Antes de cambiar un correo, el aviso de Make (#248).
 router.get('/:id/aviso-correo', puede('users.aviso_correo'), userController.avisoCorreo);
+// El cambio de correo pendiente y su historial, en la ficha (#833, gemela de CRM#1199). Nunca el código.
+router.get('/:id/cambios-de-correo', puede('users.cambios_correo'), userController.cambiosDeCorreo);
+router.post('/:id/cambios-de-correo/anular', puede('users.cambios_correo'), userController.anularCambioDeCorreo);
 // «Desbloquear en Brevo»: solo superadmin y admin (catálogo).
 router.delete('/:id/brevo-bloqueo', puede('users.brevo_desbloquear'), userController.desbloquearBrevo);
 router.patch('/:id/availability', puede('users.edit'), availabilityController.setAvailability);

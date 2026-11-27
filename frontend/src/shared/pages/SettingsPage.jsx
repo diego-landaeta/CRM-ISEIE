@@ -18,6 +18,7 @@ import CampusPorEmpresa, { marcarVarios } from '@/shared/components/CampusPorEmp
 import PermisosDePersona from '@/modules/permissions/components/PermisosDePersona';
 import PermisosDelAlta from '@/modules/permissions/components/PermisosDelAlta';
 import EquipoComercial from '@/modules/equipo-comercial/components/EquipoComercial';
+import CambioDeCorreo from '@/modules/cambio-de-correo/components/CambioDeCorreo';
 import { avisoCambioCorreo, confirmacionCambioCorreo, problemaDeContrasena } from '@/shared/lib/credenciales';
 // «Usuario» como los demás formularios (#106, como en MultiCRM): todo lo que
 // falta en un solo aviso, Escape cierra y sin autocompletado del navegador.
@@ -405,6 +406,7 @@ function UsersSection({ isAdmin }) {
           faltaMigracionEmpresas={faltaMigracionEmpresas}
           bloqueoBrevo={bloqueosBrevo.get(editingUser.id) || null}
           onDesbloquearBrevo={can('users.brevo_desbloquear') ? () => desbloquearEnBrevo(editingUser) : undefined}
+          verCambiosDeCorreo={can('users.cambios_correo')}
           onClose={() => setEditingUser(null)}
           onSaved={() => { setEditingUser(null); load(); }}
         />
@@ -413,7 +415,7 @@ function UsersSection({ isAdmin }) {
   );
 }
 
-export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo }) {
+export function EditUserModal({ user, projects, onClose, onSaved, empresas, faltaMigracionEmpresas = false, bloqueoBrevo = null, onDesbloquearBrevo, verCambiosDeCorreo = false }) {
   const { user: me } = useAuth();
   const isSuperadmin = me?.role === 'superadmin';
   const [nombre, setNombre] = useState(user.nombre || '');
@@ -648,6 +650,8 @@ export function EditUserModal({ user, projects, onClose, onSaved, empresas, falt
           <PermisosDePersona userId={user.id} enLinea />
         </div>
         <EquipoComercial userId={user.id} />
+        {/* Si dice «no me llega el código» (#833, gemela de CRM#1199): si lo pidió, a qué dirección y hasta cuándo. */}
+        {verCambiosDeCorreo && <CambioDeCorreo userId={user.id} />}
 
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="h-9 px-4 rounded-md border border-border text-sm font-medium hover:bg-muted">Cancelar</button>

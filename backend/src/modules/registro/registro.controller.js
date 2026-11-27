@@ -1,7 +1,7 @@
 import * as model from './registro.model.js';
 import { listarSchema } from './registro.validation.js';
 import { AppError } from '../../shared/utils/AppError.js';
-import { listaDelAmbito } from '../../shared/utils/ambito.js';
+import { listaDelAmbito, veTodoElCrm } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 
 /**
@@ -15,6 +15,8 @@ async function alcance(req) {
   return {
     campus: await listaDelAmbito(req),
     sistema: await tienePermiso(req, 'registro.sistema'),
+    // Si la dirección de un cambio de correo ya era de otra persona (#197, como CRM#1199): solo superadmin y soporte.
+    verTodo: veTodoElCrm(req.user),
   };
 }
 

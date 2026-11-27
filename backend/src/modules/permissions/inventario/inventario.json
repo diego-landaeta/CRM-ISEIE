@@ -862,6 +862,28 @@
   "puertas": []
  },
  {
+  "id": "POST /api/auth/me/email/codigo",
+  "tipo": "ruta",
+  "modulo": "auth",
+  "metodo": "POST",
+  "ruta": "/api/auth/me/email/codigo",
+  "relativa": "POST /me/email/codigo",
+  "controlador": "pedirCodigoMiCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "cuenta.cambiar_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "PATCH /api/auth/me/email",
   "tipo": "ruta",
   "modulo": "auth",
@@ -19060,6 +19082,50 @@
     "tipo": "puede",
     "claves": [
      "users.aviso_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/users/:id/cambios-de-correo",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/:id/cambios-de-correo",
+  "relativa": "GET /:id/cambios-de-correo",
+  "controlador": "cambiosDeCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.cambios_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/users/:id/cambios-de-correo/anular",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "POST",
+  "ruta": "/api/users/:id/cambios-de-correo/anular",
+  "relativa": "POST /:id/cambios-de-correo/anular",
+  "controlador": "anularCambioDeCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.cambios_correo"
     ]
    }
   ],

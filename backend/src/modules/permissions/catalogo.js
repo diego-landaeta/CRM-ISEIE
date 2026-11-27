@@ -682,6 +682,8 @@ export const SECCIONES = [
           a('aviso_correo', 'Aviso de cambio de correo', 'Ver el aviso que recibe quien cambia de correo.', NADIE),
           // 17/11/2026: una gestora de ISEIE, tres semanas sin avisos por un rebote duro en Brevo.
           a('brevo_desbloquear', 'Desbloquear correos en Brevo', 'Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos.', ADMIN),
+          // #833 (gemela de CRM#1199): si alguien dice «no me llega el código», comprobar si lo pidió y a qué dirección.
+          a('cambios_correo', 'Cambios de correo', 'Ver en la ficha el cambio de correo que alguien tiene pendiente (a qué dirección, hasta cuándo, intentos) y los anteriores, y anularlo. Nunca el código.', SOPORTE, { requiere: ['users.view'] }),
         ],
       },
       {
@@ -730,7 +732,11 @@ export const SECCIONES = [
       },
       {
         clave: 'cuenta', nombre: 'Su cuenta', acciones: [
-          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra (el de su factura).', ['tutor'], { propia: true }),
+          // Hasta el #197, solo el tutor y sin código (#246). Diego, 06/11 (en
+          // CRM#688, gemela CRM#211): TODOS los roles, también project manager y
+          // colaborador. La líder de equipo lo hereda de la gestora. A un tutor no
+          // le sale el código mientras siga el freno (cambio-de-correo.js).
+          a('cambiar_correo', 'Cambiar su correo', 'Cambiar el correo con el que entra, con un código que le llega a la dirección nueva.', ['admin', 'gestor', 'soporte', 'tutor', 'project_manager', 'colaborador', 'tutor_redactor'], { propia: true }),
         ],
       },
     ],
