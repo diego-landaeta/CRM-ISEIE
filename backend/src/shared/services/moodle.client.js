@@ -17,6 +17,7 @@
   entienda, no a «error».
 */
 import { pluginMoodleActivo } from '../config/soloEnPruebas.js';
+import { conTurno } from './moodle.limitador.js';
 
 const TIEMPO_MAXIMO_MS = parseInt(process.env.MOODLE_TIMEOUT_MS || '10000', 10);
 
@@ -55,26 +56,53 @@ export async function llamar(conexion, funcion, parametros = {}, opciones = {}) 
     try {
       return await llamarUnaVez(conexion, funcion, parametros, opciones);
     } catch (err) {
-      // «Database connection failed»: el Moodle no ha llegado ni a abrir su base, así que no
-      // ha hecho nada y repetir es seguro, también en lo que escribe. Pasa cuando el servidor
-      // de los campus tiene sus conexiones a la base llenas (Psiko e ISAEG, 24/11: con 4
-      // llamadas a la vez fallaban 14-40 de 96 cursos; de una en una, ninguno).
-      if (!(err instanceof MoodleError) || err.codigo !== 'BD_CAMPUS' || intento >= veces) throw err;
-      await (opciones.esperarImpl || esperar)(pausaBD() * (intento + 1) + Math.floor(Math.random() * pausaBD()));
+      if (!seRepite(err, funcion) || intento >= veces) throw err;
+      await (opciones.esperarImpl || esperar)(pausaDeReintento(intento));
     }
   }
 }
 
-/** Cuántas veces se repite una llamada que el campus rechaza por su base llena. */
+/**
+ * ¿Se puede repetir esta llamada sin riesgo?
+ *
+ * · «Database connection failed»: el Moodle no ha llegado ni a abrir su base, así que no ha
+ *   hecho nada y repetir es seguro, también en lo que escribe. Pasa cuando el hosting de los
+ *   campus rechaza conexiones: admite 20 nuevas por segundo para toda la cuenta (Psiko e
+ *   ISAEG, 24/11: con 4 llamadas a la vez fallaban 14-40 de 96 cursos; de una en una, ninguno).
+ * · Un 5xx o la red caída: solo en las funciones que leen (`…_get_…`). En las que escriben,
+ *   un 500 puede llegar después de haber escrito, y repetir una matrícula o un mensaje no es
+ *   inocente.
+ * · «No ha contestado a tiempo» no se repite: el campus va lento, y repetir es cargarlo más.
+ */
+function seRepite(err, funcion) {
+  if (!(err instanceof MoodleError)) return false;
+  if (err.codigo === 'BD_CAMPUS') return true;
+  if (!/_get_/.test(String(funcion))) return false;
+  return (err.codigo === 'SIN_RED' && err.redPasajera) || (err.codigo === 'HTTP' && err.estadoHttp >= 500);
+}
+
+/** Los fallos de red que son del momento (el hosting cortó o rechazó la conexión). */
+const RED_PASAJERA = new Set(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT']);
+
+/** Cuántas veces se repite una llamada que el campus rechaza (base llena, 5xx, red). */
 const reintentosBD = () => {
   const n = parseInt(process.env.MOODLE_REINTENTOS_BD ?? '3', 10);
   return Number.isInteger(n) && n >= 0 ? Math.min(n, 5) : 3;
 };
-/** La pausa (ms) antes de cada repetición; crece con cada intento. */
+/** La pausa base (ms) antes de cada repetición: 1,5 s. */
 const pausaBD = () => {
-  const n = parseInt(process.env.MOODLE_REINTENTO_MS ?? '700', 10);
-  return Number.isInteger(n) && n >= 0 ? n : 700;
+  const n = parseInt(process.env.MOODLE_REINTENTO_MS ?? '1500', 10);
+  return Number.isInteger(n) && n >= 0 ? n : 1500;
 };
+/**
+ * Lo que se espera antes de la repetición nº `intento + 1`: la base por el número de
+ * intento, y hasta un tercio más al azar (1,5-2 s; 3-4 s; 4,5-6 s). Con 700 ms se repetía
+ * casi en el mismo segundo en que el hosting estaba rechazando conexiones, y las
+ * repeticiones de siete campus caían juntas; el azar las separa.
+ */
+export function pausaDeReintento(intento, azar = Math.random) {
+  return Math.round(pausaBD() * (intento + 1) * (1 + azar() / 3));
+}
 const esperar = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
 async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
@@ -85,33 +113,44 @@ async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImp
   const cuerpo = new URLSearchParams({ wstoken: token, wsfunction: funcion, moodlewsrestformat: 'json' });
   for (const [k, v] of Object.entries(parametros)) cuerpo.append(k, String(v));
 
-  const control = new AbortController();
-  const reloj = setTimeout(() => control.abort(), TIEMPO_MAXIMO_MS);
-  let r;
-  try {
-    r = await fetchImpl(`${base}/webservice/rest/server.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: cuerpo.toString(),
-      signal: control.signal,
-      // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
-      // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
-      redirect: 'error',
-    });
-  } catch (err) {
-    const tarde = err?.name === 'AbortError';
-    throw new MoodleError(
-      tarde ? `El campus no ha contestado en ${Math.round(TIEMPO_MAXIMO_MS / 1000)} s.` : `No se ha podido llegar al campus (${base}).`,
-      tarde ? 'TIEMPO' : 'SIN_RED');
-  } finally {
-    clearTimeout(reloj);
-  }
+  // La petición y la lectura de la respuesta, con turno en el freno común a todas las
+  // tareas y campus (moodle.limitador.js): el hosting de los campus no admite ráfagas.
+  const datos = await conTurno(async () => {
+    const control = new AbortController();
+    const reloj = setTimeout(() => control.abort(), TIEMPO_MAXIMO_MS);
+    let r;
+    try {
+      r = await fetchImpl(`${base}/webservice/rest/server.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: cuerpo.toString(),
+        signal: control.signal,
+        // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
+        // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
+        redirect: 'error',
+      });
+    } catch (err) {
+      const tarde = err?.name === 'AbortError';
+      const e = new MoodleError(
+        tarde ? `El campus no ha contestado en ${Math.round(TIEMPO_MAXIMO_MS / 1000)} s.` : `No se ha podido llegar al campus (${base}).`,
+        tarde ? 'TIEMPO' : 'SIN_RED');
+      // Una conexión cortada o rechazada se puede repetir; una dirección que no existe o
+      // una redirección, no: darían lo mismo tres veces más.
+      e.redPasajera = !tarde && RED_PASAJERA.has(err?.cause?.code || err?.code);
+      throw e;
+    } finally {
+      clearTimeout(reloj);
+    }
 
-  if (!r.ok) throw new MoodleError(`El campus ha contestado con un error HTTP ${r.status}.`, 'HTTP');
-  let datos;
-  try { datos = await r.json(); } catch {
-    throw new MoodleError('El campus no ha contestado como un Moodle: revisa la dirección.', 'NO_ES_MOODLE');
-  }
+    if (!r.ok) {
+      const e = new MoodleError(`El campus ha contestado con un error HTTP ${r.status}.`, 'HTTP');
+      e.estadoHttp = r.status; // para saber si se puede repetir (un 5xx)
+      throw e;
+    }
+    try { return await r.json(); } catch {
+      throw new MoodleError('El campus no ha contestado como un Moodle: revisa la dirección.', 'NO_ES_MOODLE');
+    }
+  });
   if (datos && typeof datos === 'object' && !Array.isArray(datos) && datos.exception) {
     throw traducir(datos, funcion);
   }

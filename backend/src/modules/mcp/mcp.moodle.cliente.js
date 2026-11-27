@@ -3,6 +3,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
 import { marcarUso } from '../credentials/credentials.model.js';
 import { enteroEnv } from './mcp.config.js';
+import { conTurno } from '../../shared/services/moodle.limitador.js';
 
 /**
  * El cliente de los Moodle de los campus (#335), SOLO LECTURA.
@@ -274,36 +275,41 @@ export async function llamarMoodle({ url, token }, funcion, params = {}, { signa
   cuerpo.set('wsfunction', funcion);
   cuerpo.set('moodlewsrestformat', 'json');
 
-  let res;
-  try {
-    res = await fetch(`${url}/webservice/rest/server.php`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-      body: cuerpo.toString(),
-      // Nunca se sigue una redireccion: un 307 reenviaria el token a otro host.
-      redirect: 'manual',
-      signal: senalCombinada(signal, timeoutMoodleMs()),
-    });
-  } catch (err) {
-    // Aqui NO se usa err.message: el de Node lleva a veces la URL.
-    if (signal?.aborted) throw err;
-    const motivo = err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 'no ha contestado a tiempo' : 'no responde';
-    throw new ErrorMoodle('sin_respuesta', `Moodle ${motivo}`);
-  }
+  // La petición y la lectura de la respuesta, con turno en el freno común a todas las
+  // tareas y campus (shared/services/moodle.limitador.js). Si la herramienta se queda sin
+  // tiempo mientras espera turno, sale de la cola sin llegar a llamar.
+  const texto = await conTurno(async () => {
+    let res;
+    try {
+      res = await fetch(`${url}/webservice/rest/server.php`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+        body: cuerpo.toString(),
+        // Nunca se sigue una redireccion: un 307 reenviaria el token a otro host.
+        redirect: 'manual',
+        signal: senalCombinada(signal, timeoutMoodleMs()),
+      });
+    } catch (err) {
+      // Aqui NO se usa err.message: el de Node lleva a veces la URL.
+      if (signal?.aborted) throw err;
+      const motivo = err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 'no ha contestado a tiempo' : 'no responde';
+      throw new ErrorMoodle('sin_respuesta', `Moodle ${motivo}`);
+    }
 
-  if (res.status >= 300 && res.status < 400) {
-    throw new ErrorMoodle('redireccion', 'Moodle redirige la petición: la URL guardada no es la final (¿http en vez de https?)');
-  }
-  if (res.status < 200 || res.status >= 300) {
-    throw new ErrorMoodle('http', `Moodle contestó HTTP ${res.status}`);
-  }
+    if (res.status >= 300 && res.status < 400) {
+      throw new ErrorMoodle('redireccion', 'Moodle redirige la petición: la URL guardada no es la final (¿http en vez de https?)');
+    }
+    if (res.status < 200 || res.status >= 300) {
+      throw new ErrorMoodle('http', `Moodle contestó HTTP ${res.status}`);
+    }
 
-  let texto;
-  try {
-    texto = await res.text();
-  } catch {
-    throw new ErrorMoodle('sin_respuesta', 'Moodle cortó la respuesta');
-  }
+    try {
+      return await res.text();
+    } catch {
+      throw new ErrorMoodle('sin_respuesta', 'Moodle cortó la respuesta');
+    }
+  }, { signal });
+
   let datos;
   try {
     datos = JSON.parse(texto);
