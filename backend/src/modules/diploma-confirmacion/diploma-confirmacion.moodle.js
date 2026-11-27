@@ -74,21 +74,11 @@ export const cursoCompletadoSchema = z.object({
 
 const TIPO = 'diploma_confirmacion';
 
-/** La ficha del alumno en ESTE campus: la que tiene una venta en él, luego la del campus, la más reciente. */
-export async function leadDelAlumno(projectId, email) {
-  const e = String(email || '').trim().toLowerCase();
-  if (!e) return null;
-  const { rows } = await query(
-    `SELECT l.id, l.nombre
-       FROM leads l
-      WHERE l.deleted_at IS NULL AND lower(btrim(l.email)) = $2
-        AND (l.project_id = $1 OR EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id AND c.project_id = $1))
-      ORDER BY EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id AND c.project_id = $1) DESC,
-               (l.project_id = $1) DESC, l.id DESC
-      LIMIT 1`,
-    [projectId, e]);
-  return rows[0] ? { id: Number(rows[0].id), nombre: rows[0].nombre } : null;
-}
+/**
+ * La ficha del alumno en ESTE campus: la que tiene una venta en él, luego la del campus, la
+ * más reciente. Vive en el modelo porque `pedir()` la usa igual (#791).
+ */
+export const leadDelAlumno = (projectId, email) => model.leadEnElCampus(projectId, email);
 
 /**
  * Los productos de ese curso de Moodle en este campus (`moodle_cursos_producto`) y, de
@@ -177,6 +167,13 @@ async function avisarAdministracion(projectId, aviso, title, message, extra = {}
 }
 
 /**
+ * El 503 para el plugin (#791): el texto dice lo que pasa y que se reintenta solo. Va tal
+ * cual en la respuesta (errorHandler, MENSAJE_PARA_TODOS), no el genérico de los 5xx.
+ */
+export const NO_RESPONDE_SE_REINTENTARA = 'Certifex no responde, se reintentará';
+const certifexNoResponde = () => new AppError(NO_RESPONDE_SE_REINTENTARA, 503, 'CERTIFEX_NO_RESPONDE');
+
+/**
  * ¿Es Certifex caído (que el plugin reintente) y no un «no» por los datos? No responde, o
  * contesta con un 5xx (el cliente lo da como CERTIFEX_ERROR 502). La clave mal puesta o
  * Certifex sin configurar no se arreglan reintentando: campana.
@@ -231,7 +228,7 @@ export async function recibirCursoCompletado(projectId, avisoRecibido) {
     }
     // Certifex caído o lento: que el plugin lo reintente.
     logger.warn({ err: err.message, projectId: pid }, 'Diploma: Certifex no contesta al aviso de curso terminado');
-    throw new AppError('Certifex no responde: prueba más tarde', 503, 'CERTIFEX_NO_RESPONDE');
+    throw certifexNoResponde();
   }
   if (!c) {
     await avisarAdministracion(pid, a, 'Curso terminado: sin matrícula en Certifex',
@@ -259,7 +256,7 @@ export async function recibirCursoCompletado(projectId, avisoRecibido) {
     } catch (err) {
       if (certifexCaido(err)) {
         logger.warn({ err: err.message, projectId: pid, matriculaId }, 'Diploma: Certifex no contesta al pasar a pendientes por curso terminado');
-        throw new AppError('Certifex no responde: prueba más tarde', 503, 'CERTIFEX_NO_RESPONDE');
+        throw certifexNoResponde();
       }
       if (!(err instanceof AppError)) throw err;
       if (err.code === 'YA_EMITIDO') return { resultado: 'ya_emitido', matriculaId, ...base };
@@ -272,12 +269,13 @@ export async function recibirCursoCompletado(projectId, avisoRecibido) {
 
   let r;
   try {
-    [r] = await pedir(DESDE_MOODLE, [matriculaId]);
+    // La ficha es la que ya se encontró para este aviso (de este campus), no otra (#791).
+    [r] = await pedir(DESDE_MOODLE, [matriculaId], { leads: new Map([[matriculaId, lead.id]]) });
   } catch (err) {
     // Ya pasado a pendientes (si hacía falta): el reintento solo pedirá los datos.
     if (!certifexCaido(err)) throw err;
     logger.warn({ err: err.message, projectId: pid, matriculaId, pasado }, 'Diploma: Certifex no contesta al pedir los datos por curso terminado');
-    throw new AppError('Certifex no responde: prueba más tarde', 503, 'CERTIFEX_NO_RESPONDE');
+    throw certifexNoResponde();
   }
   if (!r?.ok) {
     await avisarAdministracion(pid, a, 'Curso terminado: no se pudieron pedir los datos del diploma',

@@ -205,3 +205,50 @@ export async function proyectos() {
     `SELECT id, nombre, slug, logo_url, emoji, theme_color FROM projects WHERE NOT COALESCE(es_prueba, false)`);
   return rows;
 }
+
+/**
+ * La ficha del alumno en ESE campus, por su correo (#791): la que tiene una venta en él,
+ * luego la del campus, la más reciente. Nunca la de otro campus: el mismo alumno puede
+ * tener ficha en varios, y la confirmación es del campus del aviso. Sin ninguna, null.
+ * (Antes vivía en diploma-confirmacion.moodle.js como `leadDelAlumno`; ahora la usan el
+ * aviso de Moodle y `pedir()`.)
+ */
+export async function leadEnElCampus(projectId, email) {
+  const e = String(email || '').trim().toLowerCase();
+  if (!e || !projectId) return null;
+  const { rows } = await query(
+    `SELECT l.id, l.nombre
+       FROM leads l
+      WHERE l.deleted_at IS NULL AND lower(btrim(l.email)) = $2
+        AND (l.project_id = $1 OR EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id AND c.project_id = $1))
+      ORDER BY EXISTS (SELECT 1 FROM conversions c WHERE c.lead_id = l.id AND c.project_id = $1) DESC,
+               (l.project_id = $1) DESC, l.id DESC
+      LIMIT 1`,
+    [projectId, e]);
+  return rows[0] ? { id: Number(rows[0].id), nombre: rows[0].nombre } : null;
+}
+
+/**
+ * El diploma en la ficha del alumno (#791): sus confirmaciones vivas, la más reciente
+ * primero. Lo que hace falta para decir «datos pedidos», «contestados» o «emitido»; sin el
+ * enlace, la IP ni el documento.
+ *
+ * `campusPermitidos`: los campus de quien mira (null si ve todo el CRM). Una ficha puede
+ * tener confirmaciones de otro campus (una venta allí, o las filas de antes de #1135 que se
+ * unieron por correo a la ficha de cualquier campus): solo salen las de sus campus, como en
+ * el avance de Moodle.
+ */
+export async function deLaFicha(leadId, { campusPermitidos = null } = {}) {
+  const { rows } = await query(
+    `SELECT d.matricula_id, d.centro, d.project_id, p.nombre AS campus, d.estado, d.curso_nombre,
+            d.created_at AS pedido_at, d.caduca_at, d.enviado_at, d.envio_simulado, d.envio_error,
+            d.respondido_at, d.aplicado_at, d.aplicar_error, d.nexpediente, d.emitido_at, d.diploma_enviado_at
+       FROM diploma_confirmaciones d
+       LEFT JOIN projects p ON p.id = d.project_id
+      WHERE d.lead_id = $1 AND d.estado <> 'anulado'
+        AND ($2::int[] IS NULL OR d.project_id = ANY($2))
+      ORDER BY d.created_at DESC, d.id DESC
+      LIMIT 20`,
+    [leadId, campusPermitidos]);
+  return rows.map((r) => ({ ...r, matricula_id: Number(r.matricula_id) }));
+}

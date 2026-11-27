@@ -1,4 +1,5 @@
 import client, { API_BASE_URL, getAccessToken } from '@/shared/api/client';
+import type { ConfirmacionDeDatos } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /** Una consulta que llega desde la web de Certifex (migración 173). */
 export type EstadoConsulta = 'nueva' | 'en_curso' | 'resuelta' | 'spam';
@@ -351,6 +352,11 @@ export interface FirmaDelAlumno {
 
 /** Una solicitud de diploma: un candidato de Certifex que lo pidió desde Moodle. */
 export interface Solicitud extends Candidato {
+  /**
+   * Solo en Pendientes (#791): la confirmación de datos del diploma, si ya se le pidió al
+   * alumno (en qué está). null = no se le ha pedido o la confirmación está apagada.
+   */
+  confirmacion?: ConfirmacionDeDatos | null;
   /** Solo sin diploma: el programa que se mandará al emitir. */
   programaCrm?: ProgramaDelCrm | null;
   /** Solo sin diploma: lo revisado a mano antes de aprobar. */

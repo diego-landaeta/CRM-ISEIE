@@ -103,8 +103,12 @@ function proyectoDe(centro, proyectos) {
  *
  * Con el correo apagado (lo normal en pruebas) el resultado trae `enlace` para
  * poder probar la página: así se prueba de punta a punta sin mandar nada.
+ *
+ * La ficha del alumno (`lead_id`, #791): la de SU campus, el del aviso. `opciones.leads`
+ * (matrícula → ficha) la trae ya hecha quien la tiene, como el aviso de Moodle; si no, se
+ * busca por el correo en ese campus. Nunca la de otro campus: si no hay, queda vacía.
  */
-export async function pedir(user, matriculaIds) {
+export async function pedir(user, matriculaIds, { leads = new Map() } = {}) {
   if (!cfg.activa()) throw new AppError('La confirmación de datos del diploma no está encendida.', 409, 'APAGADA');
   // Pedida sola por el aviso de Moodle (paso 1): no hay persona ni alcance que mirar.
   const alcance = user === DESDE_MOODLE ? null : await alcanceDe(user);
@@ -136,7 +140,7 @@ export async function pedir(user, matriculaIds) {
         matriculaId: id,
         centro: String(c.centro).toUpperCase(),
         projectId: proyecto?.id ?? null,
-        leadId: c.titular?.email ? await certifexModel.leadPorCorreo(c.titular.email) : null,
+        leadId: leads.get(id) ?? (await model.leadEnElCampus(proyecto?.id, c.titular?.email))?.id ?? null,
         tokenHash: hash,
         caducaAt: caducidad(),
         nombre: c.solicitud?.nombre ?? c.solicitud?.nombreAlumno ?? c.titular?.nombre ?? null,

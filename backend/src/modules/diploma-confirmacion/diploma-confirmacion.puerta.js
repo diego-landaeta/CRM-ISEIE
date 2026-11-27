@@ -100,3 +100,35 @@ export async function anotarEnvios(nexpedientes) {
     logger.warn({ err: err.message }, 'Confirmación de diploma: no se pudo apuntar el envío');
   }
 }
+
+/**
+ * En qué está la confirmación de cada fila de Diplomas › Pendientes (#791): `confirmacion`,
+ * o null si no se ha pedido (o el interruptor está apagado). Así el panel enseña «datos
+ * pedidos, esperando al alumno» en vez del «Aprobar y emitir» de las demás. Sin el enlace,
+ * la IP ni el documento. Si la base no contesta, el listado sale igual, sin el dato.
+ */
+export async function conConfirmacion(filas) {
+  for (const c of filas) c.confirmacion = null;
+  if (!cfg.activa() || !filas.length) return;
+  try {
+    const m = await model.deLasMatriculas(filas.map((c) => Number(c.matriculaId)));
+    for (const c of filas) {
+      const f = m.get(Number(c.matriculaId));
+      if (!f) continue;
+      c.confirmacion = {
+        estado: f.estado,
+        pedidaEn: f.created_at,
+        caducaEn: f.caduca_at,
+        enviadaEn: f.enviado_at,
+        simulado: !!f.envio_simulado,
+        envioError: f.envio_error,
+        respondidaEn: f.respondido_at,
+        // Corregida y sin pasar a Certifex: aún no se puede emitir (DATOS_SIN_APLICAR).
+        sinAplicar: f.estado === 'corregido' && !f.aplicado_at,
+        aplicarError: f.aplicar_error,
+      };
+    }
+  } catch (err) {
+    logger.warn({ err: err.message }, 'Confirmación de diploma: no se pudo leer para el listado');
+  }
+}

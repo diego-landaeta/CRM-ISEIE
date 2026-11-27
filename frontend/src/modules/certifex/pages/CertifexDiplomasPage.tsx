@@ -29,6 +29,7 @@ import {
   Avance, AvisoCasiListo, AvisoDireccionPublica, avisoSinTerminar, Buscador, EnElCrmEtiqueta, Entregas, Etiqueta, FIRMA_EN_DIPLOMA, PON_EL_DNI, Pestana, TITULO_SIN_DNI, tieneDni,
 } from '../components/piezas';
 import EnviosBrevo, { fechaHoraMadrid } from '../components/EnviosBrevo';
+import { dia, EtiquetaDiploma, leerConfirmacion } from '@/modules/diploma-confirmacion/components/EstadoDelDiploma';
 
 /**
  * Certifex · Diplomas (#272): lo que los alumnos piden desde Moodle y los diplomas ya
@@ -135,10 +136,28 @@ const notaTexto = (nota: number | null, umbral: number | null) => (nota == null
   : `${nota.toLocaleString('es', { maximumFractionDigits: 2 })}${umbral != null ? ` · aprobado desde ${umbral.toLocaleString('es', { maximumFractionDigits: 2 })}` : ''}`);
 
 type Fallo = { quien: string; error: string };
+
+/**
+ * #791 (QA del 26/11): a quien se le pidieron los datos y aún no contestó (o corrigió y su
+ * corrección no se ha pasado a Certifex) no se le ofrece «Aprobar y emitir», ni de uno en uno
+ * ni en lote. La casilla se puede marcar (para rechazar en lote), pero el lote lo deja fuera y lo
+ * dice. El servidor lo bloquea igual (`bloqueosDeConfirmacion`); esto lo dice antes.
+ */
+type FueraPorConfirmacion = { alumno: number; sinPasar: number };
+const esperaAlAlumno = (c: Solicitud) => {
+  const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+  return !!datos && !datos.puedeEmitir;
+};
+const textoFueraPorConfirmacion = ({ alumno, sinPasar }: FueraPorConfirmacion) => [
+  alumno > 0 && `${alumno} ${alumno === 1 ? 'espera' : 'esperan'} al alumno: no se ${alumno === 1 ? 'emite' : 'emiten'}`,
+  sinPasar > 0 && `${sinPasar} con datos corregidos sin pasar a Certifex: no se ${sinPasar === 1 ? 'emite' : 'emiten'}`,
+].filter(Boolean).join(' · ');
+
 type Dialogo =
   | null
   // `sinDni`: las que se quedaron fuera por no tener DNI (se dice en la confirmación).
-  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number }
+  // `esperando`: las que se quedaron fuera por esperar al alumno (#791, `esperaAlAlumno`).
+  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number; esperando?: FueraPorConfirmacion }
   | { tipo: 'emitir'; ids: number[]; sinDni?: number }
   | { tipo: 'rechazar'; ids: number[] }
   | { tipo: 'avisos'; exps: string[]; reenvio: boolean; fuera?: boolean }
@@ -929,9 +948,16 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     return n;
   });
   // El DNI es obligatorio para emitir (Diego, 20/10): lo que no lo tiene no entra en un lote.
+  // Lo que espera al alumno (#791) tampoco: se puede elegir para rechazar, pero no se emite.
   const elegidasPendientes = pestana === 'pendientes' ? solicitudes.filter((c) => elegidas.has(String(c.matriculaId))) : [];
-  const elegidasConDni = elegidasPendientes.filter(tieneDni).map((c) => c.matriculaId);
-  const elegidasSinDni = elegidasPendientes.length - elegidasConDni.length;
+  const elegidasEsperando = elegidasPendientes.filter(esperaAlAlumno);
+  const fueraPorConfirmacion: FueraPorConfirmacion = {
+    alumno: elegidasEsperando.filter((c) => c.confirmacion?.estado === 'pendiente').length,
+    sinPasar: elegidasEsperando.filter((c) => c.confirmacion?.estado !== 'pendiente').length,
+  };
+  const elegidasEmitibles = elegidasPendientes.filter((c) => !esperaAlAlumno(c));
+  const elegidasConDni = elegidasEmitibles.filter(tieneDni).map((c) => c.matriculaId);
+  const elegidasSinDni = elegidasEmitibles.length - elegidasConDni.length;
   const sinEmitirConDni = despues.sinEmitir.filter(tieneDni);
   const sinEmitirSinDni = despues.sinEmitir.length - sinEmitirConDni.length;
   const conFechas = pestana !== 'terminados';
@@ -1597,6 +1623,10 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                   <tbody className="divide-y divide-border">
                     {solicitudes.map((c) => {
                       const k = String(c.matriculaId);
+                      // #791: a quien ya se le pidieron los datos no se le ofrece «Aprobar y emitir»
+                      // como a los demás: se dice que se espera al alumno (y hasta cuándo).
+                      const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+                      const esperando = !!datos && !datos.puedeEmitir;
                       return (
                         <tr key={k} className={cn('group align-top transition-colors', elegidas.has(k) ? 'bg-primary/5' : 'hover:bg-muted/40')}>
                           {!soloLectura && <td className="px-4 py-3"><Casilla id={`diplomas-elegir-${k}`} etiqueta={`Elegir a ${nombre(c.matriculaId)}`} marcada={elegidas.has(k)} alCambiar={() => alternar(setElegidas, k)} /></td>}
@@ -1605,6 +1635,7 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                             <CorreoDelAlumno c={c} />
                             <div className="flex flex-wrap items-center gap-1.5">
                               {FIRMA_EN_DIPLOMA && administra && <FirmaEnFila c={c} alSubir={() => setEditando(c)} deshabilitado={trabajando} />}
+                              {datos && <EtiquetaDiploma lectura={datos} className="mt-1" />}
                               {soloLectura
                                 ? (tieneDni(c)
                                   ? <div className="mt-1"><Etiqueta tono="neutral">DNI {c.titular.dni}</Etiqueta></div>
@@ -1626,12 +1657,27 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                           {!soloLectura && (
                             <td className={cn('px-2 py-3 pr-4', accionesTd(elegidas.has(k)))}>
                               <div className="flex flex-col items-stretch gap-1.5">
-                                <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
-                                  aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
-                                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
-                                  <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
-                                </Button>
-                                {!tieneDni(c) && (
+                                {esperando ? (
+                                  <div role="status" data-confirmacion={c.confirmacion?.estado}
+                                    className="flex max-w-[190px] items-start gap-1.5 rounded-md border border-border bg-muted/40 px-2 py-1.5 text-[11px] leading-snug text-muted-foreground">
+                                    <HourglassMedium size={14} className="mt-px shrink-0 text-info" aria-hidden="true" />
+                                    <span>
+                                      <span className="block font-semibold text-foreground">
+                                        {c.confirmacion?.estado === 'pendiente' ? 'Esperando al alumno' : 'Sin pasar a Certifex'}
+                                      </span>
+                                      {c.confirmacion?.estado === 'pendiente'
+                                        ? `Datos pedidos. Hasta el ${dia(c.confirmacion.caducaEn)}.`
+                                        : 'Corrigió sus datos: pásalos antes de emitir.'}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" disabled={trabajando || !tieneDni(c)} title={tieneDni(c) ? undefined : TITULO_SIN_DNI}
+                                    aria-describedby={tieneDni(c) ? undefined : `diplomas-sin-dni-${k}`}
+                                    onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: [c.matriculaId] })}>
+                                    <SealCheck size={14} className="mr-1.5" /> Aprobar y emitir
+                                  </Button>
+                                )}
+                                {!esperando && !tieneDni(c) && (
                                   <span id={`diplomas-sin-dni-${k}`} className="text-center text-[11px] font-medium text-destructive" title={TITULO_SIN_DNI}>{PON_EL_DNI}</span>
                                 )}
                                 {/* Rechazar sigue siendo de administración (22/10/2026). */}
@@ -1845,13 +1891,20 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 {/* Sin DNI no se emite: las que no lo tienen se quedan fuera, y se dice. */}
                 {elegidasSinDni > 0 && (
                   <span className="self-center text-xs font-medium text-destructive" role="status">
-                    {elegidasConDni.length === 0
+                    {elegidasConDni.length === 0 && elegidasEsperando.length === 0
                       ? 'Ninguna tiene DNI: ponlo para poder emitir'
                       : `${elegidasSinDni} sin DNI ${elegidasSinDni === 1 ? 'se queda' : 'se quedan'} fuera (es obligatorio)`}
                   </span>
                 )}
-                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0} title={elegidasConDni.length === 0 ? TITULO_SIN_DNI : undefined}
-                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni })}>
+                {/* #791: lo que espera al alumno tampoco se emite en lote, y se dice. */}
+                {elegidasEsperando.length > 0 && (
+                  <span className="self-center text-xs font-medium text-muted-foreground" role="status" data-fuera="esperando">
+                    {textoFueraPorConfirmacion(fueraPorConfirmacion)}
+                  </span>
+                )}
+                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0}
+                  title={elegidasConDni.length > 0 ? undefined : elegidasSinDni > 0 ? TITULO_SIN_DNI : 'Esperan al alumno: se podrán emitir cuando conteste o venza el plazo.'}
+                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni, esperando: fueraPorConfirmacion })}>
                   <SealCheck size={14} className="mr-1.5" />
                   {trabajando && lote ? `Emitiendo ${lote.hechas} de ${lote.total}…` : `Aprobar y emitir (${elegidasConDni.length})`}
                 </Button>
@@ -1904,6 +1957,17 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
             {(dialogo?.tipo === 'aprobarEmitir' || dialogo?.tipo === 'emitir') && !!dialogo.sinDni && (
               <strong className="mt-2 block text-destructive">
                 {dialogo.sinDni} sin DNI no {dialogo.sinDni === 1 ? 'entra' : 'entran'}: el DNI es obligatorio en el diploma. Pónselo y emítelo después.
+              </strong>
+            )}
+            {/* #791: lo que espera al alumno se queda fuera del lote, y se dice aquí también. */}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.alumno && (
+              <strong className="mt-2 block text-foreground" data-fuera="esperando">
+                {textoFueraPorConfirmacion({ alumno: dialogo.esperando.alumno, sinPasar: 0 })}. Se podrá emitir cuando conteste o venza el plazo.
+              </strong>
+            )}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.sinPasar && (
+              <strong className="mt-2 block text-foreground" data-fuera="sin-pasar">
+                {textoFueraPorConfirmacion({ alumno: 0, sinPasar: dialogo.esperando.sinPasar })}. Pasa sus datos antes de emitir.
               </strong>
             )}
             {/* #351, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar» a mano. */}
