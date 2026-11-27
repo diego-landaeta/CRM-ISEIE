@@ -279,6 +279,10 @@ export const SECCIONES = [
           // campus, con el token del campus, aunque no tenga cuenta enlazada. Solo lee;
           // corregir y responder siguen siendo de la profesora del curso.
           a('campus_administracion', 'Mi campus de administración', 'Ver en «Mi campus» todos los cursos del Moodle de sus campus: consultas por responder, entregas por corregir y alumnos con su % hecho. Solo lectura; se abre en Moodle.', ADMIN),
+          // Supervisor de tutores (la dirección, 26/11/2026, para ISEIE): un tutor que ve lo que hacen
+          // los demás tutores de sus campus. Solo lee. De serie, nadie (el superadmin, siempre):
+          // se le da a la persona como excepción o con un rol a medida (tutor.supervision.js).
+          a('supervisar', 'Supervisar tutores', 'Ver, sin tocar nada, a los tutores de sus campus: su «Mi campus» (consultas, entregas por corregir, mensajes y carga), lo que redactan en Moodle y sus tareas de tutora.', NADIE),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
           // «Avisar al tutor» desde Comisiones (CRM-ISEIE#188, gemela de CRM#165). Como en el 360.
           a('avisar', 'Avisar de comisiones', 'Ver el aviso de comisiones y mandarlo al tutor.', TODOS),

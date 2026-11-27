@@ -8,6 +8,7 @@ import { proyectosDelAmbito } from '../../shared/utils/ambito.js';
 import { tienePermiso } from '../../shared/middleware/permissions.js';
 import { alcanceComercial, alcanceDeLider, personasDentro } from '../../shared/utils/roles.js';
 import { leerFiltroPais } from '../leads/pais.js';
+import { leerCompartidas } from '../conversions/compartidas.js';
 
 export async function create(req, res, next) {
   try {
@@ -61,6 +62,7 @@ export async function topProducts(req, res, next) {
     if (alcance) responsableId = personasDentro(alcance, responsableId);
     const result = await salesService.getTopProducts({
       projectId, projectIds, limit, days, from, to, responsableId, paisEntrada: leerFiltroPais(req.query.paisEntrada),
+      compartidas: leerCompartidas(req.query.compartidas),
     });
     // `data` sigue siendo la lista, como siempre: el panel de inicio la lee así
     // y no tiene por qué enterarse. Lo que no es un programa va aparte, y los
@@ -98,6 +100,7 @@ export async function facturado(req, res, next) {
       to: parsed.data.to ?? null,
       responsableId,
       paisEntrada: leerFiltroPais(req.query.paisEntrada),
+      compartidas: leerCompartidas(parsed.data.compartidas),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -182,6 +185,8 @@ async function filtrosDeQuery(req) {
     // País de entrada del prospecto de cada venta (#221): un código o `sin_pais`.
     paisEntrada: leerFiltroPais(req.query.paisEntrada),
     search: (req.query.search || '').trim() || null,
+    // Todas · Solo compartidas · Solo enteras (#163), validado con Zod (#186).
+    compartidas: leerCompartidas(req.query.compartidas),
     page: req.query.page,
     limit: req.query.limit,
   };
@@ -250,6 +255,7 @@ export async function desglose(req, res, next) {
         return alcance ? personasDentro(alcance, pedido) : pedido;
       })(),
       paisEntrada: leerFiltroPais(req.query.paisEntrada),
+      compartidas: leerCompartidas(req.query.compartidas),
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }
@@ -269,6 +275,7 @@ export async function paises(req, res, next) {
       to: f.to || hoy,
       asesoraId: f.responsableId,
       paisEntrada: f.paisEntrada,
+      compartidas: f.compartidas,
     });
     res.json({ success: true, data });
   } catch (err) { next(err); }

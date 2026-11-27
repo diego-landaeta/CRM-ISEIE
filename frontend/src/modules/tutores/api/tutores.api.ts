@@ -626,3 +626,31 @@ export const tutoresApi = {
       id: number; nombre: string; email: string;
     }>>,
 };
+
+// ─── Supervisión de tutores (la dirección, 26/11/2026) ────────────────────────────
+// Quien tiene `tutores.supervisar` ve, sin tocar nada, a los tutores de sus campus.
+
+export interface TutorSupervisado {
+  id: number; nombre: string; email: string; campus: string[];
+  disponible: boolean; motivo_no_disponible: string | null;
+  /** Lo último que dijo de su carga de trabajo (Consultas › Mi carga). */
+  carga: { nivel: string; texto: string | null; created_at: string } | null;
+  carga_desactualizada: boolean;
+  alumnos_activos: number; consultas_abiertas: number; alumnos_sin_mensajes: number;
+  es_redactora: boolean; tareas_abiertas: number; por_desarrollar: number;
+}
+export interface TareaSupervisada {
+  id: number; titulo: string; estado: string; columna: string; prioridad: string;
+  vence: string | null; creada: string; actualizada: string; hecha: string | null;
+  equipo: string | null; comentarios: number;
+  ultimoComentario: { texto: string; at: string; autor: string | null } | null;
+}
+
+export const supervisionApi = {
+  lista: () => client.get('/tutores/supervision') as Promise<ApiResponse<{ tutores: TutorSupervisado[] }>>,
+  /** Su «Mi campus», solo en los campus que comparte con quien mira. */
+  miCampus: (tutorId: number, refrescar = false) =>
+    client.get(`/tutores/supervision/${tutorId}/mi-campus${refrescar ? '?refrescar=1' : ''}`) as Promise<ApiResponse<MiCampus>>,
+  tareas: (tutorId: number) =>
+    client.get(`/tutores/supervision/${tutorId}/tareas`) as Promise<ApiResponse<TareaSupervisada[]>>,
+};

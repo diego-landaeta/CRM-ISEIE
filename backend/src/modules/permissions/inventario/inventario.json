@@ -18179,6 +18179,94 @@
   ]
  },
  {
+  "id": "GET /api/tutores/supervision",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/supervision",
+  "relativa": "GET /supervision",
+  "controlador": "supervisionLista",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.supervisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/supervision/:id/mi-campus",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/supervision/:id/mi-campus",
+  "relativa": "GET /supervision/:id/mi-campus",
+  "controlador": "supervisionMiCampus",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.supervisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/supervision/:id/tareas",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/supervision/:id/tareas",
+  "relativa": "GET /supervision/:id/tareas",
+  "controlador": "supervisionTareas",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.supervisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "GET /api/tutores/supervision/:id/redaccion-moodle",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/supervision/:id/redaccion-moodle",
+  "relativa": "GET /supervision/:id/redaccion-moodle",
+  "controlador": "supervisionRedaccion",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.supervisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/buscar",
   "tipo": "ruta",
   "modulo": "tutores",
