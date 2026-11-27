@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { soloEsTutorRedactor } from '@/shared/lib/roles';
 import {
-  ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, GraduationCap, ListBullets, Warning,
+  ArrowSquareOut, ArrowsClockwise, CaretRight, ChatCircleText, CheckCircle, ClipboardText, Coins, Eye, GraduationCap, ListBullets, Warning,
 } from '@phosphor-icons/react';
 import PageHeader from '@/shared/components/ui/PageHeader';
 import { Button } from '@/shared/components/ui/button';
@@ -29,6 +29,8 @@ import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 // «Mi campus» de administración (Diego, 25/11, gemela de CRM): todo el campus, con su permiso.
 import usePermission from '@/shared/hooks/usePermission';
 import CampusAdministracion from '../components/CampusAdministracion';
+// Supervisión de tutores (la dirección, 26/11/2026): con `tutores.supervisar`, lo de los demás tutores, solo lectura.
+import SupervisionTutores from '../components/SupervisionTutores';
 
 /*
   «Mi campus» (#408, gemela de CRM#681): lo que la tutora tiene que hacer hoy en Moodle.
@@ -403,9 +405,10 @@ function Resumen({ porCorregir, dudas, porDesarrollar, conCampus }: { porCorregi
  * todo el campus. Con ella, la de la tutora se llama «Mis cursos en Moodle». Sin el permiso no
  * hay pestañas: la tutora y la redactora ven lo de siempre.
  */
-type Vista = 'campus' | 'administracion';
+type Vista = 'campus' | 'administracion' | 'supervision';
 const PESTANA_MIA = { id: 'campus' as Vista, label: 'Mis cursos en Moodle', icono: <ClipboardText size={15} aria-hidden /> };
 const PESTANA_ADMINISTRACION = { id: 'administracion' as Vista, label: 'Todo el campus (administración)', icono: <GraduationCap size={15} aria-hidden /> };
+const PESTANA_SUPERVISION = { id: 'supervision' as Vista, label: 'Supervisión de tutores', icono: <Eye size={15} aria-hidden /> };
 
 export default function MiCampusPage() {
   // La redactora no tiene comisiones: sin el enlace (Diego, 24/11/2026).
@@ -415,13 +418,19 @@ export default function MiCampusPage() {
   const { can } = usePermission();
   const puedeAdministracion = can('tutores.campus_administracion');
   const puedeMios = can('tutores.mis_cursos');
+  const puedeSupervisar = can('tutores.supervisar');
   // Administración con su propia cuenta enlazada (da clase): también ve «sus cursos».
   const [cuentaEnlazada, setCuentaEnlazada] = useState(false);
   const [leidoAdministracion, setLeidoAdministracion] = useState<string | null>(null);
-  const pestanas = puedeAdministracion
-    ? [...(puedeMios || cuentaEnlazada ? [PESTANA_MIA] : []), PESTANA_ADMINISTRACION]
-    : [];
-  const porDefecto: Vista = puedeAdministracion && !puedeMios ? 'administracion' : 'campus';
+  // Sin «Supervisar tutores», como siempre; con él, su pestaña al final (y la suya, si da clase).
+  const pestanas = [
+    ...(puedeAdministracion
+      ? [...(puedeMios || cuentaEnlazada ? [PESTANA_MIA] : []), PESTANA_ADMINISTRACION]
+      : (puedeSupervisar && puedeMios ? [PESTANA_MIA] : [])),
+    ...(puedeSupervisar ? [PESTANA_SUPERVISION] : []),
+  ];
+  const porDefecto: Vista = puedeAdministracion && !puedeMios ? 'administracion'
+    : (puedeSupervisar && !puedeMios ? 'supervision' : 'campus');
   const pedida = params.get('vista') as Vista | null;
   const vista: Vista = pedida && pestanas.some((t) => t.id === pedida) ? pedida : porDefecto;
   const irA = (v: Vista) => setParams(v === porDefecto ? {} : { vista: v }, { replace: true });
@@ -527,7 +536,8 @@ export default function MiCampusPage() {
   const leido = datos ? new Date(datos.leidoAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
   const leidoAdmin = leidoAdministracion ? new Date(leidoAdministracion).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : null;
   // Cada vista dice cuál es: la de administración (todo el campus) o la suya (sus cursos).
-  const subtitulo = vista === 'administracion'
+  const subtitulo = vista === 'supervision' ? 'Supervisión: lo que hacen los tutores de tus campus, solo lectura'
+    : vista === 'administracion'
     ? `Administración: todo el campus en Moodle${leidoAdmin ? ` · leído a las ${leidoAdmin}` : ''}`
     : (leido ? `Tus cursos en Moodle · leído a las ${leido}` : 'Tus cursos en Moodle');
 
@@ -570,7 +580,9 @@ export default function MiCampusPage() {
       </div>
       )}
 
-      {vista === 'administracion' ? (
+      {vista === 'supervision' ? (
+        <SupervisionTutores />
+      ) : vista === 'administracion' ? (
         <CampusAdministracion alLeer={({ leidoAt, tengoCuentaEnlazada }) => { setLeidoAdministracion(leidoAt); setCuentaEnlazada(tengoCuentaEnlazada); }} />
       ) : (<>
 

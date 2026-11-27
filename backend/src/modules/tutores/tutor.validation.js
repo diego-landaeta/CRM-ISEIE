@@ -5,6 +5,15 @@ import { z } from 'zod';
 // una colaboracion que empieza el 1 acaba empezando el 31 del mes anterior.
 const fecha = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Fecha en formato AAAA-MM-DD');
 
+// Supervisión de tutores (26/11/2026): el `:id` de la ruta y `?refrescar=1`.
+export const supervisionTutorSchema = z.object({
+  id: z.coerce.number({ invalid_type_error: 'Tutor no válido' }).int('Tutor no válido').positive('Tutor no válido'),
+});
+export const supervisionMiCampusSchema = supervisionTutorSchema.extend({
+  refrescar: z.enum(['0', '1'], { errorMap: () => ({ message: 'refrescar es 0 o 1' }) })
+    .optional().transform((v) => v === '1'),
+});
+
 export const altaTutorSchema = z.object({
   nombre: z.string().min(2, 'El nombre es obligatorio'),
   email: z.string().email('Correo no valido'),

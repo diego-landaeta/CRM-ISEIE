@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { compartidasSchema } from './compartidas.js';
 import { envioFacturaSchema, datosFiscalesSchema } from '../factura-automatica/factura-automatica.validation.js';
 
 // 'deposito' (depósito bancario) desde el 15/10: con 'transferencia', las dos
@@ -180,6 +181,8 @@ export const listConversionsSchema = z.object({
   // Filtro por producto: hasta ahora se hacia en el navegador sobre las filas
   // cargadas, asi que con paginacion dejaba fuera el resto.
   producto: z.string().max(255).optional(),
+  // Todas · Solo compartidas · Solo enteras (#163), validado con Zod (#186).
+  compartidas: compartidasSchema.optional(),
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
 });

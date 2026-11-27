@@ -8,6 +8,8 @@
   el plazo sin actualizarla (una semana, decisión 9), se marca «desactualizada».
 */
 import { query } from '../../shared/config/db.js';
+import { logger } from '../../shared/utils/logger.js';
+import { avisosAbiertos, resolverAvisos } from '../notifications/notifications.service.js';
 
 export const NIVELES = ['baja', 'media', 'alta', 'completa'];
 export const DIAS_CARGA = Number(process.env.CONSULTAS_CARGA_DIAS || 7);
@@ -53,10 +55,37 @@ export async function cargaDe(tutorId) {
   };
 }
 
+/**
+ * Retira de la campana el «Actualiza tu carga de trabajo» de ese tutor (26/11: una tutora
+ * la actualizaba y el aviso seguía ahí). Al guardar la carga y antes de mandar el de la
+ * semana siguiente (`recordarCargas`). `menos`: el id de un aviso que se deja (el recién
+ * creado). No falla nunca: el aviso es accesorio.
+ */
+export async function retirarAvisosDeCarga(tutorId, motivo = 'actualizada', ahora = new Date(), { menos = null } = {}) {
+  try {
+    const abiertos = await avisosAbiertos(tutorId, 'carga_desactualizada');
+    return await resolverAvisos(abiertos.map((a) => a.id).filter((id) => id !== menos), motivo, ahora);
+  } catch (err) {
+    logger.warn({ tutorId, err: err.message }, 'consultas: no se ha podido retirar el aviso de carga');
+    return 0;
+  }
+}
+
+/** ¿Ha guardado la carga dentro del plazo? Se mira en el momento, en la base. */
+export async function cargaAlDia(tutorId, ahora = new Date()) {
+  const { rows } = await query(
+    `SELECT 1 FROM tutor_carga WHERE tutor_id = $1
+        AND created_at > $2::timestamptz - make_interval(days => $3::int) LIMIT 1`,
+    [tutorId, ahora, DIAS_CARGA]);
+  return rows.length > 0;
+}
+
 export async function guardarCarga(tutorId, { nivel, texto }, porQuien) {
   await query(
     'INSERT INTO tutor_carga (tutor_id, nivel, texto, creado_por) VALUES ($1, $2, $3, $4)',
     [tutorId, nivel, texto || null, porQuien || null]);
+  // Ya está al día: el aviso de que no lo estaba sobra.
+  await retirarAvisosDeCarga(tutorId, 'actualizada');
   return cargaDe(tutorId);
 }
 
