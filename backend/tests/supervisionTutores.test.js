@@ -78,7 +78,7 @@ beforeAll(async () => {
 
   SUPER = await persona('Super', 'superadmin');
   ADMIN = await persona('Admin', 'admin', [P]);
-  // El supervisor es un tutor más, con el permiso dado como excepción (lo que hará Diego).
+  // El supervisor es un tutor más, con el permiso dado como excepción (así se le da en la realidad).
   SUPERVISOR = await persona('Supervisor', 'tutor', [P]);
   await q(`INSERT INTO user_permission_overrides (user_id, resource, action, allowed) VALUES ($1, 'tutores', 'supervisar', true)`, [SUPERVISOR.id]);
   // La redactora trabaja para las dos empresas (como pasa de verdad): lo de la otra no lo ve el supervisor.

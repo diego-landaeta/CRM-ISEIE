@@ -7,6 +7,7 @@ import { Button } from '@/shared/components/ui/button';
 import Iniciales from '@/shared/components/ui/Iniciales';
 import { cn } from '@/shared/lib/utils';
 import { casaPorTrozos } from '@/shared/lib/buscarPorTrozos';
+import { soloFecha } from '@/shared/lib/fechas';
 import usePermission from '@/shared/hooks/usePermission';
 import { SOLO_EN_PRUEBAS } from '@/shared/lib/enPruebas';
 import { NivelCargaChip } from '@/modules/consultas/pages/MiCargaPage';
@@ -31,9 +32,12 @@ import RedaccionEnMoodle from './RedaccionEnMoodle';
   redacta en Moodle. El elegido va en la dirección (`?tutor=`) para volver a él.
 */
 
-const fecha = (iso: string | null | undefined) => (iso
-  ? new Date(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
-  : '—');
+// Los DATE llegan como texto «2026-12-15»: `new Date()` los lee en UTC y al oeste de
+// Greenwich (Caracas) salían un día antes. `soloFecha` los lee en el día local.
+export const fecha = (iso: string | null | undefined) => {
+  const d = soloFecha(iso);
+  return d ? d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
+};
 const plural = (n: number, uno: string, varios: string) => `${n} ${n === 1 ? uno : varios}`;
 const mensajeDe = (e: unknown, porDefecto: string) => {
   const x = e as { data?: { error?: string }; message?: string };
