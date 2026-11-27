@@ -68,6 +68,17 @@ if (pluginMoodleActivo()) {
 }
 router.get('/curso/:productId/brochure', puede('tutores.mis_cursos', 'tutores.gestionar'), ctrl.brochureDelCurso);
 
+// Supervisión de tutores (la dirección, 26/11/2026): los tutores de sus campus, su «Mi campus», lo
+// que redactan en Moodle y sus tareas. SOLO LEE: aquí no hay ninguna ruta que escriba. Antes
+// que `/:id`, o «supervision» se leería como un id.
+router.get('/supervision', puede('tutores.supervisar'), ctrl.supervisionLista);
+router.get('/supervision/:id/mi-campus', puede('tutores.supervisar'), ctrl.supervisionMiCampus);
+router.get('/supervision/:id/tareas', puede('tutores.supervisar'), ctrl.supervisionTareas);
+// Lo que redacta en Moodle (CRM#1026): con la misma condición que la ficha, aún sin aprobar.
+if (redactorasMoodleActivo()) {
+  router.get('/supervision/:id/redaccion-moodle', puede('tutores.supervisar'), ctrl.supervisionRedaccion);
+}
+
 // El buscador (Ctrl K, #591). Antes que `/:id`, o «buscar» se leería como un id.
 router.get('/buscar', puede('tutores.gestionar'), ctrl.buscar);
 router.get('/', puede('tutores.gestionar'), ctrl.listar);
