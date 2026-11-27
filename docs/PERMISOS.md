@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-966 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
+973 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -801,6 +801,13 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | setAdSetAssociations | `POST /api/meta-ads/adset-associations` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.edit` |
 | getRoi | `GET /api/meta-ads/roi` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
 | getProductsView | `GET /api/meta-ads/products-view` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `meta_ads.view` |
+| connect | `POST /api/meta-ads/portfolios` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| list | `GET /api/meta-ads/portfolios` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| disconnect | `DELETE /api/meta-ads/portfolios/:portfolioId` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| sync | `POST /api/meta-ads/portfolios/:portfolioId/sync` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| listDiscovered | `GET /api/meta-ads/portfolios/:portfolioId/discovered` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| assign | `POST /api/meta-ads/portfolios/discovered/:discoveredId/assign` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
+| ignore | `POST /api/meta-ads/portfolios/discovered/:discoveredId/ignore` | (no existía) | (ruta nueva) | `meta_ads.conectar_portfolio` |
 
 ## monitask
 
@@ -1510,6 +1517,7 @@ lo que pide para tener sentido (editar pide ver).
 |---|---|---|---|---|
 | Ver Meta Ads | `meta_ads.view` | Cuentas, campañas, anuncios y su rendimiento. | Admin, Soporte, Project manager |  |
 | Conectar y sincronizar Meta Ads | `meta_ads.edit` | Conectar cuentas, sincronizarlas y asociar campañas a productos. | Admin, Soporte | `meta_ads.view` |
+| Conectar un portfolio de Meta | `meta_ads.conectar_portfolio` | Conectar un Business Manager entero para que sus cuentas nuevas aparezcan solas. | Admin | `meta_ads.view` |
 
 ## Catálogo
 

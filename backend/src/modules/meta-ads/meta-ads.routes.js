@@ -4,6 +4,7 @@ import { puede } from '../../shared/middleware/permissions.js';
 import { veTodoElCrm, campusDeLaPersona } from '../../shared/utils/ambito.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import * as ctrl from './meta-ads.controller.js';
+import * as portfolioCtrl from './meta-portfolio.controller.js';
 
 const router = Router();
 router.use(verifyToken);
@@ -29,6 +30,15 @@ async function deSusCampus(req, _res, next) {
 }
 // Para el inventario de permisos (#423): acota por campus, no decide quién entra.
 deSusCampus.regla = { tipo: 'alcance', nombre: 'deSusCampus' };
+// El portfolio es del negocio entero, sin campus propio (#198, gemela de CRM#212): un
+// admin limitado a su campus no debe poder conectar, listar, desconectar, sincronizar
+// ni ignorar cuentas de un Business Manager que puede tocar campus ajenos. Solo quien
+// ve el CRM entero (superadmin y soporte).
+async function soloVeTodoElCrm(req, _res, next) {
+  if (veTodoElCrm(req.user)) return next();
+  return next(new AppError('No tienes acceso a este portfolio', 403, 'FORBIDDEN'));
+}
+soloVeTodoElCrm.regla = { tipo: 'alcance', nombre: 'soloVeTodoElCrm' };
 const ver = [puede('meta_ads.view'), deSusCampus];
 const configurar = [puede('meta_ads.edit'), deSusCampus];
 
@@ -55,5 +65,18 @@ router.post('/adset-associations', configurar, ctrl.setAdSetAssociations);
 
 router.get('/roi', ver, ctrl.getRoi);
 router.get('/products-view', ver, ctrl.getProductsView);
+
+// Portfolio de Meta (#198, gemela de CRM#212): el Business Manager entero, y la
+// bandeja de cuentas que descubre. Solo admin (y superadmin, que ya lo tiene
+// todo) — soporte no, a propósito (ver el permiso en catalogo.js).
+const conectarPortfolio = puede('meta_ads.conectar_portfolio');
+router.post('/portfolios', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.connect);
+router.get('/portfolios', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.list);
+router.delete('/portfolios/:portfolioId', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.disconnect);
+router.post('/portfolios/:portfolioId/sync', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.sync);
+router.get('/portfolios/:portfolioId/discovered', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.listDiscovered);
+// Asignar sí mira el campus: el project_id del body tiene que ser uno de los suyos.
+router.post('/portfolios/discovered/:discoveredId/assign', [conectarPortfolio, deSusCampus], portfolioCtrl.assign);
+router.post('/portfolios/discovered/:discoveredId/ignore', [conectarPortfolio, soloVeTodoElCrm], portfolioCtrl.ignore);
 
 export default router;

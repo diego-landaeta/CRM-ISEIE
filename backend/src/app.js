@@ -118,6 +118,7 @@ import { startDocumentOrphanScheduler } from './jobs/documentOrphanScheduler.js'
 import { startGoogleAdsTokenScheduler } from './jobs/googleAdsTokenScheduler.js';
 import { startMetaAdsSyncScheduler } from './jobs/metaAdsSyncScheduler.js';
 import { startMetaTokensScheduler } from './jobs/metaTokensScheduler.js';
+import { startMetaPortfolioSyncScheduler } from './jobs/metaPortfolioSyncScheduler.js';
 import { startReminderScheduler } from './jobs/reminderScheduler.js';
 import { startWooCommerceSyncScheduler } from './jobs/wooCommerceSyncScheduler.js';
 import { startStripePaymentsSyncScheduler } from './jobs/stripePaymentsSyncScheduler.js';
@@ -562,19 +563,19 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'Meta Ads sync scheduler fallo al arrancar');
       }
     }
+    if (process.env.META_PORTFOLIO_SYNC_DISABLED !== '1') {
+      try {
+        startMetaPortfolioSyncScheduler();
+        logger.info('Meta Portfolio sync scheduler arrancado');
+      } catch (err) {
+        logger.error({ err }, 'Meta Portfolio sync scheduler fallo al arrancar');
+      }
+    }
     // Renovación diaria de tokens de Meta e Instagram (#471). Apagada sin META_TOKENS_RENOVACION_ACTIVA=1.
-    try {
+      try {
       startMetaTokensScheduler();
     } catch (err) {
       logger.error({ err }, 'Renovación de tokens de Meta fallo al arrancar');
-    }
-    if (process.env.REMINDER_DISABLED !== '1') {
-      try {
-        startReminderScheduler();
-        logger.info('Reminder scheduler arrancado');
-      } catch (err) {
-        logger.error({ err }, 'Reminder scheduler fallo al arrancar');
-      }
     }
     if (process.env.WC_SYNC_DISABLED !== '1') {
       try {
@@ -584,6 +585,16 @@ if (process.env.NODE_ENV !== 'test') {
         logger.error({ err }, 'WooCommerce sync scheduler fallo al arrancar');
       }
     }
+
+    if (process.env.REMINDER_DISABLED !== '1') {
+      try {
+        startReminderScheduler();
+        logger.info('Reminder scheduler arrancado');
+      } catch (err) {
+        logger.error({ err }, 'Reminder scheduler fallo al arrancar');
+      }
+    }
+
     if (process.env.STRIPE_SYNC_DISABLED !== '1') {
       try {
         startStripePaymentsSyncScheduler();
