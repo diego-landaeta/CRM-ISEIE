@@ -5,7 +5,7 @@
 > y de las comprobaciones a mano apuntadas en `inventario/manuales.js`. Una prueba
 > falla si el código cambia y esto no.
 
-963 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
+965 rutas en 70 módulos, y 31 acciones con condición dentro de una ruta.
 Ningún guardia sin clasificar.
 
 **Cómo leerlo.** «Qué la protegía» es lo que había en el código antes de #423 (congelado en `inventario/antes-423.json`): `roleGuard` dejaba pasar
@@ -1240,6 +1240,8 @@ alcance —qué campus, qué prospectos— no cambia quién entra y va al final.
 | reactivate | `PATCH /api/users/:id/reactivate` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | setPassword | `PATCH /api/users/:id/password` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · a mano: user.controller.js · setPassword | superadmin, admin | `users.contrasena` |
 | avisoCorreo | `GET /api/users/:id/aviso-correo` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo · soloRoles(superadmin) | superadmin | `users.aviso_correo` |
+| cambiosDeCorreo | `GET /api/users/:id/cambios-de-correo` | (no existía) | (ruta nueva) | `users.cambios_correo` |
+| anularCambioDeCorreo | `POST /api/users/:id/cambios-de-correo/anular` | (no existía) | (ruta nueva) | `users.cambios_correo` |
 | desbloquearBrevo | `DELETE /api/users/:id/brevo-bloqueo` | (no existía) | (ruta nueva) | `users.brevo_desbloquear` |
 | setAvailability | `PATCH /api/users/:id/availability` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.edit` |
 | listBlocks | `GET /api/users/:id/availability-blocks` | sesión · roleGuard(admin, superadmin) +superadmin +soporte por el atajo | superadmin, admin, soporte | `users.view` |
@@ -1903,6 +1905,7 @@ lo que pide para tener sentido (editar pide ver).
 | Empresas enteras y correos | `users.empresas` | Dar empresas enteras a un admin y cambiar el correo de alguien. | solo superadmin | `users.view` |
 | Aviso de cambio de correo | `users.aviso_correo` | Ver el aviso que recibe quien cambia de correo. | solo superadmin | `users.view` |
 | Desbloquear correos en Brevo | `users.brevo_desbloquear` | Sacar de la lista de bloqueados de Brevo el correo de alguien del equipo para que vuelvan a llegarle los avisos. | Admin | `users.view` |
+| Cambios de correo | `users.cambios_correo` | Ver en la ficha el cambio de correo que alguien tiene pendiente (a qué dirección, hasta cuándo, intentos) y los anteriores, y anularlo. Nunca el código. | Soporte | `users.view` |
 
 ### Equipos comerciales
 

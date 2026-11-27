@@ -208,3 +208,100 @@ export async function confirmarCodigo({ userId, codigo, porUserId = userId, ip =
   await anotar(porUserId, 'usuario.confirmar_cambio_correo', { usuario_id: userId, a: p.email_nuevo }, ip);
   return r;
 }
+
+/*
+  LA FICHA DE ADMINISTRACIÓN (#833, gemela de CRM#1199).
+
+  Si alguien dice «no me llega el código», en la ficha de Usuarios se ve si lo
+  pidió, a qué dirección, hasta cuándo vale y cuántos intentos lleva; y debajo,
+  los que ya se confirmaron o se anularon. Con «Anular», la petición pendiente
+  deja de valer (su código ya no abre nada).
+
+  Lo que NUNCA sale de aquí:
+    - el código ni su hash (`codigo_hash` no se lee);
+    - si la dirección era ya de otra persona. Para eso está la petición señuelo
+      de `pedirCodigo`: en la ficha se ve exactamente igual que una de verdad
+      (pendiente, con sus intentos; y al final anulada o caducada). Por eso no
+      se cruza `email_nuevo` con `users` ni se lee `no_mandado` del registro:
+      solo su `de`, que es el correo que la persona tenía al pedirlo.
+*/
+
+/** Cuántas del historial salen en la ficha: las últimas. */
+export const HISTORIAL = 20;
+
+/**
+ * Qué se le dice a administración de una petición que ya no vale. «Caducado»
+ * es que nadie la confirmó a tiempo (se anule al confirmar tarde o no se toque
+ * más); «anulado», que la dejó sin efecto otra cosa antes: una petición nueva,
+ * los cinco intentos, un cambio del superadmin o el botón «Anular».
+ */
+function estadoDe(p, ahora) {
+  if (p.confirmado_at) return 'confirmado';
+  if (p.anulado_at) return new Date(p.anulado_at) >= new Date(p.expira_at) ? 'caducado' : 'anulado';
+  return new Date(p.expira_at) <= ahora ? 'caducado' : 'pendiente';
+}
+
+/**
+ * La petición pendiente (si la hay) y el historial de una persona, para la
+ * ficha. Sin el hash: se piden las columnas una a una.
+ * @returns {{ pendiente: object|null, historial: object[], intentos_max: number }}
+ */
+export async function cambiosDeLaPersona(userId) {
+  const { rows } = await query(
+    `SELECT c.id, c.email_nuevo, c.intentos, c.expira_at, c.creado_at, c.confirmado_at, c.anulado_at,
+            pedido.de AS email_anterior
+       FROM cambios_de_correo c
+       -- El correo que tenía al pedirlo: sale del registro de la petición (no
+       -- hay otra fuente). Solo el «de»: el resto de ese detalle no se lee.
+       LEFT JOIN LATERAL (
+         SELECT l.details->>'de' AS de
+           FROM user_activity_log l
+          WHERE l.user_id = COALESCE(c.pedido_por_user_id, c.user_id)
+            AND l.created_at BETWEEN c.creado_at - INTERVAL '1 minute' AND c.creado_at + INTERVAL '1 minute'
+            AND l.action = 'usuario.pedir_cambio_correo'
+            AND l.details->>'usuario_id' = c.user_id::text
+            AND l.details->>'a' = c.email_nuevo
+          ORDER BY ABS(EXTRACT(EPOCH FROM (l.created_at - c.creado_at)))
+          LIMIT 1
+       ) pedido ON TRUE
+      WHERE c.user_id = $1
+      ORDER BY c.creado_at DESC, c.id DESC
+      LIMIT $2`,
+    [userId, HISTORIAL + 1]
+  );
+  const ahora = new Date();
+  const fila = (p) => ({
+    id: p.id,
+    estado: estadoDe(p, ahora),
+    de: p.email_anterior || null,
+    a: p.email_nuevo,
+    pedido_at: p.creado_at,
+    expira_at: p.expira_at,
+    intentos: Number(p.intentos),
+    cuando: p.confirmado_at || p.anulado_at || p.expira_at,
+  });
+  const todas = rows.map(fila);
+  const pendiente = todas.find((p) => p.estado === 'pendiente') || null;
+  return {
+    pendiente,
+    historial: todas.filter((p) => p !== pendiente).slice(0, HISTORIAL),
+    intentos_max: INTENTOS,
+  };
+}
+
+/**
+ * «Anular»: la petición pendiente deja de valer y su código ya no abre nada
+ * (`confirmarCodigo` solo mira las que no tienen `anulado_at`). Queda en el
+ * registro quién la anuló.
+ */
+export async function anularPendiente({ userId, porUserId, ip = null }) {
+  const { rows: [p] } = await query(
+    `UPDATE cambios_de_correo SET anulado_at = NOW()
+      WHERE user_id = $1 AND confirmado_at IS NULL AND anulado_at IS NULL
+      RETURNING id, email_nuevo`, [userId]);
+  if (!p) throw new AppError('No tiene ningún cambio de correo pendiente', 404, 'SIN_PENDIENTE');
+  const user = await userModel.findById(userId);
+  await anotar(porUserId, 'usuario.anular_cambio_correo',
+    { usuario_id: userId, nombre: user?.nombre || null, a: p.email_nuevo }, ip);
+  return cambiosDeLaPersona(userId);
+}

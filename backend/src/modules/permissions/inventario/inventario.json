@@ -19000,6 +19000,50 @@
   "puertas": []
  },
  {
+  "id": "GET /api/users/:id/cambios-de-correo",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "GET",
+  "ruta": "/api/users/:id/cambios-de-correo",
+  "relativa": "GET /:id/cambios-de-correo",
+  "controlador": "cambiosDeCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.cambios_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/users/:id/cambios-de-correo/anular",
+  "tipo": "ruta",
+  "modulo": "users",
+  "metodo": "POST",
+  "ruta": "/api/users/:id/cambios-de-correo/anular",
+  "relativa": "POST /:id/cambios-de-correo/anular",
+  "controlador": "anularCambioDeCorreo",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "users.cambios_correo"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "DELETE /api/users/:id/brevo-bloqueo",
   "tipo": "ruta",
   "modulo": "users",

@@ -268,8 +268,26 @@ async function deUsuarios(filtros, limite) {
     // La IP se queda FUERA del detalle a proposito: el registro lo mira gente
     // de dentro y una IP es un dato personal de un compañero. Si hace falta
     // para una investigacion, esta en `user_activity_log`, que es su sitio.
-    detalle: r.details || null,
+    detalle: detalleQueSePuedeVer(r.action, r.details, filtros.verTodo === true),
   }));
+}
+
+/**
+ * Lo que no sale del detalle de una fila (#833, gemela de CRM#1199).
+ *
+ * Al pedir un código de cambio de correo para una dirección que ya es de otra
+ * persona, `pedirCodigo` responde igual que si fuera libre y anota por qué no lo
+ * mandó (`no_mandado`). Eso, en el registro de un admin de campus, le diría que
+ * esa dirección tiene cuenta en el CRM, quizá en otra empresa: justo lo que la
+ * petición señuelo evita. Solo lo ven quienes ven el CRM entero (superadmin y
+ * soporte); en la base sigue estando.
+ */
+export function detalleQueSePuedeVer(action, details, verTodo) {
+  if (!details) return null;
+  if (verTodo || action !== 'usuario.pedir_cambio_correo' || !('no_mandado' in details)) return details;
+  const visible = { ...details };
+  delete visible.no_mandado;
+  return visible;
 }
 
 /**
@@ -292,6 +310,8 @@ function enCristiano(action, details) {
     'credencial.probar': `Probó la credencial de ${d.servicio || '—'}`,
     // #248: el super admin, sobre otro usuario. La contraseña nunca se guarda.
     'usuario.cambiar_correo': `Cambió el correo de ${d.nombre || `usuario ${d.usuario_id}`}: ${d.de || '—'} → ${d.a || '—'}`,
+    // #833 (gemela de CRM#1199): desde la ficha de Usuarios. La dirección es la que había pedido.
+    'usuario.anular_cambio_correo': `Anuló el cambio de correo pendiente de ${d.nombre || `usuario ${d.usuario_id}`} (a ${d.a || '—'})`,
     'usuario.cambiar_contrasena': `Cambió la contraseña de ${d.nombre || `usuario ${d.usuario_id}`}`,
     // La suya, desde «Mi perfil» (POST /auth/change-password). `change_password`
     // es como se apuntaba antes.
