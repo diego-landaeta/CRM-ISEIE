@@ -1,0 +1,4 @@
+# Quién aprueba las fusiones (Diego, 27/11/2026): solo Diego y Ángel CEDIA.
+# Con «require code owner review» en la protección de staging y main, ninguna PR
+# entra sin la aprobación de uno de los dos.
+* @diego-landaeta @molinangel
