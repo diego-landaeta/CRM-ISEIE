@@ -1,6 +1,7 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { recalcularCobrado } from './cobrado.js';
+import { negarSiTieneFactura } from './cobro-facturado.js';
 import { saldarCuotas, cargosStripeSueltos, MARGEN } from './saldar-cuotas.js';
 
 export async function listByConversion(conversionId) {
@@ -228,6 +229,7 @@ export async function editPaid(id, { fecha_cobro, importe_cobrado, metodo, refer
 
 // Deshace el pago de una cuota: borra el conversion_payment, resta del
 // importe_pagado de la conversión, y devuelve la cuota a estado "pendiente".
+// Si el cobro tiene factura emitida, se niega igual que «Eliminar pago».
 export async function unpay(id) {
   const c = await getClient();
   try {
@@ -236,6 +238,9 @@ export async function unpay(id) {
     const inst = instRows[0];
     if (!inst) { await c.query('ROLLBACK'); return null; }
     if (!inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota no estaba pagada'); }
+    // Con factura emitida, no: la factura se quedaba huérfana y luego se
+    // enganchaba sola a otro cobro del mismo importe (CRM-ISEIE#856).
+    await negarSiTieneFactura(c, inst.payment_id);
 
     // Borrar payment (cascade pone payment_id de la cuota en NULL automaticamente)
     if (inst.payment_id) {

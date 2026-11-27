@@ -254,8 +254,20 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayReferenciaInicial(inst.pago_referencia || '');
   }
 
+  // Un cobro con factura no se deshace borrándolo: la factura se quedaba
+  // huérfana (CRM-ISEIE#856). Lo mismo que dice «Eliminar pago».
+  const NO_SE_DESHACE = 'No se puede deshacer este pago';
+
   async function handleUnpay(inst: Installment) {
     if (!inst.id) return;
+    if (inst.factura_codigo) {
+      toast({
+        title: NO_SE_DESHACE,
+        description: `Ese cobro tiene la factura ${inst.factura_codigo}. Anúlala o emite una rectificativa antes de borrarlo.`,
+        variant: 'destructive',
+      });
+      return;
+    }
     if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
     try {
       await conversionsApi.unpayInstallment(inst.id);
@@ -263,7 +275,14 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
       onSaved?.();
       await load();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+      if (err?.data?.code === 'PAYMENT_HAS_INVOICE') {
+        // La factura salió mientras la pantalla estaba abierta: se explica y
+        // se recarga, para que la cuota enseñe su factura.
+        toast({ title: NO_SE_DESHACE, description: err.data.error, variant: 'destructive' });
+        await load();
+        return;
+      }
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     }
   }
 
@@ -430,7 +449,9 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                             Editar
                           </button>
                           <button onClick={() => handleUnpay(inst)}
-                            title="Deshacer el pago (vuelve a pendiente)"
+                            title={inst.factura_codigo
+                              ? `Tiene la factura ${inst.factura_codigo}: anúlala o emite una rectificativa antes de deshacer el pago`
+                              : 'Deshacer el pago (vuelve a pendiente)'}
                             className="px-2 py-1 rounded-md text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-950/40">
                             Deshacer
                           </button>
