@@ -91,6 +91,9 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
   const [viewUserId, setViewUserId] = useState('all');
   const [gestores, setGestores] = useState([]);
   const [filterCurso, setFilterCurso] = useState('all');
+  // Todas · Solo compartidas · Solo enteras (#186, gemela de CRM#163): las ventas
+  // atendidas entre dos gestoras, aparte. El servidor filtra; la parte de cada una no cambia.
+  const [filterCompartidas, setFilterCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
   const [cursos, setCursos] = useState([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -134,10 +137,10 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
 
   // Al cambiar de fechas, el desglose de cuotas de antes ya no vale.
   useEffect(() => { setCuotas([]); setVerCuotas(false); },
-    [activeProject?.id, effectiveResponsableId, rango.from, rango.to]);
+    [activeProject?.id, effectiveResponsableId, filterCompartidas, rango.from, rango.to]);
 
   // Cualquier cambio de filtro devuelve a la primera pagina.
-  useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, rango.from, rango.to]);
+  useEffect(() => { setPage(1); }, [activeProject?.id, effectiveResponsableId, filterCurso, filterCompartidas, rango.from, rango.to]);
 
   useEffect(() => {
     // LA RESPUESTA VIEJA NO PISA A LA NUEVA. Dos peticiones seguidas (cambiar
@@ -151,6 +154,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         if (activeProject?.id) params.projectId = activeProject.id;
         if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
         if (filterCurso !== 'all') params.producto = filterCurso;
+        if (filterCompartidas !== 'todas') params.compartidas = filterCompartidas;
         if (rango.from) params.from = rango.from;
         if (rango.to) params.to = rango.to;
         const res = await client.get('/conversions', { params });
@@ -183,7 +187,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       } finally { if (!cancelado) setLoading(false); }
     })();
     return () => { cancelado = true; };
-  }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, rango.from, rango.to]);
+  }, [activeProject?.id, reloadKey, effectiveResponsableId, page, filterCurso, filterCompartidas, rango.from, rango.to]);
 
   async function abrirCuotas() {
     if (verCuotas) { setVerCuotas(false); return; }
@@ -194,6 +198,8 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
       const params: Record<string, any> = { from: rango.from, to: rango.to };
       if (activeProject?.id) params.projectId = activeProject.id;
       if (effectiveResponsableId) params.responsableId = effectiveResponsableId;
+      // El mismo «Reparto» que la lista y las tarjetas.
+      if (filterCompartidas !== 'todas') params.compartidas = filterCompartidas;
       const r = await client.get('/conversions/cuotas', { params });
       setCuotas(r?.success ? (r.data || []) : []);
     } catch { setCuotas([]); }
@@ -307,14 +313,25 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
               </select>
             </>
           )}
+          <label className="text-xs font-semibold text-muted-foreground" htmlFor="filtro-compartidas">Reparto:</label>
+          <select
+            id="filtro-compartidas"
+            value={filterCompartidas}
+            onChange={(e) => setFilterCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+            className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
+          >
+            <option value="todas">Todas</option>
+            <option value="solo">Solo compartidas</option>
+            <option value="enteras">Solo enteras</option>
+          </select>
           <label className="text-xs font-semibold text-muted-foreground">Desde:</label>
           <input type="date" value={rango.from} onChange={(e) => setRango((v) => ({ ...v, from: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
           <label className="text-xs font-semibold text-muted-foreground">Hasta:</label>
           <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
             className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
-          {(viewUserId !== 'all' || filterCurso !== 'all' || rango.from !== esteMes.from || rango.to !== esteMes.to) && (
-            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setRango({ from: esteMes.from, to: esteMes.to }); }} className="text-[11px] text-primary hover:underline">
+          {(viewUserId !== 'all' || filterCurso !== 'all' || filterCompartidas !== 'todas' || rango.from !== esteMes.from || rango.to !== esteMes.to) && (
+            <button type="button" onClick={() => { setViewUserId('all'); setFilterCurso('all'); setFilterCompartidas('todas'); setRango({ from: esteMes.from, to: esteMes.to }); }} className="text-[11px] text-primary hover:underline">
               Quitar filtros
             </button>
           )}
@@ -583,7 +600,7 @@ export default function IncomePage({ title = 'Ingresos', subtitlePrefix = 'Todas
         <Suspense fallback={null}>
           <TopProductsCard projectId={activeProject?.id}
             from={rango.from || null} to={rango.to || null}
-            responsableId={effectiveResponsableId} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
+            responsableId={effectiveResponsableId} compartidas={filterCompartidas === 'todas' ? null : filterCompartidas} days={null} limit={5} title={effectiveResponsableId ? `Programas vendidos por ${gestores.find(g => g.user_id === effectiveResponsableId)?.nombre || 'gestor'}` : 'Programas más vendidos'} />
         </Suspense>
       </div>
 

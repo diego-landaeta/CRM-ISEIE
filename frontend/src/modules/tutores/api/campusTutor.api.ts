@@ -143,4 +143,7 @@ export const redaccionMoodleApi = {
   /** La propia redactora, en «Mi campus»: el servidor usa el id de su sesión. */
   mia: () =>
     client.get('/tutores/mi-campus/redaccion-moodle') as Promise<ApiResponse<RedaccionEnMoodle>>,
+  /** Supervisión de tutores (26/11/2026): lo que redacta una tutora de sus campus, sin tocar nada. */
+  supervisada: (tutorId: number) =>
+    client.get(`/tutores/supervision/${tutorId}/redaccion-moodle`) as Promise<ApiResponse<RedaccionEnMoodle>>,
 };
