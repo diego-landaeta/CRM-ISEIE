@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { render, screen, cleanup, within } from '@testing-library/react';
+import { render, screen, cleanup, within, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 
 /*
@@ -9,6 +9,8 @@ import { MemoryRouter } from 'react-router-dom';
    · Diplomas › Pendientes: a quien ya se le pidieron los datos no se le ofrece «Aprobar y
      emitir» como a los demás; se dice que se espera al alumno y hasta cuándo. Con los
      datos ya contestados, el botón vuelve.
+   · En lote tampoco (QA del 26/11): la casilla se marca (para rechazar), pero «Aprobar y
+     emitir (n)» la deja fuera y lo dice en la barra y en el diálogo.
    · La ficha del alumno enseña el diploma: datos pedidos, contestados o emitido; sin nada,
      no se pinta.
 */
@@ -33,8 +35,12 @@ const datos = vi.hoisted(() => {
       fila(1, 'Ana Esperando', { confirmacion: confirmacion('pendiente') }),
       fila(2, 'Luis Sin Pedir'),
       fila(3, 'Eva Confirmada', { confirmacion: confirmacion('confirmado', { respondidaEn: '2026-11-25T08:00:00Z' }) }),
+      fila(4, 'Pau Corrigió', { confirmacion: confirmacion('corregido', { respondidaEn: '2026-11-25T08:00:00Z', sinAplicar: true }) }),
     ],
     ficha: [],
+    aprobarEmitir: vi.fn(async (ids) => ({
+      data: { resultados: ids.map((matriculaId) => ({ matriculaId, ok: true, fase: 'emitir', nexpediente: `CTF-2026-00000${matriculaId}-AAAA` })) },
+    })),
   };
 });
 
@@ -56,6 +62,7 @@ vi.mock('@/modules/certifex/api/certifex.api', () => ({
     diplomas: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     terminados: async () => ({ data: { filas: [], total: 0, pagina: 1, tam: 50 } }),
     formaciones: async () => ({ data: { proyecto: null, motivo: null, formaciones: [] } }),
+    aprobarEmitir: (...a) => datos.aprobarEmitir(...a),
     firma: vi.fn(),
   },
 }));
@@ -93,6 +100,37 @@ describe('#791 · Diplomas › Pendientes', () => {
     const confirmada = within(filaDe('Eva Confirmada'));
     expect(confirmada.getByRole('button', { name: /Aprobar y emitir/ })).toBeTruthy();
     expect(confirmada.getByText('Datos confirmados')).toBeTruthy();
+  });
+
+  it('en lote, lo que espera al alumno se queda fuera de «Aprobar y emitir» y se dice (QA del 26/11)', async () => {
+    datos.aprobarEmitir.mockClear();
+    render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+    await screen.findByText('Ana Esperando');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Elegir a Ana Esperando' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Elegir a Luis Sin Pedir' }));
+
+    const lote = await screen.findByRole('button', { name: 'Aprobar y emitir (1)' });
+    expect(screen.getByText('1 espera al alumno: no se emite')).toBeTruthy();
+    fireEvent.click(lote);
+    const dialogo = await screen.findByRole('dialog');
+    expect(within(dialogo).getByText('Aprobar y emitir 1')).toBeTruthy();
+    expect(dialogo.textContent).toContain('1 espera al alumno: no se emite. Se podrá emitir cuando conteste o venza el plazo.');
+    fireEvent.click(within(dialogo).getByRole('button', { name: 'Emitir' }));
+    await waitFor(() => expect(datos.aprobarEmitir).toHaveBeenCalledTimes(1));
+    expect(datos.aprobarEmitir).toHaveBeenCalledWith([2]);
+  });
+
+  it('si todas las elegidas esperan, «Aprobar y emitir (0)» no se pulsa y dice por qué', async () => {
+    render(<MemoryRouter><CertifexDiplomasPage /></MemoryRouter>);
+    await screen.findByText('Ana Esperando');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Elegir a Ana Esperando' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Elegir a Pau Corrigió' }));
+
+    const lote = await screen.findByRole('button', { name: 'Aprobar y emitir (0)' });
+    expect(lote.disabled).toBe(true);
+    expect(lote.getAttribute('title')).toMatch(/Esperan al alumno/);
+    expect(screen.getByText('1 espera al alumno: no se emite · 1 con datos corregidos sin pasar a Certifex: no se emite')).toBeTruthy();
+    expect(screen.queryByText(/Ninguna tiene DNI/)).toBeNull();
   });
 });
 

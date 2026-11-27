@@ -136,10 +136,28 @@ const notaTexto = (nota: number | null, umbral: number | null) => (nota == null
   : `${nota.toLocaleString('es', { maximumFractionDigits: 2 })}${umbral != null ? ` · aprobado desde ${umbral.toLocaleString('es', { maximumFractionDigits: 2 })}` : ''}`);
 
 type Fallo = { quien: string; error: string };
+
+/**
+ * #791 (QA del 26/11): a quien se le pidieron los datos y aún no contestó (o corrigió y su
+ * corrección no se ha pasado a Certifex) no se le ofrece «Aprobar y emitir», ni de uno en uno
+ * ni en lote. La casilla se puede marcar (para rechazar en lote), pero el lote lo deja fuera y lo
+ * dice. El servidor lo bloquea igual (`bloqueosDeConfirmacion`); esto lo dice antes.
+ */
+type FueraPorConfirmacion = { alumno: number; sinPasar: number };
+const esperaAlAlumno = (c: Solicitud) => {
+  const datos = c.confirmacion ? leerConfirmacion(c.confirmacion) : null;
+  return !!datos && !datos.puedeEmitir;
+};
+const textoFueraPorConfirmacion = ({ alumno, sinPasar }: FueraPorConfirmacion) => [
+  alumno > 0 && `${alumno} ${alumno === 1 ? 'espera' : 'esperan'} al alumno: no se ${alumno === 1 ? 'emite' : 'emiten'}`,
+  sinPasar > 0 && `${sinPasar} con datos corregidos sin pasar a Certifex: no se ${sinPasar === 1 ? 'emite' : 'emiten'}`,
+].filter(Boolean).join(' · ');
+
 type Dialogo =
   | null
   // `sinDni`: las que se quedaron fuera por no tener DNI (se dice en la confirmación).
-  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number }
+  // `esperando`: las que se quedaron fuera por esperar al alumno (#791, `esperaAlAlumno`).
+  | { tipo: 'aprobarEmitir'; ids: number[]; sinDni?: number; esperando?: FueraPorConfirmacion }
   | { tipo: 'emitir'; ids: number[]; sinDni?: number }
   | { tipo: 'rechazar'; ids: number[] }
   | { tipo: 'avisos'; exps: string[]; reenvio: boolean; fuera?: boolean }
@@ -930,9 +948,16 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
     return n;
   });
   // El DNI es obligatorio para emitir (Diego, 20/10): lo que no lo tiene no entra en un lote.
+  // Lo que espera al alumno (#791) tampoco: se puede elegir para rechazar, pero no se emite.
   const elegidasPendientes = pestana === 'pendientes' ? solicitudes.filter((c) => elegidas.has(String(c.matriculaId))) : [];
-  const elegidasConDni = elegidasPendientes.filter(tieneDni).map((c) => c.matriculaId);
-  const elegidasSinDni = elegidasPendientes.length - elegidasConDni.length;
+  const elegidasEsperando = elegidasPendientes.filter(esperaAlAlumno);
+  const fueraPorConfirmacion: FueraPorConfirmacion = {
+    alumno: elegidasEsperando.filter((c) => c.confirmacion?.estado === 'pendiente').length,
+    sinPasar: elegidasEsperando.filter((c) => c.confirmacion?.estado !== 'pendiente').length,
+  };
+  const elegidasEmitibles = elegidasPendientes.filter((c) => !esperaAlAlumno(c));
+  const elegidasConDni = elegidasEmitibles.filter(tieneDni).map((c) => c.matriculaId);
+  const elegidasSinDni = elegidasEmitibles.length - elegidasConDni.length;
   const sinEmitirConDni = despues.sinEmitir.filter(tieneDni);
   const sinEmitirSinDni = despues.sinEmitir.length - sinEmitirConDni.length;
   const conFechas = pestana !== 'terminados';
@@ -1866,13 +1891,20 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
                 {/* Sin DNI no se emite: las que no lo tienen se quedan fuera, y se dice. */}
                 {elegidasSinDni > 0 && (
                   <span className="self-center text-xs font-medium text-destructive" role="status">
-                    {elegidasConDni.length === 0
+                    {elegidasConDni.length === 0 && elegidasEsperando.length === 0
                       ? 'Ninguna tiene DNI: ponlo para poder emitir'
                       : `${elegidasSinDni} sin DNI ${elegidasSinDni === 1 ? 'se queda' : 'se quedan'} fuera (es obligatorio)`}
                   </span>
                 )}
-                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0} title={elegidasConDni.length === 0 ? TITULO_SIN_DNI : undefined}
-                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni })}>
+                {/* #791: lo que espera al alumno tampoco se emite en lote, y se dice. */}
+                {elegidasEsperando.length > 0 && (
+                  <span className="self-center text-xs font-medium text-muted-foreground" role="status" data-fuera="esperando">
+                    {textoFueraPorConfirmacion(fueraPorConfirmacion)}
+                  </span>
+                )}
+                <Button size="sm" disabled={trabajando || elegidasConDni.length === 0}
+                  title={elegidasConDni.length > 0 ? undefined : elegidasSinDni > 0 ? TITULO_SIN_DNI : 'Esperan al alumno: se podrán emitir cuando conteste o venza el plazo.'}
+                  onClick={() => setDialogo({ tipo: 'aprobarEmitir', ids: elegidasConDni, sinDni: elegidasSinDni, esperando: fueraPorConfirmacion })}>
                   <SealCheck size={14} className="mr-1.5" />
                   {trabajando && lote ? `Emitiendo ${lote.hechas} de ${lote.total}…` : `Aprobar y emitir (${elegidasConDni.length})`}
                 </Button>
@@ -1925,6 +1957,17 @@ export default function CertifexDiplomasPage({ soloLectura = false, soloEmitir =
             {(dialogo?.tipo === 'aprobarEmitir' || dialogo?.tipo === 'emitir') && !!dialogo.sinDni && (
               <strong className="mt-2 block text-destructive">
                 {dialogo.sinDni} sin DNI no {dialogo.sinDni === 1 ? 'entra' : 'entran'}: el DNI es obligatorio en el diploma. Pónselo y emítelo después.
+              </strong>
+            )}
+            {/* #791: lo que espera al alumno se queda fuera del lote, y se dice aquí también. */}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.alumno && (
+              <strong className="mt-2 block text-foreground" data-fuera="esperando">
+                {textoFueraPorConfirmacion({ alumno: dialogo.esperando.alumno, sinPasar: 0 })}. Se podrá emitir cuando conteste o venza el plazo.
+              </strong>
+            )}
+            {dialogo?.tipo === 'aprobarEmitir' && !!dialogo.esperando?.sinPasar && (
+              <strong className="mt-2 block text-foreground" data-fuera="sin-pasar">
+                {textoFueraPorConfirmacion({ alumno: 0, sinPasar: dialogo.esperando.sinPasar })}. Pasa sus datos antes de emitir.
               </strong>
             )}
             {/* #351, prevención: lo que saldría «Con lo de Moodle», dicho antes y con «Editar» a mano. */}
