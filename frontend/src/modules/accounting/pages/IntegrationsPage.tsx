@@ -17,6 +17,7 @@ import CodigosPromocionales from '@/modules/links-pago/components/CodigosPromoci
 import { EtiquetaEnPruebas } from '@/shared/components/ui/EnPruebas';
 import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 import { GRUPOS_DE_FUNCIONES_MOODLE, faltasDeFunciones, type FuncionesProbadas } from '../lib/funcionesMoodle';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 /** Cuántas funciones pide el CRM al servicio del Moodle (CRM#925): 12. */
 const TOTAL_FUNCIONES_MOODLE = GRUPOS_DE_FUNCIONES_MOODLE.reduce((n, g) => n + g.funciones.length, 0);
@@ -221,6 +222,7 @@ function StripeCard({ projectId }: { projectId: number }) {
   const [webhookPrevio, setWebhookPrevio] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -284,7 +286,7 @@ function StripeCard({ projectId }: { projectId: number }) {
   }
 
   async function clear() {
-    if (!confirm('¿Borrar las credenciales de Stripe de este proyecto?')) return;
+    if (!(await confirm({ title: 'Borrar credenciales de Stripe', message: '¿Borrar las credenciales de Stripe de este proyecto?', tone: 'destructive', confirmLabel: 'Borrar' }))) return;
     try {
       await client.delete(`/integrations/stripe?projectId=${projectId}`);
       toast({ title: 'Stripe eliminado' });
@@ -505,6 +507,7 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
   const [loading, setLoading] = useState(true);
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
+  const confirm = useConfirm();
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [permisos, setPermisos] = useState<Permisos | null>(null);
@@ -555,7 +558,7 @@ function StripeLinksCard({ projectId }: { projectId: number }) {
   }
 
   async function clear() {
-    if (!confirm('¿Quitar la clave de links de pago de este campus? La de lectura (tarjeta «Stripe») no se toca.')) return;
+    if (!(await confirm({ title: 'Quitar clave de links de pago', message: '¿Quitar la clave de links de pago de este campus? La de lectura (tarjeta «Stripe») no se toca.', tone: 'destructive', confirmLabel: 'Quitar' }))) return;
     try {
       await client.delete(`/integrations/stripe_links?projectId=${projectId}`);
       toast({ title: 'Clave de links quitada' });
@@ -696,6 +699,7 @@ function BrevoCard({ projectId }: { projectId: number }) {
   const [apiKey, setApiKey] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [fromEmail, setFromEmail] = useState('');
+  const confirm = useConfirm();
   const [fromName, setFromName] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -758,7 +762,7 @@ function BrevoCard({ projectId }: { projectId: number }) {
   }
 
   async function clear() {
-    if (!confirm('¿Borrar las credenciales de Brevo de este proyecto?')) return;
+    if (!(await confirm({ title: 'Borrar credenciales de Brevo', message: '¿Borrar las credenciales de Brevo de este proyecto?', tone: 'destructive', confirmLabel: 'Borrar' }))) return;
     try {
       await client.delete(`/integrations/brevo?projectId=${projectId}`);
       toast({ title: 'Brevo eliminado' });
@@ -899,6 +903,7 @@ function PaypalCard({ projectId }: { projectId: number }) {
   const [webhookId, setWebhookId] = useState('');
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const confirm = useConfirm();
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -949,7 +954,7 @@ function PaypalCard({ projectId }: { projectId: number }) {
   }
 
   async function clear() {
-    if (!confirm('¿Borrar las credenciales de PayPal de este campus? Los cobros ya registrados se quedan.')) return;
+    if (!(await confirm({ title: 'Borrar credenciales de PayPal', message: '¿Borrar las credenciales de PayPal de este campus? Los cobros ya registrados se quedan.', tone: 'destructive', confirmLabel: 'Borrar' }))) return;
     try {
       await client.delete(`/integrations/paypal?projectId=${projectId}`);
       toast({ title: 'PayPal eliminado' });
@@ -1071,6 +1076,7 @@ function MoodleCard({ projectId }: { projectId: number }) {
   const [token, setToken] = useState('');
   const [showKey, setShowKey] = useState(false);
   const [url, setUrl] = useState('');
+  const confirm = useConfirm();
   // #188: leer las consultas de los alumnos de este campus.
   const [consultas, setConsultas] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1143,7 +1149,7 @@ function MoodleCard({ projectId }: { projectId: number }) {
   }
 
   async function clear() {
-    if (!confirm('¿Quitar el campus (Moodle) de este proyecto? Se dejará de comprobar a sus tutores.')) return;
+    if (!(await confirm({ title: 'Quitar campus de Moodle', message: '¿Quitar el campus (Moodle) de este proyecto? Se dejará de comprobar a sus tutores.', tone: 'destructive', confirmLabel: 'Quitar' }))) return;
     try {
       await client.delete(`/integrations/moodle?projectId=${projectId}`);
       toast({ title: 'Campus quitado' });
@@ -1313,6 +1319,7 @@ function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar
   const [estado, setEstado] = useState<EstadoPlugin | null>(null);
   const [codigo, setCodigo] = useState<{ codigo: string; expira_at: string } | null>(null);
   const [trabajando, setTrabajando] = useState(false);
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     try {
@@ -1348,7 +1355,7 @@ function PluginDelCrm({ projectId, alConectar }: { projectId: number; alConectar
   }
 
   async function apagar() {
-    if (!confirm('El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?')) return;
+    if (!(await confirm({ title: 'Apagar el plugin del campus', message: 'El CRM dejará de aceptar los avisos de este campus y las respuestas volverán a necesitar el token de cada tutora. ¿Seguir?', tone: 'warning', confirmLabel: 'Apagar' }))) return;
     setTrabajando(true);
     try {
       const res = await client.delete<EstadoPlugin>(`/consultas/campus/${projectId}/plugin`);

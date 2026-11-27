@@ -15,6 +15,7 @@ import usePermission from '@/shared/hooks/usePermission';
 import { posibleDuplicada, preguntarSiEmitirDuplicada, textoDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
 import { textoDatosFiscales, necesitaPersona, type DatosFiscalesEnCola } from '../lib/datosFiscalesCola';
 import EnvioFacturaDialog from '@/modules/factura-automatica/components/EnvioFacturaDialog';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 type ColaItem = {
   payment_id: number; conversion_id: number; fecha: string; importe: number;
@@ -104,6 +105,7 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
   const [envioDe, setEnvioDe] = useState<ColaItem | null>(null);
   const [estado, setEstado] = useState<Estado | null>(null);
   const [generando, setGenerando] = useState<number | null>(null);
+  const confirm = useConfirm();
   const [aprobando, setAprobando] = useState<number | null>(null);
 
   const cargar = useCallback(async () => {
@@ -160,7 +162,17 @@ export default function FacturacionAlDiaCard({ projectId, titulo, ocultarSiVacia
       const e = err as { data?: { error?: string; code?: string } };
       // Hay cobros anteriores sin facturar: se pregunta antes de saltarse el orden.
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
-        if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
+        if (await confirm({
+          title: 'Emitir fuera de orden',
+          message: (
+            <>
+              <p>{e.data.error}</p>
+              <p className="mt-2">¿Emitirla igualmente, fuera de orden?</p>
+            </>
+          ),
+          tone: 'warning',
+          confirmLabel: 'Emitir',
+        })) {
           setGenerando(null);
           // La confirmación de la duplicada que ya se dio sigue valiendo.
           return generar(paymentId, true, confirmarDuplicada);

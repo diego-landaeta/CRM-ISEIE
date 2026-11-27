@@ -14,6 +14,7 @@ import EmitirBorradorDialog from '@/modules/invoices/components/EmitirBorradorDi
 import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
 import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 interface ConversionsTabTarget {
   id: number;
@@ -44,6 +45,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   const [refundsByConv, setRefundsByConv] = useState<Record<number, Refund[]>>({});
   const [sendInvoiceDialog, setSendInvoiceDialog] = useState<Invoice | null>(null);
   const [installmentsReload, setInstallmentsReload] = useState(0);
+  const confirm = useConfirm();
 
   // Tras registrar un pago: si la conversion tiene factura emitida y aún no
   // enviada, ofrecer enviarla por email (con confirmación, no automático).
@@ -89,7 +91,7 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   }, [conversions]);
 
   async function handleDeleteRefund(refundId: number): Promise<void> {
-    if (!confirm('¿Eliminar esta devolución? La operación es irreversible.')) return;
+    if (!(await confirm({ title: 'Eliminar devolución', message: '¿Eliminar esta devolución? La operación es irreversible.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.removeRefund(refundId);
       toast({ title: 'Devolución eliminada' });

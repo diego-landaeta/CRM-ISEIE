@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('@/modules/conversions/api/conversions.api', () => ({ conversionsApi: api }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: api.toast }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 
 import InstallmentsDialog from '@/modules/conversions/components/InstallmentsDialog';
 

@@ -6,6 +6,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { invoicesApi } from '../api/invoices.api';
 import type { InvoiceTemplate, TemplateBlock, Issuer } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 // A4 @96dpi
 const A4_W = 794;
@@ -110,6 +111,7 @@ export default function InvoiceTemplateEditorPage() {
   const [condicion, setCondicion] = useState<'todos' | 'espana' | 'extranjero'>('todos');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const confirm = useConfirm();
   const canvasRef = useRef<HTMLDivElement>(null);
   const initRef = useRef(false);
   const dragRef = useRef<{ id: string; mode: 'move' | 'resize'; startX: number; startY: number; ox: number; oy: number; ow: number; oh: number } | null>(null);
@@ -192,7 +194,7 @@ export default function InvoiceTemplateEditorPage() {
   }
 
   async function removeTemplate(id: number) {
-    if (!confirm('¿Eliminar esta plantilla?')) return;
+    if (!(await confirm({ title: 'Eliminar plantilla', message: '¿Eliminar esta plantilla?', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     await invoicesApi.deleteTemplate(id);
     if (current?.id === id) newTemplate();
     await load();

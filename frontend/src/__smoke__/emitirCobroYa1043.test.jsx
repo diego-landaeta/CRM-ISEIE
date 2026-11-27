@@ -27,6 +27,7 @@ vi.mock('@/modules/products/hooks/useProducts', () => ({ useProducts: () => ({ p
 
 const toastMock = vi.fn();
 vi.mock('@/shared/hooks/useToast', () => ({ toast: (...a) => toastMock(...a) }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 
 const preguntar = vi.fn(async () => true);
 vi.mock('@/modules/invoices/lib/posibleDuplicada', async (original) => ({

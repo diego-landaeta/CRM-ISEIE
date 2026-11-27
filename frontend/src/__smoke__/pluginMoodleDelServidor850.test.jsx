@@ -33,6 +33,7 @@ vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: sesion.user, 
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/api/client', () => ({ default: { get, put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: () => true }) }));
 vi.mock('@/contexts/ProjectContext', () => ({
   useProjectContext: () => ({ activeProject: { id: 1, nombre: 'ISSLOGG', type: 'crm' }, isAllProjects: false, activeIssuerId: null }),

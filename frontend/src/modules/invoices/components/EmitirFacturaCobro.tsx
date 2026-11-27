@@ -22,6 +22,7 @@ import { toast } from '@/shared/hooks/useToast';
 import usePermission from '@/shared/hooks/usePermission';
 import { invoicesApi } from '../api/invoices.api';
 import { posibleDuplicada, preguntarSiEmitirDuplicada, type OtraFactura } from '../lib/posibleDuplicada';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 type CobroEnCola = {
   payment_id: number;
@@ -81,6 +82,7 @@ export default function EmitirFacturaCobro({ conversionId, paymentId = null, onE
   const [numero, setNumero] = useState('');
   const [sugerido, setSugerido] = useState('');
   const [emitiendo, setEmitiendo] = useState(false);
+  const confirm = useConfirm();
   const [emitida, setEmitida] = useState<{ id?: number; codigo?: string } | null>(null);
 
   const cargar = useCallback(async () => {
@@ -134,7 +136,17 @@ export default function EmitirFacturaCobro({ conversionId, paymentId = null, onE
       const e = err as { data?: { error?: string; code?: string } };
       if (e?.data?.code === 'HAY_ANTERIORES' && !forzar) {
         // Hay cobros anteriores sin facturar: se pregunta antes de saltarse el orden.
-        if (window.confirm(`${e.data.error}\n\n¿Emitirla igualmente, fuera de orden?`)) {
+        if (await confirm({
+          title: 'Emitir fuera de orden',
+          message: (
+            <>
+              <p>{e.data.error}</p>
+              <p className="mt-2">¿Emitirla igualmente, fuera de orden?</p>
+            </>
+          ),
+          tone: 'warning',
+          confirmLabel: 'Emitir',
+        })) {
           setEmitiendo(false);
           return mandar(true, confirmarDuplicada);
         }

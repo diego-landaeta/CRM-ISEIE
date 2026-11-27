@@ -12,6 +12,7 @@ import { MemoryRouter } from 'react-router-dom';
 */
 
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/shared/components/ui/portal', () => ({ default: ({ children }) => children }));
 const api = vi.hoisted(() => ({
   getById: vi.fn(async (id) => ({ success: true, data: { id, producto_contratado: 'Diplomado', importe_total: 900, importe_pagado: 300 } })),

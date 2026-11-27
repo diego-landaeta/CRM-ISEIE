@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { act } from '@testing-library/react';
 import { emitirPreguntandoSiPasa, pasaDeLoCobrado } from '@/modules/invoices/lib/masQueLoCobrado';
 
 /*
@@ -28,37 +29,52 @@ describe('pasaDeLoCobrado', () => {
 
 describe('emitirPreguntandoSiPasa', () => {
   it('si sale a la primera, ni pregunta', async () => {
-    const confirmar = vi.spyOn(window, 'confirm');
+    const preguntar = vi.fn();
     const enviar = vi.fn(async () => ({ success: true, data: { id: 1 } }));
-    await expect(emitirPreguntandoSiPasa(enviar)).resolves.toEqual({ success: true, data: { id: 1 } });
+    await expect(emitirPreguntandoSiPasa(enviar, { preguntar })).resolves.toEqual({ success: true, data: { id: 1 } });
     expect(enviar).toHaveBeenCalledTimes(1);
     // El segundo es «emitir aunque parezca duplicada» (#1001): sin aviso, no.
     expect(enviar).toHaveBeenCalledWith(false, false);
-    expect(confirmar).not.toHaveBeenCalled();
+    expect(preguntar).not.toHaveBeenCalled();
   });
 
   it('con un sí, la vuelve a mandar con permiso', async () => {
-    const confirmar = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const preguntar = vi.fn().mockResolvedValue(true);
     const enviar = vi.fn()
       .mockRejectedValueOnce(rechazo('MAS_QUE_LO_COBRADO', 'queda 111'))
       .mockResolvedValueOnce({ success: true, data: { id: 2 } });
-    await expect(emitirPreguntandoSiPasa(enviar)).resolves.toEqual({ success: true, data: { id: 2 } });
+    await expect(emitirPreguntandoSiPasa(enviar, { preguntar })).resolves.toEqual({ success: true, data: { id: 2 } });
     expect(enviar.mock.calls).toEqual([[false, false], [true, false]]);
-    expect(confirmar.mock.calls[0][0]).toContain('queda 111');
+    expect(preguntar.mock.calls[0][0]).toContain('queda 111');
   });
 
   it('con un no, no se emite y el error sigue su camino', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const preguntar = vi.fn().mockResolvedValue(false);
     const enviar = vi.fn().mockRejectedValueOnce(rechazo('MAS_QUE_LO_COBRADO'));
-    await expect(emitirPreguntandoSiPasa(enviar)).rejects.toMatchObject({ data: { code: 'MAS_QUE_LO_COBRADO' } });
+    await expect(emitirPreguntandoSiPasa(enviar, { preguntar })).rejects.toMatchObject({ data: { code: 'MAS_QUE_LO_COBRADO' } });
     expect(enviar).toHaveBeenCalledTimes(1);
   });
 
   it('otro error ni pregunta ni reintenta', async () => {
-    const confirmar = vi.spyOn(window, 'confirm');
+    const preguntar = vi.fn();
     const enviar = vi.fn().mockRejectedValueOnce(rechazo('NUMBER_TAKEN'));
-    await expect(emitirPreguntandoSiPasa(enviar)).rejects.toMatchObject({ data: { code: 'NUMBER_TAKEN' } });
+    await expect(emitirPreguntandoSiPasa(enviar, { preguntar })).rejects.toMatchObject({ data: { code: 'NUMBER_TAKEN' } });
     expect(enviar).toHaveBeenCalledTimes(1);
-    expect(confirmar).not.toHaveBeenCalled();
+    expect(preguntar).not.toHaveBeenCalled();
+  });
+});
+
+describe('el diálogo real (sin inyectar "preguntar")', () => {
+  it('"Emitir" reenvía con permiso', async () => {
+    const enviar = vi.fn()
+      .mockRejectedValueOnce(rechazo('MAS_QUE_LO_COBRADO', 'queda 111'))
+      .mockResolvedValueOnce({ success: true, data: { id: 3 } });
+    let respuesta!: Promise<unknown>;
+    await act(async () => { respuesta = emitirPreguntandoSiPasa(enviar); });
+    expect(document.body.textContent).toContain('queda 111');
+    const boton = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Emitir')!;
+    await act(async () => { boton.click(); });
+    await expect(respuesta).resolves.toEqual({ success: true, data: { id: 3 } });
+    expect(enviar.mock.calls).toEqual([[false, false], [true, false]]);
   });
 });

@@ -25,6 +25,7 @@ const facturas = vi.hoisted(() => ({
 
 vi.mock('@/shared/api/client', () => ({ default: api, API_BASE_URL: '/api' }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/contexts/AuthContext', () => ({
   useAuth: () => ({ user: { id: 1, role: 'superadmin' }, permissions: { '*': true }, alcanceComercial: null, projects: [{ id: 4, nombre: 'Campus A' }] }),
 }));

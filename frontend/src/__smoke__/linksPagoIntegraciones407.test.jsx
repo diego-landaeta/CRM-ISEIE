@@ -17,6 +17,7 @@ const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/contexts/ProjectContext', () => ({ useProjectContext: () => ctx.valor }));
 vi.mock('@/shared/api/client', () => ({ default: { get, put: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
 // El servidor tiene los links encendidos (`/auth/me`, CRM#870).
 vi.mock('@/contexts/AuthContext', () => ({ useAuth: () => ({ user: { id: 1, funciones: { links_pago: true } } }) }));

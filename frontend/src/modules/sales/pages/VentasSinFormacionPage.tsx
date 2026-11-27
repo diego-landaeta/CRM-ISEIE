@@ -7,6 +7,7 @@ import client from '@/shared/api/client';
 import { toast } from '@/shared/hooks/useToast';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { formatDate } from '@/shared/lib/format';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 /**
  * Las ventas que no dicen de qué formación son (#41).
@@ -56,6 +57,7 @@ export default function VentasSinFormacionPage() {
   const [datos, setDatos] = useState<Datos | null>(null);
   const [cargando, setCargando] = useState(true);
   const [atando, setAtando] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   const cargar = useCallback(async () => {
     if (!pid) return;
@@ -70,10 +72,20 @@ export default function VentasSinFormacionPage() {
   /** Atar UNA venta a la formación propuesta. De una en una, y confirmando. */
   async function atar(f: Fila) {
     if (!f.sugerencia) return;
-    if (!confirm(
-      `Esta venta pasará a ser de «${f.sugerencia.nombre}».\n\n`
-      + `Con eso, su comisión irá al profesor de esa formación. Comprueba que es la correcta: `
-      + `atarla a la equivocada se le paga a quien no era.\n\n¿Seguir?`)) return;
+    if (!(await confirm({
+      title: 'Atar venta a formación',
+      message: (
+        <>
+          <p>Esta venta pasará a ser de «{f.sugerencia.nombre}».</p>
+          <p className="mt-2">
+            Con eso, su comisión irá al profesor de esa formación. Comprueba que es la correcta:
+            atarla a la equivocada se le paga a quien no era.
+          </p>
+        </>
+      ),
+      tone: 'warning',
+      confirmLabel: 'Atar',
+    }))) return;
     setAtando(f.id);
     try {
       const r = await client.patch(`/conversions/${f.id}`, { producto_contratado_id: f.sugerencia.id });

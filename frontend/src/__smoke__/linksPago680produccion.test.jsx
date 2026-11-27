@@ -18,6 +18,7 @@ vi.mock('@/shared/lib/enPruebas', () => ({ SOLO_EN_PRUEBAS: false, PROCESO_EN_PR
 const get = vi.hoisted(() => vi.fn());
 vi.mock('@/shared/api/client', () => ({ default: { get, post: vi.fn(), put: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 const permisos = vi.hoisted(() => ({ mapa: {} }));
 vi.mock('@/shared/hooks/usePermission', () => ({ default: () => ({ can: (k) => permisos.mapa[k] === true }) }));
 const sesion = vi.hoisted(() => ({ user: null }));

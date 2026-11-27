@@ -7,6 +7,7 @@ import PageHeader from '@/shared/components/ui/PageHeader';
 import { invoicesApi } from '../api/invoices.api';
 import type { InvoiceSequence, Issuer } from '../api/invoices.api';
 import { toast } from '@/shared/hooks/useToast';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 export default function InvoicingConfigPage() {
   const { activeProject } = useProjectContext() as { activeProject: { id?: number | null; nombre?: string } };
@@ -33,6 +34,7 @@ export default function InvoicingConfigPage() {
   const [resetAno, setResetAno] = useState(new Date().getFullYear());
   const [resetSerie, setResetSerie] = useState('A');
   const [resetUltimo, setResetUltimo] = useState(0);
+  const confirm = useConfirm();
   const [resetting, setResetting] = useState(false);
 
   const load = useCallback(async () => {
@@ -119,7 +121,7 @@ export default function InvoicingConfigPage() {
   }
 
   async function removeIssuer(id: number) {
-    if (!confirm('¿Eliminar esta empresa emisora? Las facturas ya emitidas conservan sus datos.')) return;
+    if (!(await confirm({ title: 'Eliminar empresa emisora', message: '¿Eliminar esta empresa emisora? Las facturas ya emitidas conservan sus datos.', tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await invoicesApi.deleteIssuer(id);
       toast({ title: 'Empresa eliminada' });
@@ -147,7 +149,7 @@ export default function InvoicingConfigPage() {
 
   async function resetSequence() {
     if (!pid) return;
-    if (!confirm(`Set ${resetAno}/${resetSerie} → próxima factura será ${resetAno}/${String(resetUltimo + 1).padStart(4, '0')}. ¿Continuar?`)) return;
+    if (!(await confirm({ title: 'Actualizar secuencia', message: `Set ${resetAno}/${resetSerie} → próxima factura será ${resetAno}/${String(resetUltimo + 1).padStart(4, '0')}. ¿Continuar?` }))) return;
     setResetting(true);
     try {
       const res = await invoicesApi.setSequence({ projectId: pid, ano: resetAno, serie: resetSerie, ultimoNumero: resetUltimo });

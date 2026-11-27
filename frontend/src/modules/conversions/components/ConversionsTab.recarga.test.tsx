@@ -36,6 +36,7 @@ vi.mock('../api/conversions.api', () => ({
   }),
 }));
 vi.mock('@/shared/hooks/useToast', () => ({ toast: vi.fn() }));
+vi.mock('@/shared/components/ui/useConfirm', () => ({ useConfirm: () => vi.fn() }));
 vi.mock('@/modules/invoices/api/invoices.api', () => ({
   invoicesApi: new Proxy({}, { get: () => () => Promise.resolve({ success: true, data: [] }) }),
 }));

@@ -6,6 +6,7 @@ import { toast } from '@/shared/hooks/useToast';
 import { useEscapeKey } from '@/shared/hooks/useDialogA11y';
 import { formatCurrency } from '@/shared/lib/format';
 import EmitirFacturaCobro, { QueEsCadaUna } from '@/modules/invoices/components/EmitirFacturaCobro';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 interface PaymentForm {
   importe: string;
@@ -59,6 +60,8 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
     referencia: '',
   });
 
+  const confirm = useConfirm();
+  
   useEffect(() => {
     if (open) {
       setCobrado(null);
@@ -101,9 +104,17 @@ export default function PaymentDialog({ open, onClose, conversion, onPaid }: Pay
         // El servidor ha visto un cobro igual muy cerca en el tiempo. Preguntamos
         // en vez de crear el duplicado a ciegas.
         if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
-        const seguir = window.confirm(
-          `${err.data.error}\n\n¿Seguro que quieres registrarlo igualmente?`,
-        );
+        const seguir = await confirm({
+          title: 'Posible cobro duplicado',
+          message: (
+            <>
+              <p>{err.data.error}</p>
+              <p className="mt-2">¿Seguro que quieres registrarlo igualmente?</p>
+            </>
+          ),
+          tone: 'warning',
+          confirmLabel: 'Registrar',
+        });
         if (!seguir) { setSaving(false); return; }
         res = await enviar(true);
       }

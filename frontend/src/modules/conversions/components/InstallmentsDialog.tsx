@@ -5,6 +5,7 @@ import { toast } from '@/shared/hooks/useToast';
 import Select from '@/shared/components/ui/Select';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 import EmitirFacturaCobro from '@/modules/invoices/components/EmitirFacturaCobro';
+import { useConfirm } from '@/shared/components/ui/useConfirm';
 
 interface Installment {
   id?: number;
@@ -73,6 +74,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   // rehacerlo. Daniela, 21/09.
   const [editDraft, setEditDraft] = useState<Record<number, { importe: string; fecha: string }>>({});
   const [savingInst, setSavingInst] = useState<number | null>(null);
+  const confirm = useConfirm();
 
   async function load() {
     if (!conversion) return;
@@ -256,7 +258,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
 
   async function handleUnpay(inst: Installment) {
     if (!inst.id) return;
-    if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
+    if (!(await confirm({ title: 'Deshacer pago', message: `¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.` }))) return;
     try {
       await conversionsApi.unpayInstallment(inst.id);
       toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
@@ -306,7 +308,17 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
           // Posible duplicado (un cargo de Stripe sin enlazar, o la venta ya
           // cobrada): se pregunta antes de apuntarlo.
           if (err?.data?.code !== 'DUPLICATE_PAYMENT') throw err;
-          if (!window.confirm(`${err.data.error}\n\n¿Apuntarlo igualmente?`)) return;
+          if (!(await confirm({
+            title: 'Posible cobro duplicado',
+            message: (
+              <>
+                <p>{err.data.error}</p>
+                <p className="mt-2">¿Apuntarlo igualmente?</p>
+              </>
+            ),
+            tone: 'warning',
+            confirmLabel: 'Apuntar',
+          }))) return;
           r = await conversionsApi.payInstallment(payingInst.id, { ...datos, confirmar: true });
         }
         toast({ title: 'Cuota cobrada', description: `${importe}€ el ${payFecha}` });
@@ -322,7 +334,8 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
   }
 
   async function handleDeleteInstallment(inst: Installment) {
-    if (!inst.id || !confirm(`¿Eliminar cuota #${inst.numero}? Esto no es reversible.`)) return;
+    if (!inst.id) return;
+    if (!(await confirm({ title: 'Eliminar cuota', message: `¿Eliminar cuota #${inst.numero}? Esto no es reversible.`, tone: 'destructive', confirmLabel: 'Eliminar' }))) return;
     try {
       await conversionsApi.deleteInstallment(inst.id);
       toast({ title: 'Cuota eliminada' });
