@@ -5,7 +5,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 // minutos, y la primera vuelta tras el reinicio caía ya en la hora siguiente.
 
 vi.mock('../src/shared/config/db.js', () => ({ query: vi.fn(async () => ({ rows: [] })), getClient: vi.fn() }));
-const { vigilar, _internos } = await import('../src/jobs/latido.js');
+const { vigilar, desfaseDe, _internos } = await import('../src/jobs/latido.js');
 
 afterEach(() => { vi.useRealTimers(); _internos?.tareas?.clear?.(); });
 
@@ -18,16 +18,17 @@ describe('una tarea puede dar una vuelta nada más arrancar', () => {
     expect(tick).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(2 * 1000);
     expect(tick).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(30 * 60 * 1000);
+    // El intervalo, con el desfase fijo de la tarea (27/11: que no coincidan todas).
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000 + desfaseDe('prueba_al_arrancar', 30 * 60 * 1000));
     expect(tick).toHaveBeenCalledTimes(2);
     clearInterval(reloj);
   });
 
-  it('sin la opción, como siempre: la primera vuelta llega con el intervalo', async () => {
+  it('sin la opción, como siempre: la primera vuelta llega con el intervalo (más su desfase)', async () => {
     vi.useFakeTimers();
     const tick = vi.fn(async () => {});
     const reloj = vigilar('prueba_sin_arrancar', 'Prueba', tick, 30 * 60 * 1000);
-    await vi.advanceTimersByTimeAsync(29 * 60 * 1000);
+    await vi.advanceTimersByTimeAsync(29 * 60 * 1000 + desfaseDe('prueba_sin_arrancar', 30 * 60 * 1000));
     expect(tick).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(2 * 60 * 1000);
     expect(tick).toHaveBeenCalledTimes(1);

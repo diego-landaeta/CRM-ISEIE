@@ -425,6 +425,28 @@ describe('#455 · campus sin preparar y fallos pasajeros', () => {
     expect(m.motivo).toMatch(/no tiene permiso para «local_crm_matricular»/);
   });
 
+  // QA del freno de Moodle (27/11): si la llamada no llegó al campus (el freno común, lleno;
+  // o la petición, cerrada), el campus no ha dicho nada. No es «campus sin preparar»: ni se
+  // gasta un intento, ni se aplaza 24 h, ni se avisa a administración. Se vuelve a probar en
+  // 15 minutos. Con la matrícula del día antes del inicio, lo otro dejaba al alumno sin acceso.
+  it.each(['OCUPADO', 'CANCELADA'])('%s (no llegó al campus): se aplaza 15 min, sin gastar un intento ni avisar', async (codigo) => {
+    encender();
+    const v = await venta();
+    const moodle = (fila, cursos) => mm.hacerEnMoodle(fila, cursos, {
+      conexionImpl: async () => ({ url: CAMPUS_URL, token: 't' }),
+      llamarImpl: async () => { throw new MoodleError('El campus está ocupado ahora mismo. Inténtalo en un momento.', codigo); },
+    });
+    const r = await vueltaCon(moodle);
+    expect(r.aplazada).toBe(1);
+    const m = await matriculaDe(v);
+    expect(m.estado).toBe('programada');
+    expect(m.intentos).toBe(0);
+    const minutos = (new Date(m.proximo_intento_at) - Date.now()) / 60000;
+    expect(minutos).toBeGreaterThan(14);
+    expect(minutos).toBeLessThan(16);
+    expect(await avisosDe(m.id)).toHaveLength(0);
+  });
+
   it('sin red: reintento en una hora, sin aviso, como en la fase 1', async () => {
     encender();
     const v = await venta();

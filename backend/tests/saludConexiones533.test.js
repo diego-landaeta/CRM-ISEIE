@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
  *   npx vitest run tests/saludConexiones533.test.js
  */
 
+const fundir = vi.hoisted(() => vi.fn(async () => {}));
 const base = vi.hoisted(() => ({
   campus: [], integraciones: [], claves: [], stripe: [], recepciones: [], comprobaciones: [], plugin: [],
   woo: [], credWoo: {}, meta: [], admision: [], transferencias: [], correos: {}, guardadas: [], tarjetas: [],
@@ -52,7 +53,7 @@ vi.mock('../src/modules/integrations/integrations.model.js', () => ({
     if (i) Object.assign(i, { last_test_status: fila.status, last_test_message: fila.message, last_test_at: new Date().toISOString() });
   },
   // CRM#925: «Comprobar ahora» guarda en la tarjeta de Moodle qué funciones tiene el servicio.
-  fundirConfigPublica: async () => {},
+  fundirConfigPublica: (...a) => fundir(...a),
 }));
 
 const { encrypt } = await import('../src/shared/utils/crypto.js');
@@ -357,5 +358,67 @@ describe('#533 · Comprobar ahora (servicios simulados)', () => {
     expect(c.estado).toBe('caida');
     expect(c.motivo).toBe('Clave del MCP: HTTP 500');
     expect(c.resumen).toMatch(/^Conectado .* · Clave del MCP: no conecta$/);
+  });
+});
+
+describe('«Comprobar ahora» compartido entre pestañas (QA del freno de Moodle, 27/11)', () => {
+  const esperar = (ms) => new Promise((r) => { setTimeout(r, ms); });
+  async function peticion(fn) {
+    const { senalDeLaPeticion } = await import('../src/shared/services/moodle.limitador.js');
+    const { EventEmitter } = await import('node:events');
+    const res = Object.assign(new EventEmitter(), { writableFinished: false });
+    let p;
+    senalDeLaPeticion({}, res, () => { p = fn(); });
+    return { res, p };
+  }
+
+  it('si la pestaña que la lanzó se cierra, la otra recibe la prueba de verdad y no se guarda un error', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    try {
+      const { llamar } = await import('../src/shared/services/moodle.client.js');
+      const { conTurno } = await import('../src/shared/services/moodle.limitador.js');
+      base.campus = [{ id: 2, nombre: 'Fono', type: 'crm' }];
+      base.integraciones = [conClave(2, 'moodle', TOKEN_MOODLE, { config_public: { url: 'https://fono.example/campus' } })];
+      const fetchImpl = async () => ({ ok: true, status: 200, json: async () => ({ sitename: 'FONO' }) });
+      // Como testMoodle: lo que contesta el campus, o su error como fallo.
+      const probar = {
+        brevo: vi.fn(),
+        moodle: (token, config) => llamar({ url: config.url, token }, 'core_webservice_get_site_info', {}, { fetchImpl })
+          .then(() => ({ ok: true, message: 'Conexión OK con FONO.' }), (e) => ({ ok: false, message: e.message })),
+      };
+      // Alguien ocupa el único hueco del freno un momento.
+      const ocupa = conTurno(() => esperar(80));
+      const una = await peticion(() => S.comprobarAhora([2], { probar }));
+      const otra = await peticion(() => S.comprobarAhora([2], { probar }));
+      await esperar(20);
+      una.res.emit('close'); // la primera pestaña se cierra
+      const r = await otra.p;
+      await una.p.catch(() => {});
+      await ocupa;
+      expect(r[2]).toContain('moodle');
+      expect(base.tarjetas.filter((t) => t.provider === 'moodle')).toEqual([
+        expect.objectContaining({ projectId: 2, provider: 'moodle', status: 'success' }),
+      ]);
+      expect(base.guardadas.filter((g) => g.conexion === 'moodle').map((g) => g.ok)).toEqual([true]);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('una prueba «sin dato» (no llegó al campus) no se apunta en ningún sitio', async () => {
+    fundir.mockClear();
+    base.campus = [{ id: 2, nombre: 'Fono', type: 'crm' }];
+    base.integraciones = [conClave(2, 'moodle', TOKEN_MOODLE, { config_public: { url: 'https://fono.example/campus' } })];
+    const probar = {
+      brevo: vi.fn(),
+      moodle: vi.fn(async () => ({ ok: false, sinDato: true, message: 'El campus está ocupado ahora mismo.' })),
+    };
+    const r = await S.comprobarAhora([2], { probar });
+    expect(probar.moodle).toHaveBeenCalledTimes(1);
+    expect(r[2]).not.toContain('moodle');
+    expect(base.tarjetas).toEqual([]);
+    expect(base.guardadas).toEqual([]);
+    expect(fundir).not.toHaveBeenCalled();
   });
 });

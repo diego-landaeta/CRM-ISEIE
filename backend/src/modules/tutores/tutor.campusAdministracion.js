@@ -40,6 +40,7 @@ import {
 } from '../../shared/services/moodle.client.js';
 import { campusParaRecortar } from '../../shared/utils/ambito.js';
 import { conexionDelCampus } from './tutor.campus.js';
+import { sinPeticion } from '../../shared/services/moodle.limitador.js';
 import {
   tareasPorTandas, progresoDeAlumnos, enTandas, paralelo,
 } from './tutor.micampus.js';
@@ -249,7 +250,8 @@ export async function campusConCopia(c, { refrescar = false, esperaMs = espera()
   }
   let lectura = enMarcha.get(c.projectId);
   if (!lectura) {
-    lectura = leerSinRomper(c, opciones).then((datos) => {
+    // La esperan todas las pestañas de este campus: sin la señal de la que la lanzó.
+    lectura = sinPeticion(() => leerSinRomper(c, opciones)).then((datos) => {
       const entrada = { at: Date.now(), datos };
       copias.set(c.projectId, entrada);
       return entrada;

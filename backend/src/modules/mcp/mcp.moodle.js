@@ -875,7 +875,10 @@ export async function revisarCampus(ambito, a, { signal } = {}) {
           entrada.cursos.set(c.id, await resumenDeUnCurso(campus, c.id, ahoraS, signal));
         } catch (err) {
           if (signal?.aborted) throw err;
-          if (esSobrecarga(err)) {
+          // La petición se cerró: no es un fallo del curso, y la revisión es compartida.
+          if (err instanceof ErrorMoodle && err.codigo === 'cancelada') throw err;
+          // El freno común estaba lleno: como «va justo», se para y se sigue luego.
+          if (esSobrecarga(err) || (err instanceof ErrorMoodle && err.codigo === 'ocupado')) {
             // Va justo de carga: se para todo y se reintenta luego. NO es un fallo de este curso.
             entrada.pausaHasta = Date.now() + esperaSiSaturadoMs();
             return;

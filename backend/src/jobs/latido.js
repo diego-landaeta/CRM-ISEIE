@@ -20,6 +20,7 @@
 
 import { query } from '../shared/config/db.js';
 import { logger } from '../shared/utils/logger.js';
+import { enSegundoPlano } from '../shared/services/moodle.limitador.js';
 
 const tareas = new Map();
 
@@ -138,6 +139,10 @@ export { DIAS_QUE_SE_GUARDAN };
  *   llegaba ya en la hora siguiente (Diego, 09/10: el resumen de ISEIE salió tarde
  *   por mis reinicios). Solo para tareas que no repiten lo hecho: esas dos llevan
  *   la clave del día en cada correo.
+ *
+ * Cada vuelta del intervalo sale con un desfase fijo propio (`desfaseDe`), y corre
+ * «en segundo plano»: lo que llame a Moodle espera detrás de lo que pide una persona
+ * (shared/services/moodle.limitador.js).
  */
 export function vigilar(nombre, titulo, tick, cadaMs, { alArrancarMs = null } = {}) {
   tareas.set(nombre, {
@@ -149,10 +154,12 @@ export function vigilar(nombre, titulo, tick, cadaMs, { alArrancarMs = null } = 
     fallos: 0,
     ultimoFallo: null,   // { cuando, mensaje }
     corriendo: false,
+    desfaseMs: desfaseDe(nombre, cadaMs),
   });
 
   const envuelto = async () => {
     const t = tareas.get(nombre);
+    if (!t) return; // la quitaron (las pruebas) con una vuelta ya en camino
     // Si la vuelta anterior sigue viva no se solapa. Las tareas ya se protegen
     // por dentro, pero asi el dato de «corriendo» es de verdad y no de fe.
     if (t.corriendo) return;
@@ -163,7 +170,7 @@ export function vigilar(nombre, titulo, tick, cadaMs, { alArrancarMs = null } = 
     let resultado = null;
     let fallo = null;
     try {
-      const r = await tick();
+      const r = await enSegundoPlano(() => tick());
       resultado = (r && typeof r === 'object' && !Array.isArray(r)) ? r : null;
       t.vueltas += 1;
     } catch (err) {
@@ -185,7 +192,35 @@ export function vigilar(nombre, titulo, tick, cadaMs, { alArrancarMs = null } = 
   };
 
   if (alArrancarMs !== null) setTimeout(envuelto, alArrancarMs);
-  return setInterval(envuelto, cadaMs);
+  const desfase = tareas.get(nombre).desfaseMs;
+  return setInterval(desfase ? () => { setTimeout(envuelto, desfase); } : envuelto, cadaMs);
+}
+
+/**
+ * El desfase de cada tarea: fijo, sale del nombre (siempre el mismo para la misma tarea,
+ * en este proceso y en el siguiente) y en segundos enteros.
+ *
+ * Por qué (27/11): todos los `setInterval` arrancan en el mismo milisegundo, así que las
+ * tareas de 5, 15, 60 y 120 minutos coinciden en el mismo segundo cada dos horas, y las de
+ * Moodle llamaban a la vez a siete campus. Con el desfase, cada una sale en su segundo y
+ * la frecuencia no cambia: la vuelta llega a los `cadaMs` de siempre más el desfase.
+ *
+ * Como mucho, la mitad del intervalo (así la primera vuelta llega antes de que la pantalla
+ * de estado la dé por caída, que es a los dos intervalos) y TAREAS_DESFASE_MAX_MS (10 min).
+ * Las tareas de menos de un minuto no se desfasan. Con TAREAS_DESFASE_MAX_MS=0, sin desfase.
+ */
+export function desfaseDe(nombre, cadaMs) {
+  const tope = Number.parseInt(process.env.TAREAS_DESFASE_MAX_MS ?? String(10 * 60_000), 10);
+  if (!(cadaMs >= 60_000) || !(tope > 0)) return 0;
+  const segundos = Math.floor(Math.min(cadaMs / 2, tope) / 1000);
+  if (segundos < 1) return 0;
+  // FNV-1a de 32 bits: reparte bien nombres que se parecen («consultas_campus», «consultas_alumnos»).
+  let h = 0x811c9dc5;
+  for (let i = 0; i < nombre.length; i++) {
+    h ^= nombre.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return (h % segundos) * 1000;
 }
 
 /**

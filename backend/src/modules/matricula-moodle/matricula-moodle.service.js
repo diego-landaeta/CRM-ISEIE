@@ -252,6 +252,9 @@ async function alHacerla(fila, cursos, r, { destinatarios, enviar }) {
 }
 
 /** Una matrícula que ya toca. Devuelve qué pasó con ella. */
+/** Lo que se aplaza una matrícula cuya llamada no llegó al campus (el freno, lleno). */
+const MINUTOS_SI_NO_LLEGA = 15;
+
 export async function procesar(fila, { destinatarios = null, moodle = hacerEnMoodle, enviar = null } = {}) {
   // La venta se borró o ya no tiene nada cobrado sin pasar por los ganchos
   // (un borrado en bloque, o el interruptor apagado en ese momento).
@@ -290,6 +293,15 @@ export async function procesar(fila, { destinatarios = null, moodle = hacerEnMoo
     await anotarEnFicha(fila, `⚠️ Matrícula en Moodle sin hacer (${fila.campus_nombre}): ${r.motivo}.`);
     logger.warn({ matriculaId: fila.id, tipo: r.tipo }, 'matrícula Moodle: no se puede hacer, se avisa a administración');
     return suspendido ? 'suspendido' : 'fallo';
+  }
+
+  // La llamada no llegó al campus (el freno común de Moodle, lleno): no ha pasado nada.
+  // Se vuelve a probar en un rato, sin gastar un intento y sin avisar a nadie.
+  if (r?.aplazar) {
+    const f = await model.aplazar(fila.id, MINUTOS_SI_NO_LLEGA);
+    if (!f) return 'ocupada';
+    logger.info({ matriculaId: fila.id, motivo: r.motivo }, 'matrícula Moodle: no llegó al campus, se aplaza');
+    return 'aplazada';
   }
 
   // El campus no está preparado (sin la 1.12.0…): aviso la primera vez y reintento
@@ -343,6 +355,7 @@ export async function procesar(fila, { destinatarios = null, moodle = hacerEnMoo
 export async function vuelta({ destinatarios = null, moodle = hacerEnMoodle, enviar = null } = {}) {
   const resumen = {
     revisadas: 0, lista: 0, hecha: 0, parcial: 0, suspendido: 0, espera: 0, reintento: 0, fallo: 0, cancelada: 0, ocupada: 0,
+    aplazada: 0,
   };
   if (!cfg.activa()) return resumen;
   await model.ajustarFechas();

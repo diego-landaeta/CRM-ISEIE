@@ -23,6 +23,7 @@ import { olvidarMiCampus, vistaDeLaProfesora } from './tutor.micampus.js';
 import { corregidaDesdeElCrm } from './tutor.entregasSinCorregir.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { olvidarFichas } from '../consultas/consultas.contexto.js';
+import { conTurno, ErrorDeTurno } from '../../shared/services/moodle.limitador.js';
 
 const comoAppError = (err, porDefecto) => new AppError(err instanceof MoodleError ? err.message : porDefecto, 502, 'MOODLE');
 
@@ -220,24 +221,33 @@ export async function archivo(tutorId, projectId, cursoId, tareaId, alumnoId, po
   destino.pathname = destino.pathname.replace(/\/pluginfile\.php\//, '/webservice/pluginfile.php/').replace('/webservice/webservice/', '/webservice/');
   destino.searchParams.set('token', conexion.token);
 
-  const control = new AbortController();
-  const reloj = setTimeout(() => control.abort(), ESPERA_ARCHIVO_MS);
+  // Con turno en el freno común (shared/services/moodle.limitador.js): descargar un archivo
+  // también es una conexión al Moodle, y el reloj cubre la petición y la lectura.
   try {
-    let r;
-    try { r = await fetchImpl(destino.toString(), { signal: control.signal, redirect: 'error' }); } catch {
-      throw new AppError('El campus no ha respondido', 502, 'MOODLE');
-    }
-    if (!r.ok) throw new AppError(`El campus no ha dado el archivo (HTTP ${r.status})`, 502, 'MOODLE');
-    if (Number(r.headers.get('content-length')) > MAX_ARCHIVO) throw new AppError('El archivo es demasiado grande para abrirlo desde el CRM', 413, 'DEMASIADO_GRANDE');
-    const cuerpo = await leerConTope(r, MAX_ARCHIVO);
-    const tipo = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
-    // Moodle contesta los errores de pluginfile con un 200 y un JSON: no es el archivo.
-    if (tipo === 'application/json' && /"errorcode"/.test(cuerpo.subarray(0, 2000).toString('utf8'))) {
-      throw new AppError('El campus no deja descargar el archivo con su token (revisa «Descargar archivos» en el servicio CRM).', 502, 'MOODLE');
-    }
-    const enLinea = EN_LINEA.has(tipo);
-    return { cuerpo, tipo: enLinea ? tipo : 'application/octet-stream', enLinea, nombre: f.nombre || 'archivo' };
-  } finally { clearTimeout(reloj); }
+    return await conTurno(async () => {
+      const control = new AbortController();
+      const reloj = setTimeout(() => control.abort(), ESPERA_ARCHIVO_MS);
+      try {
+        let r;
+        try { r = await fetchImpl(destino.toString(), { signal: control.signal, redirect: 'error' }); } catch {
+          throw new AppError('El campus no ha respondido', 502, 'MOODLE');
+        }
+        if (!r.ok) throw new AppError(`El campus no ha dado el archivo (HTTP ${r.status})`, 502, 'MOODLE');
+        if (Number(r.headers.get('content-length')) > MAX_ARCHIVO) throw new AppError('El archivo es demasiado grande para abrirlo desde el CRM', 413, 'DEMASIADO_GRANDE');
+        const cuerpo = await leerConTope(r, MAX_ARCHIVO);
+        const tipo = String(r.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+        // Moodle contesta los errores de pluginfile con un 200 y un JSON: no es el archivo.
+        if (tipo === 'application/json' && /"errorcode"/.test(cuerpo.subarray(0, 2000).toString('utf8'))) {
+          throw new AppError('El campus no deja descargar el archivo con su token (revisa «Descargar archivos» en el servicio CRM).', 502, 'MOODLE');
+        }
+        const enLinea = EN_LINEA.has(tipo);
+        return { cuerpo, tipo: enLinea ? tipo : 'application/octet-stream', enLinea, nombre: f.nombre || 'archivo' };
+      } finally { clearTimeout(reloj); }
+    });
+  } catch (err) {
+    if (err instanceof ErrorDeTurno) throw new AppError(err.message, err.codigo === 'OCUPADO' ? 503 : 499, err.codigo);
+    throw err;
+  }
 }
 
 /** El cuerpo de la respuesta, cortando en cuanto pasa de `tope` bytes. */

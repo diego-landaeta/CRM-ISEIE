@@ -15,6 +15,7 @@ import {
   cursosDe, tareasDeCursos, entregasSinCorregir, urlDelCampus, MoodleError,
 } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from '../tutores/tutor.campus.js';
+import { peticionCerrada } from '../../shared/services/moodle.limitador.js';
 
 /** La ficha se pide al abrir cada consulta y lee el campus: un minuto de copia. */
 const CACHE_MS = 60_000;
@@ -31,7 +32,8 @@ export async function contextoDeLaConsulta(c, { quien = 'admin', userId = null, 
   if (!refrescar && guardada && Date.now() - guardada.at < CACHE_MS) return guardada.ficha;
   const ficha = await leerFicha(c, { quien, userId, opciones });
   if (cache.size > 500) cache.clear();
-  cache.set(clave, { at: Date.now(), ficha });
+  // Leída con la petición ya cerrada, la ficha puede llevar fallos que no son del campus.
+  if (!peticionCerrada()) cache.set(clave, { at: Date.now(), ficha });
   return ficha;
 }
 

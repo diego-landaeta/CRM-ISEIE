@@ -272,3 +272,33 @@ describe('un curso, al abrirlo', () => {
     await expect(admin.cursoDeAdministracion(req(41, 'admin'), 7, 999)).rejects.toMatchObject({ statusCode: 404 });
   });
 });
+
+describe('la lectura compartida no hereda la señal de quien la lanzó (QA del freno de Moodle, 27/11)', () => {
+  it('si la primera pestaña se cierra, la lectura sigue para la segunda y la copia sale sin fallos', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    try {
+      estado.retraso = 10;
+      const { senalDeLaPeticion } = await import('../src/shared/services/moodle.limitador.js');
+      const { EventEmitter } = await import('node:events');
+      const peticion = (fn) => {
+        const res = Object.assign(new EventEmitter(), { writableFinished: false });
+        let p;
+        senalDeLaPeticion({}, res, () => { p = fn(); });
+        return { res, p };
+      };
+      const una = peticion(() => admin.campusAdministracion(req(41, 'admin'), { campus: 7, esperaMs: 5000 }));
+      await new Promise((r) => { setTimeout(r, 25); });
+      una.res.emit('close'); // la primera pestaña se cierra a media lectura
+      const otra = peticion(() => admin.campusAdministracion(req(1, 'superadmin'), { campus: 7, esperaMs: 5000 }));
+      const r = await otra.p;
+      await una.p.catch(() => {});
+      expect(r.leyendo).toBe(false);
+      expect(r.campus.cursos.filter((k) => k.error)).toEqual([]);
+      expect(r.campus.entregas).toHaveLength(2);
+      expect(llamadasA('core_course_get_courses_by_field')).toHaveLength(1); // la misma lectura
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});

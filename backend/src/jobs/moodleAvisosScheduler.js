@@ -56,7 +56,10 @@ async function campusConectados() {
   }
 }
 
-/** null si el Moodle responde bien; el código del fallo si no. */
+/** Lo que devuelve `comprobar` cuando no llegó a preguntar (el freno, ocupado): ni bien ni mal. */
+const SIN_DATO = Symbol('sin dato');
+
+/** null si el Moodle responde bien; el código del fallo si no; SIN_DATO si no se preguntó. */
 async function comprobar(cred) {
   if (cred instanceof ErrorMoodle) return cred.codigo;
   try {
@@ -64,6 +67,8 @@ async function comprobar(cred) {
     return null;
   } catch (err) {
     if (!(err instanceof ErrorMoodle)) return 'inesperado';
+    // La llamada no salió (el freno común, lleno; o cancelada): no dice nada del Moodle.
+    if (err.codigo === 'ocupado' || err.codigo === 'cancelada') return SIN_DATO;
     // Que a ESTE token le falte esa función no es que la conexión esté caída.
     return FALLOS_DEL_CAMPUS.includes(err.codigo) ? err.codigo : null;
   }
@@ -96,6 +101,7 @@ export async function vuelta({ destinatarios = null } = {}) {
   const creds = await credencialesMoodle(campus.map((c) => c.id));
   for (const c of campus) {
     const fallo = await comprobar(creds.get(c.id) ?? new ErrorMoodle('credencial_ilegible', 'sin credencial'));
+    if (fallo === SIN_DATO) continue; // la racha se queda como estaba
     if (!fallo) { racha.delete(c.id); continue; }
 
     resumen.fallando += 1;

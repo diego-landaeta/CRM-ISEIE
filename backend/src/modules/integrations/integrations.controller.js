@@ -310,6 +310,11 @@ export async function test(req, res, next) {
     } catch (e) {
       testResult = { ok: false, message: e.message };
     }
+    // No llegó al campus: se contesta, pero no se guarda un fallo que no ha pasado.
+    if (testResult.sinDato) {
+      res.json({ success: false, data: testResult });
+      return;
+    }
     await model.recordTestResult({
       projectId: pid, provider,
       status: testResult.ok ? 'success' : 'error',
@@ -550,6 +555,9 @@ export async function testMoodle(token, url, opciones, { consultas = false } = {
     }
     return { ok: true, message: `Conexión OK con ${quien || 'el campus'}.`, sitio: info.sitio, version: info.version, funciones };
   } catch (err) {
+    // La llamada no llegó al campus: el freno común estaba lleno (OCUPADO) o la persona cerró
+    // la página (CANCELADA). No dice nada de la conexión, y quien llama no debe guardarlo.
+    if (err?.codigo === 'OCUPADO' || err?.codigo === 'CANCELADA') return { ok: false, sinDato: true, message: err.message };
     return { ok: false, message: err.message };
   }
 }
