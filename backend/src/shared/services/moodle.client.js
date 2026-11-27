@@ -873,6 +873,10 @@ export async function guardarCursoEnMoodle(conexion, {
   secciones.forEach((s, i) => {
     params[`secciones[${i}][nombre]`] = s.nombre;
     params[`secciones[${i}][resumen]`] = s.resumen || '';
+    // «Se desbloquea a los … días» (CRM#1124, plugin 1.12.0): solo con valor, para que un
+    // campus sin él no reciba una clave que no conoce. -1 = quitar la restricción
+    // (molinangel/Campus-Moodle#25).
+    if (Number.isInteger(s.dias) && (s.dias > 0 || s.dias === -1)) params[`secciones[${i}][dias]`] = s.dias;
   });
   const r = await llamar(conexion, 'local_crm_curso_guardar', params, opciones);
   if (!r?.cursoid) throw new MoodleError('El campus no ha devuelto el curso.', 'SIN_CURSO');
@@ -884,6 +888,8 @@ export async function guardarCursoEnMoodle(conexion, {
     visible: Boolean(r.visible),
     secciones: (r.secciones || []).map((x) => ({ numero: Number(x.numero), id: Number(x.id) })),
     sobran: Number(r.sobran) || 0,
+    // Lo que no se ha podido hacer, sin fallar (p. ej. «sin_relativedate», CRM#1124).
+    avisos: Array.isArray(r.avisos) ? r.avisos.map(String) : [],
   };
 }
 
