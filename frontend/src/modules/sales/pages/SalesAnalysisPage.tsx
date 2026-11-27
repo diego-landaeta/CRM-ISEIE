@@ -65,6 +65,9 @@ export default function SalesAnalysisPage() {
   const [rango, setRango] = useState({ from: '', to: '' });
   const [search, setSearch] = useState('');
   const [buscado, setBuscado] = useState('');
+  // Todas · Solo compartidas · Solo enteras (#186, gemela de CRM#163), junto a
+  // los filtros que ya había. Con una gestora, la compartida le sigue contando la mitad.
+  const [compartidas, setCompartidas] = useState<'todas' | 'solo' | 'enteras'>('todas');
   const [loading, setLoading] = useState(true);
   const [resumen, setResumen] = useState<Resumen | null>(null);
   const [asesoras, setAsesoras] = useState<Asesora[]>([]);
@@ -77,6 +80,7 @@ export default function SalesAnalysisPage() {
   if (rango.from) params.from = rango.from;
   if (rango.to) params.to = rango.to;
   if (buscado) params.search = buscado;
+  if (compartidas !== 'todas') params.compartidas = compartidas;
   const key = JSON.stringify(params);
 
   useEffect(() => { setPage(1); }, [key, tab]);
@@ -134,6 +138,17 @@ export default function SalesAnalysisPage() {
         <label className="text-xs font-semibold text-muted-foreground">Hasta</label>
         <input type="date" value={rango.to} onChange={(e) => setRango((v) => ({ ...v, to: e.target.value }))}
           className="h-9 px-2 rounded-md border border-border bg-card text-sm" />
+        <label className="text-xs font-semibold text-muted-foreground" htmlFor="analisis-compartidas">Reparto</label>
+        <select
+          id="analisis-compartidas"
+          value={compartidas}
+          onChange={(e) => setCompartidas(e.target.value as 'todas' | 'solo' | 'enteras')}
+          className="h-9 px-3 rounded-md border border-border bg-card text-sm font-medium"
+        >
+          <option value="todas">Todas</option>
+          <option value="solo">Solo compartidas</option>
+          <option value="enteras">Solo enteras</option>
+        </select>
         <form
           onSubmit={(e) => { e.preventDefault(); setBuscado(search.trim()); }}
           className="flex items-center gap-2 flex-1 min-w-[220px]"
@@ -151,10 +166,10 @@ export default function SalesAnalysisPage() {
             Buscar
           </button>
         </form>
-        {(rango.from || rango.to || buscado) && (
+        {(rango.from || rango.to || buscado || compartidas !== 'todas') && (
           <button
             type="button"
-            onClick={() => { setRango({ from: '', to: '' }); setSearch(''); setBuscado(''); }}
+            onClick={() => { setRango({ from: '', to: '' }); setSearch(''); setBuscado(''); setCompartidas('todas'); }}
             className="text-[11px] text-primary hover:underline whitespace-nowrap"
           >
             Quitar filtros
@@ -259,7 +274,7 @@ export default function SalesAnalysisPage() {
                         {a.nombre}
                         {a.role && <span className="ml-2 text-[10px] text-muted-foreground font-normal">{a.role}</span>}
                       </td>
-                      <td className="px-4 py-3 text-right tabular-nums">{a.ventas}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{a.ventas.toLocaleString('es-ES')}</td>
                       <td className="px-4 py-3 text-right tabular-nums">{a.clientes}</td>
                       <td className="px-4 py-3 text-right tabular-nums font-semibold">{fmt(a.importe)}</td>
                       <td className="px-4 py-3 text-right tabular-nums text-emerald-600 dark:text-emerald-400">{fmt(a.cobrado)}</td>
