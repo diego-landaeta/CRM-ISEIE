@@ -182,8 +182,9 @@ describe('Crear / Actualizar en Moodle (CRM#1113, fase 2)', () => {
     expect(r.status).toBe(200);
     expect(llamadas.at(-1).get('cursoid')).toBe('501');
     expect(r.body.data.curso.creado).toBe(false);
-    // Al actualizar no se lee el campus: la categoría y el nombre corto no se tocan.
-    expect(llamadas).toHaveLength(1);
+    // Al actualizar no se leen las categorías ni los nombres cortos: no se tocan. Solo se
+    // pregunta qué días tiene cada sección (CRM-ISEIE#832), y eso solo lee.
+    expect(llamadas.map((x) => x.get('wsfunction'))).toEqual(['local_crm_curso_desbloqueo', 'local_crm_curso_guardar']);
   });
 
   it('la ficha dice si se puede y si el campus está conectado', async () => {

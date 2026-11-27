@@ -1,4 +1,4 @@
-import type { CategoriaMoodle, OrigenCategoria, TipoFormacion } from '../api/formaciones.api';
+import type { CategoriaMoodle, DesbloqueoDistinto, OrigenCategoria, TipoFormacion } from '../api/formaciones.api';
 
 /**
  * Formaciones › Moodle (CRM#1113 / CRM-ISEIE#767, fase 2): cómo se enseñan las
@@ -40,6 +40,27 @@ export function nombreDeCategoria(id: number, todas: CategoriaMoodle[]): string 
   if (!id) return 'la de por defecto del Moodle';
   const c = todas.find((x) => x.id === id);
   return c ? (c.ruta || c.nombre) : `la categoría ${id}`;
+}
+
+const dias = (n: number) => `${n} ${n === 1 ? 'día' : 'días'}`;
+
+/**
+ * El aviso de un módulo con otros días en Moodle (CRM#1198): qué tiene allí, qué tiene aquí y
+ * qué pasará al llevarlo, que es poner lo de aquí. «En Moodle tiene 15 días; aquí, 30. Al
+ * llevarlo a Moodle se pondrán 30.»
+ */
+export function textoDelDesbloqueoDistinto(d: DesbloqueoDistinto): string {
+  const desdeMatricula = d.desde_moodle === 3 ? ' desde la matrícula' : '';
+  if (d.en_moodle && d.aqui) {
+    if (d.en_moodle === d.aqui) {
+      return `En Moodle tiene ${dias(d.en_moodle)} desde la matrícula; aquí, desde el inicio del curso. Al llevarlo a Moodle se contarán desde el inicio.`;
+    }
+    return `En Moodle tiene ${dias(d.en_moodle)}${desdeMatricula}; aquí, ${d.aqui}. Al llevarlo a Moodle se pondrán ${d.aqui}.`;
+  }
+  if (d.en_moodle) {
+    return `En Moodle tiene ${dias(d.en_moodle)}${desdeMatricula}; aquí, desde el principio. Al llevarlo a Moodle se quitará la restricción.`;
+  }
+  return `En Moodle no tiene «se desbloquea»; aquí, ${dias(d.aqui ?? 0)}. Al llevarlo a Moodle se pondrán ${d.aqui}.`;
 }
 
 /**

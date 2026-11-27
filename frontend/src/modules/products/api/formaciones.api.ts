@@ -98,6 +98,17 @@ export type OrigenCategoria = 'campus' | 'propuesta' | 'por_defecto';
 
 export interface CategoriaElegida { id: number; nombre: string | null; origen: OrigenCategoria }
 
+/** Un módulo con otros días en Moodle (CRM#1198). null = sin restricción. */
+export interface DesbloqueoDistinto {
+  /** El módulo, desde 0 (su sección en Moodle es la siguiente). */
+  posicion: number;
+  modulo: string;
+  en_moodle: number | null;
+  /** Desde cuándo cuentan en Moodle: 1 = inicio del curso, 3 = matrícula del alumno. */
+  desde_moodle: number | null;
+  aqui: number | null;
+}
+
 /** Fase 2: lo que se va a hacer en Moodle, antes de pulsar. */
 export interface VistaPreviaMoodle {
   accion: 'crear' | 'actualizar' | 'varios';
@@ -111,6 +122,12 @@ export interface VistaPreviaMoodle {
   desbloqueo?: Array<number | null>;
   /** Las secciones a las que se les quita la restricción que tienen en Moodle: sus días, o null (se manda `dias = -1`). */
   quitar_desbloqueo?: Array<number | null>;
+  /**
+   * Solo al actualizar el único curso unido (CRM#1198): los módulos cuyo «se desbloquea» en Moodle
+   * no es el de aquí (alguien lo cambió o lo quitó a mano allí). Vacío si coinciden o si no se
+   * puede saber (plugin anterior a la 1.16.0, campus sin «Fecha relativa»…).
+   */
+  desbloqueo_distinto?: DesbloqueoDistinto[];
   cursos_unidos: Array<{ id: number; nombre: string | null; url: string | null }>;
   /** Solo al crear (al actualizar, Moodle deja la categoría, el nombre corto y la visibilidad como estén). */
   categoria?: CategoriaElegida | null;

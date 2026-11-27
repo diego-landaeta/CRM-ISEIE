@@ -1,7 +1,7 @@
 import { query } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { formacionesMoodleActivas, pluginMoodleActivo } from '../../shared/config/soloEnPruebas.js';
-import { guardarCursoEnMoodle, categoriasDelCampus, urlDelCampus, MoodleError } from '../../shared/services/moodle.client.js';
+import { guardarCursoEnMoodle, categoriasDelCampus, desbloqueoDelCurso, urlDelCampus, MoodleError } from '../../shared/services/moodle.client.js';
 import { conexionDelCampus } from '../tutores/tutor.campus.js';
 import { textoParaElCampus } from '../consultas/consultas.service.js';
 import { tipoPorNombre } from '../cursos-pendientes/cursos-pendientes.venta.js';
@@ -263,6 +263,64 @@ export function diasTrasGuardar(modulos, enMoodle = [], avisos = []) {
 export const quitarDesbloqueo = (modulos, enMoodle = []) =>
   diasQueSeMandan(modulos, enMoodle).map((d, i) => (d === QUITAR_DIAS ? Number(enMoodle[i]) : null));
 
+// ─── Lo que hay de verdad en Moodle (CRM#1198) ───────────────────────────
+
+/** Desde cuándo cuentan los días en Moodle (`s` de la «Fecha relativa»): el CRM siempre manda el inicio del curso. */
+export const DESDE_INICIO = 1;
+
+/**
+ * Los días de «se desbloquea» que tiene AHORA cada sección del curso unido: Map(número de
+ * sección → { dias, desde }), o null si no se puede saber —plugin anterior a la 1.16.0, campus
+ * sin «Fecha relativa», curso que no es del CRM o el campus no contesta—. Solo lee, y nunca
+ * falla por Moodle: sin la lectura, todo sigue como antes de CRM#1198.
+ */
+export async function diasLeidosDeMoodle(conexion, cursoId, opciones) {
+  let r;
+  try {
+    r = await desbloqueoDelCurso(conexion, cursoId, opciones);
+  } catch (err) {
+    if (err instanceof MoodleError) return null;
+    throw err;
+  }
+  if (!r || !r.delcrm || !r.relativedate || r.avisos.length) return null;
+  return r.secciones;
+}
+
+/**
+ * Los módulos cuyo «se desbloquea» en Moodle no es el del CRM (alguien lo cambió o lo quitó a
+ * mano allí): [{ posicion, modulo, en_moodle, desde_moodle, aqui }], con null = sin restricción.
+ * Los días que cuentan desde la matrícula (`desde` = 3) tampoco son los del CRM, que cuenta
+ * desde el inicio. Las secciones que aún no existen en Moodle no se comparan: se crean al llevarlo.
+ */
+export function diferenciasDeDesbloqueo(modulos, leidas) {
+  if (!leidas) return [];
+  const distintas = [];
+  modulos.forEach((m, i) => {
+    const s = leidas.get(i + 1);
+    if (!s) return;
+    const enMoodle = s.dias > 0 ? s.dias : null;
+    const desde = enMoodle ? s.desde : null;
+    const aqui = diasDeDesbloqueo(m);
+    if (enMoodle === aqui && (enMoodle === null || desde === DESDE_INICIO)) return;
+    distintas.push({ posicion: i, modulo: m.titulo, en_moodle: enMoodle, desde_moodle: desde, aqui });
+  });
+  return distintas;
+}
+
+/**
+ * Lo que hay en cada sección para decidir qué se quita (-1): lo leído de Moodle donde se ha
+ * podido leer y, si no, lo que el CRM apuntó la última vez (`dias_secciones`). Así, vaciar los
+ * días en el CRM quita también los que alguien puso a mano en Moodle.
+ */
+export function diasEnMoodleAhora(apuntados = [], leidas = null, cuantos = 0) {
+  if (!leidas) return apuntados;
+  return Array.from({ length: Math.max(cuantos, apuntados.length) }, (_, i) => {
+    const s = leidas.get(i + 1);
+    if (s) return s.dias > 0 ? s.dias : null;
+    return apuntados[i] ?? null;
+  });
+}
+
 /**
  * Lo que el plugin dice que no ha podido hacer, sin fallar, dicho para quien lo lee
  * (CRM#1124). Los códigos que no se conocen se enseñan tal cual.
@@ -335,8 +393,17 @@ export async function vistaPrevia(productId, projectId, { fetchImpl } = {}) {
   };
   if (unidos.length > 1) return { ...base, accion: 'varios' };
   if (unidos.length === 1) {
+    // Lo que tiene de verdad cada sección en Moodle (CRM#1198): si alguien cambió o quitó los
+    // días a mano, se avisa; y lo que se quita al llevarlo sale de ahí. Sin poder leerlo
+    // (plugin anterior, sin «Fecha relativa»…), lo de siempre y sin aviso.
+    const leidas = await diasLeidosDeMoodle(conexion, Number(unidos[0].curso_moodle_id), fetchImpl ? { fetchImpl } : undefined);
     // Al actualizar, el plugin deja el nombre corto, la categoría y la visibilidad como estén.
-    return { ...base, accion: 'actualizar', categoria: null, nombre_corto: null, visible: null };
+    return {
+      ...base,
+      accion: 'actualizar', categoria: null, nombre_corto: null, visible: null,
+      quitar_desbloqueo: quitarDesbloqueo(modulos, diasEnMoodleAhora(diasEnMoodle(unidos[0]), leidas, modulos.length)),
+      desbloqueo_distinto: diferenciasDeDesbloqueo(modulos, leidas),
+    };
   }
 
   const guardadas = categoriasGuardadas(await configDelCampus(projectId));
@@ -374,7 +441,11 @@ export async function llevarAMoodle(productId, projectId, {
   const conexion = await conexionOError(projectId);
   const opciones = fetchImpl ? { fetchImpl } : undefined;
   const cursoId = unidos[0] ? Number(unidos[0].curso_moodle_id) : 0;
-  const enMoodle = cursoId ? diasEnMoodle(unidos[0]) : [];
+  // Lo que hay en Moodle ahora (CRM#1198), para quitar también lo que se puso allí a mano; si no
+  // se puede leer, lo que apuntó el CRM la última vez.
+  const enMoodle = cursoId
+    ? diasEnMoodleAhora(diasEnMoodle(unidos[0]), await diasLeidosDeMoodle(conexion, cursoId, opciones), modulos.length)
+    : [];
 
   // Al crear: la categoría y el nombre corto. Al actualizar, el plugin no los cambia.
   let cat = 0; let corto = ''; let base = ''; const ocupados = [];
