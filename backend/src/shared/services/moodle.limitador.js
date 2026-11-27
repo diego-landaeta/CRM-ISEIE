@@ -118,18 +118,3 @@ export async function conTurno(fn, { signal } = {}) {
   }
 }
 
-/** Para la pantalla de estado y las pruebas. */
-export const estadoDelLimitador = () => ({
-  enCurso,
-  esperando: colas.delante.length + colas.detras.length,
-});
-
-/** Para las pruebas: empezar de cero. */
-export function _reiniciarLimitador() {
-  if (reloj) clearTimeout(reloj);
-  reloj = null;
-  colas.delante.length = 0;
-  colas.detras.length = 0;
-  enCurso = 0;
-  ultimaSalida = -Infinity;
-}
