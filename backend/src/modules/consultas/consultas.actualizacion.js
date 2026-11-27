@@ -17,10 +17,16 @@
   y se enseña en Integraciones › Moodle. Cuando un campus PASA a pendiente, campana a los super
   admin, una vez (el paso de NULL a algo es atómico: el aviso y el repaso no avisan dos veces).
   Sin la migración, se avisa igual, como mucho una vez al día por campus.
+
+  Y cuando el campus VUELVE a estar al día, su aviso se retira de la campana (CRM#1191): leído
+  para todos y con `resuelta_at` en `metadata` (`resolverAvisos`, sin borrar). Se hace en cada
+  repaso que diga «al día», no solo cuando la columna cambia: los avisos que se quedaron colgados
+  antes de esto (los ocho campus del 26/11, con la columna ya a NULL) se van solos en el
+  siguiente repaso.
 */
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
-import { notifyUsers } from '../notifications/notifications.service.js';
+import { notifyUsers, resolverAvisos } from '../notifications/notifications.service.js';
 
 export const TIPO = 'moodle_actualizacion_pendiente';
 
@@ -70,6 +76,15 @@ async function avisadoHoy(projectId) {
   return rows.length > 0;
 }
 
+/** Retira de la campana los avisos de ese campus que siguen abiertos. Devuelve cuántos. */
+async function retirarAvisos(projectId) {
+  const { rows } = await query(
+    `SELECT id FROM admin_notifications
+      WHERE type = $1 AND metadata->>'campus_id' = $2 AND NOT (metadata ? 'resuelta_at')`,
+    [TIPO, String(projectId)]);
+  return resolverAvisos(rows.map((r) => Number(r.id)), 'campus_al_dia');
+}
+
 async function avisar(projectId, detalle, destinatarios) {
   const para = destinatarios ?? await superAdmins();
   if (!para.length) return false;
@@ -93,16 +108,26 @@ async function avisar(projectId, detalle, destinatarios) {
  * @param {number} projectId
  * @param {ReturnType<typeof leerEstado>} estado
  * @param {{ destinatarios?: number[] }} [opciones] solo para las pruebas
- * @returns {Promise<{ pendiente: boolean|null, avisado?: boolean, resuelta?: boolean }>}
+ * @returns {Promise<{ pendiente: boolean|null, avisado?: boolean, resuelta?: boolean, retirados?: number }>}
  */
 export async function anotarActualizacion(projectId, estado, { destinatarios = null } = {}) {
   if (estado?.pendiente == null) return { pendiente: null };
   try {
     if (!estado.pendiente) {
-      const { rowCount } = await query(
-        `UPDATE moodle_plugin_campus SET actualizacion_pendiente = NULL
-          WHERE project_id = $1 AND actualizacion_pendiente IS NOT NULL`, [projectId]);
-      return { pendiente: false, resuelta: rowCount > 0 };
+      let resuelta = false;
+      try {
+        const { rowCount } = await query(
+          `UPDATE moodle_plugin_campus SET actualizacion_pendiente = NULL
+            WHERE project_id = $1 AND actualizacion_pendiente IS NOT NULL`, [projectId]);
+        resuelta = rowCount > 0;
+      } catch (err) {
+        // 42703: falta la columna. El aviso de la campana se retira igual.
+        if (err?.code !== '42703') throw err;
+      }
+      // Siempre, aunque la columna ya estuviera a NULL: así se van también los que se quedaron colgados.
+      const retirados = await retirarAvisos(projectId);
+      if (retirados) logger.info({ projectId, retirados }, 'Moodle: campus al día, se retira su aviso de la campana');
+      return { pendiente: false, resuelta, retirados };
     }
     const detalle = {
       version_disco: estado.version_disco, version_bd: estado.version_bd,

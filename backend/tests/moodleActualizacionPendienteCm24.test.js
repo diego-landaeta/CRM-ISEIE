@@ -2,7 +2,8 @@ import {
   describe, it, expect, beforeAll, afterAll, vi,
 } from 'vitest';
 import crypto from 'node:crypto';
-import { query } from '../src/shared/config/db.js';
+import db, { query } from '../src/shared/config/db.js';
+import { list } from '../src/modules/notifications/notifications.service.js';
 import { encrypt } from '../src/shared/utils/crypto.js';
 import { anotarActualizacion, leerEstado, explicar, TIPO } from '../src/modules/consultas/consultas.actualizacion.js';
 import { estado, sincronizarCampus } from '../src/modules/consultas/consultas.plugin.js';
@@ -17,6 +18,8 @@ import { recibirAviso, procesarAviso } from '../src/modules/consultas/consultas.
  *   · al pasar a pendiente, campana a los super admin UNA vez, y el detalle se guarda;
  *   · repetido (aviso + repaso) no vuelve a avisar ni pierde desde cuándo;
  *   · al volver a estar al día se limpia, y una nueva vez vuelve a avisar;
+ *   · al volver a estar al día, el aviso de la campana se retira (CRM#1191): solo el de ese
+ *     campus, también si la columna ya estaba a NULL y también sin la migración;
  *   · un plugin anterior a la 1.12.0 (que no lo dice) no toca nada;
  *   · el panel (`estado`) lo enseña con qué hacer.
  *
@@ -66,8 +69,12 @@ async function campus(nombre) {
 }
 
 const avisosDe = async (projectId) => (await query(
-  `SELECT title, message, link_path, target_user_ids FROM admin_notifications
+  `SELECT title, message, link_path, target_user_ids, read_by_user_ids, metadata FROM admin_notifications
     WHERE type = $1 AND (metadata->>'campus_id')::int = $2 ORDER BY id`, [TIPO, projectId])).rows;
+
+/** Lo que esa persona ve sin leer en la campana de ese campus (lo mismo que pinta el globo). */
+const campanaDe = async (userId, projectId) => (await list({ userId, role: 'superadmin', unreadOnly: true, limit: 1000 }))
+  .filter((n) => n.type === TIPO && Number(n.metadata?.campus_id) === projectId).length;
 
 const guardado = async (projectId) => (await query(
   'SELECT actualizacion_pendiente FROM moodle_plugin_campus WHERE project_id = $1', [projectId])).rows[0]?.actualizacion_pendiente;
@@ -157,6 +164,73 @@ describe('Campus-Moodle#24 · campana a los super admin', () => {
     expect(await avisosDe(id)).toHaveLength(2);
   });
 
+  it('al volver a estar al día, la campana se queda a 0 (CRM#1191)', async () => {
+    if (!hayBase) return;
+    const yo = await superAdmin();
+    const id = await campus('Campana');
+    await anotarActualizacion(id, leerEstado(PENDIENTE), { destinatarios: [yo] });
+    expect(await campanaDe(yo, id)).toBe(1);
+    const r = await anotarActualizacion(id, leerEstado({ actualizacion_pendiente: false }));
+    expect(r).toMatchObject({ pendiente: false, resuelta: true, retirados: 1 });
+    expect(await campanaDe(yo, id)).toBe(0);
+    // No se borra: queda leído para su destinatario, con cuándo y por qué.
+    const [a] = await avisosDe(id);
+    expect(a.metadata.resuelta_at).toBeTruthy();
+    expect(a.metadata.resuelta).toBe('campus_al_dia');
+    expect(a.read_by_user_ids.map(Number)).toContain(yo);
+    // El repaso siguiente no vuelve a tocarlo.
+    expect(await anotarActualizacion(id, leerEstado({ actualizacion_pendiente: false }))).toMatchObject({ retirados: 0 });
+  });
+
+  it('solo retira el aviso de ese campus, no el de otro que sigue pendiente', async () => {
+    if (!hayBase) return;
+    const yo = await superAdmin();
+    const alDia = await campus('AlDia');
+    const sigue = await campus('Sigue');
+    await anotarActualizacion(alDia, leerEstado(PENDIENTE), { destinatarios: [yo] });
+    await anotarActualizacion(sigue, leerEstado(PENDIENTE), { destinatarios: [yo] });
+    await anotarActualizacion(alDia, leerEstado({ pendiente: false }));
+    expect(await campanaDe(yo, alDia)).toBe(0);
+    expect(await campanaDe(yo, sigue)).toBe(1);
+    expect((await avisosDe(sigue))[0].metadata.resuelta_at).toBeUndefined();
+  });
+
+  it('un campus que ya estaba al día (columna a NULL) con el aviso colgado también lo retira', async () => {
+    if (!hayBase) return;
+    // Como los ocho de producción: el aviso salió y la columna ya está a NULL.
+    const yo = await superAdmin();
+    const id = await campus('Colgado');
+    await anotarActualizacion(id, leerEstado(PENDIENTE), { destinatarios: [yo] });
+    await query('UPDATE moodle_plugin_campus SET actualizacion_pendiente = NULL WHERE project_id = $1', [id]);
+    expect(await campanaDe(yo, id)).toBe(1);
+    const r = await anotarActualizacion(id, leerEstado({ actualizacion_pendiente: false }));
+    expect(r).toMatchObject({ pendiente: false, resuelta: false, retirados: 1 });
+    expect(await campanaDe(yo, id)).toBe(0);
+  });
+
+  it('sin la migración (42703) también se retira', async () => {
+    if (!hayBase) return;
+    const yo = await superAdmin();
+    const id = await campus('SinColumna');
+    await anotarActualizacion(id, leerEstado(PENDIENTE), { destinatarios: [yo] });
+    const real = db.query.bind(db);
+    const espia = vi.spyOn(db, 'query').mockImplementation((sql, ...resto) => {
+      if (/UPDATE moodle_plugin_campus SET actualizacion_pendiente/.test(String(sql))) {
+        return Promise.reject(Object.assign(new Error('column "actualizacion_pendiente" does not exist'), { code: '42703' }));
+      }
+      return real(sql, ...resto);
+    });
+    let r;
+    try {
+      r = await anotarActualizacion(id, leerEstado({ pendiente: false }));
+    } finally {
+      espia.mockRestore();
+    }
+    expect(r.error).toBeUndefined();
+    expect(r).toMatchObject({ pendiente: false, retirados: 1 });
+    expect(await campanaDe(yo, id)).toBe(0);
+  });
+
   it('un plugin anterior a la 1.12.0 no toca nada', async () => {
     if (!hayBase) return;
     const id = await campus('Viejo');
@@ -192,6 +266,10 @@ describe('Campus-Moodle#24 · por dónde llega', () => {
     paginas.push({ avisos: '[]', hastaid: 0, mas: false, version: '1.12.0', actualizacion_pendiente: false, version_disco: '1.12.0 (2026112500)', version_bd: '2026112500', pendientes: '' });
     await sincronizarCampus(id, { procesar: procesarAviso });
     expect(await guardado(id)).toBeNull();
+    // Y el aviso que dio al quedar pendiente se va de la campana en ese mismo repaso (CRM#1191).
+    const avisos = await avisosDe(id);
+    expect(avisos.length).toBeGreaterThan(0);
+    expect(avisos.every((a) => a.metadata.resuelta_at)).toBe(true);
     expect((await estado(id)).actualizacion_pendiente).toBeNull();
   });
 });
