@@ -21,6 +21,14 @@ process.env.DATABASE_URL = process.env.DATABASE_URL
 process.env.PORT = '3099';
 process.env.CORS_ORIGINS = 'http://localhost:5173';
 process.env.LOG_LEVEL = 'silent';
+// El freno común a las llamadas a Moodle (4 por segundo, 2 a la vez) y la pausa de los
+// reintentos (1,5 s por intento) son para no saturar el hosting de los campus, no para
+// las pruebas: con ellos, cada prueba que simula un Moodle tardaría segundos en vez de
+// milisegundos. Se apagan aquí; tests/moodleLimitadorLlamadas.test.js los prueba con sus
+// valores de verdad.
+process.env.MOODLE_LLAMADAS_POR_SEGUNDO ??= '0';
+process.env.MOODLE_LLAMADAS_A_LA_VEZ ??= '0';
+process.env.MOODLE_REINTENTO_MS ??= '0';
 // Las credenciales de las APIs externas se guardan cifradas, y sin esta clave
 // el modulo entero se cae con «ENCRYPTION_KEY must be 64 hex chars». Es de
 // pega y solo vale para tests: la de verdad vive en el .env del servidor.
