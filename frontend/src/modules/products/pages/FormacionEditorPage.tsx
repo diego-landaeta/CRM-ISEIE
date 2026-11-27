@@ -15,7 +15,7 @@ import { tutoresApi } from '@/modules/tutores/api/tutores.api';
 import { campusDelRechazo } from '@/modules/tutores/lib/colaboraciones';
 import { formacionesApi, HORAS_POR_TIPO, TIPOS_FORMACION, type Formacion, type TipoFormacion } from '../api/formaciones.api';
 import {
-  datosDeForm, formDesde, moduloVacio, moverModulo, problemaDelForm, sumaDeHoras, type FormacionForm, type ModuloForm,
+  datosDeForm, diasDelCursoUnido, formDesde, MAX_DIAS_DESBLOQUEO, moduloVacio, moverModulo, problemaDelForm, sumaDeHoras, type FormacionForm, type ModuloForm,
 } from '../lib/formacionForm';
 import { RUTA_FORMACIONES, rutaDeFormacion } from '../lib/rutasFormacion';
 import LlevarAMoodle from '../components/LlevarAMoodle';
@@ -53,6 +53,12 @@ export default function FormacionEditorPage() {
   const [cambiado, setCambiado] = useState(false);
 
   const puedeEditar = esNueva ? can('products.create') : can('products.edit');
+  // «Se desbloquea a los … días» (CRM#1124) va con la fase 2 de Moodle: solo se ve (y se
+  // manda) cuando se puede llevar la formación a Moodle desde aquí.
+  const conDesbloqueo = Boolean(formacion?.moodle?.disponible);
+  // Los días que tiene cada sección en el curso unido, según lo último que se llevó. Si un
+  // módulo se vacía, en Moodle siguen hasta que se vuelva a llevar (revisión de Diego).
+  const diasEnMoodle = diasDelCursoUnido(formacion);
 
   const cargar = useCallback(async () => {
     if (!productId || !campusId) return;
@@ -86,7 +92,7 @@ export default function FormacionEditorPage() {
     if (!campusId || problema) return;
     setGuardando(true);
     try {
-      const datos = datosDeForm(form);
+      const datos = datosDeForm(form, { conDesbloqueo });
       const r = productId
         ? await formacionesApi.guardar(productId, campusId, datos)
         : await formacionesApi.crear(campusId, datos);
@@ -247,6 +253,21 @@ export default function FormacionEditorPage() {
                   <textarea value={m.descripcion} disabled={!puedeEditar} onChange={(e) => cambiarModulo(i, { descripcion: e.target.value })}
                     placeholder="Temario o descripción del módulo" aria-label={`Temario del módulo ${i + 1}`} rows={3}
                     className={`${inputClass} !h-auto py-2`} />
+                  {conDesbloqueo && (
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+                      <label htmlFor={`modulo-dias-${m.clave}`}>Se desbloquea a los</label>
+                      <input id={`modulo-dias-${m.clave}`} type="number" min={1} max={MAX_DIAS_DESBLOQUEO} step={1} inputMode="numeric"
+                        value={m.dias} disabled={!puedeEditar} onChange={(e) => cambiarModulo(i, { dias: e.target.value })}
+                        placeholder="—" aria-label={`Se desbloquea a los … días, módulo ${i + 1}`}
+                        className={`${inputClass} !h-8 !w-20 tabular-nums`} />
+                      <span>días del inicio del curso{Number(m.dias) > 0 || diasEnMoodle[i] ? '' : ' (vacío: desde el principio)'}</span>
+                      {!(Number(m.dias) > 0) && diasEnMoodle[i] ? (
+                        <span className="basis-full font-medium text-warning">
+                          Ahora tiene {diasEnMoodle[i]} días en Moodle: se quitará la restricción al llevarlo a Moodle.
+                        </span>
+                      ) : null}
+                    </div>
+                  )}
                 </li>
               ))}
             </ol>

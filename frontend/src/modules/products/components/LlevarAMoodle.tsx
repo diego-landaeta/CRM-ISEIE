@@ -75,6 +75,8 @@ export default function LlevarAMoodle({ formacion, campusId, pendiente, alGuarda
           c?.sobran ? `${c.sobran} secciones de más sin tocar` : null,
         ].filter(Boolean).join(' · '),
       });
+      // Lo que Moodle no ha podido hacer sin fallar (p. ej. sin el plugin «Fecha relativa», CRM#1124).
+      for (const aviso of c?.avisos ?? []) toast({ title: 'Aviso de Moodle', description: aviso, variant: 'warning', duration: 10000 });
       setPreguntando(false);
       if (r.data?.formacion) alGuardar(r.data.formacion);
     } catch (e) {
@@ -161,7 +163,13 @@ export default function LlevarAMoodle({ formacion, campusId, pendiente, alGuarda
             <dd>
               {vista.secciones.length === 0 ? 'Ninguna: añade módulos.' : (
                 <ol className="list-decimal pl-5">
-                  {vista.secciones.map((s, i) => <li key={`${i}-${s}`}>{s}</li>)}
+                  {vista.secciones.map((s, i) => (
+                    <li key={`${i}-${s}`}>
+                      {s}
+                      {vista.desbloqueo?.[i] ? <span className="text-xs text-muted-foreground"> · se desbloquea a los {vista.desbloqueo[i]} días</span> : null}
+                      {vista.quitar_desbloqueo?.[i] ? <span className="text-xs font-medium text-warning"> · se quita la restricción de {vista.quitar_desbloqueo[i]} días</span> : null}
+                    </li>
+                  ))}
                 </ol>
               )}
               {vista.secciones.length > 0 && <p className="mt-1 text-xs text-muted-foreground">Una por módulo, con su temario. Las secciones de más que ya tenga el curso no se borran.</p>}
