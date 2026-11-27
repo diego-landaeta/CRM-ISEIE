@@ -61,7 +61,7 @@ const DECLARADAS = {
   'tasks/tasks.service.js': [7, 'alcance: superadmin y soporte ven todas las empresas; por tarea, lo que el superadmin mueve y borra'],
   'tutores/tutor.controller.js': [6, 'alcance: el tutor, lo suyo; fichas de sus campus'],
   'users/user.empresas.js': [1, 'comportamiento: la empresa entera solo le da campus a un admin (al colaborador, no)'],
-  'users/user.controller.js': [5, 'alcance: contraseña solo de tutores de su campus; su foto y su vista'],
+  'users/user.controller.js': [6, 'alcance: contraseña solo de tutores de su campus; su foto y su vista; la ficha de cambios de correo de un superadmin solo la ve otro superadmin'],
   'users/user.model.js': [1, 'comportamiento: la lista sin tutores'],
   'users/user.service.js': [7, 'protección: al superadmin no se le edita y su contraseña solo se la pone otro superadmin; freno de correos a tutores'],
   'users/user.validation.js': [3, 'comportamiento: qué campus pide cada rol al darlo de alta'],
