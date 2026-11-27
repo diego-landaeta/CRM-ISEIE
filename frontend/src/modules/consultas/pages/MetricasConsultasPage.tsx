@@ -8,6 +8,8 @@ import Select from '@/shared/components/ui/Select';
 import { inputClass } from '@/shared/lib/ui';
 import { consultasApi, haceCuanto, type Metricas, type MediaMediana, type FilaRanking } from '../api/consultas.api';
 import ConsultasNav, { useQuienSoy, VistaMiasTodas, mensajeDeError, fechaCorta, useUltimaPeticion } from '../components/ConsultasNav';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   Métricas de las consultas (#189, sección 7 de la especificación). La
@@ -122,16 +124,19 @@ export default function MetricasConsultasPage() {
   const maxDia = Math.max(1, ...(c?.porDia || []).map((d) => d.n));
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ConsultasNav />
       <PageHeader title="Métricas"
         subtitle={deTodos
           ? 'Cómo se atienden las consultas en la empresa o el campus elegido arriba.'
-          : 'Cómo atiendes tus consultas y a tus alumnos.'} />
+          : 'Cómo atiendes tus consultas y a tus alumnos.'}
+        actions={<VerRecorrido id="consultas-metricas" listo={!cargando} />} />
 
-      {esTutor && esAdmin && <VistaMiasTodas vista={vista} onChange={(v) => { setVista(v); setTutorId(null); }} textoMias="Las mías" />}
+      {esTutor && esAdmin && <div data-recorrido="consultas-metricas-vista"><VistaMiasTodas vista={vista} onChange={(v) => { setVista(v); setTutorId(null); }} textoMias="Las mías" /></div>}
 
-      <div className="flex flex-wrap items-end gap-3">
+      <div data-recorrido="consultas-metricas-filtros" className="flex flex-wrap items-end gap-3">
         <Field label="Desde" htmlFor="metricas-desde">
           <input id="metricas-desde" type="date" value={desde} max={hasta || undefined} onChange={(e) => setDesde(e.target.value)} className={inputClass} />
         </Field>
@@ -150,7 +155,7 @@ export default function MetricasConsultasPage() {
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : c && a && m ? (
         <>
-          <section aria-label="Consultas" className="space-y-2">
+          <section aria-label="Consultas" data-recorrido="consultas-metricas-cifras" className="space-y-2">
             <h2 className="text-sm font-semibold">Consultas</h2>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <Cifra destacada titulo="Primera respuesta" {...mm(c.primeraRespuestaHoras, horas)} />
@@ -178,7 +183,7 @@ export default function MetricasConsultasPage() {
             )}
           </section>
 
-          <section aria-label="Fuera de plazo" className="rounded-lg border border-border bg-card">
+          <section aria-label="Fuera de plazo" data-recorrido="consultas-metricas-fuera" className="rounded-lg border border-border bg-card">
             <h2 className="px-4 py-2 text-sm font-semibold border-b border-border">Fuera de plazo ({c.fueraDePlazo.length})</h2>
             {c.fueraDePlazo.length === 0 ? (
               <p className="px-4 py-3 text-sm text-muted-foreground">Todas respondidas a tiempo.</p>
@@ -201,7 +206,7 @@ export default function MetricasConsultasPage() {
             )}
           </section>
 
-          <section aria-label="Alumnos" className="space-y-2">
+          <section aria-label="Alumnos" data-recorrido="consultas-metricas-alumnos" className="space-y-2">
             <h2 className="text-sm font-semibold">Alumnos</h2>
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
               <Cifra titulo="Alumnos activos" valor={String(a.total)} />
@@ -218,7 +223,7 @@ export default function MetricasConsultasPage() {
           </section>
 
           {deTodos && m.ranking && (
-            <div className="grid gap-4 xl:grid-cols-2">
+            <div data-recorrido="consultas-metricas-ranking" className="grid gap-4 xl:grid-cols-2">
               <Ranking titulo="Ranking de tutores" filas={m.ranking.tutores} />
               <Ranking titulo="Ranking de campus" filas={m.ranking.campus} />
             </div>

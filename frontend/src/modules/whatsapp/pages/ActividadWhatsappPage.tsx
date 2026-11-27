@@ -3,6 +3,8 @@ import { ChartBar } from '@phosphor-icons/react';
 import client from '@/shared/api/client';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import PageHeader from '@/shared/components/ui/PageHeader';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * Si cada gestora responde en WhatsApp, y lo que apunta (Diego, 30/10: «medir
@@ -83,13 +85,16 @@ export default function ActividadWhatsappPage() {
   const ambito = activeIssuerId ? activeIssuer?.nombre || 'la empresa' : pid ? activeProject?.nombre : 'todos los campus';
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title={(<span className="flex items-center gap-2"><ChartBar size={20} /> Actividad en WhatsApp</span>) as unknown as string}
         subtitle={`Si cada gestora responde y lo que apunta · ${ambito}`}
+        actions={<VerRecorrido id="whatsapp-actividad" listo={!cargando} />}
       />
 
-      <div className="flex gap-1">
+      <div data-recorrido="wa-actividad-periodo" className="flex gap-1">
         {PERIODOS.map((p) => (
           <button
             key={p.clave}
@@ -102,7 +107,7 @@ export default function ActividadWhatsappPage() {
         ))}
       </div>
 
-      <div className="bg-card border border-border rounded-md p-4">
+      <div data-recorrido="wa-actividad-tabla" className="bg-card border border-border rounded-md p-4">
         {cargando ? (
           <p className="text-sm text-muted-foreground">Cargando…</p>
         ) : error ? (
@@ -144,7 +149,7 @@ export default function ActividadWhatsappPage() {
             </table>
           </div>
         )}
-        <p className="text-[11px] text-muted-foreground mt-3">
+        <p data-recorrido="wa-actividad-nota" className="text-[11px] text-muted-foreground mt-3">
           «Le escribieron», «Respondió», «Sin responder», «Tarda» y «Mandó» salen de su número de WhatsApp conectado al CRM (WhatsApp › Conexión); sin número conectado salen a cero.
           «Apuntó» son los contactos que registró en la ficha: WhatsApp · llamadas · correos · notas.
         </p>

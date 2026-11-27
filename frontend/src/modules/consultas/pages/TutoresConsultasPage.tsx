@@ -9,6 +9,8 @@ import { consultasApi, type TutorPanel, type CampusSinTutor } from '../api/consu
 import ConsultasNav, { mensajeDeError, fechaCorta, useUltimaPeticion } from '../components/ConsultasNav';
 import { NivelCargaChip } from './MiCargaPage';
 import CampusSinTutorAviso from '../components/CampusSinTutorAviso';
+// El recorrido guiado de la pantalla (#941, tanda E).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /*
   Panel de tutores para administración (#189): el nivel de carga y el texto de
@@ -46,19 +48,22 @@ export default function TutoresConsultasPage() {
   useEffect(() => { cargar(); }, [cargar]);
 
   return (
-    <div className="space-y-4 pb-8">
+    // El margen de scroll de lo que señala el recorrido (#941): la barra fija de
+    // arriba no le tapa el principio.
+    <div className="space-y-4 pb-8 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <ConsultasNav />
       <PageHeader title="Tutores"
-        subtitle={`La carga de trabajo que indica cada tutor y lo que cuenta el CRM. Se marca «desactualizada» a los ${plazo} días sin cambiarla.`} />
+        subtitle={`La carga de trabajo que indica cada tutor y lo que cuenta el CRM. Se marca «desactualizada» a los ${plazo} días sin cambiarla.`}
+        actions={<VerRecorrido id="consultas-tutores" listo={!cargando} />} />
 
-      <CampusSinTutorAviso campus={sinTutor} />
+      <CampusSinTutorAviso campus={sinTutor} data-recorrido="consultas-tutores-sin-tutor" />
 
       {cargando ? (
         <p className="text-sm text-muted-foreground">Cargando…</p>
       ) : tutores.length === 0 ? (
         <EmptyState icon={UsersThree} title="No hay tutores aquí" description="Cambia de empresa o de campus en el selector de arriba." />
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border bg-card">
+        <div data-recorrido="consultas-tutores-tabla" className="overflow-x-auto rounded-lg border border-border bg-card">
           <table className="w-full text-sm">
             <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
               <tr>
@@ -101,7 +106,7 @@ export default function TutoresConsultasPage() {
           </table>
         </div>
       )}
-      <p className="text-xs text-muted-foreground">
+      <p data-recorrido="consultas-tutores-fichas" className="text-xs text-muted-foreground">
         Las fichas de los tutores, sus campus y sus empresas están en <Link to="/tutores" className="underline">Tutores</Link>.
       </p>
     </div>

@@ -11,6 +11,7 @@ import { RECORRIDOS_NOVEDADES } from '@/shared/lib/recorridosNovedades';
 import { RECORRIDOS_NOVEDADES_B } from '@/shared/lib/recorridosNovedadesB';
 import { RECORRIDOS_GESTORA } from '@/shared/lib/recorridosGestora';
 import { RECORRIDOS_GESTORA_B } from '@/shared/lib/recorridosGestoraB';
+import { RECORRIDOS_GESTORA_C } from '@/shared/lib/recorridosGestoraC';
 
 /*
   El cartel del recorrido en el móvil (testeo del 18/11, CRM#908): a 375 px, en
@@ -193,6 +194,18 @@ describe('a 375 px, todos los recorridos, paso a paso', () => {
   it('entre ellos, los del día a día, segunda tanda (#619, tanda D), con todos sus pasos', () => {
     expect(Object.keys(RECORRIDOS_GESTORA_B)).toEqual(['seguimiento-fin-de-mes', 'whatsapp-conexion']);
     for (const r of Object.values(RECORRIDOS_GESTORA_B)) {
+      const fila = TODOS.find(([id]) => id === r.id);
+      expect(fila, r.id).toBeTruthy();
+      expect(fila[1]).toHaveLength(r.pasos.length);
+    }
+  });
+
+  it('entre ellos, los del día a día, tercera tanda (#619, tanda E; gemela de CRM#941), con todos sus pasos', () => {
+    expect(Object.keys(RECORRIDOS_GESTORA_C)).toEqual([
+      'whatsapp-banco', 'whatsapp-actividad', 'correos',
+      'consultas-alumnos', 'consultas-carga', 'consultas-tutores', 'consultas-metricas', 'consultas-respuestas',
+    ]);
+    for (const r of Object.values(RECORRIDOS_GESTORA_C)) {
       const fila = TODOS.find(([id]) => id === r.id);
       expect(fila, r.id).toBeTruthy();
       expect(fila[1]).toHaveLength(r.pasos.length);

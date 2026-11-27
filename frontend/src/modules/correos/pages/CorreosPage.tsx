@@ -10,6 +10,8 @@ import RangoRapido from '@/shared/components/ui/RangoRapido';
 import usePermission from '@/shared/hooks/usePermission';
 import { correosApi, type CorreoEnLista, type CorreoCompleto, type Buzon } from '../api/correos.api';
 import BuzonesDialog from '../components/BuzonesDialog';
+// El recorrido guiado de la pantalla (#619, tanda E; gemela de CRM#941).
+import VerRecorrido from '@/shared/components/ui/VerRecorrido';
 
 /**
  * La Bandeja de correos (CRM-ISEIE#701, gemela de CRM#146 y CRM#1032).
@@ -162,14 +164,17 @@ export default function CorreosPage() {
   }
 
   return (
-    <div className="space-y-4">
+    /* El margen de scroll de lo que señala el recorrido (#619, tanda E). */
+    <div className="space-y-4 [&_[data-recorrido]]:scroll-mt-40 max-sm:[&_[data-recorrido]]:scroll-mt-64">
       <PageHeader
         title="Correos"
         subtitle="Lo que llega a los buzones conectados, con su texto"
+        actions={<VerRecorrido id="correos" listo={!cargando} />}
       />
 
       {/* Filtros */}
       <div className="flex flex-wrap items-center gap-2">
+        <div data-recorrido="correos-buscar" className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
         <div className="flex items-center gap-2 h-8 px-2.5 rounded-md border border-border bg-card w-full sm:w-auto sm:min-w-[15rem]">
           <MagnifyingGlass size={13} className="text-muted-foreground shrink-0" />
           <input
@@ -188,6 +193,7 @@ export default function CorreosPage() {
         </div>
 
         <RangoRapido valor={rango} alElegir={setRango} />
+        </div>
 
         {/* El buzón: uno, o todos juntos con su etiqueta. Solo si hay más de uno. */}
         {buzones.length > 1 && (
@@ -195,6 +201,7 @@ export default function CorreosPage() {
             value={buzon}
             onChange={(e) => setBuzon(e.target.value)}
             aria-label="Buzón"
+            data-recorrido="correos-elegir-buzon"
             className="h-8 px-2 rounded-md border border-border bg-card text-xs font-medium max-w-full sm:max-w-[14rem]"
           >
             <option value="">Todos los buzones</option>
@@ -202,7 +209,7 @@ export default function CorreosPage() {
           </select>
         )}
 
-        <div className="sm:ml-auto flex flex-wrap items-center gap-2">
+        <div className="sm:ml-auto flex flex-wrap items-center gap-2" data-recorrido="correos-buzon">
           {puedeConectar && (
             <Button variant="outline" size="sm" onClick={() => setGestionando(true)}>
               <GearSix size={13} weight="bold" className="mr-1.5" />
@@ -222,7 +229,7 @@ export default function CorreosPage() {
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg overflow-hidden">
+      <div className="bg-card border border-border rounded-lg overflow-hidden" data-recorrido="correos-lista">
         <div className="px-4 py-2.5 border-b border-border text-sm text-muted-foreground">
           {total} {total === 1 ? 'correo recibido' : 'correos recibidos'}
         </div>
