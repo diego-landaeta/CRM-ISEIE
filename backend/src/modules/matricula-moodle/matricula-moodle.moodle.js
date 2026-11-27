@@ -129,8 +129,10 @@ export async function matricularEnMoodle(fila, cursos, { llamarImpl = llamar, co
       };
     }
     if (DE_CONFIGURACION.has(err.codigo)) return { hecha: false, lento: true, motivo: err.message };
-    // No llegó al campus (el freno común, lleno; o cancelada): ni un intento menos.
-    if (err.codigo === 'OCUPADO' || err.codigo === 'CANCELADA') return { hecha: false, lento: true, motivo: err.message };
+    // No llegó al campus (el freno común, lleno; o la petición, cerrada): el campus no ha
+    // dicho nada. Ni es «sin preparar» (`lento` suma un intento, aplaza 24 h y avisa) ni un
+    // fallo: se aplaza un rato sin gastar intento (el servicio, con `model.aplazar`).
+    if (err.codigo === 'OCUPADO' || err.codigo === 'CANCELADA') return { hecha: false, aplazar: true, motivo: err.message };
     throw err; // red, tiempo, HTTP, un error de Moodle sin código conocido: reintento normal
   }
 

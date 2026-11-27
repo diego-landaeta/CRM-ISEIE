@@ -528,7 +528,7 @@ describe('tras el repaso del QA: lo que no llegó al campus no es un fallo del c
     await ocupa;
   });
 
-  it('una matrícula que no llegó al campus (OCUPADO, CANCELADA) no gasta un intento: «lento»', async () => {
+  it('una matrícula que no llegó al campus (OCUPADO, CANCELADA) se aplaza: ni «lento» ni intento', async () => {
     const { matricularEnMoodle } = await import('../src/modules/matricula-moodle/matricula-moodle.moodle.js');
     const { MoodleError } = await import('../src/shared/services/moodle.client.js');
     const fila = { project_id: 7, alumno_email: 'a@b.test', alumno_nombre: 'Ana Pérez' };
@@ -538,7 +538,8 @@ describe('tras el repaso del QA: lo que no llegó al campus no es un fallo del c
         conexionImpl: async () => ({ url: CAMPUS[0], token: 't' }),
         llamarImpl: async () => { throw new MoodleError('El campus está ocupado ahora mismo.', codigo); },
       });
-      expect(r, codigo).toMatchObject({ hecha: false, lento: true });
+      expect(r, codigo).toMatchObject({ hecha: false, aplazar: true });
+      expect(r.lento, codigo).toBeUndefined();
     }
   });
 });

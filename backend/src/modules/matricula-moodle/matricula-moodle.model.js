@@ -199,6 +199,22 @@ export async function anotarFallo(id, motivo, { maximo, minutos = 60 }) {
   return rows[0] || null;
 }
 
+/**
+ * Vuelve a probar en `minutos` (de 1 a 60) SIN contar un intento ni cambiar el motivo: para
+ * cuando la llamada no llegó al campus (el freno común de Moodle, lleno), que no es un fallo.
+ */
+export async function aplazar(id, minutos = 15) {
+  const { rows } = await query(
+    `UPDATE matriculas_moodle
+        SET proximo_intento_at = NOW() + make_interval(mins => LEAST(GREATEST($2::int, 1), 60)),
+            updated_at = NOW()
+      WHERE id = $1 AND estado = 'programada'
+      RETURNING *`,
+    [id, minutos]
+  );
+  return rows[0] || null;
+}
+
 export async function cancelar(id, motivo) {
   const { rows } = await query(
     `UPDATE matriculas_moodle
