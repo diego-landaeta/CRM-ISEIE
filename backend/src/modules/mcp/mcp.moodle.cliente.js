@@ -3,7 +3,7 @@ import { decrypt } from '../../shared/utils/crypto.js';
 import { logger } from '../../shared/utils/logger.js';
 import { marcarUso } from '../credentials/credentials.model.js';
 import { enteroEnv } from './mcp.config.js';
-import { conTurno } from '../../shared/services/moodle.limitador.js';
+import { conTurno, ErrorDeTurno } from '../../shared/services/moodle.limitador.js';
 
 /**
  * El cliente de los Moodle de los campus (#335), SOLO LECTURA.
@@ -308,7 +308,11 @@ export async function llamarMoodle({ url, token }, funcion, params = {}, { signa
     } catch {
       throw new ErrorMoodle('sin_respuesta', 'Moodle cortó la respuesta');
     }
-  }, { signal });
+  }, { signal }).catch((err) => {
+    // El turno no llegó: demasiada cola o la petición se cerró. Mensaje nuestro, sin URL.
+    if (err instanceof ErrorDeTurno) throw new ErrorMoodle(err.codigo === 'OCUPADO' ? 'ocupado' : 'cancelada', err.message);
+    throw err;
+  });
 
   let datos;
   try {

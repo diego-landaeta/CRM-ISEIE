@@ -70,7 +70,8 @@ async function tresTareasContraSieteCampus({ llamar, llamarMoodle }, fetchImpl) 
   await todo;
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+// performance también: el freno mide el ritmo con performance.now().
+beforeEach(() => { vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'setImmediate', 'clearImmediate', 'Date', 'performance'] }); });
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllEnvs();
@@ -264,5 +265,200 @@ describe('las tareas de Moodle no caen en el mismo segundo', () => {
     }
     const desfases = (vs, desde) => TAREAS.map(([n, min]) => (vs.find((v) => v.nombre === n).t - desde) - min * 60_000);
     expect(desfases(b.vueltas, inicioB)).toEqual(desfases(a.vueltas, inicioA));
+  });
+});
+
+/*
+  Tras el QA de código (27/11):
+    1. el reloj de 10 s cubre también la lectura del cuerpo: un campus que manda cabeceras y
+       deja el cuerpo a medias no se queda con un hueco del freno;
+    2. el turno caduca (una persona no espera más de MOODLE_ESPERA_TURNO_MS, 30 s) y una
+       petición HTTP que se cierra saca de la cola sus llamadas;
+    4. el ritmo se mide con performance.now() (no lo mueve un cambio de hora del reloj);
+    5. muchas llamadas con la misma signal no avisan de «MaxListenersExceededWarning»;
+    6. la descarga de archivos (pluginfile.php) también pasa por el freno.
+*/
+describe('tras el QA: nada se queda con un hueco ni espera para siempre', () => {
+  /** Un Moodle que manda cabeceras y no termina el cuerpo hasta que le cortan. */
+  const cuerpoAMedias = (salidas) => async (url, { signal } = {}) => {
+    salidas.push(Date.now());
+    return {
+      ok: true,
+      status: 200,
+      json: () => new Promise((_, rechazar) => {
+        signal?.addEventListener('abort', () => rechazar(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })));
+      }),
+    };
+  };
+  const rapido = (salidas) => async () => { salidas.push(Date.now()); return { ok: true, status: 200, json: async () => ({ sitename: 'x' }) }; };
+
+  it('un campus que deja el cuerpo a medias suelta el hueco a los 10 s (MOODLE_TIMEOUT_MS)', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    const { llamar } = await cargar();
+    const salidas = [];
+    const inicio = Date.now();
+    const colgada = llamar({ url: CAMPUS[0], token: 't' }, 'core_enrol_get_enrolled_users', {}, { fetchImpl: cuerpoAMedias(salidas) }).catch((e) => e);
+    const siguiente = llamar({ url: CAMPUS[1], token: 't' }, 'core_webservice_get_site_info', {}, { fetchImpl: rapido(salidas) }).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(10_500);
+    const err = await colgada;
+    expect(err.codigo).toBe('TIEMPO');
+    await expect(siguiente).resolves.toEqual({ sitename: 'x' });
+    expect(salidas).toHaveLength(2);
+    expect(salidas[1] - inicio).toBeGreaterThanOrEqual(10_000);
+    expect(salidas[1] - inicio).toBeLessThan(10_500);
+  });
+
+  it('una persona no espera turno más de 30 s: «campus ocupado»', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    vi.stubEnv('MOODLE_TIMEOUT_MS', '120000'); // la primera ocupa el hueco 2 minutos
+    const { llamar } = await cargar();
+    const salidas = [];
+    const inicio = Date.now();
+    const larga = llamar({ url: CAMPUS[0], token: 't' }, 'core_enrol_get_enrolled_users', {}, { fetchImpl: cuerpoAMedias(salidas) }).catch((e) => e);
+    let cuando = null;
+    const persona = llamar({ url: CAMPUS[1], token: 't' }, 'core_webservice_get_site_info', {}, { fetchImpl: rapido(salidas) })
+      .catch((e) => { cuando = Date.now() - inicio; return e; });
+    await vi.advanceTimersByTimeAsync(31_000);
+    expect(cuando).not.toBeNull();
+    const err = await persona;
+    expect(err.codigo).toBe('OCUPADO');
+    expect(err.message).toMatch(/ocupado/i);
+    expect(cuando).toBeGreaterThanOrEqual(30_000);
+    expect(cuando).toBeLessThan(30_500);
+    expect(salidas).toHaveLength(1); // no llegó a llamar
+    await vi.advanceTimersByTimeAsync(120_000);
+    await larga;
+  });
+
+  it('una tarea espera más (no hay nadie delante de la pantalla), pero no para siempre', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    vi.stubEnv('MOODLE_TIMEOUT_MS', '900000');
+    const { llamar } = await cargar();
+    const { enSegundoPlano } = await import('../src/shared/services/moodle.limitador.js');
+    const salidas = [];
+    const larga = llamar({ url: CAMPUS[0], token: 't' }, 'core_enrol_get_enrolled_users', {}, { fetchImpl: cuerpoAMedias(salidas) }).catch((e) => e);
+    let fallo = null;
+    const deFondo = enSegundoPlano(() => llamar({ url: CAMPUS[1], token: 't' }, 'core_webservice_get_site_info', {}, { fetchImpl: rapido(salidas) }))
+      .catch((e) => { fallo = e; return e; });
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fallo).toBeNull();
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    expect(fallo).not.toBeNull();
+    expect((await deFondo).codigo).toBe('OCUPADO');
+    await vi.advanceTimersByTimeAsync(900_000);
+    await larga;
+  });
+
+  it('si la persona cierra la página, sus llamadas salen de la cola sin llegar al campus', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    const { llamar } = await cargar();
+    const { senalDeLaPeticion } = await import('../src/shared/services/moodle.limitador.js');
+    const { EventEmitter } = await import('node:events');
+    const salidas = [];
+    const larga = llamar({ url: CAMPUS[0], token: 't' }, 'core_enrol_get_enrolled_users', {}, { fetchImpl: cuerpoAMedias(salidas) }).catch((e) => e);
+
+    const res = Object.assign(new EventEmitter(), { writableFinished: false });
+    let enCola;
+    senalDeLaPeticion({}, res, () => {
+      enCola = Promise.all([1, 2, 3].map(() => llamar({ url: CAMPUS[1], token: 't' }, 'core_webservice_get_site_info', {}, { fetchImpl: rapido(salidas) }).catch((e) => e)));
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    res.emit('close'); // la pestaña se cerró antes de contestar
+    await vi.advanceTimersByTimeAsync(20_000);
+    const errores = await enCola;
+    errores.forEach((e) => expect(e.codigo).toBe('CANCELADA'));
+    expect(salidas).toHaveLength(1);
+    await larga;
+  });
+
+  it('una petición que termina bien no cancela nada', async () => {
+    const { senalDeLaPeticion, senalActual } = await import('../src/shared/services/moodle.limitador.js');
+    const { EventEmitter } = await import('node:events');
+    const res = Object.assign(new EventEmitter(), { writableFinished: true });
+    let signal;
+    senalDeLaPeticion({}, res, () => { signal = senalActual(); });
+    res.emit('close');
+    expect(signal).toBeDefined();
+    expect(signal.aborted).toBe(false);
+  });
+
+  it('el ritmo no lo mueve el reloj del sistema (performance.now, no Date.now)', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '4');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '0');
+    const m = moodleSimulado();
+    const { llamar } = await cargar();
+    const conexion = { url: CAMPUS[0], token: 't' };
+    const primera = llamar(conexion, 'core_webservice_get_site_info', {}, { fetchImpl: m.responder });
+    await vi.advanceTimersByTimeAsync(200);
+    await primera;
+    // El reloj de la máquina salta una hora atrás (NTP, un cambio de hora mal hecho).
+    vi.setSystemTime(Date.now() - 60 * 60_000);
+    const segunda = llamar(conexion, 'core_webservice_get_site_info', {}, { fetchImpl: m.responder });
+    await vi.advanceTimersByTimeAsync(1_000);
+    await segunda;
+    expect(m.salidas).toHaveLength(2);
+  });
+
+  it('cien llamadas en cola con la misma signal (la del MCP) le cuelgan UN oyente, no cien', async () => {
+    // Node 24 no avisa con AbortSignal, pero otras versiones sí («MaxListenersExceededWarning:
+    // 11 abort listeners added to [AbortSignal]»), y cien oyentes son cien cierres vivos.
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '1');
+    const { getEventListeners } = await import('node:events');
+    const m = moodleSimulado();
+    vi.stubGlobal('fetch', vi.fn(m.responder));
+    const { llamarMoodle } = await cargar();
+    const control = new AbortController();
+    const todas = Promise.all(Array.from({ length: 100 }, () => llamarMoodle({ url: CAMPUS[0], token: 't' }, 'core_course_get_categories', {}, { signal: control.signal })));
+    await vi.advanceTimersByTimeAsync(10);
+    expect(getEventListeners(control.signal, 'abort').length).toBeLessThanOrEqual(1);
+    await vi.advanceTimersByTimeAsync(100 * LATENCIA_MS + 1_000);
+    await todas;
+    expect(getEventListeners(control.signal, 'abort')).toHaveLength(0); // y al acabar, ninguno
+    expect(m.salidas).toHaveLength(100);
+  });
+
+  it('ningún fichero llama a la API de Moodle (server.php, pluginfile.php) sin pasar por el freno', async () => {
+    const fs = await import('node:fs');
+    const path = await import('node:path');
+    const { fileURLToPath } = await import('node:url');
+    const raiz = fileURLToPath(new URL('../src/', import.meta.url));
+    const ficheros = [];
+    const recorrer = (dir) => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) recorrer(p);
+        else if (e.name.endsWith('.js')) ficheros.push(p);
+      }
+    };
+    recorrer(raiz);
+    const sinFreno = ficheros.filter((f) => {
+      const src = fs.readFileSync(f, 'utf8');
+      const llamaAMoodle = /fetch(Impl)?\(/.test(src) && /(webservice\/rest\/server\.php|webservice\/pluginfile\.php)/.test(src);
+      return llamaAMoodle && !/conTurno\(/.test(src);
+    }).map((f) => path.relative(raiz, f).split(path.sep).join('/'));
+    expect(sinFreno).toEqual([]);
+  });
+});
+
+describe('tras el QA: qué se repite es una lista, no un patrón', () => {
+  const respuesta = (datos, status = 200) => ({ ok: status < 400, status, json: async () => datos });
+  it('local_crm_cuenta y local_crm_mensajes_desde leen: un 503 se repite; local_crm_disponibilidad escribe: no', async () => {
+    vi.stubEnv('MOODLE_LLAMADAS_POR_SEGUNDO', '0');
+    vi.stubEnv('MOODLE_LLAMADAS_A_LA_VEZ', '0');
+    const { llamar } = await cargar();
+    const veces = {};
+    for (const f of ['local_crm_cuenta', 'local_crm_mensajes_desde', 'local_crm_disponibilidad']) {
+      veces[f] = 0;
+      await llamar({ url: CAMPUS[2], token: 't' }, f, {}, {
+        fetchImpl: async () => { veces[f] += 1; return respuesta('<html>', 503); },
+        esperarImpl: async () => {},
+      }).catch(() => {});
+    }
+    expect(veces).toEqual({ local_crm_cuenta: 4, local_crm_mensajes_desde: 4, local_crm_disponibilidad: 1 });
   });
 });

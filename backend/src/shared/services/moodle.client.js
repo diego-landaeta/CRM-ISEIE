@@ -17,7 +17,7 @@
   entienda, no a «error».
 */
 import { pluginMoodleActivo } from '../config/soloEnPruebas.js';
-import { conTurno } from './moodle.limitador.js';
+import { conTurno, ErrorDeTurno } from './moodle.limitador.js';
 
 const TIEMPO_MAXIMO_MS = parseInt(process.env.MOODLE_TIMEOUT_MS || '10000', 10);
 
@@ -69,17 +69,42 @@ export async function llamar(conexion, funcion, parametros = {}, opciones = {}) 
  *   hecho nada y repetir es seguro, también en lo que escribe. Pasa cuando el hosting de los
  *   campus rechaza conexiones: admite 20 nuevas por segundo para toda la cuenta (Psiko e
  *   ISAEG, 24/11: con 4 llamadas a la vez fallaban 14-40 de 96 cursos; de una en una, ninguno).
- * · Un 5xx o la red caída: solo en las funciones que leen (`…_get_…`). En las que escriben,
- *   un 500 puede llegar después de haber escrito, y repetir una matrícula o un mensaje no es
- *   inocente.
+ * · Un 5xx o la red caída: solo en las funciones que leen (FUNCIONES_QUE_LEEN). En las que
+ *   escriben, un 500 puede llegar después de haber escrito, y repetir una matrícula o un
+ *   mensaje no es inocente.
  * · «No ha contestado a tiempo» no se repite: el campus va lento, y repetir es cargarlo más.
  */
 function seRepite(err, funcion) {
   if (!(err instanceof MoodleError)) return false;
   if (err.codigo === 'BD_CAMPUS') return true;
-  if (!/_get_/.test(String(funcion))) return false;
+  if (!FUNCIONES_QUE_LEEN.has(String(funcion))) return false;
   return (err.codigo === 'SIN_RED' && err.redPasajera) || (err.codigo === 'HTTP' && err.estadoHttp >= 500);
 }
+
+/**
+ * Las funciones de Moodle que el CRM llama y que solo leen. Una lista y no un patrón
+ * («_get_»): las del plugin del CRM no siguen la convención (`local_crm_cuenta` lee,
+ * `local_crm_disponibilidad` escribe). Una que no esté aquí no se repite tras un 5xx.
+ */
+export const FUNCIONES_QUE_LEEN = new Set([
+  'core_webservice_get_site_info',
+  'core_user_get_users_by_field',
+  'core_enrol_get_users_courses',
+  'core_enrol_get_enrolled_users',
+  'core_course_get_courses_by_field',
+  'core_course_get_categories',
+  'core_course_get_contents',
+  'core_completion_get_course_completion_status',
+  'core_message_get_conversations',
+  'core_message_get_conversation_messages',
+  'gradereport_user_get_grade_items',
+  'mod_assign_get_assignments',
+  'mod_assign_get_submissions',
+  'mod_assign_get_grades',
+  'mod_url_get_urls_by_courses',
+  'local_crm_cuenta',
+  'local_crm_mensajes_desde',
+]);
 
 /** Los fallos de red que son del momento (el hosting cortó o rechazó la conexión). */
 const RED_PASAJERA = new Set(['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EPIPE', 'EAI_AGAIN', 'UND_ERR_SOCKET', 'UND_ERR_CONNECT_TIMEOUT']);
@@ -105,7 +130,7 @@ export function pausaDeReintento(intento, azar = Math.random) {
 }
 const esperar = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
-async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImpl = fetch } = {}) {
+async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImpl = fetch, signal } = {}) {
   const base = urlDelCampus(url);
   if (!base) throw new MoodleError('Falta la dirección del campus.', 'SIN_URL');
   if (!token) throw new MoodleError('Falta el token del campus.', 'SIN_TOKEN');
@@ -115,41 +140,49 @@ async function llamarUnaVez({ url, token }, funcion, parametros = {}, { fetchImp
 
   // La petición y la lectura de la respuesta, con turno en el freno común a todas las
   // tareas y campus (moodle.limitador.js): el hosting de los campus no admite ráfagas.
+  // El reloj cubre las dos cosas: un campus que manda las cabeceras y deja el cuerpo a
+  // medias no puede quedarse con un hueco del freno más de MOODLE_TIMEOUT_MS.
   const datos = await conTurno(async () => {
     const control = new AbortController();
     const reloj = setTimeout(() => control.abort(), TIEMPO_MAXIMO_MS);
-    let r;
+    const tarde = () => new MoodleError(`El campus no ha contestado en ${Math.round(TIEMPO_MAXIMO_MS / 1000)} s.`, 'TIEMPO');
     try {
-      r = await fetchImpl(`${base}/webservice/rest/server.php`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
-        body: cuerpo.toString(),
-        signal: control.signal,
-        // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
-        // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
-        redirect: 'error',
-      });
-    } catch (err) {
-      const tarde = err?.name === 'AbortError';
-      const e = new MoodleError(
-        tarde ? `El campus no ha contestado en ${Math.round(TIEMPO_MAXIMO_MS / 1000)} s.` : `No se ha podido llegar al campus (${base}).`,
-        tarde ? 'TIEMPO' : 'SIN_RED');
-      // Una conexión cortada o rechazada se puede repetir; una dirección que no existe o
-      // una redirección, no: darían lo mismo tres veces más.
-      e.redPasajera = !tarde && RED_PASAJERA.has(err?.cause?.code || err?.code);
-      throw e;
+      let r;
+      try {
+        r = await fetchImpl(`${base}/webservice/rest/server.php`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+          body: cuerpo.toString(),
+          signal: control.signal,
+          // Un Moodle no redirige su API. Seguir una redirección permitiría que una dirección
+          // pública llevara al CRM a la red interna (la comprobación de la dirección es previa).
+          redirect: 'error',
+        });
+      } catch (err) {
+        if (control.signal.aborted || err?.name === 'AbortError') throw tarde();
+        const e = new MoodleError(`No se ha podido llegar al campus (${base}).`, 'SIN_RED');
+        // Una conexión cortada o rechazada se puede repetir; una dirección que no existe o
+        // una redirección, no: darían lo mismo tres veces más.
+        e.redPasajera = RED_PASAJERA.has(err?.cause?.code || err?.code);
+        throw e;
+      }
+
+      if (!r.ok) {
+        const e = new MoodleError(`El campus ha contestado con un error HTTP ${r.status}.`, 'HTTP');
+        e.estadoHttp = r.status; // para saber si se puede repetir (un 5xx)
+        throw e;
+      }
+      try { return await r.json(); } catch {
+        if (control.signal.aborted) throw tarde();
+        throw new MoodleError('El campus no ha contestado como un Moodle: revisa la dirección.', 'NO_ES_MOODLE');
+      }
     } finally {
       clearTimeout(reloj);
     }
-
-    if (!r.ok) {
-      const e = new MoodleError(`El campus ha contestado con un error HTTP ${r.status}.`, 'HTTP');
-      e.estadoHttp = r.status; // para saber si se puede repetir (un 5xx)
-      throw e;
-    }
-    try { return await r.json(); } catch {
-      throw new MoodleError('El campus no ha contestado como un Moodle: revisa la dirección.', 'NO_ES_MOODLE');
-    }
+  }, { signal }).catch((err) => {
+    // El turno no llegó: demasiada cola (OCUPADO) o la persona cerró la página (CANCELADA).
+    if (err instanceof ErrorDeTurno) throw new MoodleError(err.message, err.codigo);
+    throw err;
   });
   if (datos && typeof datos === 'object' && !Array.isArray(datos) && datos.exception) {
     throw traducir(datos, funcion);
