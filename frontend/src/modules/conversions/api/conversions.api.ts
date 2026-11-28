@@ -1,5 +1,6 @@
 import client from '@/shared/api/client';
 import type { ApiResponse } from '@/shared/types';
+import type { CamposBloqueoCobro } from './cobroBloqueo';
 
 // 'deposito' (depósito bancario), 15/10: con 'transferencia', las dos que avisan al
 // webhook de transferencias (Conexión).
@@ -8,7 +9,7 @@ export type MetodoPago = 'tarjeta' | 'tarjeta_stripe' | 'transferencia' | 'depos
 /** Las formas de cobro que llevan referencia del banco (y disparan el webhook de transferencias). */
 export const METODOS_BANCARIOS: ReadonlyArray<string> = ['transferencia', 'deposito'];
 
-export interface Payment {
+export interface Payment extends CamposBloqueoCobro {
   id: number;
   conversion_id?: number;
   importe: number | string;
@@ -68,7 +69,7 @@ export interface Conversion {
 
 // Cuota de un plan de pago fraccionado. Cuando se cobra, se enlaza a un pago
 // (payment_id) y ese pago genera su factura (factura_*).
-export interface Installment {
+export interface Installment extends CamposBloqueoCobro {
   id: number;
   numero: number;
   importe_previsto: number | string;
@@ -163,7 +164,8 @@ export const conversionsApi = {
     client.delete(`/conversions/${id}`, { data } as any),
   addPayment: (id: number, data: AddPaymentInput): Promise<ApiResponse<Payment>> =>
     client.post(`/conversions/${id}/payments`, data),
-  removePayment: (paymentId: number): Promise<ApiResponse<void>> =>
+  // aviso: la comisión de la gestora ya estaba pagada y no se ha rebajado (CRM#1230).
+  removePayment: (paymentId: number): Promise<ApiResponse<{ message: string; aviso?: string | null }>> =>
     client.delete(`/conversions/payments/${paymentId}`),
   generateInstallments: (
     id: number,

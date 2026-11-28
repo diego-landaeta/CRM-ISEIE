@@ -1,7 +1,7 @@
 import { query, getClient } from '../../shared/config/db.js';
 import { AppError } from '../../shared/utils/AppError.js';
 import { recalcularCobrado } from './cobrado.js';
-import { negarSiTieneFactura } from './cobro-facturado.js';
+import { antesDeBorrarCobro, COLUMNAS_DEL_BLOQUEO, conBloqueoDelCobro } from './cobro-facturado.js';
 import { saldarCuotas, cargosStripeSueltos, MARGEN } from './saldar-cuotas.js';
 
 export async function listByConversion(conversionId) {
@@ -11,14 +11,18 @@ export async function listByConversion(conversionId) {
   // no siempre tiene su propio `metodo`).
   const { rows } = await query(
     `SELECT ci.*, f.id AS factura_id, f.codigo AS factura_codigo, f.estado AS factura_estado,
-            cp.metodo AS pago_metodo, cp.referencia AS pago_referencia
+            cp.metodo AS pago_metodo, cp.referencia AS pago_referencia,
+            -- Anulada y a cero (CRM#1230) y si se puede deshacer: la misma regla
+            -- que el servidor al deshacer (cobro-facturado.js).
+            f.anulada_at IS NOT NULL AS factura_anulada,
+            ${COLUMNAS_DEL_BLOQUEO('ci.payment_id')}
        FROM conversion_installments ci
        LEFT JOIN invoices f ON f.payment_id = ci.payment_id AND f.tipo <> 'proforma' AND f.estado <> 'cancelada'
        LEFT JOIN conversion_payments cp ON cp.id = ci.payment_id
       WHERE ci.conversion_id = $1 ORDER BY ci.numero ASC`,
     [conversionId]
   );
-  return rows;
+  return rows.map(conBloqueoDelCobro);
 }
 
 export async function generateInstallments(conversionId, numCuotas, importeTotal, fechaInicio, customInstallments = null, concepto = null) {
@@ -229,8 +233,9 @@ export async function editPaid(id, { fecha_cobro, importe_cobrado, metodo, refer
 
 // Deshace el pago de una cuota: borra el conversion_payment, resta del
 // importe_pagado de la conversión, y devuelve la cuota a estado "pendiente".
-// Si el cobro tiene factura emitida, se niega igual que «Eliminar pago».
-export async function unpay(id) {
+// Si el cobro tiene factura, se niega con la misma regla y el mismo texto que
+// «Eliminar pago» (cobro-facturado.js, CRM#1228 + CRM#1230).
+export async function unpay(id, { userId = null, ip = null } = {}) {
   const c = await getClient();
   try {
     await c.query('BEGIN');
@@ -238,9 +243,12 @@ export async function unpay(id) {
     const inst = instRows[0];
     if (!inst) { await c.query('ROLLBACK'); return null; }
     if (!inst.fecha_cobro) { await c.query('ROLLBACK'); throw new Error('Cuota no estaba pagada'); }
-    // Con factura emitida, no: la factura se quedaba huérfana y luego se
-    // enganchaba sola a otro cobro del mismo importe (CRM-ISEIE#856).
-    await negarSiTieneFactura(c, inst.payment_id);
+    // Con factura vigente, no: la factura se quedaba huérfana y luego se
+    // enganchaba sola a otro cobro del mismo importe (CRM-ISEIE#856). Anulada y
+    // a cero, sí (CRM-ISEIE#858). Bloquea el cobro, mira la comisión y deja el rastro.
+    const { comisionPagada } = await antesDeBorrarCobro(c, {
+      paymentId: inst.payment_id, conversionId: inst.conversion_id, accion: 'deshacer_pago_cuota', userId, ip,
+    });
 
     // Borrar payment (cascade pone payment_id de la cuota en NULL automaticamente)
     if (inst.payment_id) {
@@ -256,7 +264,7 @@ export async function unpay(id) {
       [id]
     );
     await c.query('COMMIT');
-    return rows[0];
+    return { ...rows[0], comision_pagada: comisionPagada };
   } catch (err) {
     await c.query('ROLLBACK');
     throw err;

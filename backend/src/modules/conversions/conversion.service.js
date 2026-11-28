@@ -3,6 +3,8 @@ import { programarAlta } from '../apostillas/apostillas.alta.js';
 import { activa as facturaAutomaticaActiva } from '../factura-automatica/factura-automatica.config.js';
 import * as conversionModel from './conversion.model.js';
 import * as commissionModel from '../commissions/commission.model.js';
+import * as installmentsModel from './installments.model.js';
+import { avisoComisionPagada } from './cobro-facturado.js';
 import * as seqModel from '../email-sequences/sequence.model.js';
 import { query } from '../../shared/config/db.js';
 import { logger } from '../../shared/utils/logger.js';
@@ -424,17 +426,33 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
   return result;
 }
 
-export async function removePayment(paymentId) {
-  const deleted = await conversionModel.deletePayment(paymentId);
+export async function removePayment(paymentId, { userId = null, ip = null } = {}) {
+  const deleted = await conversionModel.deletePayment(paymentId, { userId, ip });
   if (!deleted) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
-  // La comision sale de lo cobrado: al quitar un cobro se recalcula, igual que
-  // al apuntarlo (CRM#1230: el cobro repetido inflaba tambien la comision).
+  await recalcularComisionTrasBorrar(deleted.conversion_id);
+  return { message: 'Pago eliminado', aviso: avisoComisionPagada(deleted.comision_pagada) };
+}
+
+// La comision sale de lo cobrado: al quitar un cobro se recalcula, igual que
+// al apuntarlo (CRM#1230: el cobro repetido inflaba tambien la comision). Pero
+// la ya PAGADA no se rebaja: ese dinero ya salio; se avisa y se regulariza a
+// mano. Lo mismo para «Eliminar pago» y «Deshacer el pago».
+async function recalcularComisionTrasBorrar(conversionId) {
   try {
-    await commissionModel.recalculateCommission(deleted.conversion_id);
+    await commissionModel.recalculateCommission(conversionId, { conservarPagada: true });
   } catch (err) {
-    logger.warn({ err: err.message, conversionId: deleted.conversion_id }, 'recalculateCommission failed (non-blocking)');
+    logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)');
   }
-  return { message: 'Pago eliminado' };
+}
+
+// «Deshacer el pago» de una cuota: borra su cobro con la misma regla que
+// «Eliminar pago» y recalcula la comision igual (CRM#1228 + CRM#1230).
+export async function unpayInstallment(instId, { userId = null, ip = null } = {}) {
+  const cuota = await installmentsModel.unpay(instId, { userId, ip });
+  if (!cuota) return null;
+  const { comision_pagada: comisionPagada, ...resto } = cuota;
+  await recalcularComisionTrasBorrar(resto.conversion_id);
+  return { ...resto, aviso: avisoComisionPagada(comisionPagada) };
 }
 
 export async function remove(id, { reason, motivo, userId } = {}) {

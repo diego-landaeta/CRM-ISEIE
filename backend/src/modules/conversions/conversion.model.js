@@ -4,7 +4,7 @@ import { saldarCuotas, cargosStripeSueltos } from './saldar-cuotas.js';
 import { activa as matriculaMoodleActiva } from '../matricula-moodle/matricula-moodle.config.js';
 import { condicionDeCompartidas } from './compartidas.js';
 import { CLASE_FACTURA, FACTURA_REAL } from '../invoices/clase.sql.js';
-import { negarSiTieneFactura } from './cobro-facturado.js';
+import { antesDeBorrarCobro, COLUMNAS_DEL_BLOQUEO, conBloqueoDelCobro } from './cobro-facturado.js';
 import { comoLista } from '../../shared/utils/ambito.js';
 
 // EL DÍA DE UNA VENTA ES EL DE MADRID (#693). `CURRENT_DATE` es el día en la
@@ -267,14 +267,17 @@ export async function findById(id) {
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
             i.cliente_cp, i.cliente_pais, i.items AS factura_items,
             -- La factura salió sola sin mandarse: «la envía la gestora» (#764, 24/11).
-            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a
+            i.envio_nota AS factura_envio_nota, i.sent_to_email AS factura_enviada_a,
+            i.anulada_at IS NOT NULL AS factura_anulada,
+            -- Si se puede borrar y por qué no: la misma regla que el borrado (CRM#1228 + #1230).
+            ${COLUMNAS_DEL_BLOQUEO('cp.id')}
        FROM conversion_payments cp
        LEFT JOIN invoices i ON i.payment_id = cp.id AND i.estado <> 'cancelada'
       WHERE cp.conversion_id = $1
       ORDER BY cp.fecha DESC, cp.id DESC`,
     [id]
   );
-  conversion.payments = payments;
+  conversion.payments = payments.map(conBloqueoDelCobro);
 
   // Cuotas (plan de pago fraccionado) con la factura de la cuota ya cobrada.
   const { rows: installments } = await query(
@@ -287,14 +290,15 @@ export async function findById(id) {
             )) AS pagado_por_stripe,
             i.id AS factura_id, i.codigo AS factura_codigo, i.estado AS factura_estado,
             i.tipo AS factura_tipo, i.cliente_nif, i.cliente_direccion, i.cliente_ciudad,
-            i.cliente_cp, i.cliente_pais
+            i.cliente_cp, i.cliente_pais, i.anulada_at IS NOT NULL AS factura_anulada,
+            ${COLUMNAS_DEL_BLOQUEO('ci.payment_id')}
        FROM conversion_installments ci
        LEFT JOIN invoices i ON i.payment_id = ci.payment_id AND i.estado <> 'cancelada'
       WHERE ci.conversion_id = $1
       ORDER BY ci.numero ASC`,
     [id]
   );
-  conversion.installments = installments;
+  conversion.installments = installments.map(conBloqueoDelCobro);
   return conversion;
 }
 
@@ -977,7 +981,7 @@ export async function getPaymentOwnership(paymentId) {
  * deshace anulándola (CRM#793). Anulada y a cero, el cobro ya se puede borrar
  * (CRM-ISEIE#858). La regla es la de «Deshacer el pago»: cobro-facturado.js.
  */
-export async function deletePayment(paymentId) {
+export async function deletePayment(paymentId, { userId = null, ip = null } = {}) {
   const client = await getClient();
   try {
     await client.query('BEGIN');
@@ -991,9 +995,13 @@ export async function deletePayment(paymentId) {
       return null;
     }
 
-    // Una factura emitida no se borra por detras, salvo anulada y a cero (lo
-    // mismo en «Deshacer el pago» de una cuota, CRM-ISEIE#856 + CRM-ISEIE#858).
-    await negarSiTieneFactura(client, paymentId);
+    // Una factura emitida no se borra por detras, salvo anulada y a cero. La
+    // regla (y su texto) es la misma que en «Deshacer el pago» de una cuota:
+    // `cobro-facturado.js` (CRM-ISEIE#856 + #858). Ahí se bloquea el cobro, se
+    // mira la comisión de la gestora y se deja el rastro.
+    const { comisionPagada } = await antesDeBorrarCobro(client, {
+      paymentId, conversionId: rows[0].conversion_id, accion: 'eliminar_pago', userId, ip,
+    });
 
     // La cuota vuelve a pendiente. Sin esto seguiria diciendo que se cobro.
     await client.query(
@@ -1009,7 +1017,7 @@ export async function deletePayment(paymentId) {
     await recalcularCobrado(client, rows[0].conversion_id);
 
     await client.query('COMMIT');
-    return rows[0];
+    return { ...rows[0], comision_pagada: comisionPagada };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;

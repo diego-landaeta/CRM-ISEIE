@@ -76,6 +76,9 @@ export function condicionParecida({ nombre, nif, total, fecha, conversionId = 'N
   const f = NIF_NORMALIZADO(nif);
   return `i.tipo = 'normal'
      AND i.estado NOT IN ('cancelada', 'borrador')
+     -- «NO anulada», como dice arriba: una anulada ya no cuenta, y volver a
+     -- emitir la factura de ese cobro es lo normal (CRM#1230).
+     AND i.anulada_at IS NULL
      AND (${excluirId}::int IS NULL OR i.id <> ${excluirId}::int)
      AND ABS(i.total - (${total})::numeric) <= ${TOLERANCIA}
      AND ABS(i.fecha_emision::date - COALESCE((${fecha})::date, CURRENT_DATE)) <= ${DIAS}

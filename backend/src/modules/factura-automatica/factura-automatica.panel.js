@@ -30,6 +30,7 @@ export const ACCIONES = {
   ANTES_DEL_ARRANQUE: { texto: 'Emítela a mano desde la cola.', donde: 'cola' },
   TOTAL_CORTO: { texto: 'Revisa los importes de la venta: lo facturado no cuadra con lo cobrado.', donde: 'venta' },
   TIENE_PROFORMA: { texto: 'Pásala desde su proforma (Proformas › Cobrada).', donde: 'venta' },
+  FACTURA_ANULADA: { texto: 'Revisa la venta: la factura que cubría el cobro está anulada y no se manda.', donde: 'venta' },
   SIN_CORREO: { texto: 'El formulario no salió: pon el correo en la venta («Enviar a este correo») y se reenvía.', donde: 'venta' },
   OTRO: { texto: 'Revísala en la cola.', donde: 'cola' },
 };

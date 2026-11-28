@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { conversionsApi, type Conversion, type Payment, type Refund, type Installment } from '../api/conversions.api';
 import { toast } from '@/shared/hooks/useToast';
 import ConversionDialog from './ConversionDialog';
@@ -14,6 +14,11 @@ import EmitirBorradorDialog from '@/modules/invoices/components/EmitirBorradorDi
 import { invoicesApi, type Invoice } from '@/modules/invoices/api/invoices.api';
 import SendInvoiceDialog from '@/modules/invoices/components/SendInvoiceDialog';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
+import { motivoParaNoBorrar, avisoNuevo, COBRO_NO_SE_BORRA } from '../api/cobroBloqueo';
+
+// Un cobro con factura vigente no se borra (CRM-ISEIE#856 + CRM-ISEIE#858): la
+// regla y el texto son los del servidor, los mismos que en «Deshacer el pago».
+const NO_SE_ELIMINA = 'No se puede eliminar este pago';
 
 interface ConversionsTabTarget {
   id: number;
@@ -104,10 +109,18 @@ export default function ConversionsTab({ lead, projectId, canManage }: Conversio
   async function doDeletePayment(): Promise<void> {
     if (pendingPayment === null) return;
     try {
-      await conversionsApi.removePayment(pendingPayment);
+      const res = await conversionsApi.removePayment(pendingPayment);
       toast({ title: 'Pago eliminado' });
+      // La comisión de la gestora ya pagada no se rebaja: se avisa (CRM-ISEIE#858).
+      if (res?.data?.aviso) toast({ title: 'Comisión ya pagada', description: res.data.aviso });
       await load();
     } catch (err: any) {
+      if (COBRO_NO_SE_BORRA.includes(err?.data?.code)) {
+        // El mismo título y el mismo texto que «Deshacer el pago» (CRM-ISEIE#856 + #858).
+        toast({ title: NO_SE_ELIMINA, description: err.data.error, variant: 'destructive' });
+        await load();
+        return;
+      }
       toast({ title: 'Error', description: err?.data?.error || 'Error desconocido', variant: 'destructive' });
     } finally { setPendingPayment(null); }
   }
@@ -522,6 +535,8 @@ interface PaymentsListProps {
 
 function PaymentsList({ conversionId, onDelete, canManage, markInitial }: PaymentsListProps) {
   const [payments, setPayments] = useState<Payment[] | null>(null);
+  // Un doble clic en la papelera no apila el mismo aviso.
+  const avisosVistos = useRef(new Map<string, number>());
 
   const reload = () => {
     conversionsApi.getById(conversionId).then(res => {
@@ -560,7 +575,18 @@ function PaymentsList({ conversionId, onDelete, canManage, markInitial }: Paymen
             {/* Factura de ESTE pago */}
             <PaymentInvoiceCell src={p} onChanged={reload} />
             {canManage && (
-              <button onClick={() => onDelete(p.id)} className="text-muted-foreground hover:text-red-600 p-0.5" title="Eliminar pago">
+              <button
+                onClick={() => {
+                  // Lo dice antes de preguntar «¿Eliminar pago?», con el texto del servidor.
+                  const motivo = motivoParaNoBorrar(p);
+                  if (!motivo) onDelete(p.id);
+                  else if (avisoNuevo(avisosVistos.current, `${p.id}:${motivo}`)) {
+                    toast({ title: NO_SE_ELIMINA, description: motivo, variant: 'destructive' });
+                  }
+                }}
+                className="text-muted-foreground hover:text-red-600 p-0.5"
+                title={motivoParaNoBorrar(p) || 'Eliminar pago'}
+                aria-label="Eliminar pago">
                 <Trash size={12} weight="bold" />
               </button>
             )}

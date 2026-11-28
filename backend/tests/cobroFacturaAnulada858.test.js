@@ -32,7 +32,8 @@ const DOC = `id, serie, ano, numero, codigo, tipo, estado, total::float8 AS tota
              items, fecha_emision, rectifica_id, anulada_at, anulada_abono_id, motivo_anulacion`;
 const documento = (id) => one(`SELECT ${DOC} FROM invoices WHERE id = $1`, [id]);
 
-let P; let GESTORA; let lead;
+let P; let GESTORA; let lead; let EMISOR;
+const HOY = new Date().toISOString().slice(0, 10);
 let numero = 0;
 
 async function venta(importe_total) {
@@ -63,9 +64,13 @@ async function facturaDe(v, pago) {
 const anular = (facturaId) => invoicesModel.anularEmitida(facturaId, { motivo: 'Cobro repetido', userId: GESTORA.id });
 
 beforeAll(async () => {
+  // Una sociedad con CIF válido: las pruebas que emiten de verdad la necesitan.
+  EMISOR = (await one(
+    `INSERT INTO invoice_issuers (razon_social, nif, serie, activo) VALUES ($1, 'B12345674', $2, true) RETURNING id`,
+    [`${MARCA} S.L.`, `E${SERIE}`])).id;
   P = (await one(
-    `INSERT INTO projects (nombre, slug, webhook_api_key) VALUES ($1, $2, $3) RETURNING id`,
-    [`${MARCA} campus`, MARCA.toLowerCase(), `${MARCA}-k`])).id;
+    `INSERT INTO projects (nombre, slug, webhook_api_key, sociedad_emisora_id) VALUES ($1, $2, $3, $4) RETURNING id`,
+    [`${MARCA} campus`, MARCA.toLowerCase(), `${MARCA}-k`, EMISOR])).id;
   GESTORA = await one(
     `INSERT INTO users (nombre, email, password_hash, role) VALUES ($1, $2, 'x', 'gestor') RETURNING id`,
     [`${MARCA} gestora`, `gestora@${MARCA.toLowerCase()}.test`]);
@@ -92,6 +97,8 @@ afterAll(async () => {
     `DELETE FROM leads WHERE project_id = ${Number(P)}`,
     `DELETE FROM users WHERE id = ${Number(GESTORA?.id || 0)}`,
     `DELETE FROM projects WHERE id = ${Number(P)}`,
+    `DELETE FROM invoice_sequences WHERE serie = 'E${SERIE}'`,
+    `DELETE FROM invoice_issuers WHERE id = ${Number(EMISOR || 0)}`,
   ]) {
     try { await q(sql); } catch { /* sigue limpiando */ }
   }
@@ -134,23 +141,81 @@ describe('#858 · el cobro de una factura anulada', () => {
     expect((await one('SELECT payment_id FROM invoices WHERE id = $1', [fBuena])).payment_id).toBe(bueno.id);
   });
 
-  it('la factura anulada, ya sin cobro, no se engancha al cobro siguiente ni lo saca de la cola', async () => {
+  it('venta de pago único: la anulada no cubre la venta; el cobro bueno sale en la cola y recibe factura NUEVA', async () => {
+    // El caso del QA (repro.sql): venta de 100, cobro manual M de 100 con su
+    // factura F por el total; se anula F, se borra M y entra el cobro real S.
+    // F decía «cubro la venta entera» (VENTA_YA_FACTURADA_LO_CUBRE y `facTot`)
+    // aunque estaba anulada: S desaparecía de la cola y «Generar factura» (o
+    // la factura automática) devolvía F.
+    const v = await venta(100);
+    const m = await cobro(v, 100, HOY);
+    const f = await facturaDe(v, m);
+    await anular(f);
+    await conversionService.removePayment(m.id);
+    const antesF = await documento(f);
+
+    const s = await cobro(v, 100, HOY);
+    const cola = await invoicesModel.listPagosSinFactura(P);
+    expect(cola.map((r) => r.payment_id)).toContain(s.id);
+
+    const inv = await invoicesModel.emitirFacturaDePago(v.id, { paymentId: s.id, importe: 100 });
+    expect(inv.id).not.toBe(f);
+    expect(inv.payment_id).toBe(s.id);
+    expect(inv.anulada_at).toBeNull();
+    expect(Number(inv.total)).toBe(100);
+    // La anulada sigue sola, sin cobro y sin tocar.
+    expect((await one('SELECT payment_id FROM invoices WHERE id = $1', [f])).payment_id).toBeNull();
+    expect(await documento(f)).toEqual(antesF);
+    // Y ya facturado, S sale de la cola.
+    expect((await invoicesModel.listPagosSinFactura(P)).map((r) => r.payment_id)).not.toContain(s.id);
+  });
+
+  it('venta a plazos: la anulada, ya sin cobro, no se engancha a la cuota siguiente del mismo importe', async () => {
     const v = await venta(200);
-    const bueno = await cobro(v, 100, '2026-11-03');
-    const repetido = await cobro(v, 100, '2026-11-03');
+    const bueno = await cobro(v, 100, HOY);
+    const repetido = await cobro(v, 100, HOY);
     await facturaDe(v, bueno);
     const fRepetida = await facturaDe(v, repetido);
     await anular(fRepetida);
     await conversionModel.deletePayment(repetido.id);
 
     // La segunda cuota, de verdad, por el mismo importe.
-    const segunda = await cobro(v, 100, '2026-11-10');
+    const segunda = await cobro(v, 100, HOY);
     const cola = await invoicesModel.listPagosSinFactura(P);
     expect(cola.map((r) => r.payment_id)).toContain(segunda.id);
 
-    // Y al facturarla no se le pega la anulada: sale la suya (o ninguna), pero esa no.
-    await invoicesModel.emitirFacturaDePago(v.id, { paymentId: segunda.id, importe: 100 }).catch(() => null);
+    // La buena de la primera cuota es del mismo importe y la misma semana: el
+    // aviso de posible duplicada (CRM#819) salta con razón y quien emite confirma.
+    const inv = await invoicesModel.emitirFacturaDePago(v.id, { paymentId: segunda.id, importe: 100, confirmarDuplicada: true });
+    expect(inv.id).not.toBe(fRepetida);
+    expect(inv.payment_id).toBe(segunda.id);
     expect((await one('SELECT payment_id FROM invoices WHERE id = $1', [fRepetida])).payment_id).toBeNull();
+  });
+
+  it('abono parcial y luego «Anular»: queda a cero y el cobro se borra', async () => {
+    const v = await venta(300);
+    const p = await cobro(v, 100, '2026-11-11');
+    const f = await facturaDe(v, p);
+    await invoicesModel.createRectificativa(f, { motivo: 'Descuento', userId: GESTORA.id, parcial: 40 });
+    // Con el abono parcial sola, no: le quedan 60.
+    await expect(conversionModel.deletePayment(p.id)).rejects.toMatchObject({
+      statusCode: 409, code: 'PAYMENT_HAS_INVOICE',
+    });
+    const { abono } = await anular(f);
+    expect(Number(abono.total)).toBe(-60);
+    await conversionService.removePayment(p.id);
+    expect(await one('SELECT id FROM conversion_payments WHERE id = $1', [p.id])).toBeUndefined();
+  });
+
+  it('en borrador: 409 con «Edítala o cancélala», no «Anúlala»', async () => {
+    const v = await venta(300);
+    const p = await cobro(v, 70, '2026-11-12');
+    const f = await facturaDe(v, p);
+    await q(`UPDATE invoices SET estado = 'borrador', numero = NULL, codigo = NULL WHERE id = $1`, [f]);
+    const err = await conversionModel.deletePayment(p.id).then(() => null, (e) => e);
+    expect(err).toMatchObject({ statusCode: 409, code: 'PAYMENT_HAS_INVOICE' });
+    expect(err.message).toMatch(/Edítala o cancélala/);
+    expect(err.message).not.toMatch(/Anúlala/);
   });
 
   it('con la factura vigente: 409 PAYMENT_HAS_INVOICE y el cobro sigue', async () => {
