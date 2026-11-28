@@ -427,6 +427,13 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
 export async function removePayment(paymentId) {
   const deleted = await conversionModel.deletePayment(paymentId);
   if (!deleted) throw new AppError('Pago no encontrado', 404, 'PAYMENT_NOT_FOUND');
+  // La comision sale de lo cobrado: al quitar un cobro se recalcula, igual que
+  // al apuntarlo (CRM#1230: el cobro repetido inflaba tambien la comision).
+  try {
+    await commissionModel.recalculateCommission(deleted.conversion_id);
+  } catch (err) {
+    logger.warn({ err: err.message, conversionId: deleted.conversion_id }, 'recalculateCommission failed (non-blocking)');
+  }
   return { message: 'Pago eliminado' };
 }
 

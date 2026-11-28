@@ -1264,7 +1264,7 @@ export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
   const { rows: huerfana } = await query(
     `SELECT codigo FROM invoices
       WHERE conversion_id = $1 AND payment_id IS NULL
-        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND tipo = 'normal' AND estado <> 'cancelada' AND anulada_at IS NULL
         AND ABS(total - $2::numeric) < 0.01
       LIMIT 1`,
     [prof.conversion_id, importe]);
@@ -1330,11 +1330,15 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Pero solo si ESTE cobro es el suyo (13/10, ver HUERFANA_ES_DE): una venta a
   // plazos tiene varios cobros del mismo importe, y la factura del pago inicial no
   // puede quedarse con la cuota de la semana siguiente.
+  //
+  // Y nunca una ANULADA (CRM#1230): al borrar el cobro de una factura anulada
+  // esta se queda sin cobro, pero ya no respalda ningun dinero; engancharle el
+  // cobro siguiente lo dejaria con una factura a cero.
   const { rows: huerfana } = await query(
     `SELECT h.* FROM invoices h
        JOIN conversion_payments cp ON cp.id = $3
       WHERE h.conversion_id = $1 AND h.payment_id IS NULL
-        AND h.tipo = 'normal' AND h.estado <> 'cancelada'
+        AND h.tipo = 'normal' AND h.estado <> 'cancelada' AND h.anulada_at IS NULL
         AND ABS(h.total - $2::numeric) < 0.01
         AND ${HUERFANA_ES_DE('h', 'cp')}
       ORDER BY h.id LIMIT 1`,
@@ -2346,6 +2350,8 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
            AND h.payment_id IS NULL
            AND h.tipo = 'normal'
            AND h.estado <> 'cancelada'
+           -- Una anulada no cubre ningun cobro (CRM#1230).
+           AND h.anulada_at IS NULL
            AND ABS(h.total - cp.importe) < 0.01
            AND ${HUERFANA_ES_DE('h', 'cp')})`;
 
