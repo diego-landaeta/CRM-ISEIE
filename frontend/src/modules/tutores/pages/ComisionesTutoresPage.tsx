@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy } from '@phosphor-icons/react';
+import { Coins, ArrowsClockwise, Warning, Info, CheckCircle, ArrowCounterClockwise, CaretRight, Envelope, Bank, Copy, PaperPlaneTilt } from '@phosphor-icons/react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProjectContext } from '@/contexts/ProjectContext';
 import { toast } from '@/shared/hooks/useToast';
@@ -9,6 +9,7 @@ import EmptyState from '@/shared/components/ui/EmptyState';
 import { Button } from '@/shared/components/ui/button';
 import Entregables from '../components/Entregables';
 import LoQueFactura from '../components/LoQueFactura';
+import AvisarTutorDialog, { avisadoEnLaFila, cuandoFue } from '../components/AvisarTutorDialog';
 import { useProyectosDelAmbito } from '@/shared/hooks/useAmbito';
 import usePermission from '@/shared/hooks/usePermission';
 // El recorrido guiado de la pantalla (CRM-ISEIE#619, gemela de CRM#941).
@@ -84,6 +85,8 @@ export default function ComisionesTutoresPage() {
   const [cargando, setCargando] = useState(true);
   const [trabajando, setTrabajando] = useState(false);
   const [cambiando, setCambiando] = useState<number | null>(null);
+  // «Avisar al tutor»: la fila de la que se abre el diálogo (CRM#165 / CRM-ISEIE#188).
+  const [avisando, setAvisando] = useState<ResumenComision | null>(null);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -289,10 +292,12 @@ export default function ComisionesTutoresPage() {
               const desplegado = abierto === r.tutor_id;
               return (
                 <div key={`${r.periodo}-${r.tutor_id}`}>
-                  {/* La primera fila: el paso «Marcar pagado» del recorrido (#619). */}
+                  {/* La primera fila: el paso «Pagar y avisar» del recorrido (#619, #188). */}
                   <div data-recorrido={i === 0 ? 'comtutores-fila' : undefined} className="px-4 py-3 flex flex-wrap items-center gap-3">
+                    {/* Con un ancho minimo, como en el 360: con `min-w-0` el nombre se
+                        encogia a «L…» en cuanto la fila llevaba el boton de avisar. */}
                     <button type="button" onClick={() => setAbierto(desplegado ? null : r.tutor_id)}
-                      className="flex items-center gap-2 min-w-0 flex-1 text-left">
+                      className="flex items-center gap-2 min-w-[13rem] flex-1 text-left">
                       <CaretRight size={14} weight="bold"
                         className={`shrink-0 text-muted-foreground transition-transform ${desplegado ? 'rotate-90' : ''}`} />
                       <span className="min-w-0">
@@ -335,6 +340,28 @@ export default function ComisionesTutoresPage() {
                       <Button size="sm" disabled={trabajando} onClick={() => pagar(r)}>
                         <CheckCircle size={14} weight="bold" className="mr-1.5" /> Marcar pagado
                       </Button>
+                    )}
+                    {/* «Avisar al tutor» (CRM#165 / CRM-ISEIE#188). Va junto a pagar
+                        y no dentro del desplegable: es la otra cosa que se hace
+                        con una fila. Lo que pide el servidor: `tutores.avisar` y
+                        gestionar colaboraciones (`exigirGestion`), no liquidar. */}
+                    {puede && can('tutores.avisar') && Number(r.pendiente) > 0 && (
+                      <Button size="sm" variant="outline"
+                        title={r.tutor_email ? `Escribir a ${r.tutor_email}` : 'Este tutor no tiene correo en su ficha'}
+                        onClick={() => setAvisando(r)}>
+                        <PaperPlaneTilt size={14} weight="bold" className="mr-1.5" />
+                        Avisar al tutor
+                      </Button>
+                    )}
+
+                    {/* Que ya se le avisó, quién y cuántas veces, al lado: no en el
+                        estado del dinero, que sigue debiéndosele hasta que se pague. */}
+                    {r.avisado_at && (
+                      // «05/03/2026» en hora de Madrid, igual que el diálogo (con
+                      // formatDateNumeric salía «5/3/2026»).
+                      <span className="text-xs text-muted-foreground shrink-0" title={`Avisado el ${cuandoFue(r.avisado_at)}`}>
+                        {avisadoEnLaFila(r)}
+                      </span>
                     )}
                     {Number(r.pendiente) === 0 && r.ultima_liquidacion && (
                       <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold shrink-0">
@@ -444,6 +471,17 @@ export default function ComisionesTutoresPage() {
           </div>
         )}
       </div>
+      {/* La vista previa y el envío (CRM#165 / CRM-ISEIE#188): primero se ve el
+          correo tal cual sale, y si ya se le mandó el de ese mes, se dice. */}
+      {avisando && (
+        <AvisarTutorDialog
+          tutorId={avisando.tutor_id}
+          periodo={avisando.periodo}
+          ambito={{ projectId, issuerId }}
+          onClose={() => setAvisando(null)}
+          onEnviado={() => { setAvisando(null); cargar(); }}
+        />
+      )}
     </div>
   );
 }

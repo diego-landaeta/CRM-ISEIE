@@ -1,4 +1,5 @@
 import * as model from './tutor.model.js';
+import { previsualizar, avisar } from './avisarTutor.js';
 import * as userService from '../users/user.service.js';
 import { adminSetPasswordSchema } from '../users/user.validation.js';
 import * as dossierService from '../dossiers/dossier.service.js';
@@ -9,6 +10,7 @@ import {
   cobraDesdeSchema,
   busquedaDeTutorSchema, buscarTutoresSchema,
   empresaDelTutorSchema, campusDelTutorSchema, disponibleSchema,
+  avisoTutorQuerySchema, avisarTutorSchema,
   supervisionTutorSchema, supervisionMiCampusSchema,
 } from './tutor.validation.js';
 import * as campusTutor from './tutor.campus.js';
@@ -409,6 +411,61 @@ export async function calcular(req, res, next) {
     });
     res.json({ success: true, data: r });
   } catch (err) { next(err); }
+}
+
+/*
+  «Avisar al tutor» desde Comisiones (CRM#165 / CRM-ISEIE#188).
+
+  Quién: `tutores.avisar` en la ruta y, además, gestionar colaboraciones
+  (`exigirGestion`), como el resto de Comisiones. De qué tutor: uno de mis
+  campus. Con qué cifra: la del recorte de la pantalla (campus o empresa),
+  dentro de mis campus (`proyectosDelAmbito`), la misma que pinta la fila.
+*/
+async function ambitoDelAviso(req, d) {
+  // `proyectosDelAmbito` lee el campus y la empresa de la URL; en el POST
+  // llegan en el cuerpo, ya validados.
+  return proyectosDelAmbito({
+    user: req.user,
+    query: { projectId: d.projectId || undefined, issuerId: d.issuerId || undefined },
+  });
+}
+
+/**
+ * GET /api/tutores/comisiones/aviso — lo que se le va a mandar, sin mandarlo.
+ *
+ * Separado del envío porque un correo no se manda a ciegas: la pantalla enseña
+ * el correo, la cuenta y si ya se le mandó el de ese mes; solo entonces se envía.
+ */
+export async function previoDelAviso(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const d = valida(avisoTutorQuerySchema, req.query || {});
+    await exigirTutorDeMisCampus(req, d.tutorId);
+    const datos = await previsualizar({ tutorId: d.tutorId, periodo: d.periodo, ...(await ambitoDelAviso(req, d)) });
+    res.json({ success: true, data: datos });
+  } catch (e) { next(e); }
+}
+
+/**
+ * POST /api/tutores/comisiones/avisar — lo manda y anota quién y cuándo.
+ * Si ya se le mandó el de ese mes, 409 `YA_AVISADO` salvo con `repetir: true`.
+ */
+export async function avisarTutor(req, res, next) {
+  try {
+    await exigirGestion(req);
+    const d = valida(avisarTutorSchema, req.body || {});
+    await exigirTutorDeMisCampus(req, d.tutorId);
+    const r = await avisar({
+      tutorId: d.tutorId,
+      periodo: d.periodo,
+      userId: req.user?.userId,
+      ...(await ambitoDelAviso(req, d)),
+      asunto: d.asunto || null,
+      nota: d.nota || null,
+      repetir: d.repetir === true,
+    });
+    res.json({ success: true, data: r });
+  } catch (e) { next(e); }
 }
 
 // PATCH /api/tutores/comisiones/:id/estado

@@ -45,7 +45,7 @@ import { FINAL_RECORRIDO as FINAL } from '@/shared/lib/recorridosComun';
  *  · Comisiones es la pantalla de siempre (periodo en un desplegable, cuatro
  *    cifras, filtro de estado, «Pagar» y las reglas en Roles); el 360 la rehízo
  *    con exportar y cerrar mes. Mismos ids; textos de aquí.
- *  · Comisiones de tutores: sin «Avisar tutor»; solo «Marcar pagado».
+ *  · Comisiones de tutores: «Marcar pagado» y «Avisar al tutor», como en el 360 (#188).
  *  · Análisis de ventas: sin el filtro de ventas compartidas; las cifras, del
  *    campus de arriba.
  */
@@ -64,8 +64,8 @@ const EN_ESTE_CRM = {
   comisionesReglas: 'Qué % cobra cada gestora por cada producto; sin regla, nada. Se ponen en Configuración › Roles: al cerrar una venta, la comisión se crea sola.',
   comtutores: 'Cada tutor cobra un porcentaje de lo cobrado de sus formaciones, mes a mes. Aquí ves cuánto se le debe y se apunta como pagado. Son {pasos} pasos.',
   comtutoresPeriodo: 'Elige el mes del que quieres ver las comisiones (y, si hay varios, el campus).',
-  comtutoresFilaTitulo: 'Marcar pagado',
-  comtutoresFila: 'Cuando ya se le ha hecho la transferencia, «Marcar pagado» apunta como pagado lo de ese tutor en el mes.',
+  comtutoresFilaTitulo: 'Pagar y avisar',
+  comtutoresFila: '«Marcar pagado» apunta como pagado lo de ese mes. «Avisar al tutor» te enseña antes el correo con lo que se le debe y lo que tiene que facturar; puedes cambiar el asunto y añadirle una nota. Si ya se le mandó el de ese mes, te dice quién y cuándo.',
   pendientesCuantas: 'Las ventas sin importe del campus elegido arriba. Cada una que completas sale de la lista.',
   analisis: 'Las ventas del campus elegido arriba, de tres maneras: un resumen, por asesora y por cliente. Son {pasos} pasos.',
   analisisFiltros: 'Valen para las tres vistas: fechas (con atajos como «Este mes») y una búsqueda por cliente, email o programa. «Quitar filtros» los quita todos.',
@@ -380,7 +380,7 @@ export const RECORRIDOS_FINANZAS: Record<IdRecorridoFinanzas, RecorridoFinanzas>
         donde: anclaje('comtutores-fila'),
         titulo: EN_ESTE_CRM.comtutoresFilaTitulo,
         texto: EN_ESTE_CRM.comtutoresFila,
-        permiso: 'tutores.liquidar',
+        permiso: ['tutores.liquidar', 'tutores.avisar'],
       },
       { titulo: 'Y listo', texto: FINAL },
     ],

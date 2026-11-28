@@ -284,6 +284,8 @@ export const SECCIONES = [
           // se le da a la persona como excepción o con un rol a medida (tutor.supervision.js).
           a('supervisar', 'Supervisar tutores', 'Ver, sin tocar nada, a los tutores de sus campus: su «Mi campus» (consultas, entregas por corregir, mensajes y carga), lo que redactan en Moodle y sus tareas de tutora.', NADIE),
           a('gestionar', 'Gestionar colaboraciones', 'Dar de alta tutores, asignarles cursos, calcular sus comisiones y ver las fichas de los de sus campus.', ADMIN),
+          // «Avisar al tutor» desde Comisiones (CRM-ISEIE#188, gemela de CRM#165). Como en el 360.
+          a('avisar', 'Avisar de comisiones', 'Ver el aviso de comisiones y mandarlo al tutor.', TODOS),
           a('liquidar', 'Liquidar comisiones', 'Pagar o revertir las comisiones de un tutor (mueve dinero).', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('ajustes', 'Ajustes de comisiones', 'Cambiar los porcentajes y reglas de las comisiones.', ADMIN, { requiere: ['tutores.gestionar'] }),
           a('contrasena', 'Contraseña de un tutor', 'Ponerle contraseña nueva a un tutor de sus campus.', ADMIN, { requiere: ['tutores.gestionar'] }),

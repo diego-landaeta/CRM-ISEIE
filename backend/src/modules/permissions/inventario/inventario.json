@@ -17808,6 +17808,50 @@
   ]
  },
  {
+  "id": "GET /api/tutores/comisiones/aviso",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "GET",
+  "ruta": "/api/tutores/comisiones/aviso",
+  "relativa": "GET /comisiones/aviso",
+  "controlador": "previoDelAviso",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.avisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
+  "id": "POST /api/tutores/comisiones/avisar",
+  "tipo": "ruta",
+  "modulo": "tutores",
+  "metodo": "POST",
+  "ruta": "/api/tutores/comisiones/avisar",
+  "relativa": "POST /comisiones/avisar",
+  "controlador": "avisarTutor",
+  "publica": false,
+  "guardias": [
+   {
+    "tipo": "token"
+   },
+   {
+    "tipo": "puede",
+    "claves": [
+     "tutores.avisar"
+    ]
+   }
+  ],
+  "puertas": []
+ },
+ {
   "id": "GET /api/tutores/formaciones-sin-tutor",
   "tipo": "ruta",
   "modulo": "tutores",
