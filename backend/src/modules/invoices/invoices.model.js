@@ -1264,7 +1264,7 @@ export async function motivoParaNoCobrarProforma(prof, { importe, fecha }) {
   const { rows: huerfana } = await query(
     `SELECT codigo FROM invoices
       WHERE conversion_id = $1 AND payment_id IS NULL
-        AND tipo = 'normal' AND estado <> 'cancelada'
+        AND tipo = 'normal' AND estado <> 'cancelada' AND anulada_at IS NULL
         AND ABS(total - $2::numeric) < 0.01
       LIMIT 1`,
     [prof.conversion_id, importe]);
@@ -1330,11 +1330,15 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // Pero solo si ESTE cobro es el suyo (13/10, ver HUERFANA_ES_DE): una venta a
   // plazos tiene varios cobros del mismo importe, y la factura del pago inicial no
   // puede quedarse con la cuota de la semana siguiente.
+  //
+  // Y nunca una ANULADA (CRM#1230): al borrar el cobro de una factura anulada
+  // esta se queda sin cobro, pero ya no respalda ningun dinero; engancharle el
+  // cobro siguiente lo dejaria con una factura a cero.
   const { rows: huerfana } = await query(
     `SELECT h.* FROM invoices h
        JOIN conversion_payments cp ON cp.id = $3
       WHERE h.conversion_id = $1 AND h.payment_id IS NULL
-        AND h.tipo = 'normal' AND h.estado <> 'cancelada'
+        AND h.tipo = 'normal' AND h.estado <> 'cancelada' AND h.anulada_at IS NULL
         AND ABS(h.total - $2::numeric) < 0.01
         AND ${HUERFANA_ES_DE('h', 'cp')}
       ORDER BY h.id LIMIT 1`,
@@ -1411,8 +1415,14 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
 
   // ¿Ya hay una factura por el TOTAL de la conversión (ex-proforma o completa)?
   // No se crea otra por pago: solo se marca pagada cuando la venta queda saldada.
+  //
+  // Una ANULADA no cubre nada (CRM#1230): tras anular la factura del total y
+  // borrar su cobro, el cobro bueno se quedaba sin factura y «Generar factura»
+  // (o la factura automática) devolvía la anulada. Lo mismo en las tres
+  // consultas de abajo y en VENTA_YA_FACTURADA_LO_CUBRE.
   const { rows: facTot } = await query(
     `SELECT id, numero, estado FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+       AND anulada_at IS NULL
        AND total >= (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 ORDER BY id DESC LIMIT 1`,
     [conversionId]);
   // Salvo que la venta ya se facture COBRO A COBRO (Diego, 20/11/2026): si alguna
@@ -1422,6 +1432,7 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
   // cuota 2, cobrada por Stripe, se quedaba sin factura y fuera de la cola.
   const { rows: porCobro } = facTot[0] ? await query(
     `SELECT 1 FROM invoices WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+       AND anulada_at IS NULL
        AND payment_id IS NOT NULL AND total < (SELECT importe_total FROM conversions WHERE id = $1) - 0.01 LIMIT 1`,
     [conversionId]) : { rows: [] };
   if (facTot[0] && !porCobro.length) {
@@ -1434,7 +1445,8 @@ export async function emitirFacturaDePago(conversionId, { paymentId, importe, sa
     // no existe.
     const { rows: [cuadre] } = await query(
       `SELECT (SELECT COALESCE(sum(total), 0) FROM invoices
-                WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada') AS facturado,
+                WHERE conversion_id = $1 AND tipo = 'normal' AND estado <> 'cancelada'
+                  AND anulada_at IS NULL) AS facturado,
               (SELECT COALESCE(sum(importe), 0) FROM conversion_payments
                 WHERE conversion_id = $1) AS cobrado`,
       [conversionId]);
@@ -2346,6 +2358,8 @@ const FACTURA_HUERFANA_LO_CUBRE = `AND NOT EXISTS (
            AND h.payment_id IS NULL
            AND h.tipo = 'normal'
            AND h.estado <> 'cancelada'
+           -- Una anulada no cubre ningun cobro (CRM#1230).
+           AND h.anulada_at IS NULL
            AND ABS(h.total - cp.importe) < 0.01
            AND ${HUERFANA_ES_DE('h', 'cp')})`;
 
@@ -2366,17 +2380,21 @@ export const VENTA_YA_FACTURADA_LO_CUBRE = `AND NOT (
         NOT EXISTS (SELECT 1 FROM invoices pc
                      WHERE pc.conversion_id = cp.conversion_id
                        AND pc.tipo = 'normal' AND pc.estado <> 'cancelada'
+                       AND pc.anulada_at IS NULL
                        AND pc.payment_id IS NOT NULL
                        AND pc.total < (SELECT v2.importe_total FROM conversions v2
                                         WHERE v2.id = cp.conversion_id) - 0.01)
         AND EXISTS (SELECT 1 FROM invoices t
                  WHERE t.conversion_id = cp.conversion_id
                    AND t.tipo = 'normal' AND t.estado <> 'cancelada'
+                   -- Una anulada no cubre la venta (CRM#1230).
+                   AND t.anulada_at IS NULL
                    AND t.total >= (SELECT v.importe_total FROM conversions v
                                     WHERE v.id = cp.conversion_id) - 0.01)
         AND (SELECT COALESCE(SUM(s.total), 0) FROM invoices s
               WHERE s.conversion_id = cp.conversion_id
-                AND s.tipo = 'normal' AND s.estado <> 'cancelada') + 0.01
+                AND s.tipo = 'normal' AND s.estado <> 'cancelada'
+                AND s.anulada_at IS NULL) + 0.01
             >= (SELECT COALESCE(SUM(p.importe), 0) FROM conversion_payments p
                  WHERE p.conversion_id = cp.conversion_id))`;
 

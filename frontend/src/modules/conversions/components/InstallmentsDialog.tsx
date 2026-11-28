@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { X, CalendarBlank, Plus, Trash, CheckCircle, Coins } from '@phosphor-icons/react';
 import { conversionsApi, type Conversion } from '../api/conversions.api';
+import { motivoParaNoBorrar, avisoNuevo, COBRO_NO_SE_BORRA, type CamposBloqueoCobro } from '../api/cobroBloqueo';
 import { toast } from '@/shared/hooks/useToast';
 import Select from '@/shared/components/ui/Select';
 import { formatCurrency, formatDate } from '@/shared/lib/format';
 import EmitirFacturaCobro from '@/modules/invoices/components/EmitirFacturaCobro';
 
-interface Installment {
+interface Installment extends CamposBloqueoCobro {
   id?: number;
   numero?: number;
   importe_previsto: number;
@@ -254,16 +255,40 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
     setPayReferenciaInicial(inst.pago_referencia || '');
   }
 
+  // Un cobro con factura vigente no se deshace borrándolo: la factura se
+  // quedaba huérfana (CRM-ISEIE#856). Anulada y a cero, sí (CRM-ISEIE#858). La regla y el
+  // texto son los del servidor (cobro-facturado.js), los mismos que en
+  // «Eliminar pago»: la pantalla no decide por su cuenta.
+  const NO_SE_DESHACE = 'No se puede deshacer este pago';
+  // Un doble clic no apila el mismo aviso (QA de CRM-ISEIE#860).
+  const avisosVistos = useRef(new Map<string, number>());
+
   async function handleUnpay(inst: Installment) {
     if (!inst.id) return;
+    const motivo = motivoParaNoBorrar(inst);
+    if (motivo) {
+      if (avisoNuevo(avisosVistos.current, `${inst.id}:${motivo}`)) {
+        toast({ title: NO_SE_DESHACE, description: motivo, variant: 'destructive' });
+      }
+      return;
+    }
     if (!confirm(`¿Deshacer el pago de la cuota #${inst.numero}? Se borra el cobro y la cuota vuelve a pendiente.`)) return;
     try {
-      await conversionsApi.unpayInstallment(inst.id);
+      const res = await conversionsApi.unpayInstallment(inst.id);
       toast({ title: 'Pago deshecho', description: `Cuota #${inst.numero} vuelve a pendiente` });
+      // La comisión de la gestora ya pagada no se rebaja: se avisa (CRM-ISEIE#858).
+      if (res?.data?.aviso) toast({ title: 'Comisión ya pagada', description: res.data.aviso });
       onSaved?.();
       await load();
     } catch (err: any) {
-      toast({ title: 'Error', description: err?.data?.error, variant: 'destructive' });
+      if (COBRO_NO_SE_BORRA.includes(err?.data?.code)) {
+        // La factura salió mientras la pantalla estaba abierta: se explica y
+        // se recarga, para que la cuota enseñe su factura.
+        toast({ title: NO_SE_DESHACE, description: err.data.error, variant: 'destructive' });
+        await load();
+        return;
+      }
+      toast({ title: 'Error', description: err?.data?.error || err?.message, variant: 'destructive' });
     }
   }
 
@@ -415,7 +440,7 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                             onClick={async () => { const { invoicesApi } = await import('@/modules/invoices/api/invoices.api'); invoicesApi.openPdf(inst.factura_id!).catch(() => {}); }}
                             className="text-[11px] font-semibold text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
                             title="Ver la factura de esta cuota">
-                            🧾 Factura {inst.factura_codigo}
+                            🧾 Factura {inst.factura_codigo}{inst.factura_anulada ? ' · anulada' : ''}
                           </button>
                         )}
                       </div>
@@ -430,7 +455,10 @@ export default function InstallmentsDialog({ conversion, onClose, onSaved }: Pro
                             Editar
                           </button>
                           <button onClick={() => handleUnpay(inst)}
-                            title="Deshacer el pago (vuelve a pendiente)"
+                            title={motivoParaNoBorrar(inst)
+                              || (inst.factura_anulada_a_cero
+                                ? `Deshacer el pago (vuelve a pendiente). La factura ${inst.factura_codigo || ''} está anulada y se queda como está`
+                                : 'Deshacer el pago (vuelve a pendiente)')}
                             className="px-2 py-1 rounded-md text-[11px] font-semibold text-amber-700 hover:bg-amber-100 dark:hover:bg-amber-950/40">
                             Deshacer
                           </button>

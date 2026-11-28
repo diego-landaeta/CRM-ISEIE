@@ -358,6 +358,13 @@ async function emitirDeLaFila(filaId) {
         codigo = 'ANTES_DEL_ARRANQUE';
         break;
       }
+      // Una anulada nunca se manda al alumno (CRM#1230): si por lo que sea
+      // vuelve una, el cobro se queda en la cola para que lo mire una persona.
+      if (inv.anulada_at) {
+        error = `La factura ${inv.codigo || ''} que cubría este cobro está anulada: revísalo a mano`;
+        codigo = 'FACTURA_ANULADA';
+        break;
+      }
       if (Number(inv.datos_fiscales_id) === Number(f.id)) {
         emitidas.push(inv);
         logger.info({ conversionId: f.conversion_id, paymentId: cp.id, codigo: inv.codigo },
@@ -470,6 +477,7 @@ export const MOTIVOS_CORTOS = {
   ANTES_DEL_ARRANQUE: 'el cobro es anterior a la primera factura de la sociedad',
   TOTAL_CORTO: 'lo facturado no cuadra con lo cobrado',
   TIENE_PROFORMA: 'la venta tiene una proforma',
+  FACTURA_ANULADA: 'la factura que cubría el cobro está anulada',
 };
 
 /**

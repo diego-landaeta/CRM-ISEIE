@@ -236,7 +236,7 @@ export async function removePayment(req, res, next) {
         throw new AppError('Solo puedes borrar pagos de tus propios clientes', 403, 'FORBIDDEN_PAYMENT');
       }
     }
-    const result = await conversionService.removePayment(paymentId);
+    const result = await conversionService.removePayment(paymentId, { userId: req.user?.userId ?? null, ip: req.ip || null });
     res.json({ success: true, data: result });
   } catch (err) { next(err); }
 }
@@ -395,7 +395,7 @@ export async function editPaidInstallment(req, res, next) {
 export async function unpayInstallment(req, res, next) {
   try {
     const instId = parseInt(req.params.instId);
-    const r = await installmentsModel.unpay(instId);
+    const r = await conversionService.unpayInstallment(instId, { userId: req.user?.userId ?? null, ip: req.ip || null });
     if (!r) throw new AppError('Cuota no encontrada', 404, 'NOT_FOUND');
     res.json({ success: true, data: r });
   } catch (err) {

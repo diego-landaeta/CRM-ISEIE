@@ -146,7 +146,7 @@ function evalCondition(cond, ctx) {
   }
 }
 
-export async function createCommissionForConversion(conversionId) {
+export async function createCommissionForConversion(conversionId, { conservarPagada = false } = {}) {
   const c = await getClient();
   try {
     await c.query('BEGIN');
@@ -206,6 +206,7 @@ export async function createCommissionForConversion(conversionId) {
              base_calc = EXCLUDED.base_calc,
              rule_id = EXCLUDED.rule_id,
              updated_at = NOW()
+       ${conservarPagada ? "WHERE commissions.estado <> 'pagado'" : ''}
        RETURNING *`,
       [conversionId, rule.id, cv.responsable_id, cv.producto_contratado_id || null, base, rule.pct, importe, rule.base_calc]
     );
@@ -215,9 +216,11 @@ export async function createCommissionForConversion(conversionId) {
   finally { c.release(); }
 }
 
-export async function recalculateCommission(conversionId) {
+// `conservarPagada`: al BORRAR un cobro (CRM#1230) la comision ya pagada no se
+// rebaja; se deja como esta y quien borra recibe el aviso.
+export async function recalculateCommission(conversionId, { conservarPagada = false } = {}) {
   // Misma logica: actualiza importe_base/importe_comision basado en lo cobrado
-  return createCommissionForConversion(conversionId);
+  return createCommissionForConversion(conversionId, { conservarPagada });
 }
 
 export async function payCommission(id, fechaPago, notas) {
