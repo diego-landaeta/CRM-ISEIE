@@ -412,8 +412,10 @@ export async function addPayment(conversionId, data, { userId = null } = {}) {
       + 'No se puede apuntar otra vez a mano.',
       409, 'DUPLICATE_AUTOMATIC_PAYMENT');
   }
-  // Recalcular comision en cada pago (importe_base = importe_pagado actualizado)
-  commissionModel.recalculateCommission(conversionId).catch(err =>
+  // Recalcular comision en cada pago (importe_base = importe_pagado actualizado).
+  // La de la gestora ya PAGADA no se reescribe (CRM-ISEIE#858): lo pagado es lo que
+  // salió; lo de este cobro se regulariza a mano, igual que al borrar.
+  commissionModel.recalculateCommission(conversionId, { conservarPagada: true }).catch(err =>
     logger.warn({ err: err.message, conversionId }, 'recalculateCommission failed (non-blocking)')
   );
   // Auto-factura al registrar el abono: una factura por ESTE pago (su monto).

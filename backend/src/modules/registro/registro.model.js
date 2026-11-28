@@ -297,6 +297,9 @@ function enCristiano(action, details) {
     // es como se apuntaba antes.
     password_changed: 'Cambió su contraseña',
     change_password: 'Cambió su contraseña',
+    // Al borrar un cobro («Eliminar pago» o «Deshacer el pago», CRM-ISEIE#858).
+    cobro_borrado: `Borró un cobro de ${d.importe != null ? `${Number(d.importe).toFixed(2)} €` : '—'} del ${d.fecha || '—'}`
+      + `${Array.isArray(d.facturas) && d.facturas.length ? ` (factura anulada ${d.facturas.join(', ')})` : ''}`,
   };
   return M[action] || action;
 }

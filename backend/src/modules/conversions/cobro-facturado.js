@@ -135,23 +135,31 @@ export function avisoComisionPagada(c) {
  * qué día, por qué medio, su cargo de Stripe si lo tenía, las facturas que
  * se quedan sin él y quién lo hizo. Sin usuario (un proceso) no se apunta:
  * `user_activity_log.user_id` es obligatorio.
+ *
+ * Lleva el campus de la venta en `details.project_id`: el Registro recorta
+ * por él (registro.model.js, `deUsuarios`). Sin campus, la fila contaba como
+ * «de la persona» y la veía un admin de otro campus en el que estuviera quien
+ * borró, con el importe, las notas, la referencia y el cargo de Stripe.
  */
 export async function apuntarCobroBorrado(client, { paymentId, accion, userId, ip = null, facturas = [], comisionPagada = null }) {
   if (!userId || !paymentId) return;
   const { rows: [p] } = await client.query(
-    `SELECT cp.id, cp.conversion_id, cp.importe::float8 AS importe, cp.fecha::text AS fecha,
+    `SELECT cp.id, cp.conversion_id, cv.project_id, cp.importe::float8 AS importe, cp.fecha::text AS fecha,
             cp.metodo, cp.referencia, cp.notas, cp.origen, cp.origen_ref,
             (SELECT string_agg(ci.numero::text, ', ' ORDER BY ci.numero)
                FROM conversion_installments ci WHERE ci.payment_id = cp.id) AS cuotas,
             COALESCE((SELECT json_agg(json_build_object('stripe_id', sp.stripe_id, 'tipo', sp.type, 'estado', sp.status) ORDER BY sp.id)
                         FROM stripe_payments sp WHERE sp.conversion_payment_id = cp.id), '[]'::json) AS stripe
-       FROM conversion_payments cp WHERE cp.id = $1`,
+       FROM conversion_payments cp
+       JOIN conversions cv ON cv.id = cp.conversion_id
+      WHERE cp.id = $1`,
     [paymentId]);
   if (!p) return;
   const details = {
     accion,
     payment_id: p.id,
     conversion_id: p.conversion_id,
+    project_id: p.project_id,
     importe: p.importe,
     fecha: p.fecha,
     metodo: p.metodo,

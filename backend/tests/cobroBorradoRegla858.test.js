@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import pool, { getClient } from '../src/shared/config/db.js';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';import pool, { getClient } from '../src/shared/config/db.js';
 import * as conversionModel from '../src/modules/conversions/conversion.model.js';
 import * as conversionService from '../src/modules/conversions/conversion.service.js';
 import * as installmentsModel from '../src/modules/conversions/installments.model.js';
@@ -288,5 +287,24 @@ describe('una sola regla para borrar un cobro', () => {
     const r2 = await conversionService.removePayment(p1.id, { userId: GESTORA.id });
     expect(r2.aviso).toBeNull();
     expect((await comision(v.id)).importe).toBe(0);
+  });
+
+  it('apuntar un cobro (addPayment) tampoco reescribe la comisión de la gestora ya pagada', async () => {
+    const v = await venta();
+    await cobro(v, 100);
+    await recalcular(v);
+    await q(`UPDATE commissions SET estado = 'pagado', fecha_pago = '2026-11-20' WHERE conversion_id = $1`, [v.id]);
+    await conversionService.addPayment(v.id, { importe: 100, fecha: '2026-11-05', metodo: 'transferencia', permitir_duplicado: true }, { userId: GESTORA.id });
+    // El recálculo va sin esperar (no frena el alta del cobro): se le da tiempo.
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await comision(v.id)).toEqual({ importe: 10, estado: 'pagado' });
+
+    // Sin pagar, sí sube (lo de siempre).
+    const w = await venta();
+    await cobro(w, 100);
+    await recalcular(w);
+    await conversionService.addPayment(w.id, { importe: 100, fecha: '2026-11-05', metodo: 'transferencia', permitir_duplicado: true }, { userId: GESTORA.id });
+    await new Promise((r) => setTimeout(r, 1500));
+    expect(await comision(w.id)).toEqual({ importe: 20, estado: 'pendiente' });
   });
 });
