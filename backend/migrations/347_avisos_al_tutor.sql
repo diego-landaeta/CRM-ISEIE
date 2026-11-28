@@ -95,4 +95,20 @@ UPDATE tutor_avisos_comisiones a
  WHERE a.project_ids IS NULL AND a.comisiones IS NULL
    AND x.tutor_id = a.tutor_id AND x.periodo = a.periodo;
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 4 · PERMISOS
+--
+-- La migración la pasa `postgres` y la tabla nace suya: sin esto, la API no la
+-- puede leer (Comisiones da 500) ni anotar el aviso que ya salió. Como en la 341.
+DO $$
+DECLARE r text;
+BEGIN
+  FOREACH r IN ARRAY ARRAY['crm_user', 'crm_iseie_user'] LOOP
+    IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = r) THEN
+      EXECUTE format('GRANT SELECT, INSERT, UPDATE, DELETE ON tutor_avisos_comisiones TO %I', r);
+      EXECUTE format('GRANT USAGE, SELECT ON SEQUENCE tutor_avisos_comisiones_id_seq TO %I', r);
+    END IF;
+  END LOOP;
+END $$;
+
 COMMIT;
